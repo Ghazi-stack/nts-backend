@@ -7,79 +7,146 @@ use App\Models\Product;
 use App\Http\Resources\ProductResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Validation\ValidationException;
+use Exception;
 
 class ProductController extends Controller
 {
     public function index()
     {
-        return ProductResource::collection(Product::with(['category', 'brand'])->paginate(10));
+        try {
+            $products = Product::with(['category', 'brand'])->paginate(10);
+            return ProductResource::collection($products);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to fetch products.'], 500);
+        }
     }
 
     public function showProduct($slug)
     {
-        $product = Product::with(['category', 'brand'])->where('slug', $slug)->firstOrFail();
-        return new ProductResource($product);
+        try {
+            $product = Product::with(['category', 'brand'])->where('slug', $slug)->firstOrFail();
+            return new ProductResource($product);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['error' => 'Product not found.'], 404);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to retrieve product.'], 500);
+        }
     }
 
     public function addProduct(Request $request)
     {
-        $request->validate([
-            'name'        => 'required|string|max:255',
-            'category_id' => 'required|exists:categories,id',
-            'brand_id'    => 'required|exists:brands,id',
-            'price'       => 'required|numeric',
-            'stock'       => 'required|integer',
-            'description' => 'nullable|string',
-            'image'       => 'nullable|string'
-        ]);
+        try {
+            $validated = $request->validate([
+                'name'        => 'nullable|string|max:255',
+                'category_id' => 'required|exists:categories,id',
+                'brand_id'    => 'required|exists:brands,id',
+                'price'       => 'required|numeric|min:0',
+                'stock'       => 'nullable|integer',
+                'description' => 'nullable|string',
+                'image'       => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048'
+            ]);
 
-        $product = Product::create([
-            'name'        => $request->name,
-            'slug'        => Str::slug($request->name) . '-' . uniqid(),
-            'category_id' => $request->category_id,
-            'brand_id'    => $request->brand_id,
-            'price'       => $request->price,
-            'stock'       => $request->stock,
-            'description' => $request->description,
-            'image'       => $request->image,
-        ]);
+            if ($request->hasFile('image')) {
+                $imageName = time() . '_' . preg_replace('/[^A-Za-z0-9.\-_]/', '_', $request->file('image')->getClientOriginalName());
+                $request->file('image')->move(public_path('product_images'), $imageName);
+                $validated['image'] = 'product_images/' . $imageName;
+            }
 
-        return new ProductResource($product);
+            $validated['slug'] = Str::slug($validated['name']) . '-' . uniqid();
+
+            $product = Product::create($validated);
+               return response()->json([
+                    'status'  => true,
+                    'message' => 'Product created successfully.',
+                    'data'    => new ProductResource($product)
+                ], 201); // 👈 Status code 201: Created
+
+            return new ProductResource($product);
+        } catch (ValidationException $e) {
+            return response()->json(['errors' => $e->errors()], 422);
+        } catch (Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     public function updateProduct(Request $request, $id)
     {
-        $product = Product::findOrFail($id);
+        try {
+            $validated = $request->validate([
+                'name'        => 'nullable|string|max:255',
+                'category_id' => 'nullable|exists:categories,id',
+                'brand_id'    => 'nullable|exists:brands,id',
+                'price'       => 'nullable|numeric|min:0',
+                'stock'       => 'nullable|integer',
+                'description' => 'nullable|string',
+                'image'       => 'nullable|string'
+            ]);
 
-        $product->update($request->only([
-            'name', 'category_id', 'brand_id', 'price', 'stock', 'description', 'image'
-        ]));
+            $product = Product::findOrFail($id);
 
-        return new ProductResource($product);
+            if (isset($validated['name'])) {
+                $validated['slug'] = Str::slug($validated['name']) . '-' . uniqid();
+            }
+
+            $product->update($validated);
+             return response()->json([
+                    'status'  => true,
+                    'message' => 'Product updated successfully.',
+                    'data'    => new ProductResource($product)
+                ], 200);
+
+            return new ProductResource($product);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['error' => 'Product not found.'], 404);
+        } catch (ValidationException $e) {
+            return response()->json(['errors' => $e->errors()], 422);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to update product.'], 500);
+        }
+
+
     }
 
     public function destroyProduct($id)
     {
-        $product = Product::findOrFail($id);
-        $product->delete();
+        try {
+            $product = Product::findOrFail($id);
+            $product->delete();
 
-        return response()->json(['message' => 'Product deleted successfully']);
+            return response()->json(['message' => 'Product deleted successfully.']);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['error' => 'Product not found.'], 404);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to delete product.'], 500);
+        }
     }
 
-     public function searchProduct(Request $request)
+    public function searchProduct(Request $request)
     {
-        $request->validate([
-            'query' => 'required|string|min:2'
-        ]);
+       try {
+            $request->validate([
+                'query' => 'required|string|min:2'
+            ]);
 
-        $query = $request->input('query');
+            $query = $request->input('query');
 
-        $products = Product::where('name', 'like', "%$query%")
-            ->orWhere('slug', 'like', "%$query%")
-            ->orWhere('description', 'like', "%$query%")
-            ->with(['category', 'brand'])
-            ->paginate(10);
+            $products = Product::where('name', 'like', "%$query%")
+                ->orWhere('slug', 'like', "%$query%")
+                ->orWhere('description', 'like', "%$query%")
+                ->with(['category', 'brand'])
+                ->paginate(10);
 
-        return ProductResource::collection($products);
+            return response()->json([
+                'status'  => true,
+                'message' => 'Products retrieved successfully.',
+                'data'    => ProductResource::collection($products)
+            ], 200); // ✅ HTTP 200 OK
+        } catch (ValidationException $e) {
+            return response()->json(['errors' => $e->errors()], 422);
+        } catch (Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 }

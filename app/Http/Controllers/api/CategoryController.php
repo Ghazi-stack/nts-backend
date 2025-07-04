@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers\API;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use App\Models\Category;
+use Illuminate\Support\Str;
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
 use App\Http\Resources\CategoryResource;
 
 class CategoryController extends Controller
@@ -15,7 +15,18 @@ class CategoryController extends Controller
      */
     public function index()
     {
-        return CategoryResource::collection(Category::all());
+       $categories = Category::all(); 
+       if($categories->isEmpty()){
+           return response()->json([
+               'status' => false,
+               'message' => 'No categories found',
+           ], 404);
+       }
+       return response()->json([
+           'status' => true,
+           'message' => 'Categories retrieved successfully',
+           'categories' => CategoryResource::collection($categories),
+       ], 200);
     }
 
     /**
@@ -23,21 +34,20 @@ class CategoryController extends Controller
      */
     public function show($id)
     {
-        $category = Category::findOrFail($id);
-        return response()->json([
-            'status' => true,
-            'category' => 'Category retrieved successfully',
-            'category' => new CategoryResource($category),
-        ]);
-    }
-
-    /**
-     * OPTIONAL: GET /api/categories/slug/{slug}
-     */
-    public function showBySlug($slug)
-    {
-        $category = Category::where('slug', $slug)->firstOrFail();
-        return new CategoryResource($category);
+        // Using try-catch to handle ModelNotFoundException
+        try{
+            $category = Category::findOrFail($id);
+            return response()->json([
+                'status' => true,
+                'message' => 'Category retrieved successfully',
+                'category' => new CategoryResource($category),
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Category not found',
+            ], 404);
+        }
     }
 
     /**
@@ -76,28 +86,39 @@ class CategoryController extends Controller
      */
     public function updateCategory(Request $request, $id)
     {
-        $category = Category::findOrFail($id);
+        try {
+            $category = Category::findOrFail($id);
 
-        $request->validate([
-            'name' => 'required|string|max:255|unique:categories,name,' . $id,
-            'description' => 'nullable|string',
-        ]);
+            $request->validate([
+                'name' => 'required|string|max:255|unique:categories,name,' . $id,
+                'description' => 'nullable|string',
+            ]);
 
-        $slug = Str::slug($request->name);
+            $slug = Str::slug($request->name);
 
-        if (Category::where('slug', $slug)->where('id', '!=', $id)->exists()) {
-            return response()->json([
-                'message' => 'Slug already exists. Try a different category name.'
-            ], 422);
+            if (Category::where('slug', $slug)->where('id', '!=', $id)->exists()) {
+                return response()->json([
+                    'message' => 'Slug already exists. Try a different category name.'
+                ], 422);
+            }
+
+            $category->update([
+                'name' => $request->name,
+                'slug' => $slug,
+                'description' => $request->description,
+            ]);
+
+             return response()->json([
+                'status' => true,
+                'message' => 'Category updated successfully',
+                'category' => new CategoryResource($category),
+            ], 200);
+    } catch (ModelNotFoundException $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Category not found',
+            ], 404);
         }
-
-        $category->update([
-            'name' => $request->name,
-            'slug' => $slug,
-            'description' => $request->description,
-        ]);
-
-        return new CategoryResource($category);
     }
 
     /**
@@ -105,13 +126,20 @@ class CategoryController extends Controller
      */
     public function destroyCategory($id)
     {
-        $category = Category::findOrFail($id);
-        $category->delete();
+        try {
+            $category = Category::findOrFail($id);
+            $category->delete();
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Category deleted successfully',
-            'category' => $category,
-        ],200);
+            return response()->json([
+                'status' => true,
+                'message' => 'Category deleted successfully',
+                'category' => $category,
+            ],200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Category not found',
+            ], 404);
+        }
     }
 }

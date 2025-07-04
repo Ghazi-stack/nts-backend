@@ -47,12 +47,12 @@ use App\Http\Controllers\API\SearchController;
     // 🏷️ BRAND MODULE
     // ===============================
     Route::prefix('brands')->controller(BrandController::class)->group(function () {
-        Route::get('/', 'index');
-        Route::get('/{id}', 'show');
+        Route::get('/showall-brands', 'index');
+        Route::get('/show-brand/{id}', 'showBrands');
         Route::middleware('auth:sanctum')->group(function () {
-            Route::post('/', 'store');
-            Route::put('/{id}', 'update');
-            Route::delete('/{id}', 'destroy');
+            Route::post('/store-brands', 'storeBrands');
+            Route::post('/update-brands/{id}', 'updateBrands');
+            Route::delete('/delete-brands/{id}', 'destroyBrands');
         });
     });
 
@@ -64,7 +64,7 @@ use App\Http\Controllers\API\SearchController;
         Route::get('/show/{slug}', 'showProduct');
         Route::middleware('auth:sanctum')->group(function () {
             Route::post('/add-product', 'addProduct');
-            Route::put('/update-product/{id}', 'updateProduct');
+            Route::post('/update-product/{id}', 'updateProduct');
             Route::delete('/delete-product{id}', 'destroyProduct');
             Route::get('/search', 'searchProduct');
         });
@@ -75,9 +75,9 @@ use App\Http\Controllers\API\SearchController;
     // ===============================
     Route::prefix('cart')->controller(CartController::class)->middleware('auth:sanctum')->group(function () {
         Route::get('/', 'index');
-        Route::post('/', 'store');
-        Route::put('/{id}', 'update');
-        Route::delete('/{id}', 'destroy');
+        Route::post('/store-cart', 'storeCart');
+        Route::put('/update-cart/{id}', 'updateCart');
+        Route::delete('/delete-cart/{id}', 'destroyCart');
     });
 
     // ===============================
@@ -112,7 +112,7 @@ use App\Http\Controllers\API\SearchController;
         Route::get('/', 'index');
         Route::middleware('auth:sanctum')->group(function () {
             Route::post('/add-banner', 'storeBanner');
-            Route::put('/update-banner/{id}', 'updateBanner');
+            Route::post('/update-banner/{id}', 'updateBanner');
             Route::delete('/delete-banner/{id}', 'destroyBanner');
         });
     });
