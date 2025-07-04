@@ -17,3 +17,6 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+/public/banner_images/
+/public/brand_logos/
+/public/product_images/
