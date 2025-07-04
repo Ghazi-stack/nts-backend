@@ -13,10 +13,13 @@ use Exception;
 
 class ProductController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $products = Product::with(['category', 'brand'])->paginate(10);
+            $perPage = $request->query('perPage', 20); // default is 20 if not provided
+
+            $products = Product::with(['category', 'brand'])->paginate($perPage);
+
             return ProductResource::collection($products);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to fetch products.'], 500);
@@ -40,8 +43,8 @@ class ProductController extends Controller
         try {
             $validated = $request->validate([
                 'name'        => 'nullable|string|max:255',
-                'category_id' => 'required|exists:categories,id',
-                'brand_id'    => 'required|exists:brands,id',
+                'categoryId' => 'required|exists:categories,id',
+                'brandId'    => 'required|exists:brands,id',
                 'price'       => 'required|numeric|min:0',
                 'stock'       => 'nullable|integer',
                 'description' => 'nullable|string',
@@ -55,6 +58,9 @@ class ProductController extends Controller
             }
 
             $validated['slug'] = Str::slug($validated['name']) . '-' . uniqid();
+            $validated['category_id'] = $validated['categoryId'];
+            $validated['brand_id'] = $validated['brandId'];
+            unset($validated['categoryId'], $validated['brandId']);
 
             $product = Product::create($validated);
                return response()->json([
@@ -76,8 +82,8 @@ class ProductController extends Controller
         try {
             $validated = $request->validate([
                 'name'        => 'nullable|string|max:255',
-                'category_id' => 'nullable|exists:categories,id',
-                'brand_id'    => 'nullable|exists:brands,id',
+                'categoryId' => 'nullable|exists:categories,id',
+                'brandId'    => 'nullable|exists:brands,id',
                 'price'       => 'nullable|numeric|min:0',
                 'stock'       => 'nullable|integer',
                 'description' => 'nullable|string',
@@ -115,7 +121,11 @@ class ProductController extends Controller
             $product = Product::findOrFail($id);
             $product->delete();
 
-            return response()->json(['message' => 'Product deleted successfully.']);
+            return response()->json([
+                'status'  => true,
+                'message' => 'Product deleted successfully.',
+                'data'    => new ProductResource($product)
+            ], 200); // ✅ HTTP 200 OK
         } catch (ModelNotFoundException $e) {
             return response()->json(['error' => 'Product not found.'], 404);
         } catch (Exception $e) {
@@ -135,8 +145,16 @@ class ProductController extends Controller
             $products = Product::where('name', 'like', "%$query%")
                 ->orWhere('slug', 'like', "%$query%")
                 ->orWhere('description', 'like', "%$query%")
+                ->orWhere('price', 'like', "%$query%")
+                ->orWhere('stock', 'like', "%$query%")
+                ->orWhereHas('category', function ($q) use ($query) {
+                    $q->where('name', 'like', "%$query%");
+                })
+                ->orWhereHas('brand', function ($q) use ($query) {
+                    $q->where('name', 'like', "%$query%");
+                })
                 ->with(['category', 'brand'])
-                ->paginate(10);
+                ->paginate(20); // Default pagination size
 
             return response()->json([
                 'status'  => true,

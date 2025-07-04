@@ -21,7 +21,7 @@ class OrderController extends Controller
     {
         $request->validate([
             'items' => 'required|array',
-            'items.*.product_id' => 'required|exists:products,id',
+            'items.*.productId' => 'required|exists:products,id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.price' => 'required|numeric|min:0',
         ]);
@@ -41,7 +41,7 @@ class OrderController extends Controller
         foreach ($request->items as $item) {
             OrderItem::create([
                 'order_id' => $order->id,
-                'product_id' => $item['product_id'],
+                'product_id' => $item['productId'],
                 'quantity' => $item['quantity'],
                 'price' => $item['price'],
             ]);
@@ -49,6 +49,10 @@ class OrderController extends Controller
 
         DB::commit();
 
-        return new OrderResource($order->load('items.product'));
+        return response()->json([
+            'status' => true,
+            'message' => 'Order created successfully',
+            'data' => new OrderResource($order->load('items.product'))
+        ], 201); // HTTP 201 Created
     }
 }

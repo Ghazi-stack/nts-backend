@@ -33,8 +33,8 @@ use App\Http\Controllers\API\SearchController;
     // 📁 CATEGORY MODULE
     // ===============================
    Route::prefix('categories')->controller(CategoryController::class)->group(function () {
-        Route::get('/', 'index');               // List all categories
-        Route::get('/{id}', 'show');            // Get category by ID
+        Route::get('/list-category', 'index');               // List all categories
+        Route::get('/category/{id}', 'show');            // Get category by ID
         Route::get('/slug/{slug}', 'showBySlug'); // (Optional) Get category by slug
 
     Route::middleware('auth:sanctum')->group(function () {
@@ -65,7 +65,7 @@ use App\Http\Controllers\API\SearchController;
         Route::middleware('auth:sanctum')->group(function () {
             Route::post('/add-product', 'addProduct');
             Route::post('/update-product/{id}', 'updateProduct');
-            Route::delete('/delete-product{id}', 'destroyProduct');
+            Route::delete('/delete-product/{id}', 'destroyProduct');
             Route::get('/search', 'searchProduct');
         });
     });
@@ -74,7 +74,7 @@ use App\Http\Controllers\API\SearchController;
     // 🛒 CART MODULE
     // ===============================
     Route::prefix('cart')->controller(CartController::class)->middleware('auth:sanctum')->group(function () {
-        Route::get('/', 'index');
+        Route::get('/list-cart', 'index');
         Route::post('/store-cart', 'storeCart');
         Route::put('/update-cart/{id}', 'updateCart');
         Route::delete('/delete-cart/{id}', 'destroyCart');
@@ -84,25 +84,25 @@ use App\Http\Controllers\API\SearchController;
     // ❤️ WISHLIST MODULE
     // ===============================
     Route::prefix('wishlist')->controller(WishlistController::class)->middleware('auth:sanctum')->group(function () {
-        Route::get('/', 'index');
-        Route::post('/', 'store');
-        Route::delete('/{id}', 'destroy');
+        Route::get('/list-wishlist', 'index');
+        Route::post('/add-to-wishlist', 'store');
+        Route::delete('/remove-from-wishlist/{id}', 'destroy');
     });
 
     // ===============================
     // 🧾 ORDER MODULE
     // ===============================
     Route::prefix('orders')->controller(OrderController::class)->middleware('auth:sanctum')->group(function () {
-        Route::get('/', 'index');
-        Route::post('/', 'store');
+        Route::get('/list-order', 'index');
+        Route::post('/create-order', 'store');
     });
 
     // ===============================
     // ⭐ PRODUCT REVIEWS
     // ===============================
     Route::prefix('reviews')->controller(ReviewController::class)->group(function () {
-        Route::get('/product/{product_id}', 'index');
-        Route::middleware('auth:sanctum')->post('/', 'store');
+        Route::get('/product-reviews/{productId}', 'index');
+        Route::middleware('auth:sanctum')->post('/add-review', 'store');
     });
 
     // ===============================

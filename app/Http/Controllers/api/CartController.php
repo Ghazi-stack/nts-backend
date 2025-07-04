@@ -17,7 +17,7 @@ class CartController extends Controller
     {
         $cartItems = Cart::with('product')->where('user_id', $request->user()->id)->get();
 
-        return resource()->json([
+        return response()->json([
             'status' => true,
             'message' => 'Cart items retrieved successfully',
             'data' => CartResource::collection($cartItems)
@@ -28,14 +28,14 @@ class CartController extends Controller
     {
         try {
             $validated = $request->validate([
-                'product_id' => 'required|exists:products,id',
+                'productId' => 'required|exists:products,id',
                 'quantity'   => 'required|integer|min:1',
             ]);
 
             $cartItem = Cart::updateOrCreate(
                 [
                     'user_id' => $request->user()->id,
-                    'product_id' => $validated['product_id']
+                    'product_id' => $validated['productId']
                 ],
                 [
                     'quantity' => $validated['quantity']
@@ -114,7 +114,8 @@ class CartController extends Controller
 
             return response()->json([
                 'status' => true,
-                'message' => 'Item removed from cart successfully'
+                'message' => 'Item removed from cart successfully',
+                'data' => new CartResource($cartItem->load('product'))
             ], 200); // Status code 200: OK
 
         } catch (ModelNotFoundException $e) {

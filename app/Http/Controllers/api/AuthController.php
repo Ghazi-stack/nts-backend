@@ -22,7 +22,7 @@ class AuthController extends Controller
                     'name'         => 'required|string|max:100',
                     'email'        => 'required|email|unique:users',
                     'password'     => 'required|min:6',
-                    'phone_number' => 'required|string|max:20|unique:users', // Added unique check
+                    'phoneNumber' => 'required|string|max:20|unique:users', // Added unique check
                 ]);
             
                 if ($validator->fails()) {
@@ -37,7 +37,7 @@ class AuthController extends Controller
                     'name'         => $request->name,
                     'email'        => $request->email,
                     'password'     => bcrypt($request->password),
-                    'phone_number' => $request->phone_number,
+                    'phoneNumber' => $request->phoneNumber,
                 ]);
             
                 try {
