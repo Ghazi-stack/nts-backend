@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Cart extends Model
 {
     use HasFactory;
+    use SoftDeletes;
     protected $fillable = ['user_id', 'product_id', 'quantity'];
 
     public function product()

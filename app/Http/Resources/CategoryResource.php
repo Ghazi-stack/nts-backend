@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
+use App\Http\Resources\CategoryResource;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class CategoryResource extends JsonResource
@@ -19,6 +20,8 @@ class CategoryResource extends JsonResource
             'name'        => $this->name,
             'slug'        => $this->slug,
             'description' => $this->description,
+            'parent_id'   => $this->parent_id,
+            'children'    => CategoryResource::collection($this->whenLoaded('children')),
             'created_at'  => $this->created_at->format('Y-m-d H:i:s'),
             'updated_at'  => $this->updated_at->format('Y-m-d H:i:s'),
         ];
