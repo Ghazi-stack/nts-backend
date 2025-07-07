@@ -65,7 +65,7 @@ class CategoryController extends Controller
         $request->validate([
             'name' => 'required|string|unique:categories,name',
             'description' => 'nullable|string',
-            'parent_id' => 'nullable|exists:categories,id',
+            'parentId' => 'nullable|exists:categories,id',
         ]);
 
         $slug = Str::slug($request->name);
@@ -78,7 +78,7 @@ class CategoryController extends Controller
             'name' => $request->name,
             'slug' => $slug,
             'description' => $request->description,
-            'parent_id' => $request->parent_id,
+            'parent_id' => $request->parentId,
         ]);
 
         return response()->json([
@@ -97,7 +97,7 @@ class CategoryController extends Controller
             $request->validate([
                 'name' => 'required|string|max:255|unique:categories,name,' . $id,
                 'description' => 'nullable|string',
-                'parent_id' => 'nullable|exists:categories,id',
+                'parentId' => 'nullable|exists:categories,id',
             ]);
 
             $slug = Str::slug($request->name);
@@ -110,7 +110,7 @@ class CategoryController extends Controller
                 'name' => $request->name,
                 'slug' => $slug,
                 'description' => $request->description,
-                'parent_id' => $request->parent_id,
+                'parent_id' => $request->parentId,
             ]);
 
             return response()->json([
@@ -133,9 +133,40 @@ class CategoryController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Category deleted successfully',
-            ]);
+                'data' => new CategoryResource($category)
+            ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json(['status' => false, 'message' => 'Category not found'], 404);
         }
     }
+
+    public function destroyOnlySubcategories($id)
+    {
+        try {
+            $category = Category::with('childrenRecursive')->findOrFail($id);
+
+            $this->deleteChildren($category); // Delete only children
+
+            // 🔁 Reload category to refresh its children (now deleted)
+            $category->refresh(); // reload from DB
+            $category->load('childrenRecursive');
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Subcategories deleted successfully',
+                'data' => new CategoryResource($category),
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['status' => false, 'message' => 'Category not found'], 404);
+        }
+    }
+    // Helper method for recursion
+    private function deleteChildren($category)
+    {
+        foreach ($category->childrenRecursive as $child) {
+            $this->deleteChildren($child);
+            $child->delete();
+        }
+    }
+
 }

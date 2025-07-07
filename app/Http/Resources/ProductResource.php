@@ -26,8 +26,24 @@ class ProductResource extends JsonResource
             'image'       => $this->image ? asset($this->image) : null,
             'category_id' => $this->category_id,
             'brand_id'    => $this->brand_id,
+            'category_hierarchy' => $this->buildCategoryHierarchy($this->category),
             'created_at'  => $this->created_at->format('Y-m-d H:i:s'),
             'updated_at'  => $this->updated_at->format('Y-m-d H:i:s'),
         ];
     }
+
+
+      private function buildCategoryHierarchy($category)
+    {
+        $data = [];
+        while ($category) {
+            $data[] = [
+                'id' => $category->id,
+                'name' => $category->name
+            ];
+            $category = $category->parent;
+        }
+        return array_reverse($data); // top to bottom
+    }
+
 }

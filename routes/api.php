@@ -33,22 +33,23 @@ use App\Http\Controllers\API\SearchController;
     // 📁 CATEGORY MODULE
     // ===============================
    Route::prefix('categories')->controller(CategoryController::class)->group(function () {
-        Route::get('/list-category', 'index');               // List all categories
-        Route::get('/category/{id}', 'show');            // Get category by ID
+        Route::get('/list-categories', 'index');               // List all categories
+        Route::get('/categories/{id}', 'show');            // Get category by ID
         Route::get('/slug/{slug}', 'showBySlug'); // (Optional) Get category by slug
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/add-categories', 'storeCategory');       // Create category
-        Route::put('/update-category/{id}', 'updateCategory');      // Update category
-        Route::delete('/delete-category/{id}', 'destroyCategory');  // Delete category
+        Route::put('/update-categories/{id}', 'updateCategory');      // Update category
+        Route::delete('/delete-categories/{id}', 'destroyCategory');  // Delete category
+        Route::delete('/delete-subcategories/{id}', 'destroyOnlySubcategories'); //Delete Subcategories
     });
 });
     // ===============================
     // 🏷️ BRAND MODULE
     // ===============================
     Route::prefix('brands')->controller(BrandController::class)->group(function () {
-        Route::get('/showall-brands', 'index');
-        Route::get('/show-brand/{id}', 'showBrands');
+        Route::get('/show-brands', 'index');
+        Route::get('/show-brands/{id}', 'showBrands');
         Route::middleware('auth:sanctum')->group(function () {
             Route::post('/store-brands', 'storeBrands');
             Route::post('/update-brands/{id}', 'updateBrands');

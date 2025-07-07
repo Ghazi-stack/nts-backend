@@ -14,7 +14,12 @@ class OrderController extends Controller
     public function index(Request $request)
     {
         $orders = $request->user()->orders()->with('items.product')->get();
-        return OrderResource::collection($orders);
+        return response()->json([
+            'status' => true,
+            'message' => 'Order retrieved successfully',
+            'data' => OrderResource::collection($orders)
+        ]);
+        
     }
 
     public function store(Request $request)

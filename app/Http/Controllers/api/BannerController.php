@@ -14,7 +14,11 @@ class BannerController extends Controller
     public function index()
     {
         try {
-            return BannerResource::collection(Banner::all());
+            return response()->json([
+                'status' => true,
+                'message' => 'Banners retrieved successfully',
+                'data' => BannerResource::collection(Banner::all()),
+            ], 200);
         } catch (\Exception $e) {
             Log::error('Error fetching banners: ' . $e->getMessage());
 

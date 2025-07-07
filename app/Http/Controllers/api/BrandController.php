@@ -128,7 +128,8 @@ class BrandController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Brand deleted successfully'
+                'message' => 'Brand deleted successfully',
+                'data' => new BrandResource($brand)
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
