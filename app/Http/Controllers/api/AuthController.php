@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Models\Cart;
 use App\Models\User;
 use Illuminate\Http\Request;
 use App\Mail\UserRegistrationMail;
@@ -184,5 +185,31 @@ class AuthController extends Controller
             ], 500);
         }
     }
+
+    public function logout(Request $request)
+    {
+        try {
+            $user = $request->user();
+        
+            // 🗑️ Delete all cart items for this user
+            Cart::where('user_id', $user->id)->delete();
+        
+            // 🔐 Revoke the current token
+            $user->currentAccessToken()->delete();
+        
+            return response()->json([
+                'status' => true,
+                'message' => 'Logout successful and cart cleared',
+            ]);
+        } catch (Exception $e) {
+            Log::error('Logout failed: ' . $e->getMessage());
+        
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong during logout. Please try again.',
+            ], 500);
+        }
+    }
+
 }
 
