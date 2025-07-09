@@ -11,11 +11,19 @@ class ReviewController extends Controller
 {
     public function index($productId)
     {
-        $reviews = Review::where('product_id', $productId)->with('user')->latest()->get();
+         $perPage = $request->query('perPage', 20);
+        $reviews = Review::where('product_id', $productId)->with('user')->latest()->paginate($perPage);;
         return response()->json([
             'status' => true,
             'message' => 'Reviews retrieved successfully',
-            'data' => ReviewResource::collection($reviews)
+            'data' => ReviewResource::collection($reviews),
+            'pagination' => [
+                'total' => $reviews->total(),
+                'count' => $reviews->count(),
+                'per_page' => $reviews->perPage(),
+                'current_page' => $reviews->currentPage(),
+                'total_pages' => $reviews->lastPage(),
+        ]
         ], 200); // HTTP 200 OK
     }
 

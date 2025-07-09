@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\api;
+namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller; // ✅ Correct base controller
 use Illuminate\Http\Request;
@@ -11,13 +11,24 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class BannerController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
+            $perPage = $request->query('perPage', 20); // Default to 20 if not provided
+
+            $banners = Banner::paginate($perPage);
+
             return response()->json([
                 'status' => true,
                 'message' => 'Banners retrieved successfully',
-                'data' => BannerResource::collection(Banner::all()),
+                'data' => BannerResource::collection($banners),
+                'pagination' => [
+                    'total' => $banners->total(),
+                    'count' => $banners->count(),
+                    'perPage' => $banners->perPage(),
+                    'currentPage' => $banners->currentPage(),
+                    'totalPages' => $banners->lastPage(),
+            ]
             ], 200);
         } catch (\Exception $e) {
             Log::error('Error fetching banners: ' . $e->getMessage());
@@ -77,7 +88,7 @@ class BannerController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'Banner not found',
-            ], 404);
+            ], 200);
         } catch (\Exception $e) {
             Log::error('Error fetching banner: ' . $e->getMessage());
 
@@ -139,7 +150,7 @@ class BannerController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'Banner not found',
-            ], 404);
+            ], 200);
         } catch (\Exception $e) {
             Log::error('Error updating banner: ' . $e->getMessage());
 
@@ -165,12 +176,13 @@ class BannerController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Banner deleted successfully',
+                'data' => $banner
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => false,
                 'message' => 'Banner not found',
-            ], 404);
+            ], 200);
         } catch (\Exception $e) {
             Log::error('Error deleting banner: ' . $e->getMessage());
 

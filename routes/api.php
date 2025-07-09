@@ -3,15 +3,17 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AuthController;
-use App\Http\Controllers\API\CategoryController;
-use App\Http\Controllers\API\BrandController;
-use App\Http\Controllers\API\ProductController;
 use App\Http\Controllers\API\CartController;
+use App\Http\Controllers\API\BrandController;
 use App\Http\Controllers\API\OrderController;
-use App\Http\Controllers\API\WishlistController;
-use App\Http\Controllers\API\ReviewController;
 use App\Http\Controllers\API\BannerController;
+use App\Http\Controllers\API\ReviewController;
 use App\Http\Controllers\API\SearchController;
+use App\Http\Controllers\API\ProductController;
+use App\Http\Controllers\API\CategoryController;
+use App\Http\Controllers\API\WishlistController;
+use App\Http\Controllers\API\StripePaymentController;
+use App\Http\Controllers\API\StripeWebhookController;
 
     // 🔐 Public route to fetch current user if authenticated
     Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
@@ -74,11 +76,10 @@ use App\Http\Controllers\API\SearchController;
     // ===============================
     // 🛒 CART MODULE
     // ===============================
-    Route::prefix('cart')->controller(CartController::class)->middleware('auth:sanctum')->group(function () {
-        Route::get('/list-cart', 'index');
-        Route::post('/store-cart', 'storeCart');
-        Route::put('/update-cart/{id}', 'updateCart');
-        Route::delete('/delete-cart/{id}', 'destroyCart');
+        Route::prefix('cart')->controller(CartController::class)->group(function () {
+        Route::get('/list-cart', 'index');           // GET /api/cart/list-cart
+        Route::post('/store-cart', 'storeCart');     // POST /api/cart/store-cart
+        Route::delete('/delete-cart/{id}', 'destroyCart'); // DELETE /api/cart/delete-cart/{id}
     });
 
     // ===============================
@@ -93,9 +94,10 @@ use App\Http\Controllers\API\SearchController;
     // ===============================
     // 🧾 ORDER MODULE
     // ===============================
-    Route::prefix('orders')->controller(OrderController::class)->middleware('auth:sanctum')->group(function () {
-        Route::get('/list-order', 'index');
-        Route::post('/create-order', 'store');
+       Route::prefix('order')->controller(OrderController::class)->group(function () {
+        Route::post('/order-place', 'store');     // Place new order
+        Route::get('/my-orders', 'index');
+        Route::get('/show/{id}', 'show');  // Get current user's or guest's orders
     });
 
     // ===============================
@@ -116,4 +118,9 @@ use App\Http\Controllers\API\SearchController;
             Route::post('/update-banner/{id}', 'updateBanner');
             Route::delete('/delete-banner/{id}', 'destroyBanner');
         });
-    });
+});
+
+
+    Route::post('/stripe/create-session', [StripePaymentController::class, 'createCheckoutSession']);
+    Route::post('/stripe/webhook', [StripeWebhookController::class, 'handle']);
+    

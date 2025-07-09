@@ -11,12 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('orders', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->decimal('total_amount', 10, 2);
-            $table->string('status')->default('pending');
-            $table->timestamps();
+        Schema::table('carts', function (Blueprint $table) {
+            $table->boolean('reminder_sent')->default(false);
         });
     }
 
@@ -25,6 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('orders');
+        Schema::table('carts', function (Blueprint $table) {
+            $table->dropColumn('reminder_sent');
+        });
     }
 };

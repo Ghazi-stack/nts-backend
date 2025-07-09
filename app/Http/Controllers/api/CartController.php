@@ -13,15 +13,37 @@ use Exception;
 
 class CartController extends Controller
 {
-    public function index(Request $request)
+     public function index(Request $request)
     {
-        $cartItems = Cart::with('product')->where('user_id', $request->user()->id)->get();
+        try {
+            $user = auth('sanctum')->user();
+            $sessionId = $request->header('X-Session-ID') ?? session()->getId();
+            $perPage = $request->query('perPge', 20);
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Cart items retrieved successfully',
-            'data' => CartResource::collection($cartItems)
-        ]);
+            $cartItems = Cart::with('product')
+                ->when($user, fn($q) => $q->where('user_id', $user->id))
+                ->when(!$user, fn($q) => $q->where('session_id', $sessionId))
+                ->paginate($perPage);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Cart items retrieved successfully',
+                'data' => CartResource::collection($cartItems),
+                'pagination' => [
+                    'total' => $cartItems->total(),
+                    'count' => $cartItems->count(),
+                    'perPage' => $cartItems->perPage(),
+                    'currentPage' => $cartItems->currentPage(),
+                    'totalPages' => $cartItems->lastPage(),
+            ]
+            ],200);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong while retrieving the cart',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function storeCart(Request $request)
@@ -29,76 +51,52 @@ class CartController extends Controller
         try {
             $validated = $request->validate([
                 'productId' => 'required|exists:products,id',
-                'quantity'   => 'required|integer|min:1',
+                'quantity'  => 'required|integer|min:1',
             ]);
 
-            $cartItem = Cart::updateOrCreate(
-                [
-                    'user_id' => $request->user()->id,
-                    'product_id' => $validated['productId']
-                ],
-                [
-                    'quantity' => $validated['quantity']
-                ]
-            );
+            // ✅ Use auth helper directly
+            $user = auth('sanctum')->user();
+            $sessionId = $request->header('X-Session-ID') ?? session()->getId();
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Item added to cart successfully',
-                'data' => new CartResource($cartItem->load('product'))
-            ], 201); // Status code 201: Created
+            $existingCartItem = Cart::where([
+            'user_id'    => $user?->id,
+            'session_id' => $user ? null : $sessionId,
+            'product_id' => $validated['productId']
+                ])->whereNull('deleted_at')->first();
 
-        } catch (ValidationException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation failed',
-                'errors' => $e->errors(),
-            ], 422);
-
-        } catch (Exception $e) {
-            return response()->json([
-                'message' => 'An error occurred while adding to cart.',
-                'error' => $e->getMessage(),
-            ], 500);
+        if ($existingCartItem) {
+            // ✅ Update quantity if item is active
+            $existingCartItem->update([
+                'quantity' => $validated['quantity']
+            ]);
+            $cartItem = $existingCartItem;
+        } else {
+            // ✅ Create new cart item, ignore soft-deleted ones
+            $cartItem = Cart::create([
+                'user_id'    => $user?->id,
+                'session_id' => $user ? null : $sessionId,
+                'product_id' => $validated['productId'],
+                'quantity'   => $validated['quantity'],
+            ]);
         }
-    }
 
-    public function updateCart(Request $request, $id)
-    {
-        try {
-            $validated = $request->validate([
-                'quantity' => 'required|integer|min:1',
-            ]);
-
-            $cartItem = Cart::where('id', $id)
-                ->where('user_id', $request->user()->id)
-                ->firstOrFail();
-
-            $cartItem->update(['quantity' => $validated['quantity']]);
 
             return response()->json([
                 'status' => true,
-                'message' => 'Cart item updated successfully',
+                'message' => 'Item added/updated in cart successfully',
                 'data' => new CartResource($cartItem->load('product'))
-            ], 200); // Status code 200: OK
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Cart item not found'
-            ], 404);
-
+            ], 201);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => false,
                 'message' => 'Validation failed',
                 'errors' => $e->errors(),
             ], 422);
-
         } catch (Exception $e) {
             return response()->json([
-                'message' => 'An error occurred while updating the cart item.',
-                'error' => $e->getMessage(),
+                'status' => false,
+                'message' => 'Failed to add item to cart',
+                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -106,30 +104,60 @@ class CartController extends Controller
     public function destroyCart(Request $request, $id)
     {
         try {
+            // ✅ Use auth helper directly
+            $user = auth('sanctum')->user();
+            $sessionId = $request->header('X-Session-ID') ?? session()->getId();
+
             $cartItem = Cart::where('id', $id)
-                ->where('user_id', $request->user()->id)
+                ->when($user, fn($q) => $q->where('user_id', $user->id))
+                ->when(!$user, fn($q) => $q->where('session_id', $sessionId))
                 ->firstOrFail();
 
             $cartItem->delete();
 
             return response()->json([
                 'status' => true,
-                'message' => 'Item removed from cart successfully',
-                'data' => new CartResource($cartItem->load('product'))
-            ], 200); // Status code 200: OK
-
+                'message' => 'Cart item removed successfully'
+            ]);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => false,
                 'message' => 'Cart item not found'
-            ], 404);
-
+            ], 200);
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'An error occurred while removing the item from cart.',
-                'error' => $e->getMessage(),
+                'message' => 'Failed to remove cart item',
+                'error' => $e->getMessage()
             ], 500);
         }
     }
+
+
+    // After login move to user_id
+
+    public function transferGuestCartToUser(Request $request)
+    {
+        $user = auth('sanctum')->user();
+        $sessionId = $request->header('X-Session-ID');
+    
+        if (!$sessionId) return;
+    
+        $guestCartItems = Cart::where('session_id', $sessionId)->get();
+    
+        foreach ($guestCartItems as $item) {
+            Cart::updateOrCreate(
+                [
+                    'user_id'    => $user->id,
+                    'product_id' => $item->product_id,
+                ],
+                [
+                    'quantity' => $item->quantity
+                ]
+            );
+        
+            $item->delete(); // remove from session cart
+        }
+    }
+
 }

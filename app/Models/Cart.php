@@ -5,12 +5,18 @@ namespace App\Models;
 use App\Models\Product;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Cart extends Model
 {
+    use SoftDeletes; // ✅ use trait here
     use HasFactory;
-    use SoftDeletes;
-    protected $fillable = ['user_id', 'product_id', 'quantity'];
+    protected $fillable = [ 
+        'user_id', 
+        'session_id', 
+        'product_id', 
+        'quantity'
+    ];
 
     public function product()
     {

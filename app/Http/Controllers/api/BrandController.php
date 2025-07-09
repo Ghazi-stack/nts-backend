@@ -12,14 +12,24 @@ use Exception;
 
 class BrandController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $brands = Brand::all();
+        $perPage = $request->query('perPage', 20); 
+
+        $brands = Brand::paginate($perPage);
+
         return response()->json([
+            'status' => true,
             'message' => 'Brands retrieved successfully',
-            'success' => true,
-            'data' => BrandResource::collection($brands)
-        ]);
+            'data' => BrandResource::collection($brands),
+            'pagination' => [
+                'total' => $brands->total(),
+                'count' => $brands->count(),
+                'perPage' => $brands->perPage(),
+                'currentPage' => $brands->currentPage(),
+                'totalPages' => $brands->lastPage(),
+            ]
+        ],200);
     }
 
     public function showBrands($id)
@@ -27,15 +37,15 @@ class BrandController extends Controller
         try {
             $brand = Brand::findOrFail($id);
             return response()->json([
-                'success' => true,
+                'status' => true,
                 'message' => 'Brand retrieved successfully',
                 'data' => new BrandResource($brand)
             ]);
         } catch (ModelNotFoundException $e) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'message' => 'Brand not found'
-            ], 404);
+            ], 200);
         }
     }
 
@@ -60,7 +70,7 @@ class BrandController extends Controller
             $brand = Brand::create($data);
         
             return response()->json([
-                'success' => true,
+                'status' => true,
                 'message' => 'Brand created successfully',
                 'brand' => new BrandResource($brand),
             ], 201);
@@ -69,7 +79,7 @@ class BrandController extends Controller
                 \Log::error('Error creating brand: ' . $e->getMessage());
                
                 return response()->json([
-                    'success' => false,
+                    'status' => false,
                     'message' => 'Failed to create brand',
                 ], 500);
             }
@@ -105,7 +115,7 @@ class BrandController extends Controller
             $brand->save();
 
             return response()->json([
-                'success' => true,
+                'status' => true,
                 'message' => 'Brand updated successfully',
                 'brand' => new BrandResource($brand->fresh()),
             ], 200);
@@ -113,7 +123,7 @@ class BrandController extends Controller
             \Log::error('Error updating brand: ' . $e->getMessage());
 
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'message' => 'Failed to update brand',
             ], 500);
         }
@@ -127,18 +137,18 @@ class BrandController extends Controller
             $brand->delete();
 
             return response()->json([
-                'success' => true,
+                'status' => true,
                 'message' => 'Brand deleted successfully',
                 'data' => new BrandResource($brand)
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'message' => 'Brand not found'
-            ], 404);
+            ], 200);
         } catch (Exception $e) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'message' => 'Failed to delete brand',
                 'error' => $e->getMessage()
             ], 500);

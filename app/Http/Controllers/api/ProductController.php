@@ -20,7 +20,18 @@ class ProductController extends Controller
 
             $products = Product::with(['category', 'brand'])->paginate($perPage);
 
-            return ProductResource::collection($products);
+            return response()->json([
+            'status' => true,
+            'message' => 'Products retrieved successfully.',
+            'data' => ProductResource::collection($products),
+            'pagination' => [
+                'total' => $products->total(),
+                'count' => $products->count(),
+                'perPage' => $products->perPage(),
+                'currentPage' => $products->currentPage(),
+                'totalPages' => $products->lastPage(),
+            ]
+        ]);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to fetch products.'], 500);
         }
@@ -30,9 +41,18 @@ class ProductController extends Controller
     {
         try {
             $product = Product::with(['category', 'brand'])->where('slug', $slug)->firstOrFail();
-            return new ProductResource($product);
+
+            $product->increment('views');
+            return response()->json([
+                'status' => true,
+                'message' => 'Product Retrieved',
+                'data' => new ProductResource($product)
+            ],200);
+                
+            
+            
         } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Product not found.'], 404);
+            return response()->json(['error' => 'Product not found.'], 200);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to retrieve product.'], 500);
         }
@@ -48,7 +68,8 @@ class ProductController extends Controller
                 'price'       => 'required|numeric|min:0',
                 'stock'       => 'nullable|integer',
                 'description' => 'nullable|string',
-                'image'       => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048'
+                'image'       => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'isFeatured' => 'nullable|boolean', 
             ]);
 
             if ($request->hasFile('image')) {
@@ -60,6 +81,7 @@ class ProductController extends Controller
             $validated['slug'] = Str::slug($validated['name']) . '-' . uniqid();
             $validated['category_id'] = $validated['categoryId'];
             $validated['brand_id'] = $validated['brandId'];
+            $validated['is_featured'] = $request->get('isFeatured', false); 
             unset($validated['categoryId'], $validated['brandId']);
 
             $product = Product::create($validated);
@@ -105,7 +127,7 @@ class ProductController extends Controller
 
             return new ProductResource($product);
         } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Product not found.'], 404);
+            return response()->json(['error' => 'Product not found.'], 200);
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (Exception $e) {
@@ -127,7 +149,7 @@ class ProductController extends Controller
                 'data'    => new ProductResource($product)
             ], 200); // ✅ HTTP 200 OK
         } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Product not found.'], 404);
+            return response()->json(['error' => 'Product not found.'], 200);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to delete product.'], 500);
         }
@@ -165,6 +187,63 @@ class ProductController extends Controller
             return response()->json(['errors' => $e->errors()], 422);
         } catch (Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+
+
+    public function newProducts()
+    {
+        try {
+            $products = Product::latest()
+                ->with(['category', 'brand'])
+                ->take(10)
+                ->get();
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'New products retrieved successfully.',
+                'data'    => ProductResource::collection($products)
+            ]);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to load new products.'], 500);
+        }
+    }
+
+    public function featuredProducts()
+    {
+        try {
+            $products = Product::where('is_featured', true)
+                ->with(['category', 'brand'])
+                ->latest()
+                ->take(10)
+                ->get();
+
+        return response()->json([
+                'status'  => true,
+                'message' => 'Featured products retrieved successfully.',
+                'data'    => ProductResource::collection($products)
+            ]);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to load featured products.'], 500);
+        }
+    }
+
+    public function popularProducts()
+    {
+        try {
+            $products = Product::with(['category', 'brand'])
+                ->orderByDesc('views')
+                ->take(10)
+                ->get();
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Popular products retrieved successfully.',
+                'data'    => ProductResource::collection($products)
+            ]);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to load popular products.'], 500);
         }
     }
 }

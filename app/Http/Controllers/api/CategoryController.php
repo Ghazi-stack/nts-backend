@@ -12,21 +12,30 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 class CategoryController extends Controller
 {
    // GET /categories/list-category
-    public function index()
+    public function index(Request $request)
     {
-        $categories = Category::with('children.children.children')->whereNull('parent_id')->get();
+        $perPage = $request->query('perPage', 20);
+        $categories = Category::with('children.children.children')->whereNull('parent_id')->paginate($perPage);
 
         if ($categories->isEmpty()) {
             return response()->json([
                 'status' => false,
                 'message' => 'No categories found',
-            ], 404);
+            ], 200);
         }
 
         return response()->json([
-            'status' => true,
-            'categories' => CategoryResource::collection($categories),
-        ]);
+        'status' => true,
+        'message' => 'Categories retrieved successfully',
+        'data' => CategoryResource::collection($categories),
+        'pagination' => [
+            'total' => $categories->total(),
+            'count' => $categories->count(),
+            'perPage' => $categories->perPage(),
+            'currentPage' => $categories->currentPage(),
+            'totalPages' => $categories->lastPage(),
+        ]
+        ],200);
     }
 
     // GET /categories/category/{id}
@@ -40,7 +49,7 @@ class CategoryController extends Controller
                 'category' => new CategoryResource($category),
             ]);
         } catch (ModelNotFoundException $e) {
-            return response()->json(['status' => false, 'message' => 'Category not found'], 404);
+            return response()->json(['status' => false, 'message' => 'Category not found'], 200);
         }
     }
 
@@ -50,7 +59,7 @@ class CategoryController extends Controller
         $category = Category::with('children')->where('slug', $slug)->first();
 
         if (!$category) {
-            return response()->json(['status' => false, 'message' => 'Category not found'], 404);
+            return response()->json(['status' => false, 'message' => 'Category not found'], 200);
         }
 
         return response()->json([
@@ -119,7 +128,7 @@ class CategoryController extends Controller
                 'category' => new CategoryResource($category),
             ]);
         } catch (ModelNotFoundException $e) {
-            return response()->json(['status' => false, 'message' => 'Category not found'], 404);
+            return response()->json(['status' => false, 'message' => 'Category not found'], 200);
         }
     }
 
@@ -136,7 +145,7 @@ class CategoryController extends Controller
                 'data' => new CategoryResource($category)
             ], 200);
         } catch (ModelNotFoundException $e) {
-            return response()->json(['status' => false, 'message' => 'Category not found'], 404);
+            return response()->json(['status' => false, 'message' => 'Category not found'], 200);
         }
     }
 
@@ -157,7 +166,7 @@ class CategoryController extends Controller
                 'data' => new CategoryResource($category),
             ], 200);
         } catch (ModelNotFoundException $e) {
-            return response()->json(['status' => false, 'message' => 'Category not found'], 404);
+            return response()->json(['status' => false, 'message' => 'Category not found'], 200);
         }
     }
     // Helper method for recursion
