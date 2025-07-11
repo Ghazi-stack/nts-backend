@@ -24,6 +24,10 @@ class AuthController extends Controller
                     'email'        => 'required|email|unique:users',
                     'password'     => 'required|min:6',
                     'phoneNumber'  => 'required|string|max:20|unique:users,phone_number',
+                    'storeName'    => 'required|string|max:255',
+                    'businessSize' => 'required|string',
+                    'region'        => 'required|string',
+                    'userRole'     => 'nullable|in:1,2'
                 ]);
             
                 if ($validator->fails()) {
@@ -39,6 +43,11 @@ class AuthController extends Controller
                     'email'        => $request->email,
                     'password'     => bcrypt($request->password),
                     'phone_number' => $request->phoneNumber, // Ensure phone_number is stored correctly
+                    'userRole'         => $request->input('userRole', 2), // Default to customer
+                    'store_name'     => $request->storeName,
+                    'business_size'  => $request->businessSize,
+                    'region'         => $request->region,
+
                 ]);
             
                 try {
@@ -72,9 +81,10 @@ class AuthController extends Controller
                 'email'    => 'required|email',
                 'password' => 'required',
             ]);
-
+            
+            $roleMessage = $user->userRole == 1 ? 'Admin login successful' : 'Customer login successful';
             $user = User::where('email', $request->email)->first();
-
+           
             if (!$user || !Hash::check($request->password, $user->password)) {
                 return response()->json([
                     'status' => false,

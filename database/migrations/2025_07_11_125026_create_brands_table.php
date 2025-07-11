@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('products', function (Blueprint $table) {
-            $table->boolean('is_featured')->default(false);
-            $table->unsignedBigInteger('views')->default(0);
+        Schema::create('brands', function (Blueprint $table) {
+            $table->id();
+            $table->string('name', 255);
+            $table->string('logo')->nullable(); // Stores file path
+            $table->timestamps();
         });
     }
 
@@ -22,8 +24,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('products', function (Blueprint $table) {
-            //
-        });
+        Schema::dropIfExists('brands');
     }
 };

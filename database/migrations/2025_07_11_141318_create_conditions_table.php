@@ -11,18 +11,21 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('carts', function (Blueprint $table) {
-            $table->boolean('reminder_sent')->default(false);
+        if (!Schema::hasTable('conditions')) {
+        Schema::create('conditions', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->timestamps();
         });
     }
-
+    }
     /**
      * Reverse the migrations.
      */
     public function down(): void
     {
-        Schema::table('carts', function (Blueprint $table) {
-            $table->dropColumn('reminder_sent');
-        });
+        if (!Schema::hasTable('conditions')) {   
+        Schema::dropIfExists('conditions');
     }
+}
 };

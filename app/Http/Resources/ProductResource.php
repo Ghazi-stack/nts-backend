@@ -3,7 +3,11 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
+use App\Http\Resources\ProductImageResource;
+use App\Http\Resources\ProductContentResource;
+use App\Http\Resources\ProductAttributeResource;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Http\Resources\ProductIdentifierResource;
 
 class ProductResource extends JsonResource
 {
@@ -15,20 +19,44 @@ class ProductResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id'          => $this->id,
-            'name'        => $this->name,
-            'slug'        => $this->slug,
-            'category'    => optional($this->category)->name,
-            'brand'       => optional($this->brand)->name,
-            'price'       => $this->price,
-            'stock'       => $this->stock,
-            'description' => $this->description,
-            'image' => $this->image ? asset($this->image) : null,
-            'category_id' => $this->category_id,
-            'brand_id'    => $this->brand_id,
-            'category_hierarchy' => $this->buildCategoryHierarchy($this->category),
-            'created_at'  => $this->created_at->format('Y-m-d H:i:s'),
-            'updated_at'  => $this->updated_at->format('Y-m-d H:i:s'),
+              'id'              => $this->id,
+            'name'            => $this->name,
+            'slug'            => $this->slug,
+            'sku'             => $this->sku,
+            'productType'     => $this->product_type,
+            'price'           => $this->price,
+            'cost'            => $this->cost,
+            'msrp'            => $this->msrp,
+            'salePrice'       => $this->sale_price,
+            'brand'           => $this->brand?->name,
+           'categories'      => $this->categories->map(function ($category) {
+                return [
+                    'id' => $category->id,
+                    'name' => $category->name,
+                    'hierarchy' => $this->buildCategoryHierarchy($category),
+                ];
+            }),
+            'condition'       => $this->condition?->name,
+            'isFeatured'      => $this->is_featured,
+            'trackInventory'  => $this->track_inventory,
+            'currentStock'    => $this->current_stock,
+            'lowStock'        => $this->low_stock,
+            'sortOrder'       => $this->sort_order,
+            'searchKeywords'  => $this->search_keywords,
+            'taxClass'        => $this->tax_class,
+            'taxProviderTaxCode' => $this->tax_provider_tax_code,
+            'dimensions' => [
+                'weight' => $this->weight,
+                'width'  => $this->width,
+                'height' => $this->height,
+                'depth'  => $this->depth,
+            ],
+            'content'         => new ProductContentResource($this->whenLoaded('content')),
+            'identifiers'     => new ProductIdentifierResource($this->whenLoaded('identifiers')),
+            'images'          => ProductImageResource::collection($this->whenLoaded('images')),
+            'attributes'      => ProductAttributeResource::collection($this->whenLoaded('attributes')),
+            'createdAt'       => $this->created_at,
+            'updatedAt'       => $this->updated_at,
         ];
     }
 

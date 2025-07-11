@@ -11,21 +11,25 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('reviews', function (Blueprint $table) {
+        if (!Schema::hasTable('product_identifiers')) {
+        Schema::create('product_identifiers', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('product_id')->constrained()->onDelete('cascade');
-            $table->tinyInteger('rating'); // 1 to 5
-            $table->text('comment')->nullable();
+            $table->string('mpn')->nullable();
+            $table->string('upc')->nullable();
+            $table->string('gtin')->nullable();
+            $table->string('bpn')->nullable();
             $table->timestamps();
         });
     }
-
+    }
     /**
      * Reverse the migrations.
      */
     public function down(): void
     {
-        Schema::dropIfExists('reviews');
+        if (!Schema::hasTable('product_identifiers')) {
+        Schema::dropIfExists('product_identifiers');
+    } 
     }
 };

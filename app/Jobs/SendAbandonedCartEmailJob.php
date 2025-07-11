@@ -8,6 +8,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\AbandonedCartMail;
+use Illuminate\Support\Collection;
 
 class SendAbandonedCartEmailJob implements ShouldQueue
 {
@@ -17,7 +18,7 @@ class SendAbandonedCartEmailJob implements ShouldQueue
     public $userEmail;
     public $userName;
 
-    public function __construct($cartItems, $userEmail, $userName)
+    public function __construct(Collection $cartItems, string $userEmail, string $userName)
     {
         $this->cartItems = $cartItems;
         $this->userEmail = $userEmail;

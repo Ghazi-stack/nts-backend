@@ -11,22 +11,24 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('carts', function (Blueprint $table) {
+        if (!Schema::hasTable('product_attributes')) {
+        Schema::create('product_attributes', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->nullable()->constrained()->onDelete('cascade');
-            $table->string('session_id')->nullable(); // For guest users
             $table->foreignId('product_id')->constrained()->onDelete('cascade');
-            $table->integer('quantity')->default(1);
-            $table->softDeletes();
+            $table->string('key');
+            $table->string('value');
             $table->timestamps();
         });
     }
+}
 
     /**
      * Reverse the migrations.
      */
     public function down(): void
     {
-        Schema::dropIfExists('carts');
+        if (!Schema::hasTable('product_attributes')) {
+        Schema::dropIfExists('product_attributes');
     }
+}
 };
