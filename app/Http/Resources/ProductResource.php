@@ -3,6 +3,8 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
+use App\Http\Resources\BrandResource;
+use App\Http\Resources\CategoryResource;
 use App\Http\Resources\ProductImageResource;
 use App\Http\Resources\ProductContentResource;
 use App\Http\Resources\ProductAttributeResource;
@@ -18,46 +20,57 @@ class ProductResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+       
         return [
-              'id'              => $this->id,
-            'name'            => $this->name,
-            'slug'            => $this->slug,
-            'sku'             => $this->sku,
-            'productType'     => $this->product_type,
-            'price'           => $this->price,
-            'cost'            => $this->cost,
-            'msrp'            => $this->msrp,
-            'salePrice'       => $this->sale_price,
-            'brand'           => $this->brand?->name,
-           'categories'      => $this->categories->map(function ($category) {
-                return [
-                    'id' => $category->id,
-                    'name' => $category->name,
-                    'hierarchy' => $this->buildCategoryHierarchy($category),
-                ];
-            }),
-            'condition'       => $this->condition?->name,
-            'isFeatured'      => $this->is_featured,
-            'trackInventory'  => $this->track_inventory,
-            'currentStock'    => $this->current_stock,
-            'lowStock'        => $this->low_stock,
-            'sortOrder'       => $this->sort_order,
-            'searchKeywords'  => $this->search_keywords,
-            'taxClass'        => $this->tax_class,
-            'taxProviderTaxCode' => $this->tax_provider_tax_code,
+           'id' => $this->id,
+            'name' => $this->name,
+            'slug' => $this->slug,
+            'sku' => $this->sku,
+            'price' => $this->price,
+            'costPrice' => $this->cost_price,
+            'salePrice' => $this->sale_price,
+            'fixedShippingCost' => $this->fixed_shipping_cost,
+            'productType' => $this->product_type,
+            'optionSet' => $this->option_set,
+            'optionSetAlign' => $this->option_set_align,
+            'allowPurchase' => $this->allow_purchase,
+            'stopProcessingRules' => $this->stop_processing_rules,
+            'taxClass' => $this->tax_class,
+            'taxProviderCode' => $this->tax_provider_code,
+            
+            'brand' => new BrandResource($this->whenLoaded('brand')),
+            'category' => new CategoryResource($this->whenLoaded('category')),
+            'conditionId' => $this->condition_id,
+            
+            'weight' => $this->dimensions['weight'] ?? null,
             'dimensions' => [
-                'weight' => $this->weight,
-                'width'  => $this->width,
-                'height' => $this->height,
-                'depth'  => $this->depth,
+                'width' => $this->dimensions['width'] ?? null,
+                'height' => $this->dimensions['height'] ?? null,
+                'depth' => $this->dimensions['depth'] ?? null,
             ],
-            'content'         => new ProductContentResource($this->whenLoaded('content')),
-            'identifiers'     => new ProductIdentifierResource($this->whenLoaded('identifiers')),
-            'images'          => ProductImageResource::collection($this->whenLoaded('images')),
-            'attributes'      => ProductAttributeResource::collection($this->whenLoaded('attributes')),
-            'createdAt'       => $this->created_at,
-            'updatedAt'       => $this->updated_at,
-        ];
+        
+            'trackInventory' => $this->track_inventory,
+            'currentStock' => $this->current_stock,
+            'lowStock' => $this->low_stock,
+            'isFeatured' => $this->is_featured,
+            'isVisible' => $this->visible_on_storefront,
+            'showCondition' => $this->show_condition,
+            'sortOrder' => $this->sort_order,
+            'searchKeywords' => $this->search_keywords,
+            'customFields' => $this->custom_fields,
+        
+            'images' => ProductImageResource::collection($this->whenLoaded('images')),
+            'content' => new ProductContentResource($this->whenLoaded('content')),
+            'identifiers' => new ProductIdentifierResource($this->whenLoaded('identifiers')),
+            'seo' => new ProductSeoResource($this->whenLoaded('seo')),
+        
+            'categoryHierarchy' => $this->category ? $this->buildCategoryHierarchy($this->category) : null,
+        
+            'createdAt' => $this->created_at,
+            'updatedAt' => $this->updated_at,
+        ];         
+        
+            
     }
 
 

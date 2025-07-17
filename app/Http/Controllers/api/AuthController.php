@@ -74,32 +74,31 @@ class AuthController extends Controller
             }
         }
 
-         public function login(Request $request)
-    {
-        try {
-            $request->validate([
-                'email'    => 'required|email',
-                'password' => 'required',
-            ]);
-            
-            $roleMessage = $user->userRole == 1 ? 'Admin login successful' : 'Customer login successful';
+        public function login(Request $request)
+        {
+            try {
+                $request->validate([
+                    'email'    => 'required|email',
+                    'password' => 'required',
+                ]);
+
             $user = User::where('email', $request->email)->first();
-           
+
             if (!$user || !Hash::check($request->password, $user->password)) {
                 return response()->json([
                     'status' => false,
                     'message' => 'Invalid email or password',
-                    'user' => [
-                        $user
-                    ]
+                    'user' => null
                 ], 401); // Unauthorized
             }
 
+            $roleMessage = $user->userRole == 1 ? 'Admin login successful' : 'Customer login successful';
+
             $token = $user->createToken('api_token')->plainTextToken;
-    
+
             return response()->json([
                 'status' => true,
-                'message' => 'Login successful',
+                'message' => $roleMessage,
                 'token' => $token,
                 'user'  => $user,
             ]);

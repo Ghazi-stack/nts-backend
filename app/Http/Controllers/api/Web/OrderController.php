@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\API;
+namespace App\Http\Controllers\API\Web;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
@@ -18,8 +18,8 @@ class OrderController extends Controller
         try {
             $user = auth('sanctum')->user(); 
             $sessionId = $request->header('X-Session-ID') ?? session()->getId();
-              $perPage = $request->query('perPage', 20);
-
+                $perPage = $request->query('perPage', 20);
+                $status = $request->query('status'); // ✅ NEW
             $orders = Order::with('items.product')
                 ->when($user, fn($q) => $q->where('user_id', $user->id))
                 ->when(!$user, fn($q) => $q->where('session_id', $sessionId))
@@ -121,6 +121,7 @@ class OrderController extends Controller
             'name'            => $validated['name'],
             'email'           => $validated['email'],
             'phone'           => $validated['phone'],
+            'status'          => 'Pending', // ✅ default status
             'address'         => $validated['address'],
             'payment_method'  => $validated['paymentMethod'],
             'shipping_method' => $validated['shippingMethod'],

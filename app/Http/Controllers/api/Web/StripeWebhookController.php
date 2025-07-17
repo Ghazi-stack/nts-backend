@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\API;
+namespace App\Http\Controllers\API\Web;
 
 use Mail;
 use Stripe\Stripe;

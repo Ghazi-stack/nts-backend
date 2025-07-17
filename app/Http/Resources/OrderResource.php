@@ -20,6 +20,7 @@ class OrderResource extends JsonResource
             'name'            => $this->name,
             'email'           => $this->email,
             'phone'           => $this->phone,
+            'status'          => $this->status,
             'address'         => $this->address,
             'paymentMethod'   => $this->payment_method,
             'shippingMethod'  => $this->shipping_method,
@@ -28,6 +29,7 @@ class OrderResource extends JsonResource
             'totalAmount'     => $this->total_amount,
             'createdAt'       => $this->created_at,
             'items'           => OrderItemResource::collection($this->whenLoaded('items')),
+            
         ];
     }
 }

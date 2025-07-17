@@ -11,7 +11,7 @@ class WishlistResource extends JsonResource
     {
         return [
             'id'         => $this->id,
-            'product_id' => $this->product_id,
+            'productId' => $this->product_id,
             'product'    => $this->whenLoaded('product'), // only includes product if loaded
             'created_at' => $this->created_at->toDateTimeString(),
         ];

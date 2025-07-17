@@ -1,7 +1,5 @@
 <?php
-
-namespace App\Http\Controllers\API;
-
+namespace App\Http\Controllers\API\Admin;
 use App\Http\Controllers\Controller; // ✅ Correct base controller
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -42,32 +40,39 @@ class BannerController extends Controller
 
     public function storeBanner(Request $request)
     {
-        try {
+       try {
             $request->validate([
                 'title'  => 'nullable|string',
                 'image'  => 'required|image|mimes:jpg,jpeg,png,webp|max:2048',
                 'link'   => 'nullable|string',
                 'status' => 'nullable|boolean',
             ]);
-
+        
+            // Ensure folder exists
+            $destinationPath = public_path('banner_images');
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+        
             $imageName = time() . '_' . preg_replace('/[^A-Za-z0-9.\-_]/', '_', $request->file('image')->getClientOriginalName());
-            $request->file('image')->move(public_path('banner_images'), $imageName);
-
+            $request->file('image')->move($destinationPath, $imageName);
+        
             $banner = Banner::create([
                 'title'  => $request->title,
                 'image'  => 'banner_images/' . $imageName,
                 'link'   => $request->link,
                 'status' => $request->has('status') ? (int) $request->status : 1,
             ]);
-
+        
             return response()->json([
                 'status' => true,
                 'message' => 'Banner created successfully',
                 'banner' => new BannerResource($banner),
             ], 201);
+        
         } catch (\Exception $e) {
-            Log::error('Error creating banner: ' . $e->getMessage());
-
+            Log::error('Error creating banner', ['exception' => $e]);
+        
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to create banner',

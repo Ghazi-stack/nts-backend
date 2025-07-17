@@ -23,6 +23,7 @@ class Order extends Model
         'shipping_cost',
         'comments',
         'total_amount',
+        'status'
     ];
 
     public function items()

@@ -15,16 +15,39 @@ class CategoryResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $directProducts = $this->products->count();
+        $inSubcategories = $this->calculateSubCategoryProducts($this);
+
         return [
-            'id'          => $this->id,
-            'name'        => $this->name,
-            'slug'        => $this->slug,
+            'id' => $this->id,
+            'name' => $this->name,
+            'slug' => $this->slug,
             'description' => $this->description,
-            'parent_id'   => $this->parent_id,
-            'children'    => CategoryResource::collection($this->whenLoaded('children')),
-            'children_recursive' => CategoryResource::collection($this->whenLoaded('childrenRecursive')),
-            'created_at'  => $this->created_at->format('Y-m-d H:i:s'),
-            'updated_at'  => $this->updated_at->format('Y-m-d H:i:s'),
+            'is_visible' => $this->is_visible,
+            'parent_id' => $this->parent_id,
+
+            // ✅ Product counts
+            'direct_products' => $directProducts,
+            'in_subcategories' => $inSubcategories,
+            'total_products' => $directProducts + $inSubcategories,
+
+            // ✅ Load subcategories if available
+            'subcategories' => CategoryResource::collection($this->whenLoaded('childrenRecursive')),
         ];
+    }
+
+    /**
+     * Recursive function to calculate subcategory product counts
+     */
+    private function calculateSubCategoryProducts($category)
+    {
+        $count = 0;
+
+        foreach ($category->childrenRecursive as $child) {
+            $count += $child->products->count();
+            $count += $this->calculateSubCategoryProducts($child);
+        }
+
+        return $count;
     }
 }

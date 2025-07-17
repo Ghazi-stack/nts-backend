@@ -2,125 +2,147 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\API\Admin\{
+    BannerController, BrandController, CategoryController,
+    ProductController, ProductFilterController, HomeController
+};
+use App\Http\Controllers\API\Web\{
+    CartController, OrderController, ReviewController,
+    WishlistController, StripePaymentController, StripeWebhookController
+};
 use App\Http\Controllers\API\AuthController;
-use App\Http\Controllers\API\CartController;
-use App\Http\Controllers\API\BrandController;
-use App\Http\Controllers\API\OrderController;
-use App\Http\Controllers\API\BannerController;
-use App\Http\Controllers\API\ReviewController;
-use App\Http\Controllers\API\SearchController;
-use App\Http\Controllers\API\ProductController;
-use App\Http\Controllers\API\CategoryController;
-use App\Http\Controllers\API\WishlistController;
-use App\Http\Controllers\API\StripePaymentController;
-use App\Http\Controllers\API\StripeWebhookController;
-
-    // 🔐 Public route to fetch current user if authenticated
-    Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-        return $request->user();
-    });
-
-    // ===============================
-    // 🔐 AUTH CONTROLLER ROUTES
-    // ===============================
-    Route::prefix('user')->controller(AuthController::class)->group(function () {
-        Route::post('/register', 'register');
-        Route::post('/login', 'login');
-        Route::post('/forgot-password', 'forgotPassword');
-        Route::post('/reset-password', 'resetPassword');
-        Route::middleware('auth:sanctum')->post('/logout', 'logout');
-    });
-
-    // ===============================
-    // 📁 CATEGORY MODULE
-    // ===============================
-   Route::prefix('categories')->controller(CategoryController::class)->group(function () {
-        Route::get('/list-categories', 'index');               // List all categories
-        Route::get('/categories/{id}', 'show');            // Get category by ID
-        Route::get('/slug/{slug}', 'showBySlug'); // (Optional) Get category by slug
-
-    Route::middleware('auth:sanctum')->group(function () {
-        Route::post('/add-categories', 'storeCategory');       // Create category
-        Route::put('/update-categories/{id}', 'updateCategory');      // Update category
-        Route::delete('/delete-categories/{id}', 'destroyCategory');  // Delete category
-        Route::delete('/delete-subcategories/{id}', 'destroyOnlySubcategories'); //Delete Subcategories
-    });
+// ===============================
+// 🔐 AUTHENTICATED USER CHECK
+// ===============================
+Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+    return $request->user();
 });
-    // ===============================
-    // 🏷️ BRAND MODULE
-    // ===============================
+
+// ===============================
+// 🔐 AUTH ROUTES
+// ===============================
+
+
+Route::prefix('user')->controller(AuthController::class)->group(function () {
+    Route::post('/register', 'register');
+    Route::post('/login', 'login');
+    Route::post('/forgot-password', 'forgotPassword');
+    Route::post('/reset-password', 'resetPassword');
+    Route::middleware('auth:sanctum')->post('/logout', 'logout');
+});
+
+// ===============================
+// 🛠️ ADMIN ROUTES (Protected)
+// ===============================
+
+
+Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
+
+    // 📊 Dashboard
+    Route::get('/store-performance', [HomeController::class, 'storePerformance']);
+
+    // 📁 Categories
+    Route::prefix('categories')->controller(CategoryController::class)->group(function () {
+        Route::get('/list-categories', 'index');
+        Route::get('/category/{id}', 'show');
+        Route::get('/slug/{slug}', 'showBySlug');
+        Route::post('/add-categories', 'storeCategory');
+        Route::put('/update-categories/{id}', 'updateCategory');
+        Route::delete('/delete-categories', 'destroyCategory'); // ✅ fixed: accepts body { ids: [] }
+        Route::delete('/delete-subcategories/{id}', 'destroyOnlySubcategories');
+    });
+
+    // 🏷️ Brands
     Route::prefix('brands')->controller(BrandController::class)->group(function () {
-        Route::get('/show-brands', 'index');
-        Route::get('/show-brands/{id}', 'showBrands');
-        Route::middleware('auth:sanctum')->group(function () {
-            Route::post('/store-brands', 'storeBrands');
-            Route::post('/update-brands/{id}', 'updateBrands');
-            Route::delete('/delete-brands/{id}', 'destroyBrands');
-        });
+        Route::get('/brand-list', 'index');
+        Route::get('/brand/{id}', 'showBrands');
+        Route::post('/add-brand', 'storeBrands');
+        Route::post('/update-brand/{id}', 'updateBrands');
+        Route::delete('/delete-brand/{id}', 'destroyBrands');
     });
 
-    // ===============================
-    // 📦 PRODUCT MODULE
-    // ===============================
+    // 📦 Products
     Route::prefix('products')->controller(ProductController::class)->group(function () {
-        Route::get('/get-product', 'index');
-        Route::get('/show/{slug}', 'showProduct');
-        Route::middleware('auth:sanctum')->group(function () {
-            Route::post('/add-product', 'addProduct');
-            Route::post('/update-product/{id}', 'updateProduct');
-            Route::delete('/delete-product/{id}', 'destroyProduct');
-            Route::get('/search', 'searchProduct');
-        });
+        Route::get('/products-list', 'index');
+        Route::get('/show-product/{slug}', 'showProduct');
+        Route::post('/add-product', 'addProduct');
+        Route::put('/update-product', 'updateProduct');
+        Route::delete('/delete-product/{id}', 'destroyProduct');
+        Route::get('/search-product', 'searchProduct');
+        Route::post('/advanced-search', 'searchAdvanced');
+        Route::post('/import-csv', 'importCSV');
+        Route::get('/export-csv', 'exportCSV');
     });
 
-    // ===============================
-    // 🛒 CART MODULE
-    // ===============================
-        Route::prefix('cart')->controller(CartController::class)->group(function () {
-        Route::get('/list-cart', 'index');           // GET /api/cart/list-cart
-        Route::post('/store-cart', 'storeCart');     // POST /api/cart/store-cart
-        Route::delete('/delete-cart/{id}', 'destroyCart'); // DELETE /api/cart/delete-cart/{id}
+    // 🔘 Product Filters
+    Route::prefix('product-filters')->controller(ProductFilterController::class)->group(function () {
+        Route::get('/filter-products', 'index');
+        Route::get('/filter-visibility', 'updateVisibility');
     });
 
-    // ===============================
-    // ❤️ WISHLIST MODULE
-    // ===============================
-    Route::prefix('wishlist')->controller(WishlistController::class)->middleware('auth:sanctum')->group(function () {
-        Route::get('/list-wishlist', 'index');
-        Route::post('/add-to-wishlist', 'store');
-        Route::delete('/remove-from-wishlist/{id}', 'destroy');
-    });
-
-    // ===============================
-    // 🧾 ORDER MODULE
-    // ===============================
-       Route::prefix('order')->controller(OrderController::class)->group(function () {
-        Route::post('/order-place', 'store');     // Place new order
-        Route::get('/my-orders', 'index');
-        Route::get('/show/{id}', 'show');  // Get current user's or guest's orders
-    });
-
-    // ===============================
-    // ⭐ PRODUCT REVIEWS
-    // ===============================
-    Route::prefix('reviews')->controller(ReviewController::class)->group(function () {
-        Route::get('/product-reviews/{productId}', 'index');
-        Route::middleware('auth:sanctum')->post('/add-review', 'store');
-    });
-
-    // ===============================
-    // 🖼️ BANNERS / SLIDERS
-    // ===============================
+    // 🖼️ Banners
     Route::prefix('banners')->controller(BannerController::class)->group(function () {
-        Route::get('/', 'index');
-        Route::middleware('auth:sanctum')->group(function () {
-            Route::post('/add-banner', 'storeBanner');
-            Route::post('/update-banner/{id}', 'updateBanner');
-            Route::delete('/delete-banner/{id}', 'destroyBanner');
-        });
+        Route::get('/list-banners', 'index');
+        Route::post('/add-banner', 'storeBanner');
+        Route::post('/update-banner/{id}', 'updateBanner');
+        Route::delete('/delete-banner/{id}', 'destroyBanner');
+    });
 });
 
 
+// ===============================
+// 🌐 PUBLIC + WEB ROUTES
+// ===============================
+
+
+// 🔓 Public Routes (accessible without login)
+Route::prefix('web')->group(function () {
+
+    // 📁 Public Categories
+    Route::get('/categories', [CategoryController::class, 'index']);
+    Route::get('/categories/{id}', [CategoryController::class, 'show']);
+    Route::get('/categories/slug/{slug}', [CategoryController::class, 'showBySlug']);
+    // Public banner
+
+    Route::get('/list-banners', 'index');
+
+    // 🏷️ Public Brands
+    Route::get('/brands', [BrandController::class, 'index']);
+    Route::get('/brands/{id}', [BrandController::class, 'showBrands']);
+
+    // 📦 Public Products
+    Route::get('/products', [ProductController::class, 'index']);
+    Route::get('/product/{slug}', [ProductController::class, 'showProduct']);
+    Route::get('/search-product', [ProductController::class, 'searchProduct']);
+
+    // 🛒 Cart
+    Route::prefix('cart')->controller(CartController::class)->group(function () {
+        Route::get('/list', 'index');
+        Route::post('/add', 'storeCart');
+        Route::delete('/delete/{id}', 'destroyCart');
+    });
+
+    // ❤️ Wishlist (auth required)
+    Route::prefix('wishlist')->middleware('auth:sanctum')->controller(WishlistController::class)->group(function () {
+        Route::get('/list', 'index');
+        Route::post('/add', 'store');
+        Route::delete('/remove/{id}', 'destroy');
+    });
+
+    // 🧾 Orders (auth required)
+    Route::prefix('order')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {
+        Route::post('/place', 'store');
+        Route::get('/my-orders', 'index');
+        Route::get('/show/{id}', 'show');
+    });
+
+    // ⭐ Reviews
+    Route::prefix('reviews')->controller(ReviewController::class)->group(function () {
+        Route::get('/product/{productId}', 'index'); // ✅ public
+        Route::middleware('auth:sanctum')->post('/add', 'store'); // 🔐 secure
+    });
+
+    // 💳 Stripe
     Route::post('/stripe/create-session', [StripePaymentController::class, 'createCheckoutSession']);
     Route::post('/stripe/webhook', [StripeWebhookController::class, 'handle']);
-    
+});
