@@ -309,19 +309,21 @@ class ProductController extends Controller
             $page = (int) $request->input('page', 1);
             $pageSize = (int) $request->input('pageSize', 20);
 
-            $products = Product::where('name', 'like', "%$query%")
-                ->orWhere('slug', 'like', "%$query%")
-                ->orWhere('description', 'like', "%$query%")
-                ->orWhere('price', 'like', "%$query%")
-                ->orWhere('stock', 'like', "%$query%")
-                ->orWhereHas('category', function ($q) use ($query) {
-                    $q->where('name', 'like', "%$query%");
-                })
-                ->orWhereHas('brand', function ($q) use ($query) {
-                    $q->where('name', 'like', "%$query%");
-                })
-                ->with(['category', 'brand'])
-                ->paginate($pageSize, ['*'], 'page', $page);
+           $products = Product::where(function ($q) use ($query) {
+                $q->where('name', 'like', "%$query%")
+                  ->orWhere('sku', 'like', "%$query%")
+                  ->orWhere('slug', 'like', "%$query%")
+                  ->orWhere('price', 'like', "%$query%")
+                  ->orWhere('search_keywords', 'like', "%$query%")
+                  ->orWhereHas('category', function ($q2) use ($query) {
+                      $q2->where('name', 'like', "%$query%");
+                  })
+                  ->orWhereHas('brand', function ($q3) use ($query) {
+                      $q3->where('name', 'like', "%$query%");
+                  });
+            })
+            ->with(['category', 'brand'])
+            ->paginate($pageSize, ['*'], 'page', $page);
 
             return response()->json([
                 'status'  => true,

@@ -104,7 +104,7 @@ Route::prefix('web')->group(function () {
     Route::get('/categories/slug/{slug}', [CategoryController::class, 'showBySlug']);
     // Public banner
 
-    Route::get('/list-banners', 'index');
+    Route::get('/list-banners',[BannerController::class, 'index']);
 
     // 🏷️ Public Brands
     Route::get('/brands', [BrandController::class, 'index']);
