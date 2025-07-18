@@ -52,4 +52,29 @@ class HomeController extends Controller
             'data' => $days
         ]);
     }
+
+     public function track(Request $request)
+    {
+        $today = now()->toDateString();
+
+        $visit = DB::table('visits-site')->where('visit_date', $today)->first();
+
+        if ($visit) {
+            DB::table('visits-site')
+                ->where('visit_date', $today)
+                ->increment('count');
+        } else {
+            DB::table('visits-site')->insert([
+                'visit_date' => $today,
+                'count' => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Visit recorded'
+        ],200);
+    }
 }

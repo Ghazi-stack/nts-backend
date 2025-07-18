@@ -40,6 +40,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
     // 📊 Dashboard
     Route::get('/store-performance', [HomeController::class, 'storePerformance']);
+    Route::post('/track-visit', [HomeController::class, 'track']);
 
     // 📁 Categories
     Route::prefix('categories')->controller(CategoryController::class)->group(function () {
