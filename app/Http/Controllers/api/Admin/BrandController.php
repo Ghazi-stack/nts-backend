@@ -14,9 +14,7 @@ class BrandController extends Controller
 {
     public function index(Request $request)
     {
-        $perPage = $request->query('perPage', 20); 
-
-        $brands = Brand::paginate($perPage);
+        $brands = Brand::where('store_id', current_store_id())->paginate($perPage);
 
         return response()->json([
             'status' => true,
@@ -35,7 +33,7 @@ class BrandController extends Controller
     public function showBrands($id)
     {
         try {
-            $brand = Brand::findOrFail($id);
+            $brand = Brand::where('store_id', current_store_id())->findOrFail($id);
             return response()->json([
                 'status' => true,
                 'message' => 'Brand retrieved successfully',
@@ -59,6 +57,7 @@ class BrandController extends Controller
         
             $data = [
                 'name' => $request->name,
+                'store_id' => current_store_id(), // 👈 Add store_id
             ];
         
             if ($request->hasFile('logo')) {
@@ -93,7 +92,7 @@ class BrandController extends Controller
                 'logo' => 'nullable|image|mimes:jpg,jpeg,png,svg,webp|max:2048',
             ]);
 
-            $brand = Brand::findOrFail($id);
+            $brand = Brand::where('store_id', current_store_id())->findOrFail($id);
 
             // 👇 Log to verify hitting this method
             \Log::info('Update Request:', $request->all());
@@ -133,7 +132,7 @@ class BrandController extends Controller
     public function destroyBrands($id)
     {
         try {
-            $brand = Brand::findOrFail($id);
+            $brand = Brand::where('store_id', current_store_id())->findOrFail($id);
             $brand->delete();
 
             return response()->json([

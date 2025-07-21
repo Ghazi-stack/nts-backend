@@ -14,7 +14,9 @@ class ProductFilterController extends Controller
 {
     public function index()
     {
-        $filters = ProductFilter::orderBy('sort_order')->get();
+        $filters = ProductFilter::where('store_id', current_store_id())
+            ->orderBy('sort_order')
+            ->get();
 
         $filters->each(function ($filter) {
             $filter->countDetails = $this->getCountDetails($filter);
@@ -35,7 +37,9 @@ class ProductFilterController extends Controller
         ]);
 
         foreach ($request->filters as $item) {
-            ProductFilter::where('id', $item['id'])->update(['is_visible' => $item['visible']]);
+           ProductFilter::where('store_id', current_store_id())
+            ->where('id', $item['id'])
+            ->update(['is_visible' => $item['visible']]);
         }
 
         return response()->json([

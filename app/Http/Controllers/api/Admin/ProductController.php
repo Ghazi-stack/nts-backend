@@ -32,7 +32,7 @@ class ProductController extends Controller
         try {
             $query = Product::with([
                 'brand', 'category', 'images'
-            ]);
+            ])->where('store_id', current_store_id());
 
             // ✅ FILTERS
             if ($request->has('isFeatured')) {
@@ -164,6 +164,7 @@ class ProductController extends Controller
             ]);
 
             $product = Product::create([
+                'store_id' => current_store_id(), // 👈 Add this
                 'name' => $validated['name'],
                 'slug' => Str::slug($validated['name']) . '-' . uniqid(),
                 'sku' => $validated['sku'],
@@ -259,7 +260,8 @@ class ProductController extends Controller
 
             foreach ($validated['products'] as $item) {
                 try {
-                    $product = Product::findOrFail($item['id']);
+                    $product = Product::where('store_id', current_store_id())
+                        ->findOrFail($item['id']);
                     $fields = $item['fields'];
 
                     // ✅ customFields
@@ -523,7 +525,7 @@ class ProductController extends Controller
        try {
            // ✅ If $id is provided, treat as single delete
            if ($id) {
-               $product = Product::findOrFail($id);
+               $product = Product::where('store_id', current_store_id())->findOrFail($id);
                $product->delete();
 
                return response()->json([
@@ -544,7 +546,7 @@ class ProductController extends Controller
 
            foreach ($request->ids as $prodId) {
                try {
-                   $product = Product::findOrFail($prodId);
+                   $product = Product::where('store_id', current_store_id())->findOrFail($prodId);
                    $product->delete();
                    $deleted[] = $prodId;
                } catch (\Exception $e) {
@@ -610,6 +612,7 @@ class ProductController extends Controller
 
                     // ✅ Product
                     $product = Product::create([
+                        'store_id' => current_store_id(), // 👈 Add
                         'name' => $row['Product Name'],
                         'slug' => Str::slug($row['Product Name']) . '-' . uniqid(),
                         'sku' => $row['Product Code/SKU'],

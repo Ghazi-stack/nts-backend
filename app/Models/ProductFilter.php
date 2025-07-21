@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Store;
 use Illuminate\Database\Eloquent\Model;
 
 class ProductFilter extends Model
@@ -13,4 +14,9 @@ class ProductFilter extends Model
         'is_visible',
         'sort_order',
     ];
+
+    public function store()
+    {
+        return $this->belongsTo(Store::class);
+    }
 }

@@ -4,7 +4,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\Admin\{
     BannerController, BrandController, CategoryController,
-    ProductController, ProductFilterController, HomeController
+    ProductController, ProductFilterController, HomeController,
+    StoreController
 };
 use App\Http\Controllers\API\Web\{
     CartController, OrderController, ReviewController,
@@ -38,6 +39,13 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
 
 Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
+
+    // 🏢 Store Management
+
+    Route::prefix('stores')->controller(StoreController::class)->group(function () {
+        Route::get('/list-stores', 'index');
+        Route::post('/select-store', 'selectStore');
+    });
     // 📊 Dashboard
     Route::get('/store-performance', [HomeController::class, 'storePerformance']);
     Route::post('/track-visit', [HomeController::class, 'track']);

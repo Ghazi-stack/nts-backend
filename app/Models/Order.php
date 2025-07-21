@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\User;
+use App\Models\Store;
 use App\Models\Payment;
 use App\Models\OrderItem;
 use Illuminate\Database\Eloquent\Model;
@@ -38,5 +39,9 @@ class Order extends Model
     public function payment()
     {
         return $this->hasOne(Payment::class);
+    }
+    public function store()
+    {
+        return $this->belongsTo(Store::class);
     }
 }

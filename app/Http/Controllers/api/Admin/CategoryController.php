@@ -16,8 +16,10 @@ class CategoryController extends Controller
         $perPage = $request->query('perPage', 50);
 
         $categories = Category::with(['childrenRecursive', 'products'])
+            ->where('store_id', current_store_id())
             ->whereNull('parent_id')
             ->paginate($perPage);
+
 
         if ($categories->isEmpty()) {
             return response()->json([
@@ -129,6 +131,7 @@ class CategoryController extends Controller
             'description' => $request->description,
             'parent_id'   => $request->parentId,
             'is_visible'  => $request->boolean('isVisible', false),
+            'store_id'    => current_store_id(), // 👈
         ]);
 
         $category->load(['childrenRecursive', 'products']);
@@ -144,7 +147,7 @@ class CategoryController extends Controller
     public function updateCategory(Request $request, $id)
     {
         try {
-            $category = Category::findOrFail($id);
+            $category = Category::where('store_id', current_store_id())->find($id);
 
             $request->validate([
                 'name'        => 'required|string|max:255|unique:categories,name,' . $id,
@@ -192,7 +195,7 @@ class CategoryController extends Controller
         $notFound = [];
 
         foreach ($ids as $id) {
-            $category = Category::find($id);
+            $category = Category::where('store_id', current_store_id())->find($id);
             if ($category) {
                 $category->delete();
                 $deleted[] = $id;

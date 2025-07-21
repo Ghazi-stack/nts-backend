@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use App\Http\Resources\StoreResource;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
@@ -77,10 +78,10 @@ class AuthController extends Controller
         public function login(Request $request)
         {
             try {
-                $request->validate([
-                    'email'    => 'required|email',
-                    'password' => 'required',
-                ]);
+            $request->validate([
+                'email' => 'required|email',
+                'password' => 'required',
+            ]);
 
             $user = User::where('email', $request->email)->first();
 
@@ -89,28 +90,29 @@ class AuthController extends Controller
                     'status' => false,
                     'message' => 'Invalid email or password',
                     'user' => null
-                ], 401); // Unauthorized
+                ], 401);
             }
 
             $roleMessage = $user->userRole == 1 ? 'Admin login successful' : 'Customer login successful';
 
             $token = $user->createToken('api_token')->plainTextToken;
 
+            $stores = StoreResource::collection($user->stores()->get());
+
             return response()->json([
                 'status' => true,
                 'message' => $roleMessage,
                 'token' => $token,
-                'user'  => $user,
+                'user' => $user,
+                'stores' => $stores,
             ]);
-
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Login failed: ' . $e->getMessage());
-
             return response()->json([
                 'status' => false,
-                'message' => 'Something went wrong during login. Please try again.',
+                'message' => 'Something went wrong during login.',
             ], 500);
-        }
+        } 
     }
 
     public function forgotPassword(Request $request)

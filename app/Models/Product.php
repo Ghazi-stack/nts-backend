@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\User;
 use App\Models\Brand;
+use App\Models\Store;
 use App\Models\Category;
 use App\Models\Condition;
 use App\Models\ProductSeo;
@@ -69,5 +70,9 @@ class Product extends Model
     {
         return $this->hasOne(ProductSeo::class);
     }
-  
+    
+    public function store()
+    {
+        return $this->belongsTo(Store::class);
+    }
 }

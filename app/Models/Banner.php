@@ -2,8 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Store;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Banner extends Model
 {
@@ -14,4 +15,9 @@ class Banner extends Model
         'link',
         'status',
     ];
+
+    public function store()
+    {
+        return $this->belongsTo(Store::class);
+    }
 }
