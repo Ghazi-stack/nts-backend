@@ -30,11 +30,9 @@ class ProductController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = Product::with([
-                'brand', 'category', 'images'
-            ])->where('store_id', current_store_id());
+            $query = Product::with(['brand', 'category', 'images'])
+                ->where('store_id', current_store_id());
 
-            // ✅ FILTERS
             if ($request->has('isFeatured')) {
                 $query->where('is_featured', $request->boolean('isFeatured'));
             }
@@ -43,7 +41,7 @@ class ProductController extends Controller
                 $query->where('visible_on_storefront', $request->boolean('isVisible'));
             }
 
-            if ($request->has('outOfStock') && $request->boolean('outOfStock') === true) {
+            if ($request->has('outOfStock') && $request->boolean('outOfStock')) {
                 $query->where('current_stock', '<=', 0);
             }
 
@@ -51,34 +49,28 @@ class ProductController extends Controller
                 $query->whereColumn('current_stock', '<=', 'low_stock');
             }
 
-            // ✅ SEARCH
             if ($request->has('search')) {
                 $q = $request->search;
-                $query->where(function ($subQuery) use ($q) {
-                    $subQuery->where('name', 'LIKE', "%$q%")
-                        ->orWhere('sku', 'LIKE', "%$q%");
+                $query->where(function ($sub) use ($q) {
+                    $sub->where('name', 'like', "%$q%")
+                        ->orWhere('sku', 'like', "%$q%");
                 });
             }
 
-            // ✅ SORTING
             if ($request->has('sortBy')) {
                 $query->orderBy($request->sortBy, $request->get('sortOrder', 'asc'));
             } else {
                 $query->orderBy('id', 'desc');
             }
 
-
-            // ✅ PAGINATION using page & pageSize
             $page = (int) $request->input('page', 1);
             $pageSize = (int) $request->input('pageSize', 50);
-
             $products = $query->paginate($pageSize, ['*'], 'page', $page);
-            $categoryCounts = $this->getCategoryCounts();
+
             return response()->json([
                 'status' => true,
                 'message' => 'Product list fetched.',
                 'data' => ProductResource::collection($products),
-                'categoryCounts' => $categoryCounts,
                 'meta' => [
                     'total' => $products->total(),
                     'page' => $products->currentPage(),
@@ -86,7 +78,7 @@ class ProductController extends Controller
                     'lastPage' => $products->lastPage()
                 ]
             ]);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
@@ -120,52 +112,49 @@ class ProductController extends Controller
 
     public function addProduct(Request $request)
     {
-
         try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json(['error' => 'Store not selected or token invalid.'], 400);
+            }
+
             $validated = $request->validate([
-                // core
-                'name'           => 'required|string|max:255',
-                'sku'            => 'required|string|unique:products,sku',
-                'price'          => 'required|numeric|min:0',
-                'brandId'        => 'required|exists:brands,id',
-                'categoryId'     => 'required|exists:categories,id',
-                'condition'    => 'nullable|string',
+                'name' => 'required|string|max:255',
+                'sku' => 'required|string|unique:products,sku',
+                'price' => 'required|numeric|min:0',
+                'brandId' => 'required|exists:brands,id',
+                'categoryId' => 'required|exists:categories,id',
+                'condition' => 'nullable|string',
                 'dimensions' => 'nullable|array',
                 'dimensions.weight' => 'nullable|numeric',
-                'dimensions.width'  => 'nullable|numeric',
+                'dimensions.width' => 'nullable|numeric',
                 'dimensions.height' => 'nullable|numeric',
-                'dimensions.depth'  => 'nullable|numeric',
+                'dimensions.depth' => 'nullable|numeric',
                 'trackInventory' => 'nullable|boolean',
-                'currentStock'   => 'nullable|integer',
-                'lowStock'       => 'nullable|integer',
-                'isFeatured'     => 'nullable|boolean',
-                'showCondition'  => 'nullable|boolean',
-                'sortOrder'      => 'nullable|integer',
+                'currentStock' => 'nullable|integer',
+                'lowStock' => 'nullable|integer',
+                'isFeatured' => 'nullable|boolean',
+                'showCondition' => 'nullable|boolean',
+                'sortOrder' => 'nullable|integer',
                 'searchKeywords' => 'nullable|string',
-                'isVisible'      => 'nullable|boolean',
-                'customFields'   => 'nullable|array',
-
-                // content
-                'image'            => 'nullable|url',
-                'description'      => 'nullable|string',
-                'warranty'         => 'nullable|string',
+                'isVisible' => 'nullable|boolean',
+                'customFields' => 'nullable|array',
+                'image' => 'nullable|url',
+                'description' => 'nullable|string',
+                'warranty' => 'nullable|string',
                 'availabilityText' => 'nullable|string',
-                'templateLayout'   => 'nullable|string',
-
-                // identifiers
-                'mpn'  => 'nullable|string',
-                'upc'  => 'nullable|string',
+                'templateLayout' => 'nullable|string',
+                'mpn' => 'nullable|string',
+                'upc' => 'nullable|string',
                 'gtin' => 'nullable|string',
-                'bpn'  => 'nullable|string',
-
-                // SEO
-                'pageTitle'       => 'nullable|string',
-                'productUrl'      => 'nullable|string',
+                'bpn' => 'nullable|string',
+                'pageTitle' => 'nullable|string',
+                'productUrl' => 'nullable|string',
                 'metaDescription' => 'nullable|string',
             ]);
 
             $product = Product::create([
-                'store_id' => current_store_id(), // 👈 Add this
+                'store_id' => $storeId,
                 'name' => $validated['name'],
                 'slug' => Str::slug($validated['name']) . '-' . uniqid(),
                 'sku' => $validated['sku'],
@@ -173,12 +162,7 @@ class ProductController extends Controller
                 'brand_id' => $validated['brandId'],
                 'category_id' => $validated['categoryId'],
                 'condition' => $validated['condition'] ?? null,
-                'dimensions' => [
-                    'weight' => $validated['dimensions']['weight'] ?? null,
-                    'width'  => $validated['dimensions']['width'] ?? null,
-                    'height' => $validated['dimensions']['height'] ?? null,
-                    'depth'  => $validated['dimensions']['depth'] ?? null,
-                ],
+                'dimensions' => $validated['dimensions'] ?? [],
                 'track_inventory' => $validated['trackInventory'] ?? false,
                 'current_stock' => $validated['currentStock'] ?? 0,
                 'low_stock' => $validated['lowStock'] ?? 0,
@@ -187,26 +171,24 @@ class ProductController extends Controller
                 'sort_order' => $validated['sortOrder'] ?? 0,
                 'search_keywords' => $validated['searchKeywords'] ?? null,
                 'visible_on_storefront' => $validated['isVisible'] ?? true,
-                'custom_fields' => $validated['customFields'] ?? []
+                'custom_fields' => $validated['customFields'] ?? [],
             ]);
 
-            // save image (product_images)
             if (!empty($validated['image'])) {
                 $imageData = file_get_contents($validated['image']);
                 $imageName = time() . '_' . basename(parse_url($validated['image'], PHP_URL_PATH));
                 File::put(public_path("product_images/{$imageName}"), $imageData);
 
                 ProductImage::create([
-                    'store_id' => current_store_id(), // 👈 Add this
+                    'store_id' => $storeId,
                     'product_id' => $product->id,
                     'path' => "product_images/{$imageName}",
                     'is_primary' => true
                 ]);
             }
 
-            // content
             ProductContent::create([
-                'store_id' => current_store_id(),
+                'store_id' => $storeId,
                 'product_id' => $product->id,
                 'description' => $validated['description'] ?? null,
                 'warranty' => $validated['warranty'] ?? null,
@@ -214,9 +196,8 @@ class ProductController extends Controller
                 'template_layout' => $validated['templateLayout'] ?? null,
             ]);
 
-            // identifiers
             ProductIdentifier::create([
-                'store_id' => current_store_id(),
+                'store_id' => $storeId,
                 'product_id' => $product->id,
                 'mpn' => $validated['mpn'] ?? null,
                 'upc' => $validated['upc'] ?? null,
@@ -224,9 +205,8 @@ class ProductController extends Controller
                 'bpn' => $validated['bpn'] ?? null,
             ]);
 
-            // SEO
             ProductSeo::create([
-                'store_id' => current_store_id(),
+                'store_id' => $storeId,
                 'product_id' => $product->id,
                 'page_title' => $validated['pageTitle'] ?? null,
                 'product_url' => $validated['productUrl'] ?? null,
@@ -236,22 +216,18 @@ class ProductController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Product created successfully.',
-                'data' => new ProductResource($product->load([
-                    'brand', 'category.parent', 'images', 'content', 'identifiers', 'seo'
-                ]))
+                'data' => new ProductResource($product->load(['brand', 'category.parent', 'images', 'content', 'identifiers', 'seo']))
             ], 201);
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
-
-
     }
 
 
    
-   public function updateProduct(Request $request)
+    public function updateProduct(Request $request)
     {
         try {
             $validated = $request->validate([
@@ -267,22 +243,21 @@ class ProductController extends Controller
                 try {
                     $product = Product::where('store_id', current_store_id())
                         ->findOrFail($item['id']);
+
                     $fields = $item['fields'];
 
-                    // ✅ customFields
                     if (isset($fields['customFields']) && is_array($fields['customFields'])) {
                         $fields['custom_fields'] = $fields['customFields'];
                         unset($fields['customFields']);
                     }
 
-                    // ✅ dimensions (convert to JSON if needed)
                     if (isset($fields['dimensions']) && is_array($fields['dimensions'])) {
                         $fields['dimensions'] = $fields['dimensions'];
                     }
 
                     $product->update($fields);
                     $updated[] = $product->id;
-                } catch (\Exception $e) {
+                } catch (Exception $e) {
                     $failed[] = [
                         'id' => $item['id'],
                         'error' => $e->getMessage()
@@ -298,7 +273,7 @@ class ProductController extends Controller
             ]);
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
@@ -525,51 +500,48 @@ class ProductController extends Controller
         return $count;
     }
 
-    public function destroyProduct(Request $request, $id = null)
-    {   
-       try {
-           // ✅ If $id is provided, treat as single delete
-           if ($id) {
-               $product = Product::where('store_id', current_store_id())->findOrFail($id);
-               $product->delete();
+     public function destroyProduct(Request $request, $id = null)
+    {
+        try {
+            if ($id) {
+                $product = Product::where('store_id', current_store_id())->findOrFail($id);
+                $product->delete();
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Product deleted successfully.',
+                    'deletedIds' => [$id]
+                ]);
+            }
 
-               return response()->json([
-                   'status' => true,
-                   'message' => 'Product deleted successfully.',
-                   'deletedIds' => [$id]
-               ], 200);
-           }
+            $request->validate([
+                'ids' => 'required|array|min:1',
+                'ids.*' => 'exists:products,id',
+            ]);
 
-           // ✅ If multiple IDs sent in request body
-           $request->validate([
-               'ids' => 'required|array|min:1',
-               'ids.*' => 'exists:products,id',
-           ]);
+            $deleted = [];
+            $failed = [];
 
-           $deleted = [];
-           $failed = [];
+            foreach ($request->ids as $prodId) {
+                try {
+                    $product = Product::where('store_id', current_store_id())->findOrFail($prodId);
+                    $product->delete();
+                    $deleted[] = $prodId;
+                } catch (Exception $e) {
+                    $failed[] = ['id' => $prodId, 'error' => $e->getMessage()];
+                }
+            }
 
-           foreach ($request->ids as $prodId) {
-               try {
-                   $product = Product::where('store_id', current_store_id())->findOrFail($prodId);
-                   $product->delete();
-                   $deleted[] = $prodId;
-               } catch (\Exception $e) {
-                   $failed[] = ['id' => $prodId, 'error' => $e->getMessage()];
-               }
-           }
-
-           return response()->json([
-               'status' => true,
-               'message' => 'Delete process completed.',
-               'deletedIds' => $deleted,
-               'failed' => $failed
-           ], 200);
-       } catch (ModelNotFoundException $e) {
-           return response()->json(['status' => false, 'message' => 'Product not found.'], 404);
-       } catch (\Exception $e) {
-           return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
-       }
+            return response()->json([
+                'status' => true,
+                'message' => 'Delete process completed.',
+                'deletedIds' => $deleted,
+                'failed' => $failed
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['status' => false, 'message' => 'Product not found.'], 404);
+        } catch (Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
     }
 
     public function importCSV(Request $request)
@@ -579,6 +551,11 @@ class ProductController extends Controller
                 'file' => 'required|file|mimes:csv,txt,xlsx,xls'
             ]);
 
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json(['error' => 'Store not selected.'], 400);
+            }
+
             $file = $request->file('file');
             $ext = $file->getClientOriginalExtension();
             $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
@@ -586,16 +563,15 @@ class ProductController extends Controller
             $imported = 0;
             $skipped = [];
 
-            // ✅ Handle Excel files
             if (in_array($ext, ['xlsx', 'xls'])) {
-                Excel::import(new ProductImport(current_store_id() ?? 1), storage_path('app/' . $path));
+                Excel::import(new ProductImport($storeId), storage_path("app/{$path}"));
                 return response()->json([
                     'status' => true,
                     'message' => 'Excel import completed.'
                 ]);
             }
 
-            // ✅ Handle CSV files
+            // CSV (plain)
             $csv = Reader::createFromPath(storage_path("app/{$path}"), 'r');
             $csv->setHeaderOffset(0);
 
@@ -603,21 +579,18 @@ class ProductController extends Controller
                 try {
                     $row = array_map(fn($val) => mb_convert_encoding($val, 'UTF-8', 'auto'), $row);
 
-                    // 🔧 Brand
-                    $brand = Brand::firstOrCreate(
+                    $brand = \App\Models\Brand::firstOrCreate(
                         ['name' => $row['Brand Name']],
                         ['slug' => Str::slug($row['Brand Name'])]
                     );
 
-                    // 🔧 Category
-                    $category = Category::firstOrCreate(
+                    $category = \App\Models\Category::firstOrCreate(
                         ['name' => $row['Category Name'] ?? 'Uncategorized'],
                         ['slug' => Str::slug($row['Category Name'] ?? 'Uncategorized')]
                     );
 
-                    // ✅ Product
                     $product = Product::create([
-                        'store_id' => current_store_id(), // 👈 Add
+                        'store_id' => $storeId,
                         'name' => $row['Product Name'],
                         'slug' => Str::slug($row['Product Name']) . '-' . uniqid(),
                         'sku' => $row['Product Code/SKU'],
@@ -630,14 +603,14 @@ class ProductController extends Controller
                         'custom_fields' => $this->parseCustomFields($row['Product Custom Fields'] ?? ''),
                         'dimensions' => json_encode([
                             'weight' => $row['Product Weight'] ?? null,
-                            'width'  => $row['Width'] ?? null,
+                            'width' => $row['Width'] ?? null,
                             'height' => $row['Height'] ?? null,
-                            'depth'  => $row['Depth'] ?? null,
+                            'depth' => $row['Depth'] ?? null,
                         ]),
                     ]);
 
-                    // ✅ Content
                     ProductContent::create([
+                        'store_id' => $storeId,
                         'product_id' => $product->id,
                         'description' => $row['Product Description'] ?? '',
                         'warranty' => $row['Warranty'] ?? '',
@@ -645,8 +618,8 @@ class ProductController extends Controller
                         'template_layout' => $row['Template Layout'] ?? '',
                     ]);
 
-                    // ✅ Identifiers
                     ProductIdentifier::create([
+                        'store_id' => $storeId,
                         'product_id' => $product->id,
                         'mpn' => $row['Manufacturer Part Number'] ?? '',
                         'upc' => $row['Product UPC/EAN'] ?? '',
@@ -654,8 +627,8 @@ class ProductController extends Controller
                         'bpn' => $row['Bin Picking Number'] ?? '',
                     ]);
 
-                    // ✅ SEO
                     ProductSeo::create([
+                        'store_id' => $storeId,
                         'product_id' => $product->id,
                         'product_url' => $row['Product URL'] ?? '',
                         'page_title' => $row['Page Title'] ?? '',

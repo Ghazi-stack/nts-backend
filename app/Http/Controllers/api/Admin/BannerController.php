@@ -1,8 +1,11 @@
 <?php
+
 namespace App\Http\Controllers\API\Admin;
-use App\Http\Controllers\Controller; // ✅ Correct base controller
+
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use App\Http\Controllers\Controller;
 use App\Http\Resources\BannerResource;
 use App\Models\Banner;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -12,9 +15,11 @@ class BannerController extends Controller
     public function index(Request $request)
     {
         try {
-            $perPage = $request->query('perPage', 20); // Default to 20 if not provided
+            $perPage = $request->query('perPage', 20);
 
-            $banners = Banner::paginate($perPage);
+            $banners = Banner::where('store_id', current_store_id())
+                ->latest()
+                ->paginate($perPage);
 
             return response()->json([
                 'status' => true,
@@ -26,11 +31,10 @@ class BannerController extends Controller
                     'perPage' => $banners->perPage(),
                     'currentPage' => $banners->currentPage(),
                     'totalPages' => $banners->lastPage(),
-            ]
+                ]
             ], 200);
         } catch (\Exception $e) {
             Log::error('Error fetching banners: ' . $e->getMessage());
-
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to retrieve banners',
@@ -40,39 +44,42 @@ class BannerController extends Controller
 
     public function storeBanner(Request $request)
     {
-       try {
+        try {
             $request->validate([
                 'title'  => 'nullable|string',
                 'image'  => 'required|image|mimes:jpg,jpeg,png,webp|max:2048',
                 'link'   => 'nullable|string',
                 'status' => 'nullable|boolean',
             ]);
-        
-            // Ensure folder exists
+
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json(['error' => 'Store not selected.'], 400);
+            }
+
             $destinationPath = public_path('banner_images');
             if (!file_exists($destinationPath)) {
                 mkdir($destinationPath, 0755, true);
             }
-        
+
             $imageName = time() . '_' . preg_replace('/[^A-Za-z0-9.\-_]/', '_', $request->file('image')->getClientOriginalName());
             $request->file('image')->move($destinationPath, $imageName);
-        
+
             $banner = Banner::create([
-                'title'  => $request->title,
-                'image'  => 'banner_images/' . $imageName,
-                'link'   => $request->link,
-                'status' => $request->has('status') ? (int) $request->status : 1,
+                'store_id' => $storeId,
+                'title'    => $request->title,
+                'image'    => 'banner_images/' . $imageName,
+                'link'     => $request->link,
+                'status'   => $request->has('status') ? (int) $request->status : 1,
             ]);
-        
+
             return response()->json([
                 'status' => true,
                 'message' => 'Banner created successfully',
                 'banner' => new BannerResource($banner),
             ], 201);
-        
         } catch (\Exception $e) {
-            Log::error('Error creating banner', ['exception' => $e]);
-        
+            Log::error('Error creating banner: ' . $e->getMessage());
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to create banner',
@@ -83,7 +90,7 @@ class BannerController extends Controller
     public function show($id)
     {
         try {
-            $banner = Banner::findOrFail($id);
+            $banner = Banner::where('store_id', current_store_id())->findOrFail($id);
             return response()->json([
                 'status' => true,
                 'message' => 'Banner retrieved successfully',
@@ -93,10 +100,9 @@ class BannerController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'Banner not found',
-            ], 200);
+            ], 404);
         } catch (\Exception $e) {
             Log::error('Error fetching banner: ' . $e->getMessage());
-
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to retrieve banner',
@@ -107,7 +113,7 @@ class BannerController extends Controller
     public function updateBanner(Request $request, $id)
     {
         try {
-            $banner = Banner::findOrFail($id);
+            $banner = Banner::where('store_id', current_store_id())->findOrFail($id);
 
             $request->validate([
                 'title'  => 'nullable|string',
@@ -115,9 +121,6 @@ class BannerController extends Controller
                 'link'   => 'nullable|string',
                 'status' => 'nullable|in:0,1',
             ]);
-
-            Log::info('🔍 Before update:', $banner->toArray());
-            Log::info('📥 Request data:', $request->all());
 
             if ($request->has('title')) {
                 $banner->title = $request->title;
@@ -144,8 +147,6 @@ class BannerController extends Controller
             $banner->save();
             $banner->refresh();
 
-            Log::info('✅ After update:', $banner->toArray());
-
             return response()->json([
                 'status' => true,
                 'message' => 'Banner updated successfully',
@@ -155,10 +156,9 @@ class BannerController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'Banner not found',
-            ], 200);
+            ], 404);
         } catch (\Exception $e) {
             Log::error('Error updating banner: ' . $e->getMessage());
-
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to update banner',
@@ -166,11 +166,10 @@ class BannerController extends Controller
         }
     }
 
-
     public function destroyBanner($id)
     {
         try {
-            $banner = Banner::findOrFail($id);
+            $banner = Banner::where('store_id', current_store_id())->findOrFail($id);
 
             if ($banner->image && file_exists(public_path($banner->image))) {
                 unlink(public_path($banner->image));
@@ -187,10 +186,9 @@ class BannerController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'Banner not found',
-            ], 200);
+            ], 404);
         } catch (\Exception $e) {
             Log::error('Error deleting banner: ' . $e->getMessage());
-
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to delete banner',

@@ -50,6 +50,12 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::get('/store-performance', [HomeController::class, 'storePerformance']);
     Route::post('/track-visit', [HomeController::class, 'track']);
 
+    // Orders (Admin Dashboard style)
+    Route::prefix('orders')->controller(OrderController::class)->group(function () {
+        Route::get('/list-orders', 'index'); // ✅ Get orders with filters, pagination
+        Route::get('/show-order/{id}', 'show'); // ✅ View order details
+        Route::patch('/update-status/{id}', 'updateOrderStatus'); // ✅ Update order status
+    });
     // 📁 Categories
     Route::prefix('categories')->controller(CategoryController::class)->group(function () {
         Route::get('/list-categories', 'index');
@@ -127,7 +133,7 @@ Route::prefix('web')->group(function () {
     // 🛒 Cart
     Route::prefix('cart')->controller(CartController::class)->group(function () {
         Route::get('/list', 'index');
-        Route::post('/add', 'storeCart');
+        Route::post('/add-cart', 'storeCart');
         Route::delete('/delete/{id}', 'destroyCart');
     });
 
@@ -139,8 +145,8 @@ Route::prefix('web')->group(function () {
     });
 
     // 🧾 Orders (auth required)
-    Route::prefix('order')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {
-        Route::post('/place', 'store');
+    Route::prefix('orders')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {
+        Route::post('/place-order', 'store');
         Route::get('/my-orders', 'index');
         Route::get('/show/{id}', 'show');
     });

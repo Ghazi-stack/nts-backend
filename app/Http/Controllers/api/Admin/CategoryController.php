@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\API\Admin;
+
 use App\Models\Category;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
@@ -10,7 +11,6 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class CategoryController extends Controller
 {
-    // GET /categories/list-category
     public function index(Request $request)
     {
         $perPage = $request->query('perPage', 50);
@@ -19,7 +19,6 @@ class CategoryController extends Controller
             ->where('store_id', current_store_id())
             ->whereNull('parent_id')
             ->paginate($perPage);
-
 
         if ($categories->isEmpty()) {
             return response()->json([
@@ -70,37 +69,38 @@ class CategoryController extends Controller
     private function countProductsRecursive($category)
     {
         $count = 0;
-
         foreach ($category->childrenRecursive as $child) {
             $count += $child->products->count();
             $count += $this->countProductsRecursive($child);
         }
-
         return $count;
     }
 
-    // GET /categories/category/{id}
     public function show($id)
     {
         try {
-            $category = Category::with(['childrenRecursive', 'products'])->findOrFail($id);
+            $category = Category::where('store_id', current_store_id())
+                ->with(['childrenRecursive', 'products'])
+                ->findOrFail($id);
 
             return response()->json([
                 'status' => true,
                 'category' => new CategoryResource($category),
             ]);
         } catch (ModelNotFoundException $e) {
-            return response()->json(['status' => false, 'message' => 'Category not found'], 200);
+            return response()->json(['status' => false, 'message' => 'Category not found'], 404);
         }
     }
 
-    // GET /categories/slug/{slug}
     public function showBySlug($slug)
     {
-        $category = Category::with(['childrenRecursive', 'products'])->where('slug', $slug)->first();
+        $category = Category::where('store_id', current_store_id())
+            ->with(['childrenRecursive', 'products'])
+            ->where('slug', $slug)
+            ->first();
 
         if (!$category) {
-            return response()->json(['status' => false, 'message' => 'Category not found'], 200);
+            return response()->json(['status' => false, 'message' => 'Category not found'], 404);
         }
 
         return response()->json([
@@ -109,7 +109,6 @@ class CategoryController extends Controller
         ]);
     }
 
-    // POST /categories/add-categories
     public function storeCategory(Request $request)
     {
         $request->validate([
@@ -121,7 +120,7 @@ class CategoryController extends Controller
 
         $slug = Str::slug($request->name);
 
-        if (Category::where('slug', $slug)->exists()) {
+        if (Category::where('slug', $slug)->where('store_id', current_store_id())->exists()) {
             return response()->json(['status' => false, 'message' => 'Slug already exists.'], 422);
         }
 
@@ -131,7 +130,7 @@ class CategoryController extends Controller
             'description' => $request->description,
             'parent_id'   => $request->parentId,
             'is_visible'  => $request->boolean('isVisible', false),
-            'store_id'    => current_store_id(), // 👈
+            'store_id'    => current_store_id(),
         ]);
 
         $category->load(['childrenRecursive', 'products']);
@@ -139,15 +138,14 @@ class CategoryController extends Controller
         return response()->json([
             'status'   => true,
             'message'  => 'Category created successfully',
-            'category' => ($category),
+            'category' => new CategoryResource($category),
         ], 201);
     }
 
-    // PUT /categories/update-category/{id}
     public function updateCategory(Request $request, $id)
     {
         try {
-            $category = Category::where('store_id', current_store_id())->find($id);
+            $category = Category::where('store_id', current_store_id())->findOrFail($id);
 
             $request->validate([
                 'name'        => 'required|string|max:255|unique:categories,name,' . $id,
@@ -158,7 +156,7 @@ class CategoryController extends Controller
 
             $slug = Str::slug($request->name);
 
-            if (Category::where('slug', $slug)->where('id', '!=', $id)->exists()) {
+            if (Category::where('slug', $slug)->where('id', '!=', $id)->where('store_id', current_store_id())->exists()) {
                 return response()->json(['status' => false, 'message' => 'Slug already exists.'], 422);
             }
 
@@ -182,7 +180,6 @@ class CategoryController extends Controller
         }
     }
 
-    // DELETE /categories/delete-category/{id}
     public function destroyCategory(Request $request)
     {
         $request->validate([

@@ -1,5 +1,7 @@
 <?php
+
 namespace App\Http\Controllers\API\Admin;
+
 use App\Models\Store;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
@@ -7,6 +9,9 @@ use App\Http\Resources\StoreResource;
 
 class StoreController extends Controller
 {
+    /**
+     * List all stores assigned to the logged-in user
+     */
     public function index(Request $request)
     {
         $stores = $request->user()->stores()
@@ -16,34 +21,40 @@ class StoreController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Stores retrieved successfully',
-            'stores' => $stores
-        ], 200);
+            'stores' => StoreResource::collection($stores),
+        ]);
     }
 
+    /**
+     * Select a store and return a token scoped to it
+     */
     public function selectStore(Request $request)
     {
         $request->validate([
             'storeId' => 'required|exists:stores,id',
         ]);
 
-        // 🔐 Ensure the user has access to this store
-        if (!$request->user()->stores->contains($request->storeId)) {
+        $user = $request->user();
+        $storeId = (int) $request->storeId;
+
+        // ✅ Check if this store is assigned to the user
+        if (!$user->stores->contains($storeId)) {
             return response()->json([
                 'status' => false,
                 'message' => 'Unauthorized: Store not assigned to user.'
             ], 403);
         }
 
-        // ✅ Save store in session
-        session(['current_store_id' => $request->storeId]);
+        // ✅ Create new token with a proper name (used later to extract store_id)
+        $token = $user->createToken('StoreToken-' . $storeId)->plainTextToken;
 
-        // ✅ Get store details (like base_url)
-        $store = Store::select('id', 'name', 'base_url')->find($request->storeId);
+        $store = Store::select('id', 'name', 'base_url')->find($storeId);
 
         return response()->json([
             'status' => true,
-            'message' => 'Store selected successfully',
-            'store' => new StoreResource($store)
-        ],200);
+            'message' => 'Store selected successfully.',
+            'token' => $token,
+            'store' => new StoreResource($store),
+        ]);
     }
 }

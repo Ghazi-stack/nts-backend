@@ -1,6 +1,11 @@
 <?php
-if (!function_exists('current_store_id')) {
-    function current_store_id() {
-        return session('current_store_id') ?? 1; // fallback default store ID
+function current_store_id()
+{
+    $tokenName = auth()->user()?->currentAccessToken()?->name;
+
+    if ($tokenName && str_starts_with($tokenName, 'StoreToken-')) {
+        return (int) str_replace('StoreToken-', '', $tokenName);
     }
+
+    return null;
 }
