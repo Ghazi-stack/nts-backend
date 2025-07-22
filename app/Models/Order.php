@@ -24,7 +24,8 @@ class Order extends Model
         'shipping_cost',
         'comments',
         'total_amount',
-        'status'
+        'status',
+        'store_id' // ✅ Added 'store_id' to fillable attributes
     ];
 
     public function items()

@@ -13,6 +13,7 @@ class ProductFilter extends Model
         'type',
         'is_visible',
         'sort_order',
+        'store_id' // ✅ Added 'store_id' to fillable attributes
     ];
 
     public function store()

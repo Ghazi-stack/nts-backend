@@ -120,6 +120,7 @@ class ProductController extends Controller
 
     public function addProduct(Request $request)
     {
+
         try {
             $validated = $request->validate([
                 // core
@@ -196,6 +197,7 @@ class ProductController extends Controller
                 File::put(public_path("product_images/{$imageName}"), $imageData);
 
                 ProductImage::create([
+                    'store_id' => current_store_id(), // 👈 Add this
                     'product_id' => $product->id,
                     'path' => "product_images/{$imageName}",
                     'is_primary' => true
@@ -204,6 +206,7 @@ class ProductController extends Controller
 
             // content
             ProductContent::create([
+                'store_id' => current_store_id(),
                 'product_id' => $product->id,
                 'description' => $validated['description'] ?? null,
                 'warranty' => $validated['warranty'] ?? null,
@@ -213,6 +216,7 @@ class ProductController extends Controller
 
             // identifiers
             ProductIdentifier::create([
+                'store_id' => current_store_id(),
                 'product_id' => $product->id,
                 'mpn' => $validated['mpn'] ?? null,
                 'upc' => $validated['upc'] ?? null,
@@ -222,6 +226,7 @@ class ProductController extends Controller
 
             // SEO
             ProductSeo::create([
+                'store_id' => current_store_id(),
                 'product_id' => $product->id,
                 'page_title' => $validated['pageTitle'] ?? null,
                 'product_url' => $validated['productUrl'] ?? null,
@@ -583,7 +588,7 @@ class ProductController extends Controller
 
             // ✅ Handle Excel files
             if (in_array($ext, ['xlsx', 'xls'])) {
-                Excel::import(new ProductImport, storage_path('app/' . $path));
+                Excel::import(new ProductImport(current_store_id() ?? 1), storage_path('app/' . $path));
                 return response()->json([
                     'status' => true,
                     'message' => 'Excel import completed.'

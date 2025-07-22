@@ -13,6 +13,7 @@ class Brand extends Model
     protected $fillable = [
         'name',
         'logo',
+        'store_id'
     ];
     
     public function store()

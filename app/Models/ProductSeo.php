@@ -18,7 +18,8 @@ class ProductSeo extends Model
         'product_url',
         'meta_description',
         'meta_keywords',       
-        'redirect_old_url',    
+        'redirect_old_url',
+        'store_id' // ✅ Added 'store_id' to fillable attributes
     ];
 
 

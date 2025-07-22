@@ -9,13 +9,19 @@ use App\Models\ProductImage;
 use App\Models\ProductSeo;
 use App\Models\Brand;
 use App\Models\Category;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use Maatwebsite\Excel\Concerns\ToArray;
 
 class ProductImport implements ToArray
 {
+    protected $storeId;
+
+    public function __construct($storeId)
+    {
+        $this->storeId = $storeId;
+    }
+
     public function array(array $rows)
     {
         $header = array_map('trim', $rows[0]);
@@ -36,8 +42,8 @@ class ProductImport implements ToArray
                 );
 
                 $product = Product::create([
+                    'store_id' => $this->storeId, // ✅ Important: store ID is now passed in
                     'item_type' => $data['Item Type'] ?? null,
-                    // 'id' => $data['Product ID'] ?? null,
                     'product_type' => $data['Product Type'] ?? null,
                     'name' => $data['Product Name'],
                     'slug' => Str::slug($data['Product Name']) . '-' . uniqid(),
@@ -48,18 +54,16 @@ class ProductImport implements ToArray
                     'condition' => $data['Product Condition'] ?? null,
                     'dimensions' => [
                         'weight' => $data['Product Weight'] ?? null,
-                        'width' => $data['Product Width'] ?? null,
+                        'width'  => $data['Product Width'] ?? null,
                         'height' => $data['Product Height'] ?? null,
-                        'depth' => $data['Product Depth'] ?? null,
+                        'depth'  => $data['Product Depth'] ?? null,
                     ],
-
                     'track_inventory' => $this->toBool($data['Track Inventory'] ?? 'N'),
                     'current_stock' => $data['Current Stock Level'] ?? 0,
                     'low_stock' => $data['Low Stock Level'] ?? 0,
                     'visible_on_storefront' => $this->toBool($data['Product Visible?'] ?? 'Y'),
                     'free_shipping' => $this->toBool($data['Free Shipping'] ?? 'N'),
                     'allow_purchase' => $this->toBool($data['Allow Purchases?'] ?? 'Y'),
-                    'product_type' => $data['Product Type'] ?? null,
                     'option_set' => $data['Option Set'] ?? null,
                     'option_set_align' => $data['Option Set Align'] ?? null,
                     'cost_price' => $data['Cost Price'] ?? null,
@@ -86,6 +90,7 @@ class ProductImport implements ToArray
                 ]);
 
                 ProductIdentifier::create([
+                    'store_id' => current_store_id(),
                     'product_id' => $product->id,
                     'mpn' => $data['Manufacturer Part Number'] ?? '',
                     'upc' => $data['Product UPC/EAN'] ?? '',
@@ -94,6 +99,7 @@ class ProductImport implements ToArray
                 ]);
 
                 ProductSeo::create([
+                    'store_id' => current_store_id(),
                     'product_id' => $product->id,
                     'page_title' => $data['Page Title'] ?? $data['Product Name'],
                     'product_url' => ltrim($data['Product URL'] ?? '', '/'),
@@ -105,14 +111,13 @@ class ProductImport implements ToArray
                 // Primary image
                 if (!empty($data['Product Image File - 1'])) {
                     ProductImage::create([
+                        'store_id' => current_store_id(),
                         'product_id' => $product->id,
                         'path' => $data['Product Image File - 1'],
                         'alt_text' => $data['Product Image Description - 1'] ?? '',
                         'is_primary' => true,
                     ]);
                 }
-
-                // Additional images can be added similarly...
 
             } catch (\Throwable $e) {
                 \Log::error("Import error: " . $e->getMessage());
@@ -122,19 +127,15 @@ class ProductImport implements ToArray
 
     private function parseCustomFields($fieldString)
     {
-       if (!$fieldString) return [];
+        if (!$fieldString) return [];
 
-        // Try decoding JSON safely (escaped JSON case)
         $decoded = json_decode($fieldString, true);
         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
             return collect($decoded)->mapWithKeys(function ($value, $key) {
-                return [
-                    trim(str_replace('"', '', $key)) => trim(str_replace('"', '', $value))
-                ];
+                return [trim(str_replace('"', '', $key)) => trim(str_replace('"', '', $value))];
             })->toArray();
         }
 
-        // Fallback: handle "key=value;key2=value2" format
         $fields = [];
         $pairs = explode(';', $fieldString);
         foreach ($pairs as $pair) {
