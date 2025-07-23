@@ -21,6 +21,7 @@ class ProductSeoResource extends JsonResource
             'meta_description' => $this->meta_description,
             'meta_keywords' => $this->meta_keywords,
             'redirect_old_url' => (bool) $this->redirect_old_url,
+            'store_id' => $this->store_id,
         ];
     }
 

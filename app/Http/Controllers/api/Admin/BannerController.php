@@ -16,11 +16,11 @@ class BannerController extends Controller
     {
         try {
             $perPage = $request->query('perPage', 20);
-
-            $banners = Banner::where('store_id', current_store_id())
+            $banners = Banner::with('store') // 🟢 Eager load store
+                ->where('store_id', current_store_id())
                 ->latest()
                 ->paginate($perPage);
-
+                
             return response()->json([
                 'status' => true,
                 'message' => 'Banners retrieved successfully',

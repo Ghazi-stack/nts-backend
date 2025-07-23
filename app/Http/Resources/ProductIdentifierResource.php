@@ -19,6 +19,7 @@ class ProductIdentifierResource extends JsonResource
             'upc'  => $this->upc,
             'gtin' => $this->gtin,
             'bpn'  => $this->bpn,
+            'store_id' => $this->store_id,
         ];
     }
 }

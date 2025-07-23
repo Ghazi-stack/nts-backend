@@ -21,6 +21,7 @@ class ProductFilterResource extends JsonResource
             'visible'     => $this->is_visible,
             'sortOrder'   => $this->sort_order,
             'countDetails'=> $this->countDetails ?? null, // set in controller
+            'store_id'    => $this->store_id, // Ensure store_id is included
         ];
     }
 }

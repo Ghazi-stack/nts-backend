@@ -29,7 +29,8 @@ class OrderResource extends JsonResource
             'totalAmount'     => $this->total_amount,
             'createdAt'       => $this->created_at,
             'items'           => OrderItemResource::collection($this->whenLoaded('items')),
-            
+            'store_id'        => $this->store_id, // Ensure store_id is included
+           
         ];
     }
 }

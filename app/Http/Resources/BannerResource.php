@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
+use App\Http\Resources\StoreResource;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class BannerResource extends JsonResource
@@ -20,6 +21,7 @@ class BannerResource extends JsonResource
             'image'  => $this->image ? url($this->image) : null, // full URL
             'link'   => $this->link,
             'status' => $this->status,
+            'store' => new StoreResource($this->whenLoaded('store')),
         ];
     }
 }

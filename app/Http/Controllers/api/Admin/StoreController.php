@@ -44,16 +44,11 @@ class StoreController extends Controller
                 'message' => 'Unauthorized: Store not assigned to user.'
             ], 403);
         }
-
-        // ✅ Create new token with a proper name (used later to extract store_id)
-        $token = $user->createToken('StoreToken-' . $storeId)->plainTextToken;
-
         $store = Store::select('id', 'name', 'base_url')->find($storeId);
 
         return response()->json([
             'status' => true,
             'message' => 'Store selected successfully.',
-            'token' => $token,
             'store' => new StoreResource($store),
         ]);
     }

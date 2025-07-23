@@ -19,6 +19,7 @@ class ProductContentResource extends JsonResource
             'warranty'         => $this->warranty,
             'availabilityText' => $this->availability_text,
             'templateLayout'   => $this->template_layout,
+            'store_id'         => $this->store_id,
         ];
     }
 }

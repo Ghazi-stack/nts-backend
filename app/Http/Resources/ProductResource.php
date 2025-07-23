@@ -58,7 +58,7 @@ class ProductResource extends JsonResource
             'sortOrder' => $this->sort_order,
             'searchKeywords' => $this->search_keywords,
             'customFields' => $this->custom_fields,
-        
+            'store_id' => $this->store_id,
             'images' => ProductImageResource::collection($this->whenLoaded('images')),
             'content' => new ProductContentResource($this->whenLoaded('content')),
             'identifiers' => new ProductIdentifierResource($this->whenLoaded('identifiers')),
