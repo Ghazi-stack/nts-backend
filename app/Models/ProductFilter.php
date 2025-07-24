@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Store;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class ProductFilter extends Model
 {
