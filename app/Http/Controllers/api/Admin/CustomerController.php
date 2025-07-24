@@ -80,8 +80,8 @@ class CustomerController extends Controller
             }
 
             // Sort
-            $sortField = $request->input('sort_by', 'id');
-            $sortOrder = $request->input('sort_order', 'asc');
+            $sortField = $request->input('sortBy', 'id');
+            $sortOrder = $request->input('sortOrder', 'asc');
             $query->orderBy($sortField, $sortOrder);
 
             // Pagination
