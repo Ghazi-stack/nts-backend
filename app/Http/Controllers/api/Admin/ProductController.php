@@ -71,7 +71,7 @@ class ProductController extends Controller
                 'status' => true,
                 'message' => 'Product list fetched.',
                 'data' => ProductResource::collection($products),
-                'meta' => [
+                'pagination' => [
                     'total' => $products->total(),
                     'page' => $products->currentPage(),
                     'pageSize' => $products->perPage(),
@@ -289,7 +289,7 @@ class ProductController extends Controller
 
             $query = $request->input('query');
             $page = (int) $request->input('page', 1);
-            $pageSize = (int) $request->input('pageSize', 20);
+            $pageSize = (int) $request->input('pageSize', 50);
 
            $products = Product::where(function ($q) use ($query) {
                 $q->where('name', 'like', "%$query%")
@@ -449,7 +449,7 @@ class ProductController extends Controller
                 'status' => true,
                 'message' => 'Advanced product search result.',
                 'data' => ProductResource::collection($products),
-                'meta' => [
+                'pagination' => [
                     'total' => $products->total(),
                     'page' => $products->currentPage(),
                     'pageSize' => $products->perPage(),
