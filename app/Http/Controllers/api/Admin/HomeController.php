@@ -2,7 +2,12 @@
 
 namespace App\Http\Controllers\api\Admin;
 
+use Exception;
 use Carbon\Carbon;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\Category;
+use App\Models\Customer;
 use App\Models\VisitSite;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -97,5 +102,34 @@ class HomeController extends Controller
             'status' => true,
             'message' => 'Visit recorded'
         ]);
+    }
+
+    public function getStoreStats()
+    {
+        try {
+            $storeId = current_store_id(); // 🔐 Your existing helper to fetch store ID
+
+            $totalOrders = Order::where('store_id', $storeId)->count();
+            $totalProducts = Product::where('store_id', $storeId)->count();
+            $totalCategories = Category::where('store_id', $storeId)->count();
+            $totalCustomers = Customer::where('store_id', $storeId)->count();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Store statistics fetched successfully.',
+                'data' => [
+                    'totalOrders' => $totalOrders,
+                    'totalProducts' => $totalProducts,
+                    'totalCategories' => $totalCategories,
+                    'totalCustomers' => $totalCustomers,
+                ]
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to fetch stats.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

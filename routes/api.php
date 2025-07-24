@@ -45,10 +45,12 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::prefix('stores')->controller(StoreController::class)->group(function () {
         Route::get('/list-stores', 'index');
         Route::post('/select-store', 'selectStore');
+        
     });
     // 📊 Dashboard
     Route::get('/store-performance', [HomeController::class, 'storePerformance']);
     Route::post('/track-visit', [HomeController::class, 'track']);
+    Route::get('/total-count', [HomeController::class, 'getStoreStats']);
 
     // Orders (Admin Dashboard style)
     Route::prefix('orders')->controller(OrderController::class)->group(function () {
