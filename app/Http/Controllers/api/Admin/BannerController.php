@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\API\Admin;
+namespace App\Http\Controllers\api\Admin;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;

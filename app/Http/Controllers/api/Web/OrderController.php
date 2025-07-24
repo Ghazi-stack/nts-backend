@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\API\Web;
+namespace App\Http\Controllers\api\Web;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;

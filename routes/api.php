@@ -2,16 +2,16 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\API\Admin\{
+use App\Http\Controllers\api\Admin\{
     BannerController, BrandController, CategoryController,
     ProductController, ProductFilterController, HomeController,
     StoreController
 };
-use App\Http\Controllers\API\Web\{
+use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
     WishlistController, StripePaymentController, StripeWebhookController
 };
-use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\api\AuthController;
 // ===============================
 // 🔐 AUTHENTICATED USER CHECK
 // ===============================
@@ -55,6 +55,17 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/list-orders', 'index'); // ✅ Get orders with filters, pagination
         Route::get('/show-order/{id}', 'show'); // ✅ View order details
         Route::patch('/update-status/{id}', 'updateOrderStatus'); // ✅ Update order status
+    });
+    // Customers
+
+      Route::prefix('customers')->group(function () {
+        Route::get('/get-customers', [CustomerController::class, 'index']);
+        Route::get('/get-customer/{id}', [CustomerController::class, 'show']);
+        Route::post('/add-customer', [CustomerController::class, 'store']);
+        Route::put('/update-customer/{id}', [CustomerController::class, 'update']);
+        Route::delete('/delete-customer/{id?}', [CustomerController::class, 'destroy']);
+        Route::post('/import', [CustomerController::class, 'importCSV']);
+        Route::get('/export', [CustomerController::class, 'exportCSV']);
     });
     // 📁 Categories
     Route::prefix('categories')->controller(CategoryController::class)->group(function () {
