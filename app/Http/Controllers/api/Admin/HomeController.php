@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api\Admin;
 
 use Carbon\Carbon;
+use App\Models\VisitSite;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
