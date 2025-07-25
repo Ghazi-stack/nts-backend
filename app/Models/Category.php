@@ -14,6 +14,7 @@ class Category extends Model
 
     protected $fillable = ['name', 'slug', 'description', 'parent_id','is_visible','store_id'];
 
+     // 🔁 Recursive relationship for nested categories
     public function parent()
     {
         return $this->belongsTo(Category::class, 'parent_id');
@@ -27,12 +28,15 @@ class Category extends Model
     public function childrenRecursive()
     {
         return $this->hasMany(Category::class, 'parent_id')
-                    ->with(['childrenRecursive', 'products']); // ✅ Include 'products' here
+            ->with(['childrenRecursive', 'products']);
     }
+
+    // ✅ Many-to-many: Categories ↔ Products
     public function products()
     {
-        return $this->hasMany(Product::class);
+        return $this->belongsToMany(Product::class, 'category_product');
     }
+
     public function store()
     {
         return $this->belongsTo(Store::class);

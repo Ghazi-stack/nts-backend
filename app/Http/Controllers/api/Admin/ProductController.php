@@ -30,7 +30,7 @@ class ProductController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = Product::with(['brand', 'category', 'images'])
+            $query = Product::with(['brand', 'categories', 'images'])
                 ->where('store_id', current_store_id());
 
             if ($request->has('isFeatured')) {
@@ -89,7 +89,7 @@ class ProductController extends Controller
         try {
             $product = Product::with([
                 'brand',
-                'category.parent.parent.parent.parent', // support 5-level
+                'categories.parent.parent.parent.parent', // support 5-level
                 'images',
                 'content',
                 'identifiers',
@@ -122,7 +122,8 @@ class ProductController extends Controller
                 'name' => 'nullable|string|max:255',
                 'sku' => 'nullable|string|unique:products,sku',
                 'brandId' => 'required|exists:brands,id',
-                'categoryId' => 'required|exists:categories,id',
+                'categoryIds' => 'required|array|min:1',
+                'categoryIds.*' => 'exists:categories,id',
                 'condition' => 'nullable|string',
                 'price' => 'nullable',
                 'msrp' => 'nullable',
@@ -167,7 +168,6 @@ class ProductController extends Controller
                 'cost_price' => $validated['costPrice'] ?? null,
                 'sale_price' => $validated['salePrice'] ?? null,
                 'brand_id' => $validated['brandId'],
-                'category_id' => $validated['categoryId'],
                 'condition' => $validated['condition'] ?? null,
                 'dimensions' => $validated['dimensions'] ?? [],
                 'track_inventory' => $validated['trackInventory'] ?? false,
@@ -181,6 +181,7 @@ class ProductController extends Controller
                 'custom_fields' => $validated['customFields'] ?? [],
             ]);
 
+            $product->categories()->sync($validated['categoryIds']);
             // ✅ Handle image URLs or file uploads
             $images = [];
 
@@ -248,7 +249,7 @@ class ProductController extends Controller
                 'message' => 'Product created successfully.',
                 'data' => new ProductResource($product->load([
                     'brand',
-                    'category.parent',
+                    'categories',
                     'images',
                     'content',
                     'identifiers',
@@ -272,6 +273,8 @@ class ProductController extends Controller
                 'products' => 'required|array|min:1',
                 'products.*.id' => 'required|exists:products,id',
                 'products.*.fields' => 'required|array|min:1',
+                'products.*.fields.categoryIds' => 'nullable|array',
+                'products.*.fields.categoryIds.*' => 'exists:categories,id',
             ]);
         
             $updated = [];
@@ -283,13 +286,13 @@ class ProductController extends Controller
                         ->findOrFail($item['id']);
                 
                     $fields = $item['fields'];
-                
+                    $categoryIds = $fields['categoryIds'] ?? null;
+                    unset($fields['categoryIds']); // prevent mass assignment erro
                     // ✅ camelCase to snake_case mapping
                     $fieldMap = [
                         'costPrice' => 'cost_price',
                         'salePrice' => 'sale_price',
                         'brandId' => 'brand_id',
-                        'categoryId' => 'category_id',
                         'trackInventory' => 'track_inventory',
                         'currentStock' => 'current_stock',
                         'lowStock' => 'low_stock',
@@ -311,7 +314,11 @@ class ProductController extends Controller
                     if (!empty($productFields)) {
                         $product->update($productFields);
                     }
-                
+                    // ✅ Sync categories if provided
+                    if (is_array($categoryIds)) {
+                        $product->categories()->sync($categoryIds);
+                    }
+
                     // ✅ Content update
                     if (
                         isset($fields['description']) || isset($fields['warranty']) ||
@@ -434,14 +441,14 @@ class ProductController extends Controller
                   ->orWhere('slug', 'like', "%$query%")
                   ->orWhere('price', 'like', "%$query%")
                   ->orWhere('search_keywords', 'like', "%$query%")
-                  ->orWhereHas('category', function ($q2) use ($query) {
-                      $q2->where('name', 'like', "%$query%");
-                  })
+                  ->orWhereHas('categories', function ($q2) use ($query) {
+                        $q2->where('name', 'like', "%$query%");
+                    })
                   ->orWhereHas('brand', function ($q3) use ($query) {
                       $q3->where('name', 'like', "%$query%");
                   });
             })
-            ->with(['category', 'brand'])
+            ->with(['categories', 'brand'])
             ->paginate($pageSize, ['*'], 'page', $page);
 
             return response()->json([
@@ -462,7 +469,7 @@ class ProductController extends Controller
     {
         try {
             $products = Product::latest()
-                ->with(['category', 'brand'])
+                ->with(['categories', 'brand'])
                 ->take(10)
                 ->get();
 
@@ -480,7 +487,7 @@ class ProductController extends Controller
     {
         try {
             $products = Product::where('is_featured', true)
-                ->with(['category', 'brand'])
+                ->with(['categories', 'brand'])
                 ->latest()
                 ->take(10)
                 ->get();
@@ -498,7 +505,7 @@ class ProductController extends Controller
     public function popularProducts()
     {
         try {
-            $products = Product::with(['category', 'brand'])
+            $products = Product::with(['categories', 'brand'])
                 ->orderByDesc('views')
                 ->take(10)
                 ->get();
@@ -517,7 +524,7 @@ class ProductController extends Controller
     public function searchAdvanced(Request $request)
     {
         try {
-            $query = Product::with(['brand', 'category', 'images']);
+            $query = Product::with(['brand', 'categories', 'images']);
 
             // 🔍 Search Keywords
             if ($request->filled('searchKeywords')) {
@@ -769,7 +776,6 @@ class ProductController extends Controller
                         'sku' => $row['Product Code/SKU'],
                         'price' => $row['Retail Price'] ?? 0,
                         'brand_id' => $brand->id,
-                        'category_id' => $category->id,
                         'track_inventory' => false,
                         'current_stock' => 0,
                         'visible_on_storefront' => true,
@@ -781,6 +787,7 @@ class ProductController extends Controller
                             'depth' => $row['Depth'] ?? null,
                         ]),
                     ]);
+                    $product->categories()->sync([$category->id]);
 
                     ProductContent::create([
                         'store_id' => $storeId,

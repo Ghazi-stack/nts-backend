@@ -19,7 +19,7 @@ class Product extends Model
 {
     use HasFactory;
     protected $fillable = [
-        'name', 'slug', 'sku', 'price', 'brand_id', 'category_id',
+        'name', 'slug', 'sku', 'price', 'brand_id',
         'dimensions', 'track_inventory', 'current_stock', 'low_stock',
         'is_featured', 'show_condition', 'sort_order', 'search_keywords',
         'visible_on_storefront', 'custom_fields', 'free_shipping',
@@ -47,9 +47,9 @@ class Product extends Model
         return $this->belongsTo(Brand::class);
     }
 
-    public function category()
+    public function categories()
     {
-        return $this->belongsTo(Category::class);
+        return $this->belongsToMany(Category::class, 'category_product');
     }
 
     public function images()

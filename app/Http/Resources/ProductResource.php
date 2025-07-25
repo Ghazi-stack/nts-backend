@@ -53,7 +53,7 @@ class ProductResource extends JsonResource
             'taxProviderCode' => $this->tax_provider_code,
             
             'brand' => new BrandResource($this->whenLoaded('brand')),
-            'category' => new CategoryResource($this->whenLoaded('category')),
+            'categories' => CategoryResource::collection($this->whenLoaded('categories')), // ✅ fixed
             'conditionId' => $this->condition_id,
             
             'weight' => $this->dimensions['weight'] ?? null,
