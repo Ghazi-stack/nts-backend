@@ -101,8 +101,7 @@ class AuthController extends Controller
             $plainTextToken = $tokenResult->plainTextToken;
 
             // ✅ Set expiry before checking token
-            // $expireAt = now()->addHours(24);
-            $expireAt = now()->addMinute();
+            $expireAt = now()->addHours(12);
             $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($plainTextToken);
 
             if ($accessToken) {
