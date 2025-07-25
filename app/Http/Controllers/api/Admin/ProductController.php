@@ -637,49 +637,85 @@ class ProductController extends Controller
         return $count;
     }
 
-     public function destroyProduct(Request $request, $id = null)
-    {
-        try {
-            if ($id) {
-                $product = Product::where('store_id', current_store_id())->findOrFail($id);
-                $product->delete();
+  public function destroyProduct(Request $request, $id = null)
+{
+    try {
+        $storeId = current_store_id(); // ✅ Real dynamic store context
+
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or session/token is missing.'
+            ], 400);
+        }
+
+        // 🔹 SINGLE DELETE
+        if ($id) {
+            $product = Product::where('store_id', $storeId)->find($id);
+
+            if (!$product) {
                 return response()->json([
-                    'status' => true,
-                    'message' => 'Product deleted successfully.',
-                    'deletedIds' => [$id]
-                ]);
+                    'status' => false,
+                    'message' => "Product ID $id not found in store_id $storeId."
+                ], 404);
             }
 
-            $request->validate([
-                'ids' => 'required|array|min:1',
-                'ids.*' => 'exists:products,id',
-            ]);
-
-            $deleted = [];
-            $failed = [];
-
-            foreach ($request->ids as $prodId) {
-                try {
-                    $product = Product::where('store_id', current_store_id())->findOrFail($prodId);
-                    $product->delete();
-                    $deleted[] = $prodId;
-                } catch (Exception $e) {
-                    $failed[] = ['id' => $prodId, 'error' => $e->getMessage()];
-                }
-            }
+            $product->delete();
 
             return response()->json([
                 'status' => true,
-                'message' => 'Delete process completed.',
-                'deletedIds' => $deleted,
-                'failed' => $failed
+                'message' => 'Product deleted successfully.',
+                'deletedIds' => [$id]
             ]);
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['status' => false, 'message' => 'Product not found.'], 404);
-        } catch (Exception $e) {
-            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
         }
+
+        // 🔹 BULK DELETE
+        $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer'
+        ]);
+
+        $deleted = [];
+        $failed = [];
+
+        foreach ($request->ids as $prodId) {
+            $product = Product::where('store_id', $storeId)->find($prodId);
+
+            if (!$product) {
+                $failed[] = [
+                    'id' => $prodId,
+                    'error' => "Product ID $prodId not found in store_id $storeId."
+                ];
+                continue;
+            }
+
+            try {
+                $product->delete();
+                $deleted[] = $prodId;
+            } catch (Exception $e) {
+                $failed[] = [
+                    'id' => $prodId,
+                    'error' => $e->getMessage()
+                ];
+            }
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Delete process completed.',
+            'deletedIds' => $deleted,
+            'failed' => $failed
+        ]);
+
+    } catch (Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Unexpected error: ' . $e->getMessage()
+        ], 500);
     }
+}
+
+
 
     public function importCSV(Request $request)
     {

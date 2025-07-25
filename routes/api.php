@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\api\Admin\{
     BannerController, BrandController, CategoryController,
     ProductController, ProductFilterController, HomeController,
-    StoreController
+    StoreController, CustomerController
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
@@ -94,7 +94,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/show-product/{slug}', 'showProduct');
         Route::post('/add-product', 'addProduct');
         Route::put('/update-product', 'updateProduct');
-        Route::delete('/delete-product/{id}', 'destroyProduct');
+        Route::delete('/delete-product/{id?}', 'destroyProduct');
         Route::get('/search-product', 'searchProduct');
         Route::post('/advanced-search', 'searchAdvanced');
         Route::post('/import-csv', 'importCSV');
