@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use App\Http\Resources\StoreResource;
 use Illuminate\Support\Facades\Password;
+use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -75,9 +76,9 @@ class AuthController extends Controller
             }
         }
 
-        public function login(Request $request)
-        {
-            try {
+     public function login(Request $request)
+    {
+        try {
             $request->validate([
                 'email' => 'required|email',
                 'password' => 'required',
@@ -95,25 +96,41 @@ class AuthController extends Controller
 
             $roleMessage = $user->userRole == 1 ? 'Admin login successful' : 'Customer login successful';
 
-            $token = $user->createToken('api_token')->plainTextToken;
-
+             // ✅ Create token
+            $tokenResult = $user->createToken('api_token');
+            $plainTextToken = $tokenResult->plainTextToken;
+            
+            // ✅ Set expiry before checking token
+            $expireAt = now()->addHours(24);
+            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($plainTextToken);
+            
+            if ($accessToken) {
+                $accessToken->expires_at = $expireAt;
+                $accessToken->save();
+            }
+        
+            // ✅ Load stores
             $stores = StoreResource::collection($user->stores()->get());
-
+        
+            // ✅ Return with expireAt
             return response()->json([
                 'status' => true,
                 'message' => $roleMessage,
-                'token' => $token,
+                'token' => $plainTextToken,
+                'expireAt' => $expireAt->toDateTimeString(), // ✅ Now this is always set
                 'user' => $user,
                 'stores' => $stores,
             ]);
         } catch (\Exception $e) {
-            Log::error('Login failed: ' . $e->getMessage());
+            \Log::error('Login failed: ' . $e->getMessage());
+
             return response()->json([
                 'status' => false,
                 'message' => 'Something went wrong during login.',
             ], 500);
-        } 
+        }
     }
+
 
     public function forgotPassword(Request $request)
     {

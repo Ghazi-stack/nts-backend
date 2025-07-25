@@ -1,5 +1,5 @@
 <?php
-
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\api\Admin\{
@@ -173,4 +173,22 @@ Route::prefix('web')->group(function () {
     // 💳 Stripe
     Route::post('/stripe/create-session', [StripePaymentController::class, 'createCheckoutSession']);
     Route::post('/stripe/webhook', [StripeWebhookController::class, 'handle']);
+});
+Route::get('/test-token', function () {
+    $user = User::first(); // ya find(1)
+
+    $tokenResult = $user->createToken('api_token');
+    $plainTextToken = $tokenResult->plainTextToken;
+
+    // Set expiry
+    $tokenModel = \Laravel\Sanctum\PersonalAccessToken::findToken($plainTextToken);
+    if ($tokenModel) {
+        $tokenModel->expires_at = now()->addHours(24);
+        $tokenModel->save();
+    }
+
+    return response()->json([
+        'token' => $plainTextToken,
+        'expireAt' => $tokenModel->expires_at->toDateTimeString(),
+    ]);
 });

@@ -25,7 +25,7 @@ class Product extends Model
         'visible_on_storefront', 'custom_fields', 'free_shipping',
         'product_type', 'option_set', 'option_set_align',
         'cost_price', 'sale_price', 'fixed_shipping_cost',
-        'allow_purchase', 'stop_processing_rules', 'tax_class', 'tax_provider_code','item_type','store_id'
+        'allow_purchase', 'stop_processing_rules', 'tax_class', 'tax_provider_code','item_type','store_id','msrp'
     ];
 
     protected $casts = [
@@ -37,7 +37,8 @@ class Product extends Model
         'allow_purchase' => 'boolean',
         'stop_processing_rules' => 'boolean',
         'free_shipping' => 'boolean',
-        'dimensions' => 'array'
+        'dimensions' => 'array',
+        'msrp' => 'decimal:2',
     ];
 
       // Relationships

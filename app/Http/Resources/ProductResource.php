@@ -20,6 +20,20 @@ class ProductResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $price = $this->price ?? 0;
+        $msrp = $this->msrp ?? 0;
+        $cost = $this->cost_price ?? 0;
+
+        // Calculated fields
+        $savings = ($msrp > $price) ? $msrp - $price : 0;
+        $savingPercent = ($msrp > 0 && $savings > 0)
+            ? round(($savings / $msrp) * 100, 2)
+            : 0;
+
+        $profit = ($price > $cost) ? $price - $cost : 0;
+        $profitMargin = ($cost > 0 && $profit > 0)
+            ? round(($profit / $cost) * 100, 2)
+            : 0;
        
         return [
            'id' => $this->id,
@@ -65,6 +79,11 @@ class ProductResource extends JsonResource
             'seo' => new ProductSeoResource($this->whenLoaded('seo')),
         
             'categoryHierarchy' => $this->category ? $this->buildCategoryHierarchy($this->category) : null,
+             // New calculated fields
+            'savingAmount' => $savings,
+            'savingPercent' => $savingPercent,
+            'profit' => $profit,
+            'profitMargin' => $profitMargin,
         
             'createdAt' => $this->created_at,
             'updatedAt' => $this->updated_at,

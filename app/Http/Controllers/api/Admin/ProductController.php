@@ -119,12 +119,15 @@ class ProductController extends Controller
             }
 
             $validated = $request->validate([
-                'name' => 'required|string|max:255',
-                'sku' => 'required|string|unique:products,sku',
-                'price' => 'required|numeric|min:0',
+                'name' => 'nullable|string|max:255',
+                'sku' => 'nullable|string|unique:products,sku',
                 'brandId' => 'required|exists:brands,id',
                 'categoryId' => 'required|exists:categories,id',
                 'condition' => 'nullable|string',
+                'price' => 'nullable',
+                'msrp' => 'nullable',
+                'costPrice' => 'nullable',
+                'salePrice' => 'nullable',
                 'dimensions' => 'nullable|array',
                 'dimensions.weight' => 'nullable|numeric',
                 'dimensions.width' => 'nullable|numeric',
@@ -159,6 +162,9 @@ class ProductController extends Controller
                 'slug' => Str::slug($validated['name']) . '-' . uniqid(),
                 'sku' => $validated['sku'],
                 'price' => $validated['price'],
+                'msrp' => $validated['msrp'] ?? null,
+                'cost_price' => $validated['costPrice'] ?? null,
+                'sale_price' => $validated['salePrice'] ?? null,
                 'brand_id' => $validated['brandId'],
                 'category_id' => $validated['categoryId'],
                 'condition' => $validated['condition'] ?? null,
