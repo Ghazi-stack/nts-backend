@@ -241,17 +241,17 @@ class ProductController extends Controller
                 'products.*.id' => 'required|exists:products,id',
                 'products.*.fields' => 'required|array|min:1',
             ]);
-        
+
             $updated = [];
             $failed = [];
-        
+
             foreach ($validated['products'] as $item) {
                 try {
                     $product = Product::where('store_id', current_store_id())
                         ->findOrFail($item['id']);
-                
+
                     $fields = $item['fields'];
-                
+
                     // 👇 camelCase to snake_case mapping
                     $fieldMap = [
                         'costPrice' => 'cost_price',
@@ -267,19 +267,16 @@ class ProductController extends Controller
                         'searchKeywords' => 'search_keywords',
                         'isVisible' => 'visible_on_storefront',
                         'customFields' => 'custom_fields',
+                        'msrp'          => 'msrp'
                     ];
-                
                     $productFields = [];
-                
                     foreach ($fields as $key => $value) {
                         $dbKey = $fieldMap[$key] ?? $key; // fallback to original if no mapping
                         $productFields[$dbKey] = $value;
                     }
-                
                     if (!empty($productFields)) {
                         $product->update($productFields);
                     }
-                
                     // ✅ Content Table
                     if (
                         isset($fields['description']) || isset($fields['warranty']) ||
@@ -295,7 +292,6 @@ class ProductController extends Controller
                         $content->product_id = $product->id;
                         $content->save();
                     }
-                
                     // ✅ Identifiers Table
                     if (
                         isset($fields['mpn']) || isset($fields['upc']) ||
@@ -311,7 +307,6 @@ class ProductController extends Controller
                         $identifiers->product_id = $product->id;
                         $identifiers->save();
                     }
-                
                     // ✅ SEO Table
                     if (
                         isset($fields['pageTitle']) || isset($fields['productUrl']) ||
@@ -326,13 +321,13 @@ class ProductController extends Controller
                         $seo->product_id = $product->id;
                         $seo->save();
                     }
-                
+
                     // ✅ Image Update
                     if (isset($fields['image'])) {
                         $imageData = file_get_contents($fields['image']);
                         $imageName = time() . '_' . basename(parse_url($fields['image'], PHP_URL_PATH));
                         File::put(public_path("product_images/{$imageName}"), $imageData);
-                    
+
                         ProductImage::updateOrCreate(
                             ['product_id' => $product->id, 'is_primary' => true],
                             [
@@ -341,7 +336,7 @@ class ProductController extends Controller
                             ]
                         );
                     }
-                
+
                     $updated[] = $product->id;
                 } catch (Exception $e) {
                     $failed[] = [
@@ -350,7 +345,7 @@ class ProductController extends Controller
                     ];
                 }
             }
-        
+
             return response()->json([
                 'status' => true,
                 'message' => 'Bulk update completed.',
