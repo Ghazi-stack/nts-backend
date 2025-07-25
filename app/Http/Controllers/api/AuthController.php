@@ -99,19 +99,20 @@ class AuthController extends Controller
              // ✅ Create token
             $tokenResult = $user->createToken('api_token');
             $plainTextToken = $tokenResult->plainTextToken;
-            
+
             // ✅ Set expiry before checking token
-            $expireAt = now()->addHours(24);
+            // $expireAt = now()->addHours(24);
+            $expireAt = now()->addMinute();
             $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($plainTextToken);
-            
+
             if ($accessToken) {
                 $accessToken->expires_at = $expireAt;
                 $accessToken->save();
             }
-        
+
             // ✅ Load stores
             $stores = StoreResource::collection($user->stores()->get());
-        
+
             // ✅ Return with expireAt
             return response()->json([
                 'status' => true,
