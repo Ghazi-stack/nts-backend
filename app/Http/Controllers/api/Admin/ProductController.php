@@ -142,7 +142,8 @@ class ProductController extends Controller
                 'searchKeywords' => 'nullable|string',
                 'isVisible' => 'nullable|boolean',
                 'customFields' => 'nullable|array',
-                'image' => 'nullable|url',
+                'image' => 'nullable',
+                'image.*' => 'url',
                 'description' => 'nullable|string',
                 'warranty' => 'nullable|string',
                 'availabilityText' => 'nullable|string',
@@ -180,17 +181,21 @@ class ProductController extends Controller
                 'custom_fields' => $validated['customFields'] ?? [],
             ]);
 
-            if (!empty($validated['image'])) {
-                $imageData = file_get_contents($validated['image']);
-                $imageName = time() . '_' . basename(parse_url($validated['image'], PHP_URL_PATH));
-                File::put(public_path("product_images/{$imageName}"), $imageData);
+           if (!empty($validated['image'])) {
+                $images = is_array($validated['image']) ? $validated['image'] : [$validated['image']];
 
-                ProductImage::create([
-                    'store_id' => $storeId,
-                    'product_id' => $product->id,
-                    'path' => "product_images/{$imageName}",
-                    'is_primary' => true
-                ]);
+                foreach ($images as $index => $imageUrl) {
+                    $imageData = file_get_contents($imageUrl);
+                    $imageName = time() . '_' . $index . '_' . basename(parse_url($imageUrl, PHP_URL_PATH));
+                    File::put(public_path("product_images/{$imageName}"), $imageData);
+                
+                    ProductImage::create([
+                        'store_id' => $storeId,
+                        'product_id' => $product->id,
+                        'path' => "product_images/{$imageName}",
+                        'is_primary' => $index === 0, // First image = primary
+                    ]);
+                }
             }
 
             ProductContent::create([
@@ -322,19 +327,24 @@ class ProductController extends Controller
                         $seo->save();
                     }
 
-                    // ✅ Image Update
-                    if (isset($fields['image'])) {
-                        $imageData = file_get_contents($fields['image']);
-                        $imageName = time() . '_' . basename(parse_url($fields['image'], PHP_URL_PATH));
-                        File::put(public_path("product_images/{$imageName}"), $imageData);
+                   if (isset($fields['image'])) {
+                        $images = is_array($fields['image']) ? $fields['image'] : [$fields['image']];
 
-                        ProductImage::updateOrCreate(
-                            ['product_id' => $product->id, 'is_primary' => true],
-                            [
+                        // Optional: delete existing images if needed
+                        // ProductImage::where('product_id', $product->id)->delete();
+
+                        foreach ($images as $index => $imageUrl) {
+                            $imageData = file_get_contents($imageUrl);
+                            $imageName = time() . '_' . $index . '_' . basename(parse_url($imageUrl, PHP_URL_PATH));
+                            File::put(public_path("product_images/{$imageName}"), $imageData);
+                        
+                            ProductImage::create([
                                 'store_id' => $product->store_id,
-                                'path' => "product_images/{$imageName}"
-                            ]
-                        );
+                                'product_id' => $product->id,
+                                'path' => "product_images/{$imageName}",
+                                'is_primary' => $index === 0
+                            ]);
+                        }
                     }
 
                     $updated[] = $product->id;
