@@ -249,19 +249,87 @@ class ProductController extends Controller
                 try {
                     $product = Product::where('store_id', current_store_id())
                         ->findOrFail($item['id']);
-
+                
                     $fields = $item['fields'];
-
-                    if (isset($fields['customFields']) && is_array($fields['customFields'])) {
-                        $fields['custom_fields'] = $fields['customFields'];
-                        unset($fields['customFields']);
+                
+                    // Main Product Table
+                    $productFields = array_intersect_key($fields, array_flip([
+                        'name', 'sku', 'price', 'msrp', 'cost_price', 'sale_price',
+                        'brand_id', 'category_id', 'condition', 'dimensions', 'track_inventory',
+                        'current_stock', 'low_stock', 'is_featured', 'show_condition',
+                        'sort_order', 'search_keywords', 'visible_on_storefront', 'custom_fields'
+                    ]));
+                
+                    if (isset($fields['customFields'])) {
+                        $productFields['custom_fields'] = $fields['customFields'];
                     }
-
-                    if (isset($fields['dimensions']) && is_array($fields['dimensions'])) {
-                        $fields['dimensions'] = $fields['dimensions'];
+                
+                    if (!empty($productFields)) {
+                        $product->update($productFields);
                     }
-
-                    $product->update($fields);
+                
+                    // Content Table
+                    if (
+                        isset($fields['description']) || isset($fields['warranty']) ||
+                        isset($fields['availabilityText']) || isset($fields['templateLayout'])
+                    ) {
+                        $content = $product->content ?? new ProductContent(['store_id' => $product->store_id]);
+                        $content->fill([
+                            'description' => $fields['description'] ?? $content->description,
+                            'warranty' => $fields['warranty'] ?? $content->warranty,
+                            'availability_text' => $fields['availabilityText'] ?? $content->availability_text,
+                            'template_layout' => $fields['templateLayout'] ?? $content->template_layout,
+                        ]);
+                        $content->product_id = $product->id;
+                        $content->save();
+                    }
+                
+                    // Identifiers Table
+                    if (
+                        isset($fields['mpn']) || isset($fields['upc']) ||
+                        isset($fields['gtin']) || isset($fields['bpn'])
+                    ) {
+                        $identifiers = $product->identifiers ?? new ProductIdentifier(['store_id' => $product->store_id]);
+                        $identifiers->fill([
+                            'mpn' => $fields['mpn'] ?? $identifiers->mpn,
+                            'upc' => $fields['upc'] ?? $identifiers->upc,
+                            'gtin' => $fields['gtin'] ?? $identifiers->gtin,
+                            'bpn' => $fields['bpn'] ?? $identifiers->bpn,
+                        ]);
+                        $identifiers->product_id = $product->id;
+                        $identifiers->save();
+                    }
+                
+                    // SEO Table
+                    if (
+                        isset($fields['pageTitle']) || isset($fields['productUrl']) ||
+                        isset($fields['metaDescription'])
+                    ) {
+                        $seo = $product->seo ?? new ProductSeo(['store_id' => $product->store_id]);
+                        $seo->fill([
+                            'page_title' => $fields['pageTitle'] ?? $seo->page_title,
+                            'product_url' => $fields['productUrl'] ?? $seo->product_url,
+                            'meta_description' => $fields['metaDescription'] ?? $seo->meta_description,
+                        ]);
+                        $seo->product_id = $product->id;
+                        $seo->save();
+                    }
+                
+                    // Image Update (if new image provided as URL)
+                    if (isset($fields['image'])) {
+                        $imageData = file_get_contents($fields['image']);
+                        $imageName = time() . '_' . basename(parse_url($fields['image'], PHP_URL_PATH));
+                        File::put(public_path("product_images/{$imageName}"), $imageData);
+                    
+                        ProductImage::updateOrCreate(
+                            ['product_id' => $product->id, 'is_primary' => true],
+                            [
+                                'store_id' => $product->store_id,
+                                'path' => "product_images/{$imageName}"
+                            ]
+                        );
+                    }
+                
                     $updated[] = $product->id;
                 } catch (Exception $e) {
                     $failed[] = [
