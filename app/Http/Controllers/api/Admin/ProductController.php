@@ -143,7 +143,7 @@ class ProductController extends Controller
                 'isVisible' => 'nullable|boolean',
                 'customFields' => 'nullable|array',
                 'image' => 'nullable',
-                'image.*' => 'url',
+                'image.*' => 'nullable',
                 'description' => 'nullable|string',
                 'warranty' => 'nullable|string',
                 'availabilityText' => 'nullable|string',
@@ -181,23 +181,40 @@ class ProductController extends Controller
                 'custom_fields' => $validated['customFields'] ?? [],
             ]);
 
-           if (!empty($validated['image'])) {
-                $images = is_array($validated['image']) ? $validated['image'] : [$validated['image']];
+            // ✅ Handle image URLs or file uploads
+            $images = [];
 
-                foreach ($images as $index => $imageUrl) {
-                    $imageData = file_get_contents($imageUrl);
-                    $imageName = time() . '_' . $index . '_' . basename(parse_url($imageUrl, PHP_URL_PATH));
-                    File::put(public_path("product_images/{$imageName}"), $imageData);
-                
-                    ProductImage::create([
-                        'store_id' => $storeId,
-                        'product_id' => $product->id,
-                        'path' => "product_images/{$imageName}",
-                        'is_primary' => $index === 0, // First image = primary
-                    ]);
-                }
+            if ($request->hasFile('image')) {
+                $images = $request->file('image');
+            } elseif (!empty($validated['image'])) {
+                $images = is_array($validated['image']) ? $validated['image'] : [$validated['image']];
             }
 
+            foreach ($images as $index => $img) {
+                if (is_string($img)) {
+                    // It's a URL
+                    try {
+                        $imageData = file_get_contents($img);
+                        $imageName = time() . '_' . $index . '_' . basename(parse_url($img, PHP_URL_PATH));
+                        File::put(public_path("product_images/{$imageName}"), $imageData);
+                    } catch (\Exception $e) {
+                        continue; // skip invalid URL
+                    }
+                } else {
+                    // It's a file
+                    $imageName = time() . '_' . $index . '.' . $img->getClientOriginalExtension();
+                    $img->move(public_path('product_images'), $imageName);
+                }
+
+                ProductImage::create([
+                    'store_id' => $storeId,
+                    'product_id' => $product->id,
+                    'path' => "product_images/{$imageName}",
+                    'is_primary' => $index === 0
+                ]);
+            }
+
+            // ✅ Add Content
             ProductContent::create([
                 'store_id' => $storeId,
                 'product_id' => $product->id,
@@ -207,6 +224,7 @@ class ProductController extends Controller
                 'template_layout' => $validated['templateLayout'] ?? null,
             ]);
 
+            // ✅ Add Identifiers
             ProductIdentifier::create([
                 'store_id' => $storeId,
                 'product_id' => $product->id,
@@ -216,6 +234,7 @@ class ProductController extends Controller
                 'bpn' => $validated['bpn'] ?? null,
             ]);
 
+            // ✅ Add SEO
             ProductSeo::create([
                 'store_id' => $storeId,
                 'product_id' => $product->id,
@@ -227,7 +246,14 @@ class ProductController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Product created successfully.',
-                'data' => new ProductResource($product->load(['brand', 'category.parent', 'images', 'content', 'identifiers', 'seo']))
+                'data' => new ProductResource($product->load([
+                    'brand',
+                    'category.parent',
+                    'images',
+                    'content',
+                    'identifiers',
+                    'seo'
+                ]))
             ], 201);
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
@@ -235,6 +261,7 @@ class ProductController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
 
 
    
@@ -246,18 +273,18 @@ class ProductController extends Controller
                 'products.*.id' => 'required|exists:products,id',
                 'products.*.fields' => 'required|array|min:1',
             ]);
-
+        
             $updated = [];
             $failed = [];
-
+        
             foreach ($validated['products'] as $item) {
                 try {
                     $product = Product::where('store_id', current_store_id())
                         ->findOrFail($item['id']);
-
+                
                     $fields = $item['fields'];
-
-                    // 👇 camelCase to snake_case mapping
+                
+                    // ✅ camelCase to snake_case mapping
                     $fieldMap = [
                         'costPrice' => 'cost_price',
                         'salePrice' => 'sale_price',
@@ -272,17 +299,20 @@ class ProductController extends Controller
                         'searchKeywords' => 'search_keywords',
                         'isVisible' => 'visible_on_storefront',
                         'customFields' => 'custom_fields',
-                        'msrp'          => 'msrp'
+                        'msrp' => 'msrp'
                     ];
+                
                     $productFields = [];
                     foreach ($fields as $key => $value) {
-                        $dbKey = $fieldMap[$key] ?? $key; // fallback to original if no mapping
+                        $dbKey = $fieldMap[$key] ?? $key;
                         $productFields[$dbKey] = $value;
                     }
+                
                     if (!empty($productFields)) {
                         $product->update($productFields);
                     }
-                    // ✅ Content Table
+                
+                    // ✅ Content update
                     if (
                         isset($fields['description']) || isset($fields['warranty']) ||
                         isset($fields['availabilityText']) || isset($fields['templateLayout'])
@@ -297,7 +327,8 @@ class ProductController extends Controller
                         $content->product_id = $product->id;
                         $content->save();
                     }
-                    // ✅ Identifiers Table
+                
+                    // ✅ Identifiers update
                     if (
                         isset($fields['mpn']) || isset($fields['upc']) ||
                         isset($fields['gtin']) || isset($fields['bpn'])
@@ -312,7 +343,8 @@ class ProductController extends Controller
                         $identifiers->product_id = $product->id;
                         $identifiers->save();
                     }
-                    // ✅ SEO Table
+                
+                    // ✅ SEO update
                     if (
                         isset($fields['pageTitle']) || isset($fields['productUrl']) ||
                         isset($fields['metaDescription'])
@@ -326,17 +358,31 @@ class ProductController extends Controller
                         $seo->product_id = $product->id;
                         $seo->save();
                     }
-
-                   if (isset($fields['image'])) {
+                
+                    // ✅ Images (URL or file)
+                    if (isset($fields['image'])) {
                         $images = is_array($fields['image']) ? $fields['image'] : [$fields['image']];
-
-                        // Optional: delete existing images if needed
-                        // ProductImage::where('product_id', $product->id)->delete();
-
-                        foreach ($images as $index => $imageUrl) {
-                            $imageData = file_get_contents($imageUrl);
-                            $imageName = time() . '_' . $index . '_' . basename(parse_url($imageUrl, PHP_URL_PATH));
-                            File::put(public_path("product_images/{$imageName}"), $imageData);
+                    
+                        // Optional: clear old images first
+                        ProductImage::where('product_id', $product->id)->delete();
+                    
+                        foreach ($images as $index => $img) {
+                            if (is_string($img)) {
+                                // Image from URL
+                                try {
+                                    $imageData = file_get_contents($img);
+                                    $imageName = time() . '_' . $index . '_' . basename(parse_url($img, PHP_URL_PATH));
+                                    File::put(public_path("product_images/{$imageName}"), $imageData);
+                                } catch (\Exception $e) {
+                                    continue;
+                                }
+                            } elseif ($img instanceof \Illuminate\Http\UploadedFile) {
+                                // Image from file upload (via controller or future extension)
+                                $imageName = time() . '_' . $index . '.' . $img->getClientOriginalExtension();
+                                $img->move(public_path('product_images'), $imageName);
+                            } else {
+                                continue; // Skip invalid
+                            }
                         
                             ProductImage::create([
                                 'store_id' => $product->store_id,
@@ -346,7 +392,7 @@ class ProductController extends Controller
                             ]);
                         }
                     }
-
+                
                     $updated[] = $product->id;
                 } catch (Exception $e) {
                     $failed[] = [
@@ -355,7 +401,7 @@ class ProductController extends Controller
                     ];
                 }
             }
-
+        
             return response()->json([
                 'status' => true,
                 'message' => 'Bulk update completed.',
@@ -368,6 +414,7 @@ class ProductController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
 
 
     public function searchProduct(Request $request)
