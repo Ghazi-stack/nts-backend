@@ -241,10 +241,10 @@ class ProductController extends Controller
                 'products.*.id' => 'required|exists:products,id',
                 'products.*.fields' => 'required|array|min:1',
             ]);
-
+        
             $updated = [];
             $failed = [];
-
+        
             foreach ($validated['products'] as $item) {
                 try {
                     $product = Product::where('store_id', current_store_id())
@@ -252,23 +252,35 @@ class ProductController extends Controller
                 
                     $fields = $item['fields'];
                 
-                    // Main Product Table
-                    $productFields = array_intersect_key($fields, array_flip([
-                        'name', 'sku', 'price', 'msrp', 'cost_price', 'sale_price',
-                        'brand_id', 'category_id', 'condition', 'dimensions', 'track_inventory',
-                        'current_stock', 'low_stock', 'is_featured', 'show_condition',
-                        'sort_order', 'search_keywords', 'visible_on_storefront', 'custom_fields'
-                    ]));
+                    // 👇 camelCase to snake_case mapping
+                    $fieldMap = [
+                        'costPrice' => 'cost_price',
+                        'salePrice' => 'sale_price',
+                        'brandId' => 'brand_id',
+                        'categoryId' => 'category_id',
+                        'trackInventory' => 'track_inventory',
+                        'currentStock' => 'current_stock',
+                        'lowStock' => 'low_stock',
+                        'isFeatured' => 'is_featured',
+                        'showCondition' => 'show_condition',
+                        'sortOrder' => 'sort_order',
+                        'searchKeywords' => 'search_keywords',
+                        'isVisible' => 'visible_on_storefront',
+                        'customFields' => 'custom_fields',
+                    ];
                 
-                    if (isset($fields['customFields'])) {
-                        $productFields['custom_fields'] = $fields['customFields'];
+                    $productFields = [];
+                
+                    foreach ($fields as $key => $value) {
+                        $dbKey = $fieldMap[$key] ?? $key; // fallback to original if no mapping
+                        $productFields[$dbKey] = $value;
                     }
                 
                     if (!empty($productFields)) {
                         $product->update($productFields);
                     }
                 
-                    // Content Table
+                    // ✅ Content Table
                     if (
                         isset($fields['description']) || isset($fields['warranty']) ||
                         isset($fields['availabilityText']) || isset($fields['templateLayout'])
@@ -284,7 +296,7 @@ class ProductController extends Controller
                         $content->save();
                     }
                 
-                    // Identifiers Table
+                    // ✅ Identifiers Table
                     if (
                         isset($fields['mpn']) || isset($fields['upc']) ||
                         isset($fields['gtin']) || isset($fields['bpn'])
@@ -300,7 +312,7 @@ class ProductController extends Controller
                         $identifiers->save();
                     }
                 
-                    // SEO Table
+                    // ✅ SEO Table
                     if (
                         isset($fields['pageTitle']) || isset($fields['productUrl']) ||
                         isset($fields['metaDescription'])
@@ -315,7 +327,7 @@ class ProductController extends Controller
                         $seo->save();
                     }
                 
-                    // Image Update (if new image provided as URL)
+                    // ✅ Image Update
                     if (isset($fields['image'])) {
                         $imageData = file_get_contents($fields['image']);
                         $imageName = time() . '_' . basename(parse_url($fields['image'], PHP_URL_PATH));
@@ -338,7 +350,7 @@ class ProductController extends Controller
                     ];
                 }
             }
-
+        
             return response()->json([
                 'status' => true,
                 'message' => 'Bulk update completed.',
@@ -351,7 +363,6 @@ class ProductController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
-
 
 
     public function searchProduct(Request $request)
