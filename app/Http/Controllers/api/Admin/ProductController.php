@@ -111,319 +111,317 @@ class ProductController extends Controller
     }
 
     public function addProduct(Request $request)
-{
-    try {
-        $storeId = current_store_id();
-        if (!$storeId) {
-            return response()->json(['error' => 'Store not selected or token invalid.'], 400);
-        }
-
-        $validated = $request->validate([
-            'name' => 'nullable|string|max:255',
-            'sku' => 'nullable|string|unique:products,sku',
-            'brandId' => 'required|exists:brands,id',
-            'categoryIds' => 'required|array|min:1',
-            'categoryIds.*' => 'exists:categories,id',
-            'condition' => 'nullable|string',
-            'price' => 'nullable|numeric',
-            'msrp' => 'nullable|numeric',
-            'costPrice' => 'nullable|numeric',
-            'salePrice' => 'nullable|numeric',
-            'dimensions' => 'nullable|array',
-            'dimensions.weight' => 'nullable|numeric',
-            'dimensions.width' => 'nullable|numeric',
-            'dimensions.height' => 'nullable|numeric',
-            'dimensions.depth' => 'nullable|numeric',
-            'trackInventory' => 'nullable|boolean',
-            'currentStock' => 'nullable|integer',
-            'lowStock' => 'nullable|integer',
-            'isFeatured' => 'nullable|boolean',
-            'showCondition' => 'nullable|boolean',
-            'sortOrder' => 'nullable|integer',
-            'searchKeywords' => 'nullable|string',
-            'isVisible' => 'nullable|boolean',
-            'customFields' => 'nullable|array',
-            'customFields.*.name' => 'required|string',
-            'customFields.*.value' => 'required|string',
-            'image' => 'nullable|array',
-            'image.*' => 'nullable',
-            'description' => 'nullable|string',
-            'warranty' => 'nullable|string',
-            'availabilityText' => 'nullable|string',
-            'templateLayout' => 'nullable|string',
-            'mpn' => 'nullable|string',
-            'upc' => 'nullable|string',
-            'gtin' => 'nullable|string',
-            'bpn' => 'nullable|string',
-            'pageTitle' => 'nullable|string',
-            'productUrl' => 'nullable|string',
-            'metaDescription' => 'nullable|string',
-            'purchasabilityStatus' => 'nullable|string',
-            'minPurchaseQuantity' => 'nullable|integer|min:1',
-            'maxPurchaseQuantity' => 'nullable|integer|min:1',
-            'relatedProducts' => 'nullable|boolean',
-            'fixedShippingCost' => 'nullable|numeric',
-            'productType' => 'nullable|string',
-            'optionSet' => 'nullable|string',
-            'optionSetAlign' => 'nullable|string|in:horizontal,vertical',
-            'allowPurchase' => 'nullable|boolean',
-            'stopProcessingRules' => 'nullable|boolean',
-            'taxClass' => 'nullable|string',
-            'taxProviderCode' => 'nullable|string',
-        ]);
-
-        $product = Product::create([
-            'store_id' => $storeId,
-            'name' => $validated['name'],
-            'slug' => Str::slug($validated['name']) . '-' . uniqid(),
-            'sku' => $validated['sku'],
-            'price' => $validated['price'] ?? null,
-            'msrp' => $validated['msrp'] ?? null,
-            'cost_price' => $validated['costPrice'] ?? null,
-            'sale_price' => $validated['salePrice'] ?? null,
-            'brand_id' => $validated['brandId'],
-            'condition' => $validated['condition'] ?? null,
-            'dimensions' => $validated['dimensions'] ?? [],
-            'track_inventory' => $validated['trackInventory'] ?? false,
-            'current_stock' => $validated['currentStock'] ?? 0,
-            'low_stock' => $validated['lowStock'] ?? 0,
-            'is_featured' => $validated['isFeatured'] ?? false,
-            'show_condition' => $validated['showCondition'] ?? false,
-            'sort_order' => $validated['sortOrder'] ?? 0,
-            'search_keywords' => $validated['searchKeywords'] ?? null,
-            'visible_on_storefront' => $validated['isVisible'] ?? true,
-            'custom_fields' => collect($validated['customFields'] ?? [])
-                ->mapWithKeys(fn($item) => [$item['name'] => $item['value']])
-                ->toArray(),
-            'purchasability_status' => $validated['purchasabilityStatus'] ?? null,
-            'min_purchase_quantity' => $validated['minPurchaseQuantity'] ?? null,
-            'max_purchase_quantity' => $validated['maxPurchaseQuantity'] ?? null,
-            'related_products_enabled' => $validated['relatedProducts'] ?? false,
-            'fixed_shipping_cost' => $validated['fixedShippingCost'] ?? 0,
-            'product_type' => $validated['productType'] ?? '',
-            'option_set' => $validated['optionSet'] ?? '',
-            'option_set_align' => $validated['optionSetAlign'] ?? '',
-            'allow_purchase' => $validated['allowPurchase'] ?? true,
-            'stop_processing_rules' => $validated['stopProcessingRules'] ?? false,
-            'tax_class' => $validated['taxClass'] ?? '',
-            'tax_provider_code' => $validated['taxProviderCode'] ?? '',
-        ]);
-
-        $product->categories()->sync($validated['categoryIds']);
-
-        // ✅ Handle image URLs (objects with url)
-        foreach ($validated['image'] ?? [] as $index => $img) {
-            $imageUrl = null;
-
-            if (is_array($img) && isset($img['url'])) {
-                $imageUrl = $img['url'];
-            } elseif (is_string($img)) {
-                $imageUrl = $img;
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json(['error' => 'Store not selected or token invalid.'], 400);
             }
 
-            if ($imageUrl) {
-                try {
-                    $imageData = file_get_contents($imageUrl);
-                    $imageName = time() . '_' . $index . '_' . basename(parse_url($imageUrl, PHP_URL_PATH));
-                    File::put(public_path("product_images/{$imageName}"), $imageData);
+            $validated = $request->validate([
+                'name' => 'nullable|string|max:255',
+                'sku' => 'nullable|string|unique:products,sku',
+                'brandId' => 'required|exists:brands,id',
+                'categoryIds' => 'required|array|min:1',
+                'categoryIds.*' => 'exists:categories,id',
+                'condition' => 'nullable|string',
+                'price' => 'nullable',
+                'msrp' => 'nullable',
+                'costPrice' => 'nullable',
+                'salePrice' => 'nullable',
+                'dimensions' => 'nullable|array',
+                'dimensions.weight' => 'nullable|numeric',
+                'dimensions.width' => 'nullable|numeric',
+                'dimensions.height' => 'nullable|numeric',
+                'dimensions.depth' => 'nullable|numeric',
+                'trackInventory' => 'nullable|boolean',
+                'currentStock' => 'nullable|integer',
+                'lowStock' => 'nullable|integer',
+                'isFeatured' => 'nullable|boolean',
+                'showCondition' => 'nullable|boolean',
+                'sortOrder' => 'nullable|integer',
+                'searchKeywords' => 'nullable|string',
+                'isVisible' => 'nullable|boolean',
+                'customFields' => 'nullable|array',
+                'image' => 'nullable',
+                'image.*' => 'nullable',
+                'description' => 'nullable|string',
+                'warranty' => 'nullable|string',
+                'availabilityText' => 'nullable|string',
+                'templateLayout' => 'nullable|string',
+                'mpn' => 'nullable|string',
+                'upc' => 'nullable|string',
+                'gtin' => 'nullable|string',
+                'bpn' => 'nullable|string',
+                'pageTitle' => 'nullable|string',
+                'productUrl' => 'nullable|string',
+                'metaDescription' => 'nullable|string',
+                'purchasabilityStatus' => 'nullable|string',
+                'minPurchaseQuantity' => 'nullable|integer|min:1',
+                'maxPurchaseQuantity' => 'nullable|integer|min:1',
+                'relatedProducts' => 'nullable|boolean',
+                'fixedShippingCost' => 'nullable|numeric',
+                'productType' => 'nullable|string',
+                'optionSet' => 'nullable|string',
+                'optionSetAlign' => 'nullable|string|in:horizontal,vertical',
+                'allowPurchase' => 'nullable|boolean',
+                'stopProcessingRules' => 'nullable|boolean',
+                'taxClass' => 'nullable|string',
+                'taxProviderCode' => 'nullable|string',
+            ]);
 
-                    ProductImage::create([
+            $product = Product::create([
+                'store_id' => $storeId,
+                'name' => $validated['name'],
+                'slug' => Str::slug($validated['name']) . '-' . uniqid(),
+                'sku' => $validated['sku'],
+                'price' => $validated['price'],
+                'msrp' => $validated['msrp'] ?? null,
+                'cost_price' => $validated['costPrice'] ?? null,
+                'sale_price' => $validated['salePrice'] ?? null,
+                'brand_id' => $validated['brandId'],
+                'condition' => $validated['condition'] ?? null,
+                'dimensions' => $validated['dimensions'] ?? [],
+                'track_inventory' => $validated['trackInventory'] ?? false,
+                'current_stock' => $validated['currentStock'] ?? 0,
+                'low_stock' => $validated['lowStock'] ?? 0,
+                'is_featured' => $validated['isFeatured'] ?? false,
+                'show_condition' => $validated['showCondition'] ?? false,
+                'sort_order' => $validated['sortOrder'] ?? 0,
+                'search_keywords' => $validated['searchKeywords'] ?? null,
+                'visible_on_storefront' => $validated['isVisible'] ?? true,
+                'custom_fields' => $validated['customFields'] ?? [],
+                'purchasability_status' => $validated['purchasabilityStatus'] ?? null,
+                'min_purchase_quantity' => $validated['minPurchaseQuantity'] ?? null,
+                'max_purchase_quantity' => $validated['maxPurchaseQuantity'] ?? null,
+                'related_products_enabled' => $validated['relatedProducts'] ?? null,
+                'fixed_shipping_cost' => $validated['fixedShippingCost'] ?? 0,
+                'product_type' => $validated['productType'] ?? '',
+                'option_set' => $validated['optionSet'] ?? '',
+                'option_set_align' => $validated['optionSetAlign'] ?? '',
+                'allow_purchase' => $validated['allowPurchase'] ?? true,
+                'stop_processing_rules' => $validated['stopProcessingRules'] ?? false,
+                'tax_class' => $validated['taxClass'] ?? '',
+                'tax_provider_code' => $validated['taxProviderCode'] ?? '',
+            ]);
+
+            $product->categories()->sync($validated['categoryIds']);
+            // ✅ Handle image URLs or file uploads
+            $images = [];
+
+            if ($request->hasFile('image')) {
+                $images = $request->file('image');
+            } elseif (!empty($validated['image'])) {
+                $images = is_array($validated['image']) ? $validated['image'] : [$validated['image']];
+            }
+
+            foreach ($images as $index => $img) {
+                if (is_string($img)) {
+                    // It's a URL
+                    try {
+                        $imageData = file_get_contents($img);
+                        $imageName = time() . '_' . $index . '_' . basename(parse_url($img, PHP_URL_PATH));
+                        File::put(public_path("product_images/{$imageName}"), $imageData);
+                    } catch (\Exception $e) {
+                        continue; // skip invalid URL
+                    }
+                } elseif ($img instanceof \Illuminate\Http\UploadedFile) {
+                    // It's a file
+                    $imageName = time() . '_' . $index . '.' . $img->getClientOriginalExtension();
+                    $img->move(public_path('product_images'), $imageName);
+                } else {
+                    continue; // unknown or malformed input
+                }
+            
+                ProductImage::create([
+                    'store_id' => $storeId,
+                    'product_id' => $product->id,
+                    'path' => "product_images/{$imageName}",
+                    'is_primary' => $index === 0
+                ]);
+            }
+
+            // ✅ Add Content
+            ProductContent::create([
+                'store_id' => $storeId,
+                'product_id' => $product->id,
+                'description' => $validated['description'] ?? null,
+                'warranty' => $validated['warranty'] ?? null,
+                'availability_text' => $validated['availabilityText'] ?? null,
+                'template_layout' => $validated['templateLayout'] ?? null,
+            ]);
+
+            // ✅ Add Identifiers
+            ProductIdentifier::create([
+                'store_id' => $storeId,
+                'product_id' => $product->id,
+                'mpn' => $validated['mpn'] ?? null,
+                'upc' => $validated['upc'] ?? null,
+                'gtin' => $validated['gtin'] ?? null,
+                'bpn' => $validated['bpn'] ?? null,
+            ]);
+
+            // ✅ Add SEO
+            ProductSeo::create([
+                'store_id' => $storeId,
+                'product_id' => $product->id,
+                'page_title' => $validated['pageTitle'] ?? null,
+                'product_url' => $validated['productUrl'] ?? null,
+                'meta_description' => $validated['metaDescription'] ?? null,
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Product created successfully.',
+                'data' => new ProductResource($product->load([
+                    'brand',
+                    'categories',
+                    'images',
+                    'content',
+                    'identifiers',
+                    'seo'
+                ]))
+            ], 201);
+        } catch (ValidationException $e) {
+            return response()->json(['errors' => $e->errors()], 422);
+        } catch (Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+
+     public function updateProduct(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json(['error' => 'Store not selected or token invalid.'], 400);
+            }
+
+            $data = $request->validate([
+                'products' => 'required|array|min:1',
+                'products.*.id' => 'required|integer|exists:products,id',
+                'products.*.fields' => 'required|array',
+            ]);
+
+            $updatedProducts = [];
+
+            foreach ($data['products'] as $item) {
+                $product = Product::where('store_id', $storeId)->findOrFail($item['id']);
+                $fields = $item['fields'];
+
+                // ✅ Main product fields
+                $product->fill([
+                    'name' => $fields['name'] ?? $product->name,
+                    'slug' => isset($fields['name']) ? Str::slug($fields['name']) . '-' . uniqid() : $product->slug,
+                    'sku' => $fields['sku'] ?? $product->sku,
+                    'brand_id' => $fields['brandId'] ?? $product->brand_id,
+                    'condition' => $fields['condition'] ?? $product->condition,
+                    'price' => $fields['price'] ?? $product->price,
+                    'msrp' => $fields['msrp'] ?? $product->msrp,
+                    'cost_price' => $fields['costPrice'] ?? $product->cost_price,
+                    'sale_price' => $fields['salePrice'] ?? $product->sale_price,
+                    'dimensions' => $fields['dimensions'] ?? $product->dimensions,
+                    'track_inventory' => $fields['trackInventory'] ?? $product->track_inventory,
+                    'current_stock' => $fields['currentStock'] ?? $product->current_stock,
+                    'low_stock' => $fields['lowStock'] ?? $product->low_stock,
+                    'is_featured' => $fields['isFeatured'] ?? $product->is_featured,
+                    'show_condition' => $fields['showCondition'] ?? $product->show_condition,
+                    'sort_order' => $fields['sortOrder'] ?? $product->sort_order,
+                    'search_keywords' => $fields['searchKeywords'] ?? $product->search_keywords,
+                    'visible_on_storefront' => $fields['isVisible'] ?? $product->visible_on_storefront,
+                    'custom_fields' => $fields['customFields'] ?? $product->custom_fields,
+                    'purchasability_status' => $fields['purchasabilityStatus'] ?? $product->purchasability_status,
+                    'min_purchase_quantity' => $fields['minPurchaseQuantity'] ?? $product->min_purchase_quantity,
+                    'max_purchase_quantity' => $fields['maxPurchaseQuantity'] ?? $product->max_purchase_quantity,
+                    'related_products_enabled' => $fields['relatedProducts'] ?? $product->related_products_enabled,
+                    'fixed_shipping_cost' => $fields['fixedShippingCost'] ?? $product->fixed_shipping_cost,
+                    'product_type' => $fields['productType'] ?? $product->product_type,
+                    'option_set' => $fields['optionSet'] ?? $product->option_set,
+                    'option_set_align' => $fields['optionSetAlign'] ?? $product->option_set_align,
+                    'allow_purchase' => $fields['allowPurchase'] ?? $product->allow_purchase,
+                    'stop_processing_rules' => $fields['stopProcessingRules'] ?? $product->stop_processing_rules,
+                    'tax_class' => $fields['taxClass'] ?? $product->tax_class,
+                    'tax_provider_code' => $fields['taxProviderCode'] ?? $product->tax_provider_code,
+                ])->save();
+
+                // ✅ Sync Categories
+                if (!empty($fields['categoryIds']) && is_array($fields['categoryIds'])) {
+                    $product->categories()->sync($fields['categoryIds']);
+                }
+
+                // ✅ Update Content (description, warranty, etc.)
+                if (isset($fields['description']) || isset($fields['warranty']) || isset($fields['availabilityText']) || isset($fields['templateLayout'])) {
+                    $content = $product->content ?: new ProductContent([
                         'store_id' => $storeId,
                         'product_id' => $product->id,
-                        'path' => "product_images/{$imageName}",
-                        'is_primary' => $index === 0
                     ]);
-                } catch (\Exception $e) {
-                    continue;
+
+                    $content->fill([
+                        'description' => $fields['description'] ?? $content->description,
+                        'warranty' => $fields['warranty'] ?? $content->warranty,
+                        'availability_text' => $fields['availabilityText'] ?? $content->availability_text,
+                        'template_layout' => $fields['templateLayout'] ?? $content->template_layout,
+                    ])->save();
                 }
-            }
-        }
 
-        ProductContent::create([
-            'store_id' => $storeId,
-            'product_id' => $product->id,
-            'description' => $validated['description'] ?? null,
-            'warranty' => $validated['warranty'] ?? null,
-            'availability_text' => $validated['availabilityText'] ?? null,
-            'template_layout' => $validated['templateLayout'] ?? null,
-        ]);
+                // ✅ Update Identifiers (MPN, UPC, GTIN, BPN)
+                if (isset($fields['mpn']) || isset($fields['upc']) || isset($fields['gtin']) || isset($fields['bpn'])) {
+                    $identifiers = $product->identifiers ?: new ProductIdentifier([
+                        'store_id' => $storeId,
+                        'product_id' => $product->id,
+                    ]);
 
-        ProductIdentifier::create([
-            'store_id' => $storeId,
-            'product_id' => $product->id,
-            'mpn' => $validated['mpn'] ?? null,
-            'upc' => $validated['upc'] ?? null,
-            'gtin' => $validated['gtin'] ?? null,
-            'bpn' => $validated['bpn'] ?? null,
-        ]);
+                    $identifiers->fill([
+                        'mpn' => $fields['mpn'] ?? $identifiers->mpn,
+                        'upc' => $fields['upc'] ?? $identifiers->upc,
+                        'gtin' => $fields['gtin'] ?? $identifiers->gtin,
+                        'bpn' => $fields['bpn'] ?? $identifiers->bpn,
+                    ])->save();
+                }
 
-        ProductSeo::create([
-            'store_id' => $storeId,
-            'product_id' => $product->id,
-            'page_title' => $validated['pageTitle'] ?? null,
-            'product_url' => $validated['productUrl'] ?? null,
-            'meta_description' => $validated['metaDescription'] ?? null,
-        ]);
+                // ✅ Update SEO (meta, page title, product URL)
+                if (isset($fields['pageTitle']) || isset($fields['productUrl']) || isset($fields['metaDescription'])) {
+                    $seo = $product->seo ?: new ProductSeo([
+                        'store_id' => $storeId,
+                        'product_id' => $product->id,
+                    ]);
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Product created successfully.',
-            'data' => new ProductResource($product->load([
-                'brand',
-                'categories',
-                'images',
-                'content',
-                'identifiers',
-                'seo'
-            ]))
-        ], 201);
-    } catch (ValidationException $e) {
-        return response()->json(['errors' => $e->errors()], 422);
-    } catch (\Exception $e) {
-        return response()->json(['error' => $e->getMessage()], 500);
-    }
-}
+                    $seo->fill([
+                        'page_title' => $fields['pageTitle'] ?? $seo->page_title,
+                        'product_url' => $fields['productUrl'] ?? $seo->product_url,
+                        'meta_description' => $fields['metaDescription'] ?? $seo->meta_description,
+                    ])->save();
+                }
 
-
-public function updateProduct(Request $request)
-{
-    try {
-        $storeId = current_store_id();
-        if (!$storeId) {
-            return response()->json(['error' => 'Store not selected or token invalid.'], 400);
-        }
-
-        $data = $request->validate([
-            'products' => 'required|array|min:1',
-            'products.*.id' => 'required|integer|exists:products,id',
-            'products.*.fields' => 'required|array',
-        ]);
-
-        $updatedProducts = [];
-
-        foreach ($data['products'] as $item) {
-            $product = Product::where('store_id', $storeId)->findOrFail($item['id']);
-            $fields = $item['fields'];
-
-            $product->fill([
-                'name' => $fields['name'] ?? $product->name,
-                'slug' => isset($fields['name']) ? Str::slug($fields['name']) . '-' . uniqid() : $product->slug,
-                'sku' => $fields['sku'] ?? $product->sku,
-                'brand_id' => $fields['brandId'] ?? $product->brand_id,
-                'condition' => $fields['condition'] ?? $product->condition,
-                'price' => $fields['price'] ?? $product->price,
-                'msrp' => $fields['msrp'] ?? $product->msrp,
-                'cost_price' => $fields['costPrice'] ?? $product->cost_price,
-                'sale_price' => $fields['salePrice'] ?? $product->sale_price,
-                'dimensions' => $fields['dimensions'] ?? $product->dimensions,
-                'track_inventory' => $fields['trackInventory'] ?? $product->track_inventory,
-                'current_stock' => $fields['currentStock'] ?? $product->current_stock,
-                'low_stock' => $fields['lowStock'] ?? $product->low_stock,
-                'is_featured' => $fields['isFeatured'] ?? $product->is_featured,
-                'show_condition' => $fields['showCondition'] ?? $product->show_condition,
-                'sort_order' => $fields['sortOrder'] ?? $product->sort_order,
-                'search_keywords' => $fields['searchKeywords'] ?? $product->search_keywords,
-                'visible_on_storefront' => $fields['isVisible'] ?? $product->visible_on_storefront,
-                'custom_fields' => (isset($fields['customFields']) && is_array($fields['customFields']))
-                        ? collect($fields['customFields'])->filter(function ($item) {
-                            return is_array($item) && isset($item['name'], $item['value']);
-                        })->mapWithKeys(function ($item) {
-                            return [$item['name'] => $item['value']];
-                        })->toArray()
-                        : $product->custom_fields,
-                'purchasability_status' => $fields['purchasabilityStatus'] ?? $product->purchasability_status,
-                'min_purchase_quantity' => $fields['minPurchaseQuantity'] ?? $product->min_purchase_quantity,
-                'max_purchase_quantity' => $fields['maxPurchaseQuantity'] ?? $product->max_purchase_quantity,
-                'related_products_enabled' => $fields['relatedProducts'] ?? $product->related_products_enabled,
-                'fixed_shipping_cost' => $fields['fixedShippingCost'] ?? $product->fixed_shipping_cost,
-                'product_type' => $fields['productType'] ?? $product->product_type,
-                'option_set' => $fields['optionSet'] ?? $product->option_set,
-                'option_set_align' => $fields['optionSetAlign'] ?? $product->option_set_align,
-                'allow_purchase' => $fields['allowPurchase'] ?? $product->allow_purchase,
-                'stop_processing_rules' => $fields['stopProcessingRules'] ?? $product->stop_processing_rules,
-                'tax_class' => $fields['taxClass'] ?? $product->tax_class,
-                'tax_provider_code' => $fields['taxProviderCode'] ?? $product->tax_provider_code,
-            ])->save();
-
-            // ✅ Categories
-            if (!empty($fields['categoryIds']) && is_array($fields['categoryIds'])) {
-                $product->categories()->sync($fields['categoryIds']);
-            }
-
-            // ✅ Content
-            if (isset($fields['description']) || isset($fields['warranty']) || isset($fields['availabilityText']) || isset($fields['templateLayout'])) {
-                $content = $product->content ?: new ProductContent([
-                    'store_id' => $storeId,
-                    'product_id' => $product->id,
-                ]);
-
-                $content->fill([
-                    'description' => $fields['description'] ?? $content->description,
-                    'warranty' => $fields['warranty'] ?? $content->warranty,
-                    'availability_text' => $fields['availabilityText'] ?? $content->availability_text,
-                    'template_layout' => $fields['templateLayout'] ?? $content->template_layout,
-                ])->save();
-            }
-
-            // ✅ Identifiers
-            if (isset($fields['mpn']) || isset($fields['upc']) || isset($fields['gtin']) || isset($fields['bpn'])) {
-                $identifiers = $product->identifiers ?: new ProductIdentifier([
-                    'store_id' => $storeId,
-                    'product_id' => $product->id,
-                ]);
-
-                $identifiers->fill([
-                    'mpn' => $fields['mpn'] ?? $identifiers->mpn,
-                    'upc' => $fields['upc'] ?? $identifiers->upc,
-                    'gtin' => $fields['gtin'] ?? $identifiers->gtin,
-                    'bpn' => $fields['bpn'] ?? $identifiers->bpn,
-                ])->save();
-            }
-
-            // ✅ SEO
-            if (isset($fields['pageTitle']) || isset($fields['productUrl']) || isset($fields['metaDescription'])) {
-                $seo = $product->seo ?: new ProductSeo([
-                    'store_id' => $storeId,
-                    'product_id' => $product->id,
-                ]);
-
-                $seo->fill([
-                    'page_title' => $fields['pageTitle'] ?? $seo->page_title,
-                    'product_url' => $fields['productUrl'] ?? $seo->product_url,
-                    'meta_description' => $fields['metaDescription'] ?? $seo->meta_description,
-                ])->save();
-            }
-
-            // ✅ Handle image URLs (delete old + save new)
+              // ✅ Update/Add Images
             if (!empty($fields['image'])) {
+                // 🗑️ Delete old images
                 ProductImage::where('product_id', $product->id)->delete();
 
                 $images = is_array($fields['image']) ? $fields['image'] : [$fields['image']];
 
                 foreach ($images as $index => $img) {
-                    $imageUrl = null;
-
-                    if (is_string($img)) {
-                        $imageUrl = $img;
-                    } elseif (is_array($img) && isset($img['url'])) {
-                        $imageUrl = $img['url'];
-                    }
-
-                    if ($imageUrl) {
-                        try {
-                            $imageData = file_get_contents($imageUrl);
-                            $imageName = time() . '_' . $index . '_' . basename(parse_url($imageUrl, PHP_URL_PATH));
+                    try {
+                        if (is_string($img)) {
+                            $imageData = file_get_contents($img);
+                            $imageName = time() . '_' . $index . '_' . basename(parse_url($img, PHP_URL_PATH));
                             File::put(public_path("product_images/{$imageName}"), $imageData);
-
-                            ProductImage::create([
-                                'store_id' => $storeId,
-                                'product_id' => $product->id,
-                                'path' => "product_images/{$imageName}",
-                                'is_primary' => $index === 0
-                            ]);
-                        } catch (\Exception $e) {
+                        } elseif ($img instanceof \Illuminate\Http\UploadedFile) {
+                            $imageName = time() . '_' . $index . '.' . $img->getClientOriginalExtension();
+                            $img->move(public_path('product_images'), $imageName);
+                        } else {
                             continue;
                         }
+
+                        ProductImage::create([
+                            'store_id' => $storeId,
+                            'product_id' => $product->id,
+                            'path' => "product_images/{$imageName}",
+                            'is_primary' => $index === 0
+                        ]);
+                    } catch (\Exception $e) {
+                        continue;
                     }
                 }
             }
@@ -434,18 +432,17 @@ public function updateProduct(Request $request)
             ]));
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Products updated successfully.',
-            'data' => $updatedProducts,
-        ]);
-    } catch (ValidationException $e) {
-        return response()->json(['errors' => $e->errors()], 422);
-    } catch (\Exception $e) {
-        return response()->json(['error' => $e->getMessage()], 500);
+            return response()->json([
+                'status' => true,
+                'message' => 'Products updated successfully.',
+                'data' => $updatedProducts,
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json(['errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
-}
-
 
 
     public function searchProduct(Request $request)
@@ -575,10 +572,10 @@ public function updateProduct(Request $request)
             if (!$storeId) {
                 return response()->json(['error' => 'Store not selected.'], 400);
             }
-        
+
             $query = Product::with(['brand', 'categories', 'images'])
                 ->where('store_id', $storeId);
-        
+
             // 🔍 Search by name, SKU, etc.
             if ($request->filled('searchKeywords')) {
                 $keywords = $request->searchKeywords;
@@ -588,66 +585,66 @@ public function updateProduct(Request $request)
                       ->orWhere('search_keywords', 'like', "%{$keywords}%");
                 });
             }
-        
+
             // 🔍 Filter by brand
             if ($request->filled('brandId')) {
                 $query->where('brand_id', $request->brandId);
             }
-        
+
             // 🔍 Filter by categories (multiple IDs allowed)
             if ($request->filled('categoryIds')) {
                 $categoryIds = is_array($request->categoryIds)
                     ? $request->categoryIds
                     : [$request->categoryIds];
-            
+
                 $query->whereHas('categories', function ($q) use ($categoryIds) {
                     $q->whereIn('categories.id', $categoryIds);
                 });
             }
-        
+
             // 🔍 Filter by price range
             if ($request->filled('priceMin')) {
                 $query->where('price', '>=', $request->priceMin);
             }
-        
+
             if ($request->filled('priceMax')) {
                 $query->where('price', '<=', $request->priceMax);
             }
-        
+
             // 🔍 Filter by inventory
             if ($request->filled('inventoryMin')) {
                 $query->where('current_stock', '>=', $request->inventoryMin);
             }
-        
+
             if ($request->filled('inventoryMax')) {
                 $query->where('current_stock', '<=', $request->inventoryMax);
             }
-        
+
             // 🔍 Filter by visibility
             if ($request->filled('isVisible')) {
                 $query->where('visible_on_storefront', $request->boolean('isVisible'));
             }
-        
+
             // 🔍 Filter by featured
             if ($request->filled('isFeatured')) {
                 $query->where('is_featured', $request->boolean('isFeatured'));
             }
-        
+
             // 🔍 Optional: freeShipping (if such a column exists in DB)
             if ($request->filled('freeShipping')) {
                 $query->where('free_shipping', $request->boolean('freeShipping'));
             }
-        
+
             // 🔁 Sorting
             $sortBy = $request->get('sortBy', 'id');
             $sortOrder = $request->get('sortOrder', 'asc');
             $query->orderBy($sortBy, $sortOrder);
-        
+
             // ✅ Pagination
             $page = (int) $request->input('page', 1);
             $pageSize = (int) $request->input('pageSize', 50);
             $products = $query->paginate($pageSize, ['*'], 'page', $page);
-        
+
             return response()->json([
                 'status' => true,
                 'message' => 'Advanced product search result.',
