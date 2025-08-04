@@ -294,19 +294,19 @@ class ProductController extends Controller
             if (!$storeId) {
                 return response()->json(['error' => 'Store not selected or token invalid.'], 400);
             }
-        
+
             $data = $request->validate([
                 'products' => 'required|array|min:1',
                 'products.*.id' => 'required|integer|exists:products,id',
                 'products.*.fields' => 'required|array',
             ]);
-        
+
             $updatedProducts = [];
-        
+
             foreach ($data['products'] as $item) {
                 $product = Product::where('store_id', $storeId)->findOrFail($item['id']);
                 $fields = $item['fields'];
-            
+
                 // ✅ Main product fields
                 $product->fill([
                     'name' => $fields['name'] ?? $product->name,
@@ -341,19 +341,19 @@ class ProductController extends Controller
                     'tax_class' => $fields['taxClass'] ?? $product->tax_class,
                     'tax_provider_code' => $fields['taxProviderCode'] ?? $product->tax_provider_code,
                 ])->save();
-                
+
                 // ✅ Sync Categories
                 if (!empty($fields['categoryIds']) && is_array($fields['categoryIds'])) {
                     $product->categories()->sync($fields['categoryIds']);
                 }
-            
+
                 // ✅ Update Content (description, warranty, etc.)
                 if (isset($fields['description']) || isset($fields['warranty']) || isset($fields['availabilityText']) || isset($fields['templateLayout'])) {
                     $content = $product->content ?: new ProductContent([
                         'store_id' => $storeId,
                         'product_id' => $product->id,
                     ]);
-                
+
                     $content->fill([
                         'description' => $fields['description'] ?? $content->description,
                         'warranty' => $fields['warranty'] ?? $content->warranty,
@@ -361,14 +361,14 @@ class ProductController extends Controller
                         'template_layout' => $fields['templateLayout'] ?? $content->template_layout,
                     ])->save();
                 }
-            
+
                 // ✅ Update Identifiers (MPN, UPC, GTIN, BPN)
                 if (isset($fields['mpn']) || isset($fields['upc']) || isset($fields['gtin']) || isset($fields['bpn'])) {
                     $identifiers = $product->identifiers ?: new ProductIdentifier([
                         'store_id' => $storeId,
                         'product_id' => $product->id,
                     ]);
-                
+
                     $identifiers->fill([
                         'mpn' => $fields['mpn'] ?? $identifiers->mpn,
                         'upc' => $fields['upc'] ?? $identifiers->upc,
@@ -376,27 +376,27 @@ class ProductController extends Controller
                         'bpn' => $fields['bpn'] ?? $identifiers->bpn,
                     ])->save();
                 }
-            
+
                 // ✅ Update SEO (meta, page title, product URL)
                 if (isset($fields['pageTitle']) || isset($fields['productUrl']) || isset($fields['metaDescription'])) {
                     $seo = $product->seo ?: new ProductSeo([
                         'store_id' => $storeId,
                         'product_id' => $product->id,
                     ]);
-                
+
                     $seo->fill([
                         'page_title' => $fields['pageTitle'] ?? $seo->page_title,
                         'product_url' => $fields['productUrl'] ?? $seo->product_url,
                         'meta_description' => $fields['metaDescription'] ?? $seo->meta_description,
                     ])->save();
                 }
-            
+
                 // ✅ Add to response
                 $updatedProducts[] = new ProductResource($product->load([
                     'categories', 'content', 'seo', 'identifiers'
                 ]));
             }
-        
+
             return response()->json([
                 'status' => true,
                 'message' => 'Products updated successfully.',
@@ -510,7 +510,8 @@ class ProductController extends Controller
     public function searchAdvanced(Request $request)
     {
         try {
-            $query = Product::with(['brand', 'categories', 'images']);
+            $query = Product::with(['brand', 'categories', 'images'])
+             ->where('store_id', $storeId); // ✅ Store-wise filtering;
 
             // 🔍 Search Keywords
             if ($request->filled('searchKeywords')) {
