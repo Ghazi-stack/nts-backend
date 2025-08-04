@@ -25,7 +25,10 @@ class Product extends Model
         'visible_on_storefront', 'custom_fields', 'free_shipping',
         'product_type', 'option_set', 'option_set_align',
         'cost_price', 'sale_price', 'fixed_shipping_cost',
-        'allow_purchase', 'stop_processing_rules', 'tax_class', 'tax_provider_code','item_type','store_id','msrp'
+        'allow_purchase', 'stop_processing_rules', 'tax_class', 'tax_provider_code','item_type','store_id','msrp', 'purchasability_status',
+        'min_purchase_quantity',
+        'max_purchase_quantity',
+        'related_products_enabled',
     ];
 
     protected $casts = [
@@ -39,6 +42,9 @@ class Product extends Model
         'free_shipping' => 'boolean',
         'dimensions' => 'array',
         'msrp' => 'decimal:2',
+        'related_products_enabled' => 'boolean',
+        'min_purchase_quantity' => 'integer',
+        'max_purchase_quantity' => 'integer',
     ];
 
       // Relationships

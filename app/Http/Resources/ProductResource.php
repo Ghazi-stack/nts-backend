@@ -54,7 +54,6 @@ class ProductResource extends JsonResource
             
             'brand' => new BrandResource($this->whenLoaded('brand')),
             'categories' => CategoryResource::collection($this->whenLoaded('categories')), // ✅ fixed
-            'conditionId' => $this->condition_id,
             
             'weight' => $this->dimensions['weight'] ?? null,
             'dimensions' => [
@@ -84,6 +83,10 @@ class ProductResource extends JsonResource
             'savingPercent' => $savingPercent,
             'profit' => $profit,
             'profitMargin' => $profitMargin,
+            'purchasabilityStatus' => $this->purchasability_status,
+            'minPurchaseQuantity' => $this->min_purchase_quantity,
+            'maxPurchaseQuantity' => $this->max_purchase_quantity,
+            'relatedProductsEnabled' => $this->related_products_enabled,
         
             'createdAt' => $this->created_at,
             'updatedAt' => $this->updated_at,

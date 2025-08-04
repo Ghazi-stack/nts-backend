@@ -156,6 +156,18 @@ class ProductController extends Controller
                 'pageTitle' => 'nullable|string',
                 'productUrl' => 'nullable|string',
                 'metaDescription' => 'nullable|string',
+                'purchasabilityStatus' => 'nullable|string',
+                'minPurchaseQuantity' => 'nullable|integer|min:1',
+                'maxPurchaseQuantity' => 'nullable|integer|min:1',
+                'relatedProducts' => 'nullable|boolean',
+                'fixedShippingCost' => 'nullable|numeric',
+                'productType' => 'nullable|string',
+                'optionSet' => 'nullable|string',
+                'optionSetAlign' => 'nullable|string|in:horizontal,vertical',
+                'allowPurchase' => 'nullable|boolean',
+                'stopProcessingRules' => 'nullable|boolean',
+                'taxClass' => 'nullable|string',
+                'taxProviderCode' => 'nullable|string',
             ]);
 
             $product = Product::create([
@@ -179,6 +191,18 @@ class ProductController extends Controller
                 'search_keywords' => $validated['searchKeywords'] ?? null,
                 'visible_on_storefront' => $validated['isVisible'] ?? true,
                 'custom_fields' => $validated['customFields'] ?? [],
+                'purchasability_status' => $validated['purchasabilityStatus'] ?? null,
+                'min_purchase_quantity' => $validated['minPurchaseQuantity'] ?? null,
+                'max_purchase_quantity' => $validated['maxPurchaseQuantity'] ?? null,
+                'related_products_enabled' => $validated['relatedProducts'] ?? null,
+                'fixed_shipping_cost' => $validated['fixedShippingCost'] ?? 0,
+                'product_type' => $validated['productType'] ?? '',
+                'option_set' => $validated['optionSet'] ?? '',
+                'option_set_align' => $validated['optionSetAlign'] ?? '',
+                'allow_purchase' => $validated['allowPurchase'] ?? true,
+                'stop_processing_rules' => $validated['stopProcessingRules'] ?? false,
+                'tax_class' => $validated['taxClass'] ?? '',
+                'tax_provider_code' => $validated['taxProviderCode'] ?? '',
             ]);
 
             $product->categories()->sync($validated['categoryIds']);
@@ -289,6 +313,12 @@ class ProductController extends Controller
                     $categoryIds = $fields['categoryIds'] ?? null;
                     unset($fields['categoryIds']); // prevent mass assignment erro
                     // ✅ camelCase to snake_case mapping
+                     // 🔁 Convert customFields object to array if needed
+                    if (isset($fields['customFields']) && is_array($fields['customFields']) && array_keys($fields['customFields']) !== range(0, count($fields['customFields']) - 1)) {
+                        $fields['customFields'] = collect($fields['customFields'])->map(function ($value, $key) {
+                            return ['name' => $key, 'value' => $value];
+                        })->values()->toArray();
+                    }
                     $fieldMap = [
                         'costPrice' => 'cost_price',
                         'salePrice' => 'sale_price',
@@ -302,7 +332,19 @@ class ProductController extends Controller
                         'searchKeywords' => 'search_keywords',
                         'isVisible' => 'visible_on_storefront',
                         'customFields' => 'custom_fields',
-                        'msrp' => 'msrp'
+                        'msrp' => 'msrp',
+                        'purchasabilityStatus' => 'purchasability_status',
+                        'minPurchaseQuantity' => 'min_purchase_quantity',
+                        'maxPurchaseQuantity' => 'max_purchase_quantity',
+                        'relatedProducts' => 'related_products_enabled',
+                        'fixedShippingCost' => 'fixed_shipping_cost',
+                        'productType' => 'product_type',
+                        'optionSet' => 'option_set',
+                        'optionSetAlign' => 'option_set_align',
+                        'allowPurchase' => 'allow_purchase',
+                        'stopProcessingRules' => 'stop_processing_rules',
+                        'taxClass' => 'tax_class',
+                        'taxProviderCode' => 'tax_provider_code',
                     ];
                 
                     $productFields = [];
