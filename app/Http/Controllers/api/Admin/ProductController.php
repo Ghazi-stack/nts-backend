@@ -143,7 +143,7 @@ class ProductController extends Controller
                 'searchKeywords' => 'nullable|string',
                 'isVisible' => 'nullable|boolean',
                 'customFields' => 'nullable|array',
-                'image' => 'nullable',
+                'image' => 'nullable|array',
                 'image.*' => 'nullable',
                 'description' => 'nullable|string',
                 'warranty' => 'nullable|string',
@@ -206,38 +206,62 @@ class ProductController extends Controller
             ]);
 
             $product->categories()->sync($validated['categoryIds']);
-            // ✅ Handle image URLs or file uploads
+            // ✅ Handle both uploaded files and external URLs
             $images = [];
 
-            if ($request->hasFile('image')) {
-                $images = $request->file('image');
-            } elseif (!empty($validated['image'])) {
-                $images = is_array($validated['image']) ? $validated['image'] : [$validated['image']];
+            if (!empty($validated['image'])) {
+                foreach ($validated['image'] as $img) {
+                    if (is_array($img)) {
+                        $imageEntry = [
+                            'type' => null,
+                            'value' => null,
+                            'is_primary' => $img['isThumbnail'] ?? false,
+                            'alt_text' => $img['alt_text'] ?? null,
+                            'description' => $img['description'] ?? null,
+                        ];
+                    
+                        if (!empty($img['url']) && is_string($img['url'])) {
+                            $imageEntry['type'] = 'url';
+                            $imageEntry['value'] = $img['url'];
+                            $images[] = $imageEntry;
+                        }
+                    
+                        if (
+                            isset($img['file']) &&
+                            $img['file'] instanceof \Illuminate\Http\UploadedFile
+                        ) {
+                            $imageEntry['type'] = 'file';
+                            $imageEntry['value'] = $img['file'];
+                            $images[] = $imageEntry;
+                        }
+                    }
+                }
             }
 
             foreach ($images as $index => $img) {
-                if (is_string($img)) {
-                    // It's a URL
-                    try {
-                        $imageData = file_get_contents($img);
-                        $imageName = time() . '_' . $index . '_' . basename(parse_url($img, PHP_URL_PATH));
-                        File::put(public_path("product_images/{$imageName}"), $imageData);
-                    } catch (\Exception $e) {
-                        continue; // skip invalid URL
+                $path = null;
+            
+                if ($img['type'] === 'url') {
+                    if (!filter_var($img['value'], FILTER_VALIDATE_URL)) {
+                        continue;
                     }
-                } elseif ($img instanceof \Illuminate\Http\UploadedFile) {
-                    // It's a file
-                    $imageName = time() . '_' . $index . '.' . $img->getClientOriginalExtension();
-                    $img->move(public_path('product_images'), $imageName);
-                } else {
-                    continue; // unknown or malformed input
+                    $path = $img['value'];
+                } elseif ($img['type'] === 'file') {
+                    $file = $img['value'];
+                    $imageName = time() . '_' . $index . '.' . $file->getClientOriginalExtension();
+                    $file->move(public_path('product_images'), $imageName);
+                    $path = "product_images/{$imageName}";
                 }
+            
+                if (!$path) continue;
             
                 ProductImage::create([
                     'store_id' => $storeId,
                     'product_id' => $product->id,
-                    'path' => "product_images/{$imageName}",
-                    'is_primary' => $index === 0
+                    'path' => $path,
+                    'is_primary' => $img['is_primary'] ?? ($index === 0),
+                    'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
+                    'description' => $img['description'] ?? null,
                 ]);
             }
 
@@ -394,37 +418,68 @@ class ProductController extends Controller
                     ])->save();
                 }
 
-              // ✅ Update/Add Images
-            if (!empty($fields['image'])) {
-                // 🗑️ Delete old images
-                ProductImage::where('product_id', $product->id)->delete();
-
-                $images = is_array($fields['image']) ? $fields['image'] : [$fields['image']];
-
-                foreach ($images as $index => $img) {
-                    try {
-                        if (is_string($img)) {
-                            $imageData = file_get_contents($img);
-                            $imageName = time() . '_' . $index . '_' . basename(parse_url($img, PHP_URL_PATH));
-                            File::put(public_path("product_images/{$imageName}"), $imageData);
-                        } elseif ($img instanceof \Illuminate\Http\UploadedFile) {
-                            $imageName = time() . '_' . $index . '.' . $img->getClientOriginalExtension();
-                            $img->move(public_path('product_images'), $imageName);
-                        } else {
-                            continue;
-                        }
-
-                        ProductImage::create([
-                            'store_id' => $storeId,
-                            'product_id' => $product->id,
-                            'path' => "product_images/{$imageName}",
-                            'is_primary' => $index === 0
-                        ]);
-                    } catch (\Exception $e) {
-                        continue;
+            // ✅ Update/Add Images
+        if (!empty($fields['image'])) {
+            // 🗑️ Delete old images
+            ProductImage::where('product_id', $product->id)->delete();
+        
+            $imageInputs = is_array($fields['image']) ? $fields['image'] : [$fields['image']];
+            $images = [];
+        
+            foreach ($imageInputs as $img) {
+                if (is_array($img)) {
+                    $imageEntry = [
+                        'type' => null,
+                        'value' => null,
+                        'is_primary' => $img['isThumbnail'] ?? false,
+                        'alt_text' => $img['alt_text'] ?? $product->name,
+                        'description' => $img['description'] ?? null,
+                    ];
+                
+                    if (!empty($img['url']) && is_string($img['url'])) {
+                        $imageEntry['type'] = 'url';
+                        $imageEntry['value'] = $img['url'];
+                        $images[] = $imageEntry;
+                    }
+                
+                    if (
+                        isset($img['file']) &&
+                        $img['file'] instanceof \Illuminate\Http\UploadedFile
+                    ) {
+                        $imageEntry['type'] = 'file';
+                        $imageEntry['value'] = $img['file'];
+                        $images[] = $imageEntry;
                     }
                 }
             }
+        
+            foreach ($images as $index => $img) {
+                $path = null;
+            
+                if ($img['type'] === 'url') {
+                    if (!filter_var($img['value'], FILTER_VALIDATE_URL)) {
+                        continue;
+                    }
+                    $path = $img['value'];
+                } elseif ($img['type'] === 'file') {
+                    $file = $img['value'];
+                    $imageName = time() . '_' . $index . '.' . $file->getClientOriginalExtension();
+                    $file->move(public_path('product_images'), $imageName);
+                    $path = "product_images/{$imageName}";
+                }
+            
+                if (!$path) continue;
+            
+                ProductImage::create([
+                    'store_id' => $storeId,
+                    'product_id' => $product->id,
+                    'path' => $path,
+                    'is_primary' => $img['is_primary'] ?? ($index === 0),
+                    'alt_text' => $img['alt_text'] ?? null,
+                    'description' => $img['description'] ?? null,
+                ]);
+            }
+        }
 
             // ✅ Add to response
             $updatedProducts[] = new ProductResource($product->load([
@@ -443,8 +498,6 @@ class ProductController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
-
-
     public function searchProduct(Request $request)
     {
         try {

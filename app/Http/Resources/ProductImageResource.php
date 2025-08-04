@@ -17,7 +17,10 @@ class ProductImageResource extends JsonResource
        return [
             'path'      => asset($this->path),
             'isPrimary' => $this->is_primary,
-            'store_id' => $this->store_id, // Ensure store_id is included
+            'store_id' => $this->store_id, // Ensure store_id is included.
+            'altText'     => $this->alt_text,
+            'description' => $this->description,
+
         ];
     }
 }
