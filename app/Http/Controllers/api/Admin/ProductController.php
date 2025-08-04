@@ -933,24 +933,30 @@ class ProductController extends Controller
                 ]);
 
                 // ✅ Auto-detect image URL from any column
-                $imageUrl = collect($row)->map(fn($v) => trim($v))->filter(function ($value) {
-                    if (!is_string($value)) return false;
-                    $cleaned = preg_replace('/(\?.*|!.*)$/', '', $value);
-                    return preg_match('/^https?:\/\/.*\.(jpg|jpeg|png|gif|webp)$/i', $cleaned);
-                })->first();
-
-                if ($imageUrl) {
-                    \App\Models\ProductImage::create([
-                        'store_id' => $storeId,
-                        'product_id' => $product->id,
-                        'path' => $imageUrl,
-                        'alt_text' => $row['Product Name'] ?? '',
-                        'is_primary' => true,
-                    ]);
-                    \Log::info("Image imported for SKU: " . ($row['Product Code/SKU'] ?? 'N/A') . " — " . $imageUrl);
-                } else {
-                    \Log::info("No image found for SKU: " . ($row['Product Code/SKU'] ?? 'N/A'));
-                }
+               $imagePath = collect($row)->map(fn($v) => trim($v))->first(function ($value) {
+               if (!is_string($value)) return false;
+               return preg_match('/\.(jpg|jpeg|png|gif|webp)$/i', $value); // Accept image-like strings
+           });
+           
+           if ($imagePath) {
+               // Check if it's a full URL
+               $isUrl = filter_var($imagePath, FILTER_VALIDATE_URL);
+           
+               // Prefix internal image paths to match 'addProduct' behavior
+               $finalPath = $isUrl ? $imagePath : 'product_images/' . ltrim($imagePath, '/');
+           
+               \App\Models\ProductImage::create([
+                   'store_id' => $storeId,
+                   'product_id' => $product->id,
+                   'path' => $finalPath,
+                   'alt_text' => $row['Product Name'] ?? '',
+                   'is_primary' => true,
+               ]);
+           
+               \Log::info("Image imported for SKU: " . ($row['Product Code/SKU'] ?? 'N/A') . " — " . $finalPath);
+           } else {
+               \Log::info("No image found for SKU: " . ($row['Product Code/SKU'] ?? 'N/A'));
+           }
 
                 $imported++;
             } catch (\Throwable $e) {

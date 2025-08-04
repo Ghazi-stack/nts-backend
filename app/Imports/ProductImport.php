@@ -111,26 +111,29 @@ class ProductImport implements ToArray
                 ]);
 
                 // ✅ Improved image detection logic
-                $imageUrl = collect($data)->map(fn($v) => trim($v))->filter(function ($value) {
-                    if (!is_string($value)) return false;
-                    $cleaned = preg_replace('/(\?.*|!.*)$/', '', $value); // remove ?query or !modifiers
-                    return preg_match('/^https?:\/\/.*\.(jpg|jpeg|png|gif|webp)$/i', $cleaned);
-                })->first();
-
-                // ✅ Log and save image if found
-                if ($imageUrl) {
-                    Log::info("Image URL detected for product SKU {$data['Product Code/SKU']}: {$imageUrl}");
-
-                    ProductImage::create([
-                        'store_id' => $this->storeId,
-                        'product_id' => $product->id,
-                        'path' => $imageUrl,
-                        'alt_text' => $data['Product Name'] ?? '',
-                        'is_primary' => true,
-                    ]);
-                } else {
-                    Log::info("No image URL found for SKU: {$data['Product Code/SKU']}");
-                }
+                $imagePath = collect($data)->map(fn($v) => trim($v))->first(function ($value) {
+                if (!is_string($value)) return false;
+                return preg_match('/\.(jpg|jpeg|png|gif|webp)$/i', $value); // Accepts image file names or full URLs
+            });
+            
+            if ($imagePath) {
+                $isUrl = filter_var($imagePath, FILTER_VALIDATE_URL);
+            
+                // Prefix internal image paths
+                $finalPath = $isUrl ? $imagePath : 'product_images/' . ltrim($imagePath, '/');
+            
+                Log::info("Image path detected for SKU {$data['Product Code/SKU']}: {$finalPath}");
+            
+                ProductImage::create([
+                    'store_id' => $this->storeId,
+                    'product_id' => $product->id,
+                    'path' => $finalPath,
+                    'alt_text' => $data['Product Name'] ?? '',
+                    'is_primary' => true,
+                ]);
+            } else {
+                Log::info("No image found for SKU: {$data['Product Code/SKU']}");
+            }
 
             } catch (\Throwable $e) {
                 Log::error("Import error for row: " . json_encode($row) . ' — ' . $e->getMessage());
