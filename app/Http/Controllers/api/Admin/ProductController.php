@@ -840,116 +840,138 @@ class ProductController extends Controller
 
 
 
-    public function importCSV(Request $request)
-    {
-        try {
-            $request->validate([
-                'file' => 'required|file|mimes:csv,txt,xlsx,xls'
-            ]);
+   public function importCSV(Request $request)
+{
+    try {
+        $request->validate([
+            'file' => 'required|file|mimes:csv,txt,xlsx,xls'
+        ]);
 
-            $storeId = current_store_id();
-            if (!$storeId) {
-                return response()->json(['error' => 'Store not selected.'], 400);
-            }
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json(['error' => 'Store not selected.'], 400);
+        }
 
-            $file = $request->file('file');
-            $ext = $file->getClientOriginalExtension();
-            $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
+        $file = $request->file('file');
+        $ext = $file->getClientOriginalExtension();
+        $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
 
-            $imported = 0;
-            $skipped = [];
+        $imported = 0;
+        $skipped = [];
 
-            if (in_array($ext, ['xlsx', 'xls'])) {
-                Excel::import(new ProductImport($storeId), storage_path("app/{$path}"));
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Excel import completed.'
-                ]);
-            }
-
-            // CSV (plain)
-            $csv = Reader::createFromPath(storage_path("app/{$path}"), 'r');
-            $csv->setHeaderOffset(0);
-
-            foreach ($csv->getRecords() as $row) {
-                try {
-                    $row = array_map(fn($val) => mb_convert_encoding($val, 'UTF-8', 'auto'), $row);
-
-                    $brand = \App\Models\Brand::firstOrCreate(
-                        ['name' => $row['Brand Name']],
-                        ['slug' => Str::slug($row['Brand Name'])]
-                    );
-
-                    $category = \App\Models\Category::firstOrCreate(
-                        ['name' => $row['Category Name'] ?? 'Uncategorized'],
-                        ['slug' => Str::slug($row['Category Name'] ?? 'Uncategorized')]
-                    );
-
-                    $product = Product::create([
-                        'store_id' => $storeId,
-                        'name' => $row['Product Name'],
-                        'slug' => Str::slug($row['Product Name']) . '-' . uniqid(),
-                        'sku' => $row['Product Code/SKU'],
-                        'price' => $row['Retail Price'] ?? 0,
-                        'brand_id' => $brand->id,
-                        'track_inventory' => false,
-                        'current_stock' => 0,
-                        'visible_on_storefront' => true,
-                        'custom_fields' => $this->parseCustomFields($row['Product Custom Fields'] ?? ''),
-                        'dimensions' => json_encode([
-                            'weight' => $row['Product Weight'] ?? null,
-                            'width' => $row['Width'] ?? null,
-                            'height' => $row['Height'] ?? null,
-                            'depth' => $row['Depth'] ?? null,
-                        ]),
-                    ]);
-                    $product->categories()->sync([$category->id]);
-
-                    ProductContent::create([
-                        'store_id' => $storeId,
-                        'product_id' => $product->id,
-                        'description' => $row['Product Description'] ?? '',
-                        'warranty' => $row['Warranty'] ?? '',
-                        'availability_text' => $row['Availability'] ?? '',
-                        'template_layout' => $row['Template Layout'] ?? '',
-                    ]);
-
-                    ProductIdentifier::create([
-                        'store_id' => $storeId,
-                        'product_id' => $product->id,
-                        'mpn' => $row['Manufacturer Part Number'] ?? '',
-                        'upc' => $row['Product UPC/EAN'] ?? '',
-                        'gtin' => $row['Global Trade Item Number'] ?? '',
-                        'bpn' => $row['Bin Picking Number'] ?? '',
-                    ]);
-
-                    ProductSeo::create([
-                        'store_id' => $storeId,
-                        'product_id' => $product->id,
-                        'product_url' => $row['Product URL'] ?? '',
-                        'page_title' => $row['Page Title'] ?? '',
-                        'meta_description' => $row['Meta Description'] ?? '',
-                    ]);
-
-                    $imported++;
-                } catch (\Throwable $e) {
-                    $skipped[] = [
-                        'row' => $row,
-                        'error' => $e->getMessage()
-                    ];
-                }
-            }
-
+        if (in_array($ext, ['xlsx', 'xls'])) {
+            Excel::import(new ProductImport($storeId), storage_path("app/{$path}"));
             return response()->json([
                 'status' => true,
-                'message' => 'CSV import completed.',
-                'imported' => $imported,
-                'skipped' => $skipped
+                'message' => 'Excel import completed.'
             ]);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
         }
+
+        // CSV (plain)
+        $csv = Reader::createFromPath(storage_path("app/{$path}"), 'r');
+        $csv->setHeaderOffset(0);
+
+        foreach ($csv->getRecords() as $row) {
+            try {
+                $row = array_map(fn($val) => mb_convert_encoding($val, 'UTF-8', 'auto'), $row);
+
+                $brand = \App\Models\Brand::firstOrCreate(
+                    ['name' => $row['Brand Name']],
+                    ['slug' => Str::slug($row['Brand Name'])]
+                );
+
+                $category = \App\Models\Category::firstOrCreate(
+                    ['name' => $row['Category Name'] ?? 'Uncategorized'],
+                    ['slug' => Str::slug($row['Category Name'] ?? 'Uncategorized')]
+                );
+
+                $product = Product::create([
+                    'store_id' => $storeId,
+                    'name' => $row['Product Name'],
+                    'slug' => Str::slug($row['Product Name']) . '-' . uniqid(),
+                    'sku' => $row['Product Code/SKU'],
+                    'price' => $row['Retail Price'] ?? 0,
+                    'brand_id' => $brand->id,
+                    'track_inventory' => false,
+                    'current_stock' => 0,
+                    'visible_on_storefront' => true,
+                    'custom_fields' => $this->parseCustomFields($row['Product Custom Fields'] ?? ''),
+                    'dimensions' => json_encode([
+                        'weight' => $row['Product Weight'] ?? null,
+                        'width' => $row['Width'] ?? null,
+                        'height' => $row['Height'] ?? null,
+                        'depth' => $row['Depth'] ?? null,
+                    ]),
+                ]);
+
+                $product->categories()->sync([$category->id]);
+
+                ProductContent::create([
+                    'store_id' => $storeId,
+                    'product_id' => $product->id,
+                    'description' => $row['Product Description'] ?? '',
+                    'warranty' => $row['Warranty'] ?? '',
+                    'availability_text' => $row['Availability'] ?? '',
+                    'template_layout' => $row['Template Layout'] ?? '',
+                ]);
+
+                ProductIdentifier::create([
+                    'store_id' => $storeId,
+                    'product_id' => $product->id,
+                    'mpn' => $row['Manufacturer Part Number'] ?? '',
+                    'upc' => $row['Product UPC/EAN'] ?? '',
+                    'gtin' => $row['Global Trade Item Number'] ?? '',
+                    'bpn' => $row['Bin Picking Number'] ?? '',
+                ]);
+
+                ProductSeo::create([
+                    'store_id' => $storeId,
+                    'product_id' => $product->id,
+                    'product_url' => $row['Product URL'] ?? '',
+                    'page_title' => $row['Page Title'] ?? '',
+                    'meta_description' => $row['Meta Description'] ?? '',
+                ]);
+
+                // ✅ Auto-detect image URL from any column
+                $imageUrl = collect($row)->map(fn($v) => trim($v))->filter(function ($value) {
+                    if (!is_string($value)) return false;
+                    $cleaned = preg_replace('/(\?.*|!.*)$/', '', $value);
+                    return preg_match('/^https?:\/\/.*\.(jpg|jpeg|png|gif|webp)$/i', $cleaned);
+                })->first();
+
+                if ($imageUrl) {
+                    \App\Models\ProductImage::create([
+                        'store_id' => $storeId,
+                        'product_id' => $product->id,
+                        'path' => $imageUrl,
+                        'alt_text' => $row['Product Name'] ?? '',
+                        'is_primary' => true,
+                    ]);
+                    \Log::info("Image imported for SKU: " . ($row['Product Code/SKU'] ?? 'N/A') . " — " . $imageUrl);
+                } else {
+                    \Log::info("No image found for SKU: " . ($row['Product Code/SKU'] ?? 'N/A'));
+                }
+
+                $imported++;
+            } catch (\Throwable $e) {
+                $skipped[] = [
+                    'row' => $row,
+                    'error' => $e->getMessage()
+                ];
+            }
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'CSV import completed.',
+            'imported' => $imported,
+            'skipped' => $skipped
+        ]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
     }
+}
+
 
     private function parseCustomFields($fieldString)
     {

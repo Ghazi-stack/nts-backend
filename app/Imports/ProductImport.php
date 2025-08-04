@@ -11,6 +11,7 @@ use App\Models\Brand;
 use App\Models\Category;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToArray;
 
 class ProductImport implements ToArray
@@ -32,8 +33,8 @@ class ProductImport implements ToArray
                 $data = array_combine($header, $row);
 
                 $brand = Brand::firstOrCreate(
-                    ['name' => $data['Brand Name']],
-                    ['slug' => Str::slug($data['Brand Name'])]
+                    ['name' => $data['Brand Name'] ?? 'Unknown Brand'],
+                    ['slug' => Str::slug($data['Brand Name'] ?? 'Unknown Brand')]
                 );
 
                 $category = Category::firstOrCreate(
@@ -42,12 +43,12 @@ class ProductImport implements ToArray
                 );
 
                 $product = Product::create([
-                    'store_id' => $this->storeId, // ✅ Important: store ID is now passed in
+                    'store_id' => $this->storeId,
                     'item_type' => $data['Item Type'] ?? null,
                     'product_type' => $data['Product Type'] ?? null,
-                    'name' => $data['Product Name'],
-                    'slug' => Str::slug($data['Product Name']) . '-' . uniqid(),
-                    'sku' => $data['Product Code/SKU'],
+                    'name' => $data['Product Name'] ?? 'Unnamed',
+                    'slug' => Str::slug($data['Product Name'] ?? 'Unnamed') . '-' . uniqid(),
+                    'sku' => $data['Product Code/SKU'] ?? null,
                     'price' => $data['Retail Price'] ?? 0,
                     'brand_id' => $brand->id,
                     'category_id' => $category->id,
@@ -82,6 +83,7 @@ class ProductImport implements ToArray
                 ]);
 
                 ProductContent::create([
+                    'store_id' => $this->storeId,
                     'product_id' => $product->id,
                     'description' => $data['Product Description'] ?? '',
                     'warranty' => $data['Product Warranty'] ?? '',
@@ -90,7 +92,7 @@ class ProductImport implements ToArray
                 ]);
 
                 ProductIdentifier::create([
-                    'store_id' => current_store_id(),
+                    'store_id' => $this->storeId,
                     'product_id' => $product->id,
                     'mpn' => $data['Manufacturer Part Number'] ?? '',
                     'upc' => $data['Product UPC/EAN'] ?? '',
@@ -99,28 +101,39 @@ class ProductImport implements ToArray
                 ]);
 
                 ProductSeo::create([
-                    'store_id' => current_store_id(),
+                    'store_id' => $this->storeId,
                     'product_id' => $product->id,
-                    'page_title' => $data['Page Title'] ?? $data['Product Name'],
-                    'product_url' => ltrim($data['Product URL'] ?? '', '/'),
+                    'page_title' => $data['Page Title'] ?? $data['Product Name'] ?? '',
+                    'product_url' => ltrim($data['Product Url'] ?? '', '/'),
                     'meta_description' => $data['Meta Description'] ?? '',
                     'meta_keywords' => $data['Meta Keywords'] ?? '',
                     'redirect_old_url' => $this->toBool($data['Redirect Old URL?'] ?? 'N'),
                 ]);
 
-                // Primary image
-                if (!empty($data['Product Image File - 1'])) {
+                // ✅ Improved image detection logic
+                $imageUrl = collect($data)->map(fn($v) => trim($v))->filter(function ($value) {
+                    if (!is_string($value)) return false;
+                    $cleaned = preg_replace('/(\?.*|!.*)$/', '', $value); // remove ?query or !modifiers
+                    return preg_match('/^https?:\/\/.*\.(jpg|jpeg|png|gif|webp)$/i', $cleaned);
+                })->first();
+
+                // ✅ Log and save image if found
+                if ($imageUrl) {
+                    Log::info("Image URL detected for product SKU {$data['Product Code/SKU']}: {$imageUrl}");
+
                     ProductImage::create([
-                        'store_id' => current_store_id(),
+                        'store_id' => $this->storeId,
                         'product_id' => $product->id,
-                        'path' => $data['Product Image File - 1'],
-                        'alt_text' => $data['Product Image Description - 1'] ?? '',
+                        'path' => $imageUrl,
+                        'alt_text' => $data['Product Name'] ?? '',
                         'is_primary' => true,
                     ]);
+                } else {
+                    Log::info("No image URL found for SKU: {$data['Product Code/SKU']}");
                 }
 
             } catch (\Throwable $e) {
-                \Log::error("Import error: " . $e->getMessage());
+                Log::error("Import error for row: " . json_encode($row) . ' — ' . $e->getMessage());
             }
         }
     }
