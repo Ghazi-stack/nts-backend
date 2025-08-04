@@ -287,183 +287,127 @@ class ProductController extends Controller
         }
     }
 
-
-
-   
     public function updateProduct(Request $request)
     {
         try {
-            $validated = $request->validate([
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json(['error' => 'Store not selected or token invalid.'], 400);
+            }
+        
+            $data = $request->validate([
                 'products' => 'required|array|min:1',
-                'products.*.id' => 'required|exists:products,id',
-                'products.*.fields' => 'required|array|min:1',
-                'products.*.fields.categoryIds' => 'nullable|array',
-                'products.*.fields.categoryIds.*' => 'exists:categories,id',
+                'products.*.id' => 'required|integer|exists:products,id',
+                'products.*.fields' => 'required|array',
             ]);
         
-            $updated = [];
-            $failed = [];
+            $updatedProducts = [];
         
-            foreach ($validated['products'] as $item) {
-                try {
-                    $product = Product::where('store_id', current_store_id())
-                        ->findOrFail($item['id']);
+            foreach ($data['products'] as $item) {
+                $product = Product::where('store_id', $storeId)->findOrFail($item['id']);
+                $fields = $item['fields'];
+            
+                // ✅ Main product fields
+                $product->fill([
+                    'name' => $fields['name'] ?? $product->name,
+                    'slug' => isset($fields['name']) ? Str::slug($fields['name']) . '-' . uniqid() : $product->slug,
+                    'sku' => $fields['sku'] ?? $product->sku,
+                    'brand_id' => $fields['brandId'] ?? $product->brand_id,
+                    'condition' => $fields['condition'] ?? $product->condition,
+                    'price' => $fields['price'] ?? $product->price,
+                    'msrp' => $fields['msrp'] ?? $product->msrp,
+                    'cost_price' => $fields['costPrice'] ?? $product->cost_price,
+                    'sale_price' => $fields['salePrice'] ?? $product->sale_price,
+                    'dimensions' => $fields['dimensions'] ?? $product->dimensions,
+                    'track_inventory' => $fields['trackInventory'] ?? $product->track_inventory,
+                    'current_stock' => $fields['currentStock'] ?? $product->current_stock,
+                    'low_stock' => $fields['lowStock'] ?? $product->low_stock,
+                    'is_featured' => $fields['isFeatured'] ?? $product->is_featured,
+                    'show_condition' => $fields['showCondition'] ?? $product->show_condition,
+                    'sort_order' => $fields['sortOrder'] ?? $product->sort_order,
+                    'search_keywords' => $fields['searchKeywords'] ?? $product->search_keywords,
+                    'visible_on_storefront' => $fields['isVisible'] ?? $product->visible_on_storefront,
+                    'custom_fields' => $fields['customFields'] ?? $product->custom_fields,
+                    'purchasability_status' => $fields['purchasabilityStatus'] ?? $product->purchasability_status,
+                    'min_purchase_quantity' => $fields['minPurchaseQuantity'] ?? $product->min_purchase_quantity,
+                    'max_purchase_quantity' => $fields['maxPurchaseQuantity'] ?? $product->max_purchase_quantity,
+                    'related_products_enabled' => $fields['relatedProducts'] ?? $product->related_products_enabled,
+                    'fixed_shipping_cost' => $fields['fixedShippingCost'] ?? $product->fixed_shipping_cost,
+                    'product_type' => $fields['productType'] ?? $product->product_type,
+                    'option_set' => $fields['optionSet'] ?? $product->option_set,
+                    'option_set_align' => $fields['optionSetAlign'] ?? $product->option_set_align,
+                    'allow_purchase' => $fields['allowPurchase'] ?? $product->allow_purchase,
+                    'stop_processing_rules' => $fields['stopProcessingRules'] ?? $product->stop_processing_rules,
+                    'tax_class' => $fields['taxClass'] ?? $product->tax_class,
+                    'tax_provider_code' => $fields['taxProviderCode'] ?? $product->tax_provider_code,
+                ])->save();
                 
-                    $fields = $item['fields'];
-                    $categoryIds = $fields['categoryIds'] ?? null;
-                    unset($fields['categoryIds']); // prevent mass assignment erro
-                    // ✅ camelCase to snake_case mapping
-                     // 🔁 Convert customFields object to array if needed
-                    if (isset($fields['customFields']) && is_array($fields['customFields']) && array_keys($fields['customFields']) !== range(0, count($fields['customFields']) - 1)) {
-                        $fields['customFields'] = collect($fields['customFields'])->map(function ($value, $key) {
-                            return ['name' => $key, 'value' => $value];
-                        })->values()->toArray();
-                    }
-                    $fieldMap = [
-                        'costPrice' => 'cost_price',
-                        'salePrice' => 'sale_price',
-                        'brandId' => 'brand_id',
-                        'trackInventory' => 'track_inventory',
-                        'currentStock' => 'current_stock',
-                        'lowStock' => 'low_stock',
-                        'isFeatured' => 'is_featured',
-                        'showCondition' => 'show_condition',
-                        'sortOrder' => 'sort_order',
-                        'searchKeywords' => 'search_keywords',
-                        'isVisible' => 'visible_on_storefront',
-                        'customFields' => 'custom_fields',
-                        'msrp' => 'msrp',
-                        'purchasabilityStatus' => 'purchasability_status',
-                        'minPurchaseQuantity' => 'min_purchase_quantity',
-                        'maxPurchaseQuantity' => 'max_purchase_quantity',
-                        'relatedProducts' => 'related_products_enabled',
-                        'fixedShippingCost' => 'fixed_shipping_cost',
-                        'productType' => 'product_type',
-                        'optionSet' => 'option_set',
-                        'optionSetAlign' => 'option_set_align',
-                        'allowPurchase' => 'allow_purchase',
-                        'stopProcessingRules' => 'stop_processing_rules',
-                        'taxClass' => 'tax_class',
-                        'taxProviderCode' => 'tax_provider_code',
-                    ];
-                
-                    $productFields = [];
-                    foreach ($fields as $key => $value) {
-                        $dbKey = $fieldMap[$key] ?? $key;
-                        $productFields[$dbKey] = $value;
-                    }
-                
-                    if (!empty($productFields)) {
-                        $product->update($productFields);
-                    }
-                    // ✅ Sync categories if provided
-                    if (is_array($categoryIds)) {
-                        $product->categories()->sync($categoryIds);
-                    }
-
-                    // ✅ Content update
-                    if (
-                        isset($fields['description']) || isset($fields['warranty']) ||
-                        isset($fields['availabilityText']) || isset($fields['templateLayout'])
-                    ) {
-                        $content = $product->content ?? new ProductContent(['store_id' => $product->store_id]);
-                        $content->fill([
-                            'description' => $fields['description'] ?? $content->description,
-                            'warranty' => $fields['warranty'] ?? $content->warranty,
-                            'availability_text' => $fields['availabilityText'] ?? $content->availability_text,
-                            'template_layout' => $fields['templateLayout'] ?? $content->template_layout,
-                        ]);
-                        $content->product_id = $product->id;
-                        $content->save();
-                    }
-                
-                    // ✅ Identifiers update
-                    if (
-                        isset($fields['mpn']) || isset($fields['upc']) ||
-                        isset($fields['gtin']) || isset($fields['bpn'])
-                    ) {
-                        $identifiers = $product->identifiers ?? new ProductIdentifier(['store_id' => $product->store_id]);
-                        $identifiers->fill([
-                            'mpn' => $fields['mpn'] ?? $identifiers->mpn,
-                            'upc' => $fields['upc'] ?? $identifiers->upc,
-                            'gtin' => $fields['gtin'] ?? $identifiers->gtin,
-                            'bpn' => $fields['bpn'] ?? $identifiers->bpn,
-                        ]);
-                        $identifiers->product_id = $product->id;
-                        $identifiers->save();
-                    }
-                
-                    // ✅ SEO update
-                    if (
-                        isset($fields['pageTitle']) || isset($fields['productUrl']) ||
-                        isset($fields['metaDescription'])
-                    ) {
-                        $seo = $product->seo ?? new ProductSeo(['store_id' => $product->store_id]);
-                        $seo->fill([
-                            'page_title' => $fields['pageTitle'] ?? $seo->page_title,
-                            'product_url' => $fields['productUrl'] ?? $seo->product_url,
-                            'meta_description' => $fields['metaDescription'] ?? $seo->meta_description,
-                        ]);
-                        $seo->product_id = $product->id;
-                        $seo->save();
-                    }
-                
-                    // ✅ Images (URL or file)
-                    if (isset($fields['image'])) {
-                        $images = is_array($fields['image']) ? $fields['image'] : [$fields['image']];
-                    
-                        // Optional: clear old images first
-                        ProductImage::where('product_id', $product->id)->delete();
-                    
-                        foreach ($images as $index => $img) {
-                            if (is_string($img)) {
-                                // Image from URL
-                                try {
-                                    $imageData = file_get_contents($img);
-                                    $imageName = time() . '_' . $index . '_' . basename(parse_url($img, PHP_URL_PATH));
-                                    File::put(public_path("product_images/{$imageName}"), $imageData);
-                                } catch (\Exception $e) {
-                                    continue;
-                                }
-                            } elseif ($img instanceof \Illuminate\Http\UploadedFile) {
-                                // Image from file upload (via controller or future extension)
-                                $imageName = time() . '_' . $index . '.' . $img->getClientOriginalExtension();
-                                $img->move(public_path('product_images'), $imageName);
-                            } else {
-                                continue; // Skip invalid
-                            }
-                        
-                            ProductImage::create([
-                                'store_id' => $product->store_id,
-                                'product_id' => $product->id,
-                                'path' => "product_images/{$imageName}",
-                                'is_primary' => $index === 0
-                            ]);
-                        }
-                    }
-                
-                    $updated[] = $product->id;
-                } catch (Exception $e) {
-                    $failed[] = [
-                        'id' => $item['id'],
-                        'error' => $e->getMessage()
-                    ];
+                // ✅ Sync Categories
+                if (!empty($fields['categoryIds']) && is_array($fields['categoryIds'])) {
+                    $product->categories()->sync($fields['categoryIds']);
                 }
+            
+                // ✅ Update Content (description, warranty, etc.)
+                if (isset($fields['description']) || isset($fields['warranty']) || isset($fields['availabilityText']) || isset($fields['templateLayout'])) {
+                    $content = $product->content ?: new ProductContent([
+                        'store_id' => $storeId,
+                        'product_id' => $product->id,
+                    ]);
+                
+                    $content->fill([
+                        'description' => $fields['description'] ?? $content->description,
+                        'warranty' => $fields['warranty'] ?? $content->warranty,
+                        'availability_text' => $fields['availabilityText'] ?? $content->availability_text,
+                        'template_layout' => $fields['templateLayout'] ?? $content->template_layout,
+                    ])->save();
+                }
+            
+                // ✅ Update Identifiers (MPN, UPC, GTIN, BPN)
+                if (isset($fields['mpn']) || isset($fields['upc']) || isset($fields['gtin']) || isset($fields['bpn'])) {
+                    $identifiers = $product->identifiers ?: new ProductIdentifier([
+                        'store_id' => $storeId,
+                        'product_id' => $product->id,
+                    ]);
+                
+                    $identifiers->fill([
+                        'mpn' => $fields['mpn'] ?? $identifiers->mpn,
+                        'upc' => $fields['upc'] ?? $identifiers->upc,
+                        'gtin' => $fields['gtin'] ?? $identifiers->gtin,
+                        'bpn' => $fields['bpn'] ?? $identifiers->bpn,
+                    ])->save();
+                }
+            
+                // ✅ Update SEO (meta, page title, product URL)
+                if (isset($fields['pageTitle']) || isset($fields['productUrl']) || isset($fields['metaDescription'])) {
+                    $seo = $product->seo ?: new ProductSeo([
+                        'store_id' => $storeId,
+                        'product_id' => $product->id,
+                    ]);
+                
+                    $seo->fill([
+                        'page_title' => $fields['pageTitle'] ?? $seo->page_title,
+                        'product_url' => $fields['productUrl'] ?? $seo->product_url,
+                        'meta_description' => $fields['metaDescription'] ?? $seo->meta_description,
+                    ])->save();
+                }
+            
+                // ✅ Add to response
+                $updatedProducts[] = new ProductResource($product->load([
+                    'categories', 'content', 'seo', 'identifiers'
+                ]));
             }
         
             return response()->json([
                 'status' => true,
-                'message' => 'Bulk update completed.',
-                'updated' => $updated,
-                'failed' => $failed
+                'message' => 'Products updated successfully.',
+                'data' => $updatedProducts,
             ]);
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
-
 
 
     public function searchProduct(Request $request)

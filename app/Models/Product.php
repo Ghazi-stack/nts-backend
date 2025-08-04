@@ -22,7 +22,7 @@ class Product extends Model
         'name', 'slug', 'sku', 'price', 'brand_id',
         'dimensions', 'track_inventory', 'current_stock', 'low_stock',
         'is_featured', 'show_condition', 'sort_order', 'search_keywords',
-        'visible_on_storefront', 'custom_fields', 'free_shipping',
+        'visible_on_storefront', 'custom_fields', 'free_shipping','price',
         'product_type', 'option_set', 'option_set_align',
         'cost_price', 'sale_price', 'fixed_shipping_cost',
         'allow_purchase', 'stop_processing_rules', 'tax_class', 'tax_provider_code','item_type','store_id','msrp', 'purchasability_status',
