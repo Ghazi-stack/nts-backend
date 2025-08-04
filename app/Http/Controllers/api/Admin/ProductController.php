@@ -225,12 +225,14 @@ class ProductController extends Controller
                     } catch (\Exception $e) {
                         continue; // skip invalid URL
                     }
-                } else {
+                } elseif ($img instanceof \Illuminate\Http\UploadedFile) {
                     // It's a file
                     $imageName = time() . '_' . $index . '.' . $img->getClientOriginalExtension();
                     $img->move(public_path('product_images'), $imageName);
+                } else {
+                    continue; // unknown or malformed input
                 }
-
+            
                 ProductImage::create([
                     'store_id' => $storeId,
                     'product_id' => $product->id,
@@ -391,11 +393,43 @@ class ProductController extends Controller
                     ])->save();
                 }
 
-                // ✅ Add to response
-                $updatedProducts[] = new ProductResource($product->load([
-                    'categories', 'content', 'seo', 'identifiers'
-                ]));
+              // ✅ Update/Add Images
+            if (!empty($fields['image'])) {
+                // 🗑️ Delete old images
+                ProductImage::where('product_id', $product->id)->delete();
+
+                $images = is_array($fields['image']) ? $fields['image'] : [$fields['image']];
+
+                foreach ($images as $index => $img) {
+                    try {
+                        if (is_string($img)) {
+                            $imageData = file_get_contents($img);
+                            $imageName = time() . '_' . $index . '_' . basename(parse_url($img, PHP_URL_PATH));
+                            File::put(public_path("product_images/{$imageName}"), $imageData);
+                        } elseif ($img instanceof \Illuminate\Http\UploadedFile) {
+                            $imageName = time() . '_' . $index . '.' . $img->getClientOriginalExtension();
+                            $img->move(public_path('product_images'), $imageName);
+                        } else {
+                            continue;
+                        }
+
+                        ProductImage::create([
+                            'store_id' => $storeId,
+                            'product_id' => $product->id,
+                            'path' => "product_images/{$imageName}",
+                            'is_primary' => $index === 0
+                        ]);
+                    } catch (\Exception $e) {
+                        continue;
+                    }
+                }
             }
+
+            // ✅ Add to response
+            $updatedProducts[] = new ProductResource($product->load([
+                'categories', 'content', 'seo', 'identifiers', 'images'
+            ]));
+        }
 
             return response()->json([
                 'status' => true,
