@@ -178,7 +178,8 @@ class BrandController extends Controller
             \Log::error('Error updating brand: ' . $e->getMessage());
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to update brand.'
+                'message' => 'Failed to update brand.',
+                'error'    => $e->getMessage(),
             ], 500);
         }
     }
