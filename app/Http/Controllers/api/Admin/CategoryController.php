@@ -26,6 +26,7 @@ class CategoryController extends Controller
 
         $categories = Category::with(['childrenRecursive', 'products'])
             ->where('store_id', $storeId)
+            ->whereNull('parent_id')
             ->paginate($perPage);
 
         $data = $categories->getCollection()->map(function ($category) {
