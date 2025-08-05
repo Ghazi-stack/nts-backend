@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api\Admin;
 
 use Exception;
 use App\Models\User;
+use App\Models\Brand;
 use App\Models\Order;
 use League\Csv\Reader;
 use App\Models\Product;
@@ -19,6 +20,7 @@ use App\Models\ProductIdentifier;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Http\Resources\ProductResource;
 use Illuminate\Support\Facades\Storage;
@@ -264,14 +266,31 @@ class ProductController extends Controller
                 }
             }
 
-            foreach ($images as $index => $img) {
+          foreach ($images as $index => $img) {
                 $path = null;
-            
+
                 if ($img['type'] === 'url') {
                     if (!filter_var($img['value'], FILTER_VALIDATE_URL)) {
                         continue;
                     }
-                    $path = $img['value'];
+                
+                    try {
+                        $response = Http::timeout(5)->get($img['value']);
+                    
+                        if ($response->ok()) {
+                            $imageContent = $response->body();
+                            $extension = pathinfo(parse_url($img['value'], PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+                            $imageName = time() . '_' . $index . '.' . $extension;
+                        
+                            $filePath = public_path('product_images/' . $imageName);
+                            file_put_contents($filePath, $imageContent);
+                        
+                            $path = 'product_images/' . $imageName;
+                        }
+                    } catch (\Exception $e) {
+                        continue;
+                    }
+                
                 } elseif ($img['type'] === 'file') {
                     $file = $img['value'];
                     $imageName = time() . '_' . $index . '.' . $file->getClientOriginalExtension();
@@ -289,7 +308,7 @@ class ProductController extends Controller
                     'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
                     'description' => $img['description'] ?? null,
                 ]);
-            }
+            } 
 
             // ✅ Add Content
             ProductContent::create([
@@ -493,15 +512,24 @@ class ProductController extends Controller
                     if (!filter_var($img['value'], FILTER_VALIDATE_URL)) {
                         continue;
                     }
-                    $path = $img['value'];
-                } elseif ($img['type'] === 'file') {
-                    $file = $img['value'];
-                    $imageName = time() . '_' . $index . '.' . $file->getClientOriginalExtension();
-                    $file->move(public_path('product_images'), $imageName);
-                    $path = "product_images/{$imageName}";
+                
+                    try {
+                        $response = Http::timeout(5)->get($img['value']);
+                    
+                        if ($response->ok()) {
+                            $imageContent = $response->body();
+                            $extension = pathinfo(parse_url($img['value'], PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+                            $imageName = time() . '_' . $index . '.' . $extension;
+                        
+                            $filePath = public_path('product_images/' . $imageName);
+                            file_put_contents($filePath, $imageContent);
+                        
+                            $path = 'product_images/' . $imageName;
+                        }
+                    } catch (\Exception $e) {
+                        continue;
+                    }
                 }
-            
-                if (!$path) continue;
             
                 ProductImage::create([
                     'store_id' => $storeId,
@@ -795,222 +823,237 @@ class ProductController extends Controller
 
 
   public function destroyProduct(Request $request, $id = null)
-{
-    try {
-        $storeId = current_store_id(); // ✅ Real dynamic store context
-
-        if (!$storeId) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Store not selected or session/token is missing.'
-            ], 400);
-        }
-
-        // 🔹 SINGLE DELETE
-        if ($id) {
-            $product = Product::where('store_id', $storeId)->find($id);
-
-            if (!$product) {
+    {
+        try {
+            $storeId = current_store_id(); // ✅ Real dynamic store context
+        
+            if (!$storeId) {
                 return response()->json([
                     'status' => false,
-                    'message' => "Product ID $id not found in store_id $storeId."
-                ], 404);
+                    'message' => 'Store not selected or session/token is missing.'
+                ], 400);
             }
-
-            $product->delete();
-
-            return response()->json([
-                'status' => true,
-                'message' => 'Product deleted successfully.',
-                'deletedIds' => [$id]
-            ]);
-        }
-
-        // 🔹 BULK DELETE
-        $request->validate([
-            'ids' => 'required|array|min:1',
-            'ids.*' => 'integer'
-        ]);
-
-        $deleted = [];
-        $failed = [];
-
-        foreach ($request->ids as $prodId) {
-            $product = Product::where('store_id', $storeId)->find($prodId);
-
-            if (!$product) {
-                $failed[] = [
-                    'id' => $prodId,
-                    'error' => "Product ID $prodId not found in store_id $storeId."
-                ];
-                continue;
-            }
-
-            try {
+        
+            // 🔹 SINGLE DELETE
+            if ($id) {
+                $product = Product::where('store_id', $storeId)->find($id);
+            
+                if (!$product) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => "Product ID $id not found in store_id $storeId."
+                    ], 404);
+                }
+            
                 $product->delete();
-                $deleted[] = $prodId;
-            } catch (Exception $e) {
-                $failed[] = [
-                    'id' => $prodId,
-                    'error' => $e->getMessage()
-                ];
+            
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Product deleted successfully.',
+                    'deletedIds' => [$id]
+                ]);
             }
-        }
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Delete process completed.',
-            'deletedIds' => $deleted,
-            'failed' => $failed
-        ]);
-
-    } catch (Exception $e) {
-        return response()->json([
-            'status' => false,
-            'message' => 'Unexpected error: ' . $e->getMessage()
-        ], 500);
-    }
-}
-
-
-
-   public function importCSV(Request $request)
-{
-    try {
-        $request->validate([
-            'file' => 'required|file|mimes:csv,txt,xlsx,xls'
-        ]);
-
-        $storeId = current_store_id();
-        if (!$storeId) {
-            return response()->json(['error' => 'Store not selected.'], 400);
-        }
-
-        $file = $request->file('file');
-        $ext = $file->getClientOriginalExtension();
-        $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
-
-        $imported = 0;
-        $skipped = [];
-
-        if (in_array($ext, ['xlsx', 'xls'])) {
-            Excel::import(new ProductImport($storeId), storage_path("app/{$path}"));
+        
+            // 🔹 BULK DELETE
+            $request->validate([
+                'ids' => 'required|array|min:1',
+                'ids.*' => 'integer'
+            ]);
+        
+            $deleted = [];
+            $failed = [];
+        
+            foreach ($request->ids as $prodId) {
+                $product = Product::where('store_id', $storeId)->find($prodId);
+            
+                if (!$product) {
+                    $failed[] = [
+                        'id' => $prodId,
+                        'error' => "Product ID $prodId not found in store_id $storeId."
+                    ];
+                    continue;
+                }
+            
+                try {
+                    $product->delete();
+                    $deleted[] = $prodId;
+                } catch (Exception $e) {
+                    $failed[] = [
+                        'id' => $prodId,
+                        'error' => $e->getMessage()
+                    ];
+                }
+            }
+        
             return response()->json([
                 'status' => true,
-                'message' => 'Excel import completed.'
+                'message' => 'Delete process completed.',
+                'deletedIds' => $deleted,
+                'failed' => $failed
             ]);
+        
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Unexpected error: ' . $e->getMessage()
+            ], 500);
         }
-
-        // CSV (plain)
-        $csv = Reader::createFromPath(storage_path("app/{$path}"), 'r');
-        $csv->setHeaderOffset(0);
-
-        foreach ($csv->getRecords() as $row) {
-            try {
-                $row = array_map(fn($val) => mb_convert_encoding($val, 'UTF-8', 'auto'), $row);
-
-                $brand = \App\Models\Brand::firstOrCreate(
-                    ['name' => $row['Brand Name']],
-                    ['slug' => Str::slug($row['Brand Name'])]
-                );
-
-                $category = \App\Models\Category::firstOrCreate(
-                    ['name' => $row['Category Name'] ?? 'Uncategorized'],
-                    ['slug' => Str::slug($row['Category Name'] ?? 'Uncategorized')]
-                );
-
-                $product = Product::create([
-                    'store_id' => $storeId,
-                    'name' => $row['Product Name'],
-                    'slug' => Str::slug($row['Product Name']) . '-' . uniqid(),
-                    'sku' => $row['Product Code/SKU'],
-                    'price' => $row['Retail Price'] ?? 0,
-                    'brand_id' => $brand->id,
-                    'track_inventory' => false,
-                    'current_stock' => 0,
-                    'visible_on_storefront' => true,
-                    'custom_fields' => $this->parseCustomFields($row['Product Custom Fields'] ?? ''),
-                    'dimensions' => json_encode([
-                        'weight' => $row['Product Weight'] ?? null,
-                        'width' => $row['Width'] ?? null,
-                        'height' => $row['Height'] ?? null,
-                        'depth' => $row['Depth'] ?? null,
-                    ]),
-                ]);
-
-                $product->categories()->sync([$category->id]);
-
-                ProductContent::create([
-                    'store_id' => $storeId,
-                    'product_id' => $product->id,
-                    'description' => $row['Product Description'] ?? '',
-                    'warranty' => $row['Warranty'] ?? '',
-                    'availability_text' => $row['Availability'] ?? '',
-                    'template_layout' => $row['Template Layout'] ?? '',
-                ]);
-
-                ProductIdentifier::create([
-                    'store_id' => $storeId,
-                    'product_id' => $product->id,
-                    'mpn' => $row['Manufacturer Part Number'] ?? '',
-                    'upc' => $row['Product UPC/EAN'] ?? '',
-                    'gtin' => $row['Global Trade Item Number'] ?? '',
-                    'bpn' => $row['Bin Picking Number'] ?? '',
-                ]);
-
-                ProductSeo::create([
-                    'store_id' => $storeId,
-                    'product_id' => $product->id,
-                    'product_url' => $row['Product URL'] ?? '',
-                    'page_title' => $row['Page Title'] ?? '',
-                    'meta_description' => $row['Meta Description'] ?? '',
-                ]);
-
-                // ✅ Auto-detect image URL from any column
-               $imagePath = collect($row)->map(fn($v) => trim($v))->first(function ($value) {
-               if (!is_string($value)) return false;
-               return preg_match('/\.(jpg|jpeg|png|gif|webp)$/i', $value); // Accept image-like strings
-           });
-           
-           if ($imagePath) {
-               // Check if it's a full URL
-               $isUrl = filter_var($imagePath, FILTER_VALIDATE_URL);
-           
-               // Prefix internal image paths to match 'addProduct' behavior
-               $finalPath = $isUrl ? $imagePath : 'product_images/' . ltrim($imagePath, '/');
-           
-               \App\Models\ProductImage::create([
-                   'store_id' => $storeId,
-                   'product_id' => $product->id,
-                   'path' => $finalPath,
-                   'alt_text' => $row['Product Name'] ?? '',
-                   'is_primary' => true,
-               ]);
-           
-               \Log::info("Image imported for SKU: " . ($row['Product Code/SKU'] ?? 'N/A') . " — " . $finalPath);
-           } else {
-               \Log::info("No image found for SKU: " . ($row['Product Code/SKU'] ?? 'N/A'));
-           }
-
-                $imported++;
-            } catch (\Throwable $e) {
-                $skipped[] = [
-                    'row' => $row,
-                    'error' => $e->getMessage()
-                ];
-            }
-        }
-
-        return response()->json([
-            'status' => true,
-            'message' => 'CSV import completed.',
-            'imported' => $imported,
-            'skipped' => $skipped
-        ]);
-    } catch (\Exception $e) {
-        return response()->json(['error' => $e->getMessage()], 500);
     }
-}
+
+
+
+    public function importCSV(Request $request)
+    {
+         try {
+            $request->validate([
+                'file' => 'required|file|mimes:csv,txt,xlsx,xls'
+            ]);
+
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json(['error' => 'Store not selected.'], 400);
+            }
+
+            $file = $request->file('file');
+            $ext = $file->getClientOriginalExtension();
+            $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
+
+            $imported = 0;
+            $skipped = [];
+
+            if (in_array($ext, ['xlsx', 'xls'])) {
+                Excel::import(new ProductImport($storeId), storage_path("app/{$path}"));
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Excel import completed.'
+                ]);
+            }
+
+            // CSV import
+            $csv = Reader::createFromPath(storage_path("app/{$path}"), 'r');
+            $csv->setHeaderOffset(0);
+
+            foreach ($csv->getRecords() as $row) {
+                try {
+                    $row = array_map(fn($val) => mb_convert_encoding($val, 'UTF-8', 'auto'), $row);
+
+                    $brand = Brand::firstOrCreate(
+                        ['name' => $row['Brand Name']],
+                        ['slug' => Str::slug($row['Brand Name'])]
+                    );
+
+                    $category = Category::firstOrCreate(
+                        ['name' => $row['Category Name'] ?? 'Uncategorized'],
+                        ['slug' => Str::slug($row['Category Name'] ?? 'Uncategorized')]
+                    );
+
+                    $product = Product::create([
+                        'store_id' => $storeId,
+                        'name' => $row['Product Name'],
+                        'slug' => Str::slug($row['Product Name']) . '-' . uniqid(),
+                        'sku' => $row['Product Code/SKU'],
+                        'price' => $row['Retail Price'] ?? 0,
+                        'brand_id' => $brand->id,
+                        'track_inventory' => false,
+                        'current_stock' => 0,
+                        'visible_on_storefront' => true,
+                        'custom_fields' => $this->parseCustomFields($row['Product Custom Fields'] ?? ''),
+                        'dimensions' => json_encode([
+                            'weight' => $row['Product Weight'] ?? null,
+                            'width' => $row['Width'] ?? null,
+                            'height' => $row['Height'] ?? null,
+                            'depth' => $row['Depth'] ?? null,
+                        ]),
+                    ]);
+
+                    $product->categories()->sync([$category->id]);
+
+                    ProductContent::create([
+                        'store_id' => $storeId,
+                        'product_id' => $product->id,
+                        'description' => $row['Product Description'] ?? '',
+                        'warranty' => $row['Warranty'] ?? '',
+                        'availability_text' => $row['Availability'] ?? '',
+                        'template_layout' => $row['Template Layout'] ?? '',
+                    ]);
+
+                    ProductIdentifier::create([
+                        'store_id' => $storeId,
+                        'product_id' => $product->id,
+                        'mpn' => $row['Manufacturer Part Number'] ?? '',
+                        'upc' => $row['Product UPC/EAN'] ?? '',
+                        'gtin' => $row['Global Trade Item Number'] ?? '',
+                        'bpn' => $row['Bin Picking Number'] ?? '',
+                    ]);
+
+                    ProductSeo::create([
+                        'store_id' => $storeId,
+                        'product_id' => $product->id,
+                        'product_url' => $row['Product URL'] ?? '',
+                        'page_title' => $row['Page Title'] ?? '',
+                        'meta_description' => $row['Meta Description'] ?? '',
+                    ]);
+
+                    // ✅ Handle image from any column
+                    $imagePath = collect($row)->map(fn($v) => trim($v))->first(function ($value) {
+                        if (!is_string($value)) return false;
+                        return preg_match('/\.(jpg|jpeg|png|gif|webp)$/i', $value);
+                    });
+
+                    $finalPath = null;
+
+                    if ($imagePath) {
+                        $isUrl = filter_var($imagePath, FILTER_VALIDATE_URL);
+
+                        if ($isUrl) {
+                            try {
+                                $response = Http::timeout(5)->get($imagePath);
+
+                                if ($response->ok()) {
+                                    $imageContent = $response->body();
+                                    $extension = pathinfo(parse_url($imagePath, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+                                    $imageName = time() . '_' . uniqid() . '.' . $extension;
+                                    $localPath = public_path('product_images/' . $imageName);
+                                    file_put_contents($localPath, $imageContent);
+                                    $finalPath = 'product_images/' . $imageName;
+                                }
+                            } catch (\Exception $e) {
+                                \Log::error("Image download failed for SKU: " . ($row['Product Code/SKU'] ?? 'N/A') . " — " . $e->getMessage());
+                            }
+                        } else {
+                            $finalPath = 'product_images/' . ltrim($imagePath, '/');
+                        }
+
+                        if ($finalPath) {
+                            ProductImage::create([
+                                'store_id' => $storeId,
+                                'product_id' => $product->id,
+                                'path' => $finalPath,
+                                'alt_text' => $row['Product Name'] ?? '',
+                                'is_primary' => true,
+                            ]);
+                            \Log::info("Image saved for SKU: " . ($row['Product Code/SKU'] ?? 'N/A') . " — " . $finalPath);
+                        } else {
+                            \Log::info("No valid image found for SKU: " . ($row['Product Code/SKU'] ?? 'N/A'));
+                        }
+                    }
+
+                    $imported++;
+                } catch (\Throwable $e) {
+                    $skipped[] = "Row skipped: " . $e->getMessage();
+                }
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'CSV import completed.',
+                'imported' => $imported,
+                'skipped' => $skipped
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 
 
     private function parseCustomFields($fieldString)
