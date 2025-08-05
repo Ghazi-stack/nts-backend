@@ -314,7 +314,7 @@ class ProductController extends Controller
     }
 
 
-     public function updateProduct(Request $request)
+    public function updateProduct(Request $request)
     {
         try {
             $storeId = current_store_id();
@@ -324,15 +324,22 @@ class ProductController extends Controller
 
             $data = $request->validate([
                 'products' => 'required|array|min:1',
-                'products.*.id' => 'required|integer|exists:products,id',
+                'products.*.id' => 'required|array|min:1',
+                'products.*.id.*' => 'required|integer|exists:products,id',
                 'products.*.fields' => 'required|array',
             ]);
 
             $updatedProducts = [];
 
-            foreach ($data['products'] as $item) {
-                $product = Product::where('store_id', $storeId)->findOrFail($item['id']);
-                $fields = $item['fields'];
+            // foreach ($data['products'] as $item) {
+            //     $product = Product::where('store_id', $storeId)->findOrFail($item['id']);
+            //     $fields = $item['fields'];
+                foreach ($data['products'] as $item) {
+            $productIds = $item['id'];
+            $fields = $item['fields'];
+
+            foreach ($productIds as $productId) {
+                $product = Product::where('store_id', $storeId)->findOrFail($productId);
 
                 // ✅ Main product fields
                 $product->fill([
@@ -492,6 +499,7 @@ class ProductController extends Controller
                 'message' => 'Products updated successfully.',
                 'data' => $updatedProducts,
             ]);
+        }
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
