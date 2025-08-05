@@ -91,6 +91,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     // 📦 Products
     Route::prefix('products')->controller(ProductController::class)->group(function () {
         Route::get('/products-list', 'index');
+        Route::get('/product/{id}', 'show');
         Route::get('/show-product/{slug}', 'showProduct');
         Route::post('/add-product', 'addProduct');
         Route::put('/update-product', 'updateProduct');

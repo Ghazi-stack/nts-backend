@@ -18,7 +18,15 @@ class CustomerController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = Customer::where('store_id', current_store_id());
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $query = Customer::where('store_id', $storeId);
 
             // 🔍 Keyword search
             if ($request->filled('search')) {
@@ -32,59 +40,54 @@ class CustomerController extends Controller
                 });
             }
 
-            // Starts with first name
             if ($request->filled('starts_with')) {
                 $query->where('first_name', 'like', $request->starts_with . '%');
             }
 
-            // 📞 Phone filter
             if ($request->filled('phone')) {
                 $query->where('phone', 'like', "%{$request->phone}%");
             }
 
-            // 🌍 Country / State
             if ($request->filled('country')) {
                 $query->where('country', $request->country);
             }
+
             if ($request->filled('state')) {
                 $query->where('state', $request->state);
             }
 
-            // 🔢 ID range
             if ($request->filled('id_from')) {
                 $query->where('id', '>=', $request->id_from);
             }
+
             if ($request->filled('id_to')) {
                 $query->where('id', '<=', $request->id_to);
             }
 
-            // 💰 Store credit range
             if ($request->filled('credit_from')) {
                 $query->where('store_credit', '>=', $request->credit_from);
             }
+
             if ($request->filled('credit_to')) {
                 $query->where('store_credit', '<=', $request->credit_to);
             }
 
-            // 🏷️ Customer group
             if ($request->filled('customer_group')) {
                 $query->where('customer_group', $request->customer_group);
             }
 
-            // 📅 Date range
             if ($request->filled('created_from')) {
                 $query->whereDate('created_at', '>=', $request->created_from);
             }
+
             if ($request->filled('created_to')) {
                 $query->whereDate('created_at', '<=', $request->created_to);
             }
 
-            // Sort
             $sortField = $request->input('sortBy', 'id');
             $sortOrder = $request->input('sortOrder', 'asc');
             $query->orderBy($sortField, $sortOrder);
 
-            // Pagination
             $pageSize = $request->input('pageSize', 50);
             $customers = $query->paginate($pageSize);
 
@@ -107,7 +110,15 @@ class CustomerController extends Controller
     public function show($id)
     {
         try {
-            $customer = Customer::where('store_id', current_store_id())->findOrFail($id);
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $customer = Customer::where('store_id', $storeId)->findOrFail($id);
             return response()->json([
                 'status' => true,
                 'message' => 'Customer retrieved.',
@@ -121,6 +132,14 @@ class CustomerController extends Controller
     public function store(Request $request)
     {
         try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
             $validated = $request->validate([
                 'first_name'            => 'nullable|string|max:255',
                 'last_name'             => 'nullable|string|max:255',
@@ -138,7 +157,7 @@ class CustomerController extends Controller
                 'password'              => 'nullable|string|min:7'
             ]);
 
-            $validated['store_id'] = current_store_id();
+            $validated['store_id'] = $storeId;
             $validated['name'] = trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? ''));
 
             if (!empty($validated['password'])) {
@@ -162,7 +181,15 @@ class CustomerController extends Controller
     public function update(Request $request, $id)
     {
         try {
-            $customer = Customer::where('store_id', current_store_id())->findOrFail($id);
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $customer = Customer::where('store_id', $storeId)->findOrFail($id);
 
             $validated = $request->validate([
                 'first_name'            => 'sometimes|string|max:255',
@@ -206,8 +233,16 @@ class CustomerController extends Controller
     public function destroy(Request $request, $id = null)
     {
         try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
             if ($id) {
-                $customer = Customer::where('store_id', current_store_id())->findOrFail($id);
+                $customer = Customer::where('store_id', $storeId)->findOrFail($id);
                 $customer->delete();
                 return response()->json([
                     'status' => true,
@@ -226,7 +261,7 @@ class CustomerController extends Controller
 
             foreach ($request->ids as $cid) {
                 try {
-                    $customer = Customer::where('store_id', current_store_id())->findOrFail($cid);
+                    $customer = Customer::where('store_id', $storeId)->findOrFail($cid);
                     $customer->delete();
                     $deleted[] = $cid;
                 } catch (Exception $e) {
@@ -275,7 +310,16 @@ class CustomerController extends Controller
 
     public function exportCSV()
     {
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+    
         $fileName = 'customers_export_' . now()->format('Ymd_His') . '.xlsx';
-        return Excel::download(new CustomerExport, $fileName);
+        return Excel::download(new CustomerExport($storeId), $fileName);
     }
+
 }

@@ -84,6 +84,32 @@ class ProductController extends Controller
     }
 
 
+    public function show($id)
+    {
+        try {
+            $product = Product::with(['brand', 'categories', 'images'])
+                ->where('store_id', current_store_id())
+                ->findOrFail($id);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Product fetched successfully.',
+                'data' => new ProductResource($product)
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Product not found.'
+            ], 200);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function showProduct($slug)
     {
         try {
@@ -1015,13 +1041,18 @@ class ProductController extends Controller
     }
 
 
-    public function exportCSV(Request $request)
+    public function exportCSV()
     {
-            $fileName = 'products_export_' . now()->format('Ymd_His') . '.xlsx';
-            return Excel::download(new ProductExport, $fileName);
-    }
-      
-    
-    
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+
+        $fileName = 'products_export_' . now()->format('Ymd_His') . '.xlsx';
+        return Excel::download(new ProductExport($storeId), $fileName);
+    }   
 
 }

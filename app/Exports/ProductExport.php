@@ -9,9 +9,18 @@ use Maatwebsite\Excel\Concerns\WithMapping;
 
 class ProductExport implements FromCollection, WithHeadings, WithMapping
 {
+    protected $storeId;
+
+    public function __construct($storeId)
+    {
+        $this->storeId = $storeId;
+    }
+
     public function collection()
     {
-        return Product::with(['brand', 'categories', 'content', 'identifiers', 'seo', 'images'])->get();
+        return Product::with(['brand', 'categories', 'content', 'identifiers', 'seo', 'images'])
+            ->where('store_id', $this->storeId)
+            ->get();
     }
 
     public function map($product): array
@@ -24,7 +33,7 @@ class ProductExport implements FromCollection, WithHeadings, WithMapping
             $product->product_type,
             $product->sku,
             optional($product->brand)->name,
-            optional($product->category)->name,
+            optional($product->category)->name, // May still be null
             $product->price,
             $product->cost_price,
             $product->sale_price,
@@ -118,11 +127,11 @@ class ProductExport implements FromCollection, WithHeadings, WithMapping
 
     private function formatCustomFields($fields)
     {
-         if (!is_array($fields)) return '';
+        if (!is_array($fields)) return '';
 
         return collect($fields)->map(function ($val, $key) {
             if (is_array($val)) {
-                $val = json_encode($val); // Safely convert array to JSON string
+                $val = json_encode($val); // convert nested arrays
             }
             return "{$key}={$val}";
         })->implode('; ');

@@ -15,12 +15,20 @@ class BannerController extends Controller
     public function index(Request $request)
     {
         try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
             $perPage = $request->query('perPage', 20);
-            $banners = Banner::with('store') // 🟢 Eager load store
-                ->where('store_id', current_store_id())
+            $banners = Banner::with('store')
+                ->where('store_id', $storeId)
                 ->latest()
                 ->paginate($perPage);
-                
+
             return response()->json([
                 'status' => true,
                 'message' => 'Banners retrieved successfully',
@@ -45,17 +53,20 @@ class BannerController extends Controller
     public function storeBanner(Request $request)
     {
         try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
             $request->validate([
                 'title'  => 'nullable|string',
                 'image'  => 'required|image|mimes:jpg,jpeg,png,webp|max:2048',
                 'link'   => 'nullable|string',
                 'status' => 'nullable|boolean',
             ]);
-
-            $storeId = current_store_id();
-            if (!$storeId) {
-                return response()->json(['error' => 'Store not selected.'], 400);
-            }
 
             $destinationPath = public_path('banner_images');
             if (!file_exists($destinationPath)) {
@@ -90,7 +101,16 @@ class BannerController extends Controller
     public function show($id)
     {
         try {
-            $banner = Banner::where('store_id', current_store_id())->findOrFail($id);
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $banner = Banner::where('store_id', $storeId)->findOrFail($id);
+
             return response()->json([
                 'status' => true,
                 'message' => 'Banner retrieved successfully',
@@ -113,7 +133,15 @@ class BannerController extends Controller
     public function updateBanner(Request $request, $id)
     {
         try {
-            $banner = Banner::where('store_id', current_store_id())->findOrFail($id);
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $banner = Banner::where('store_id', $storeId)->findOrFail($id);
 
             $request->validate([
                 'title'  => 'nullable|string',
@@ -169,7 +197,15 @@ class BannerController extends Controller
     public function destroyBanner($id)
     {
         try {
-            $banner = Banner::where('store_id', current_store_id())->findOrFail($id);
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $banner = Banner::where('store_id', $storeId)->findOrFail($id);
 
             if ($banner->image && file_exists(public_path($banner->image))) {
                 unlink(public_path($banner->image));

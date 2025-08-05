@@ -8,9 +8,16 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 
 class CustomerExport implements FromCollection, WithHeadings
 {
+    protected $storeId;
+
+    public function __construct($storeId)
+    {
+        $this->storeId = $storeId;
+    }
+
     public function collection()
     {
-        return Customer::where('store_id', current_store_id())
+        return Customer::where('store_id', $this->storeId)
             ->select([
                 'id',
                 'first_name',
