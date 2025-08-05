@@ -183,7 +183,7 @@ class BrandController extends Controller
         }
     }
 
-      public function destroyBrands($id)
+    public function destroyBrands($ids)
     {
         try {
             $storeId = current_store_id();
@@ -194,33 +194,50 @@ class BrandController extends Controller
                 ], 400);
             }
 
-            $brand = Brand::where('store_id', $storeId)->findOrFail($id);
+            // Convert comma-separated string to array
+            $idArray = explode(',', $ids);
 
-            if ($brand->logo && file_exists(public_path($brand->logo))) {
-                unlink(public_path($brand->logo));
+            if (empty($idArray)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'No brand IDs provided.'
+                ], 422);
             }
 
-            $brand->delete();
+            // Fetch brands for deletion
+            $brands = Brand::where('store_id', $storeId)
+                           ->whereIn('id', $idArray)
+                           ->get();
+
+            if ($brands->isEmpty()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'No matching brands found.'
+                ], 404);
+            }
+
+            foreach ($brands as $brand) {
+                if ($brand->logo && file_exists(public_path($brand->logo))) {
+                    unlink(public_path($brand->logo));
+                }
+                $brand->delete();
+            }
 
             return response()->json([
                 'status' => true,
-                'message' => 'Brand deleted successfully',
-                'data' => new BrandResource($brand)
+                'message' => 'Brands deleted successfully.',
+                'data' => BrandResource::collection($brands)
             ]);
-        } catch (ModelNotFoundException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Brand not found',
-            ], 404);
         } catch (Exception $e) {
-            Log::error('Error deleting brand: ' . $e->getMessage());
+            Log::error('Error deleting brands: ' . $e->getMessage());
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to delete brand',
+                'message' => 'Failed to delete brands.',
                 'error' => $e->getMessage()
             ], 500);
         }
     }
+
 
     private function deleteOldLogo(?string $path): void
     {
