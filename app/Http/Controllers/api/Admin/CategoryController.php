@@ -160,7 +160,7 @@ class CategoryController extends Controller
         ], 201);
     }
 
-    public function updateCategory(Request $request, $id)
+    public function updateSingleCategory(Request $request, $id)
     {
         $storeId = current_store_id();
 
@@ -172,15 +172,18 @@ class CategoryController extends Controller
             $category = Category::where('store_id', $storeId)->findOrFail($id);
 
             $request->validate([
-                'name'        => 'required|string|max:255|unique:categories,name,' . $id,
+                'name' => 'required|string|max:255|unique:categories,name,' . $id,
                 'description' => 'nullable|string',
-                'parentId'    => 'nullable|exists:categories,id',
-                'isVisible'   => 'nullable|boolean',
+                'parentId' => 'nullable|exists:categories,id',
+                'isVisible' => 'nullable|boolean',
             ]);
 
             $slug = Str::slug($request->name);
 
-            if (Category::where('slug', $slug)->where('id', '!=', $id)->where('store_id', $storeId)->exists()) {
+            if (Category::where('slug', $slug)
+                ->where('id', '!=', $id)
+                ->where('store_id', $storeId)
+                ->exists()) {
                 return response()->json(['status' => false, 'message' => 'Slug already exists.'], 422);
             }
 
@@ -197,10 +200,68 @@ class CategoryController extends Controller
                 'message' => 'Category updated successfully',
                 'category' => new CategoryResource($category->load(['childrenRecursive', 'products'])),
             ]);
+
         } catch (ModelNotFoundException $e) {
             return response()->json(['status' => false, 'message' => 'Category not found'], 404);
         }
     }
+
+    public function updateBulkCategory(Request $request)
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json(['status' => false, 'message' => 'Missing store-id in headers.'], 400);
+        }
+
+        $request->validate([
+            'categories' => 'required|array|min:1',
+            'categories.*.id' => 'required|exists:categories,id',
+            'categories.*.name' => 'required|string|max:255',
+            'categories.*.description' => 'nullable|string',
+            'categories.*.parentId' => 'nullable|exists:categories,id',
+            'categories.*.isVisible' => 'nullable|boolean',
+        ]);
+
+        $updated = [];
+
+        foreach ($request->categories as $data) {
+            try {
+                $category = Category::where('store_id', $storeId)->findOrFail($data['id']);
+
+                $slug = Str::slug($data['name']);
+
+                if (Category::where('slug', $slug)
+                    ->where('id', '!=', $data['id'])
+                    ->where('store_id', $storeId)
+                    ->exists()) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => "Slug already exists for: {$data['name']}"
+                    ], 422);
+                }
+
+                $category->update([
+                    'name' => $data['name'],
+                    'slug' => $slug,
+                    'description' => $data['description'] ?? null,
+                    'parent_id' => $data['parentId'] ?? null,
+                    'is_visible' => isset($data['isVisible']) ? (bool)$data['isVisible'] : $category->is_visible,
+                ]);
+
+                $updated[] = new CategoryResource($category->load(['childrenRecursive', 'products']));
+            } catch (ModelNotFoundException $e) {
+                return response()->json(['status' => false, 'message' => "Category not found: ID {$data['id']}"], 404);
+            }
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Bulk categories updated successfully',
+            'categories' => $updated,
+        ]);
+    }
+
 
     public function destroyCategory(Request $request)
     {

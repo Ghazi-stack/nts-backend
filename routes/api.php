@@ -74,7 +74,8 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/category/{id}', 'show');
         Route::get('/slug/{slug}', 'showBySlug');
         Route::post('/add-categories', 'storeCategory');
-        Route::put('/update-categories/{id}', 'updateCategory');
+        Route::put('/update-category/{id}', 'updateSingleCategory');
+        Route::put('/update-bulk-category', 'updateBulkCategory');
         Route::delete('/delete-categories', 'destroyCategory'); // ✅ fixed: accepts body { ids: [] }
         Route::delete('/delete-subcategories/{id}', 'destroyOnlySubcategories');
     });
