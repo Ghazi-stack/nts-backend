@@ -3,13 +3,7 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
-use App\Http\Resources\BrandResource;
-use App\Http\Resources\CategoryResource;
-use App\Http\Resources\ProductImageResource;
-use App\Http\Resources\ProductContentResource;
-use App\Http\Resources\ProductAttributeResource;
 use Illuminate\Http\Resources\Json\JsonResource;
-use App\Http\Resources\ProductIdentifierResource;
 
 class ProductResource extends JsonResource
 {
@@ -34,13 +28,14 @@ class ProductResource extends JsonResource
         $profitMargin = ($cost > 0 && $profit > 0)
             ? round(($profit / $cost) * 100, 2)
             : 0;
-       
+
         return [
-           'id' => $this->id,
+            'id' => $this->id,
             'name' => $this->name,
             'slug' => $this->slug,
             'sku' => $this->sku,
             'price' => $this->price,
+            'msrp' => $this->msrp,
             'costPrice' => $this->cost_price,
             'salePrice' => $this->sale_price,
             'fixedShippingCost' => $this->fixed_shipping_cost,
@@ -51,17 +46,24 @@ class ProductResource extends JsonResource
             'stopProcessingRules' => $this->stop_processing_rules,
             'taxClass' => $this->tax_class,
             'taxProviderCode' => $this->tax_provider_code,
-            
+
+            // IDs (matching payload)
+            'brandId' => (int) $this->brand_id,
+            'categoryIds' => $this->whenLoaded('categories', fn () => $this->categories->pluck('id')),
+
+            // Relationship data (optional for frontend)
             'brand' => new BrandResource($this->whenLoaded('brand')),
-            'categories' => CategoryResource::collection($this->whenLoaded('categories')), // ✅ fixed
-            
-            'weight' => $this->dimensions['weight'] ?? null,
+            'categories' => CategoryResource::collection($this->whenLoaded('categories')),
+
+            // Dimensions
             'dimensions' => [
+                'weight' => $this->dimensions['weight'] ?? null,
                 'width' => $this->dimensions['width'] ?? null,
                 'height' => $this->dimensions['height'] ?? null,
                 'depth' => $this->dimensions['depth'] ?? null,
             ],
-        
+
+            // Inventory & visibility
             'trackInventory' => $this->track_inventory,
             'currentStock' => $this->current_stock,
             'lowStock' => $this->low_stock,
@@ -71,42 +73,52 @@ class ProductResource extends JsonResource
             'sortOrder' => $this->sort_order,
             'searchKeywords' => $this->search_keywords,
             'customFields' => $this->custom_fields,
-            'store_id' => $this->store_id,
-            'images' => ProductImageResource::collection($this->whenLoaded('images')),
+
+            // Meta
+            'storeId' => $this->store_id,
+            'createdAt' => $this->created_at,
+            'updatedAt' => $this->updated_at,
+
+            // Content & Related
+            'image' => ProductImageResource::collection($this->whenLoaded('images')),
             'content' => new ProductContentResource($this->whenLoaded('content')),
-            'identifiers' => new ProductIdentifierResource($this->whenLoaded('identifiers')),
+            'mpn' => optional($this->identifiers)->mpn,
+            'upc' => optional($this->identifiers)->upc,
+            'gtin' => optional($this->identifiers)->gtin,
+            'bpn' => optional($this->identifiers)->bpn,
             'seo' => new ProductSeoResource($this->whenLoaded('seo')),
-        
-            'categoryHierarchy' => $this->category ? $this->buildCategoryHierarchy($this->category) : null,
-             // New calculated fields
+
+            // Hierarchy
+            'categoryHierarchy' => $this->whenLoaded('categories', function () {
+                $primaryCategory = $this->categories->first();
+                return $primaryCategory ? $this->buildCategoryHierarchy($primaryCategory) : null;
+            }),
+
+            // Calculated values
             'savingAmount' => $savings,
             'savingPercent' => $savingPercent,
             'profit' => $profit,
             'profitMargin' => $profitMargin,
+
+            // Purchase limits
             'purchasabilityStatus' => $this->purchasability_status,
             'minPurchaseQuantity' => $this->min_purchase_quantity,
             'maxPurchaseQuantity' => $this->max_purchase_quantity,
             'relatedProductsEnabled' => $this->related_products_enabled,
-        
-            'createdAt' => $this->created_at,
-            'updatedAt' => $this->updated_at,
-        ];         
-        
-            
+        ];
     }
 
-
-      private function buildCategoryHierarchy($category)
+    private function buildCategoryHierarchy($category)
     {
         $data = [];
         while ($category) {
             $data[] = [
                 'id' => $category->id,
-                'name' => $category->name
+                'name' => $category->name,
             ];
             $category = $category->parent;
         }
-        return array_reverse($data); // top to bottom
-    }
 
+        return array_reverse($data);
+    }
 }
