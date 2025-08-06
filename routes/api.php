@@ -96,6 +96,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/show-product/{slug}', 'showProduct');
         Route::post('/add-product', 'addProduct');
         Route::put('/update-product', 'updateProduct');
+        Route::post('/update-single-product/{id}','updateSingleProduct');
         Route::delete('/delete-product/{id?}', 'destroyProduct');
         Route::get('/search-product', 'searchProduct');
         Route::post('/advanced-search', 'searchAdvanced');
