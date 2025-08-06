@@ -222,7 +222,7 @@ class ProductController extends Controller
                 'purchasability_status' => $validated['purchasabilityStatus'] ?? null,
                 'min_purchase_quantity' => $validated['minPurchaseQuantity'] ?? null,
                 'max_purchase_quantity' => $validated['maxPurchaseQuantity'] ?? null,
-                'related_products_enabled' => $validated['relatedProducts'] ?? null,
+                'related_products_enabled' => $validated['relatedProducts'] ?? false,
                 'fixed_shipping_cost' => $validated['fixedShippingCost'] ?? 0,
                 'product_type' => $validated['productType'] ?? '',
                 'option_set' => $validated['optionSet'] ?? '',
