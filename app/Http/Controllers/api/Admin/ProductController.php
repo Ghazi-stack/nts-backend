@@ -372,8 +372,8 @@ class ProductController extends Controller
             $validated = $request->validate([
                 'name' => 'nullable|string|max:255',
                 'sku' => 'nullable|string|unique:products,sku,' . $product->id,
-                'brandId' => 'nullable|exists:brands,id',
-                'categoryIds' => 'nullable|array|min:1',
+                'brandId' => 'required|exists:brands,id',
+                'categoryIds' => 'required|array|min:1',
                 'categoryIds.*' => 'exists:categories,id',
                 'condition' => 'nullable|string',
                 'price' => 'nullable',
@@ -421,51 +421,128 @@ class ProductController extends Controller
                 'taxProviderCode' => 'nullable|string',
             ]);
 
-            // Update product fields
-            $product->fill([
+            $product->update([
                 'name' => $validated['name'] ?? $product->name,
-                'slug' => isset($validated['name']) ? Str::slug($validated['name']) . '-' . uniqid() : $product->slug,
+                'slug' => Str::slug($validated['name'] ?? $product->name) . '-' . uniqid(),
                 'sku' => $validated['sku'] ?? $product->sku,
-                'price' => $validated['price'] ?? $product->price,
-                'msrp' => $validated['msrp'] ?? $product->msrp,
-                'cost_price' => $validated['costPrice'] ?? $product->cost_price,
-                'sale_price' => $validated['salePrice'] ?? $product->sale_price,
-                'brand_id' => $validated['brandId'] ?? $product->brand_id,
-                'condition' => $validated['condition'] ?? $product->condition,
-                'dimensions' => $validated['dimensions'] ?? $product->dimensions,
-                'track_inventory' => $validated['trackInventory'] ?? $product->track_inventory,
-                'current_stock' => $validated['currentStock'] ?? $product->current_stock,
-                'low_stock' => $validated['lowStock'] ?? $product->low_stock,
-                'is_featured' => $validated['isFeatured'] ?? $product->is_featured,
-                'show_condition' => $validated['showCondition'] ?? $product->show_condition,
-                'sort_order' => $validated['sortOrder'] ?? $product->sort_order,
-                'search_keywords' => $validated['searchKeywords'] ?? $product->search_keywords,
-                'visible_on_storefront' => $validated['isVisible'] ?? $product->visible_on_storefront,
-                'custom_fields' => $validated['customFields'] ?? $product->custom_fields,
-                'purchasability_status' => $validated['purchasabilityStatus'] ?? $product->purchasability_status,
-                'min_purchase_quantity' => $validated['minPurchaseQuantity'] ?? $product->min_purchase_quantity,
-                'max_purchase_quantity' => $validated['maxPurchaseQuantity'] ?? $product->max_purchase_quantity,
-                'related_products_enabled' => $validated['relatedProducts'] ?? $product->related_products_enabled,
-                'fixed_shipping_cost' => $validated['fixedShippingCost'] ?? $product->fixed_shipping_cost,
-                'product_type' => $validated['productType'] ?? $product->product_type,
-                'option_set' => $validated['optionSet'] ?? $product->option_set,
-                'option_set_align' => $validated['optionSetAlign'] ?? $product->option_set_align,
-                'allow_purchase' => $validated['allowPurchase'] ?? $product->allow_purchase,
-                'stop_processing_rules' => $validated['stopProcessingRules'] ?? $product->stop_processing_rules,
-                'tax_class' => $validated['taxClass'] ?? $product->tax_class,
-                'tax_provider_code' => $validated['taxProviderCode'] ?? $product->tax_provider_code,
-            ])->save();
+                'price' => $validated['price'] ?? $product->price ?? 0,
+                'msrp' => $validated['msrp'] ?? null,
+                'cost_price' => $validated['costPrice'] ?? null,
+                'sale_price' => $validated['salePrice'] ?? null,
+                'brand_id' => $validated['brandId'],
+                'category_id' => $validated['categoryIds'][0] ?? null, // primary category
+                'condition' => $validated['condition'] ?? null,
+                'dimensions' => $validated['dimensions'] ?? [],
+                'track_inventory' => $validated['trackInventory'] ?? false,
+                'current_stock' => $validated['currentStock'] ?? 0,
+                'low_stock' => $validated['lowStock'] ?? 0,
+                'is_featured' => $validated['isFeatured'] ?? false,
+                'show_condition' => $validated['showCondition'] ?? false,
+                'sort_order' => $validated['sortOrder'] ?? 0,
+                'search_keywords' => $validated['searchKeywords'] ?? null,
+                'visible_on_storefront' => $validated['isVisible'] ?? true,
+                'custom_fields' => $validated['customFields'] ?? [],
+                'purchasability_status' => $validated['purchasabilityStatus'] ?? null,
+                'min_purchase_quantity' => $validated['minPurchaseQuantity'] ?? null,
+                'max_purchase_quantity' => $validated['maxPurchaseQuantity'] ?? null,
+                'related_products_enabled' => $validated['relatedProducts'] ?? false,
+                'fixed_shipping_cost' => $validated['fixedShippingCost'] ?? 0,
+                'product_type' => $validated['productType'] ?? '',
+                'option_set' => $validated['optionSet'] ?? '',
+                'option_set_align' => $validated['optionSetAlign'] ?? '',
+                'allow_purchase' => $validated['allowPurchase'] ?? true,
+                'stop_processing_rules' => $validated['stopProcessingRules'] ?? false,
+                'tax_class' => $validated['taxClass'] ?? '',
+                'tax_provider_code' => $validated['taxProviderCode'] ?? '',
+            ]);
 
-            // Update Categories if sent
-            if (isset($validated['categoryIds'])) {
-                $product->categories()->sync($validated['categoryIds']);
+            // Sync many-to-many categories
+            $product->categories()->sync($validated['categoryIds']);
+
+            // Remove old images from storage and DB
+            foreach ($product->images as $oldImage) {
+                $imagePath = public_path($oldImage->path);
+                if (file_exists($imagePath)) {
+                    @unlink($imagePath);
+                }
+                $oldImage->delete();
             }
 
-            // Update Content
-            $product->content()->updateOrCreate(
-                ['product_id' => $product->id],
-                [
+            // Process new images
+            $images = [];
+            if (!empty($validated['image'])) {
+                foreach ($validated['image'] as $img) {
+                    if (is_array($img)) {
+                        $imageEntry = [
+                            'type' => null,
+                            'value' => null,
+                            'is_primary' => $img['isThumbnail'] ?? false,
+                            'alt_text' => $img['alt_text'] ?? null,
+                            'description' => $img['description'] ?? null,
+                        ];
+
+                        if (!empty($img['url']) && is_string($img['url'])) {
+                            $imageEntry['type'] = 'url';
+                            $imageEntry['value'] = $img['url'];
+                            $images[] = $imageEntry;
+                        }
+
+                        if (
+                            isset($img['file']) &&
+                            $img['file'] instanceof \Illuminate\Http\UploadedFile
+                        ) {
+                            $imageEntry['type'] = 'file';
+                            $imageEntry['value'] = $img['file'];
+                            $images[] = $imageEntry;
+                        }
+                    }
+                }
+            }
+
+            foreach ($images as $index => $img) {
+                $path = null;
+
+                if ($img['type'] === 'url') {
+                    if (!filter_var($img['value'], FILTER_VALIDATE_URL)) {
+                        continue;
+                    }
+
+                    try {
+                        $response = Http::timeout(5)->get($img['value']);
+                        if ($response->ok()) {
+                            $imageContent = $response->body();
+                            $extension = pathinfo(parse_url($img['value'], PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+                            $imageName = time() . '_' . $index . '.' . $extension;
+                            $filePath = public_path('product_images/' . $imageName);
+                            file_put_contents($filePath, $imageContent);
+                            $path = 'product_images/' . $imageName;
+                        }
+                    } catch (\Exception $e) {
+                        continue;
+                    }
+                } elseif ($img['type'] === 'file') {
+                    $file = $img['value'];
+                    $imageName = time() . '_' . $index . '.' . $file->getClientOriginalExtension();
+                    $file->move(public_path('product_images'), $imageName);
+                    $path = "product_images/{$imageName}";
+                }
+
+                if (!$path) continue;
+
+                ProductImage::create([
                     'store_id' => $storeId,
+                    'product_id' => $product->id,
+                    'path' => $path,
+                    'is_primary' => $img['is_primary'] ?? ($index === 0),
+                    'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
+                    'description' => $img['description'] ?? null,
+                ]);
+            }
+
+            // Update content
+            $product->content()->updateOrCreate(
+                ['store_id' => $storeId, 'product_id' => $product->id],
+                [
                     'description' => $validated['description'] ?? null,
                     'warranty' => $validated['warranty'] ?? null,
                     'availability_text' => $validated['availabilityText'] ?? null,
@@ -473,11 +550,10 @@ class ProductController extends Controller
                 ]
             );
 
-            // Update Identifiers
+            // Update identifiers
             $product->identifiers()->updateOrCreate(
-                ['product_id' => $product->id],
+                ['store_id' => $storeId, 'product_id' => $product->id],
                 [
-                    'store_id' => $storeId,
                     'mpn' => $validated['mpn'] ?? null,
                     'upc' => $validated['upc'] ?? null,
                     'gtin' => $validated['gtin'] ?? null,
@@ -487,70 +563,33 @@ class ProductController extends Controller
 
             // Update SEO
             $product->seo()->updateOrCreate(
-                ['product_id' => $product->id],
+                ['store_id' => $storeId, 'product_id' => $product->id],
                 [
-                    'store_id' => $storeId,
                     'page_title' => $validated['pageTitle'] ?? null,
                     'product_url' => $validated['productUrl'] ?? null,
                     'meta_description' => $validated['metaDescription'] ?? null,
                 ]
             );
 
-             // ✅ DELETE OLD IMAGES FIRST
-        foreach ($product->images as $oldImage) {
-            if ($oldImage->path && file_exists(public_path($oldImage->path))) {
-                @unlink(public_path($oldImage->path));
-            }
-        }
-            $product->images()->delete();
-
-                // ✅ ADD NEW IMAGES
-            if (!empty($validated['image'])) {
-                foreach ($validated['image'] as $index => $img) {
-                    $imageEntry = [
-                        'store_id' => $storeId,
-                        'product_id' => $product->id,
-                        'is_primary' => $img['isThumbnail'] ?? ($index === 0),
-                        'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
-                        'description' => $img['description'] ?? null,
-                    ];
-
-                        if (isset($img['file']) && $img['file'] instanceof \Illuminate\Http\UploadedFile) {
-                        $imageName = time() . '_' . $index . '.' . $img['file']->getClientOriginalExtension();
-                        $img['file']->move(public_path('product_images'), $imageName);
-                        $imageEntry['path'] = "product_images/{$imageName}";
-                    } elseif (!empty($img['url']) && filter_var($img['url'], FILTER_VALIDATE_URL)) {
-                        try {
-                            $response = Http::timeout(5)->get($img['url']);
-                            if ($response->ok()) {
-                                $imageContent = $response->body();
-                                $extension = pathinfo(parse_url($img['url'], PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
-                                $imageName = time() . '_' . $index . '.' . $extension;
-                                file_put_contents(public_path('product_images/' . $imageName), $imageContent);
-                                $imageEntry['path'] = "product_images/{$imageName}";
-                            }
-                        } catch (\Exception $e) {
-                            continue;
-                        }
-                    }
-
-                        if (!empty($imageEntry['path'])) {
-                        ProductImage::create($imageEntry);
-                    }
-                }
-            }
-
             return response()->json([
                 'status' => true,
                 'message' => 'Product updated successfully.',
-                'data' => new ProductResource($product->load(['brand', 'categories', 'images', 'content', 'identifiers', 'seo']))
-            ]);
+                'data' => new ProductResource($product->load([
+                    'brand',
+                    'categories',
+                    'images',
+                    'content',
+                    'identifiers',
+                    'seo'
+                ]))
+            ], 200);
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
 
 
     public function updateProduct(Request $request)
