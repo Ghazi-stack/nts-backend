@@ -496,11 +496,16 @@ class ProductController extends Controller
                 ]
             );
 
-            // Handle Images (Optional: you can delete existing ones if needed)
-            if (!empty($validated['image'])) {
-                // You can decide to delete old images or keep them.
-                // $product->images()->delete();
+             // ✅ DELETE OLD IMAGES FIRST
+        foreach ($product->images as $oldImage) {
+            if ($oldImage->path && file_exists(public_path($oldImage->path))) {
+                @unlink(public_path($oldImage->path));
+            }
+        }
+            $product->images()->delete();
 
+                // ✅ ADD NEW IMAGES
+            if (!empty($validated['image'])) {
                 foreach ($validated['image'] as $index => $img) {
                     $imageEntry = [
                         'store_id' => $storeId,
@@ -510,7 +515,7 @@ class ProductController extends Controller
                         'description' => $img['description'] ?? null,
                     ];
 
-                    if (isset($img['file']) && $img['file'] instanceof \Illuminate\Http\UploadedFile) {
+                        if (isset($img['file']) && $img['file'] instanceof \Illuminate\Http\UploadedFile) {
                         $imageName = time() . '_' . $index . '.' . $img['file']->getClientOriginalExtension();
                         $img['file']->move(public_path('product_images'), $imageName);
                         $imageEntry['path'] = "product_images/{$imageName}";
@@ -521,16 +526,15 @@ class ProductController extends Controller
                                 $imageContent = $response->body();
                                 $extension = pathinfo(parse_url($img['url'], PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
                                 $imageName = time() . '_' . $index . '.' . $extension;
-                                $filePath = public_path('product_images/' . $imageName);
-                                file_put_contents($filePath, $imageContent);
-                                $imageEntry['path'] = 'product_images/' . $imageName;
+                                file_put_contents(public_path('product_images/' . $imageName), $imageContent);
+                                $imageEntry['path'] = "product_images/{$imageName}";
                             }
                         } catch (\Exception $e) {
                             continue;
                         }
                     }
 
-                    if (!empty($imageEntry['path'])) {
+                        if (!empty($imageEntry['path'])) {
                         ProductImage::create($imageEntry);
                     }
                 }
