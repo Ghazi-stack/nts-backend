@@ -37,8 +37,8 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
 
 
 Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
-
-
+    // Main Search
+    Route::get('/global-search', [\App\Http\Controllers\api\Admin\GlobalSearchController::class, 'search']);
     // 🏢 Store Management
 
     Route::prefix('stores')->controller(StoreController::class)->group(function () {
@@ -95,7 +95,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/product/{id}', 'show');
         Route::get('/show-product/{slug}', 'showProduct');
         Route::post('/add-product', 'addProduct');
-        Route::put('/update-product', 'updateProduct');
+        Route::post('/update-product', 'updateProduct');
         Route::delete('/delete-product/{id?}', 'destroyProduct');
         Route::get('/search-product', 'searchProduct');
         Route::post('/advanced-search', 'searchAdvanced');
