@@ -369,21 +369,25 @@ class ProductController extends Controller
 
             $data = $request->validate([
                 'products' => 'required|array|min:1',
-                'products.*.id' => 'required|array|min:1',
-                'products.*.id.*' => 'required|integer|exists:products,id',
+                'products.*.id' => 'required', // Accept both integer and array
                 'products.*.fields' => 'required|array',
             ]);
+
 
             $updatedProducts = [];
 
             // foreach ($data['products'] as $item) {
             //     $product = Product::where('store_id', $storeId)->findOrFail($item['id']);
             //     $fields = $item['fields'];
-                foreach ($data['products'] as $item) {
-            $productIds = $item['id'];
-            $fields = $item['fields'];
+            foreach ($data['products'] as $item) {
+                $fields = $item['fields'];
+                $productIds = is_array($item['id']) ? $item['id'] : [$item['id']];
+                
+                foreach ($productIds as $productId) {
+                    if (!is_numeric($productId)) {
+                        continue;
+                    }
 
-            foreach ($productIds as $productId) {
                 $product = Product::where('store_id', $storeId)->findOrFail($productId);
 
                 // ✅ Main product fields
