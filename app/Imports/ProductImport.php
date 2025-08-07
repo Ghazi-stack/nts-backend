@@ -32,16 +32,21 @@ class ProductImport implements ToArray
             try {
                 $data = array_combine($header, $row);
 
+                // $brand = Brand::firstOrCreate(
+                //     ['name' => $data['Brand Name'] ?? 'Unknown Brand'],
+                //     ['slug' => Str::slug($data['Brand Name'] ?? 'Unknown Brand')]
+                // );
+                $brandName = $data['Brand Name'] ?? $data['Brand'] ?? 'Unknown Brand';
                 $brand = Brand::firstOrCreate(
-                    ['name' => $data['Brand Name'] ?? 'Unknown Brand'],
-                    ['slug' => Str::slug($data['Brand Name'] ?? 'Unknown Brand')]
+                    ['name' => $brandName, 'store_id' => $this->storeId],
+                    ['slug' => Str::slug($brandName)]
                 );
 
+                $categoryName = $row['Category Name'] ?? $row['Category'] ?? $row['GPS Category'] ?? 'Uncategorized';
                 $category = Category::firstOrCreate(
-                    ['name' => $data['Category'] ?? 'Uncategorized'],
-                    ['slug' => Str::slug($data['Category'] ?? 'Uncategorized')]
+                    ['name' => $categoryName, 'store_id' => $this->storeId],
+                    ['slug' => Str::slug($categoryName)]
                 );
-
                 $product = Product::create([
                     'store_id' => $this->storeId,
                     'item_type' => $data['Item Type'] ?? null,

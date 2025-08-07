@@ -469,10 +469,10 @@ class ProductController extends Controller
                     $oldImage->delete();
                 }
             }
-            
+
             // Process new images
             $images = [];
-            
+
             if (!empty($validated['image'])) {
                 foreach ($validated['image'] as $img) {
                     // Handle string input as URL
@@ -508,7 +508,7 @@ class ProductController extends Controller
                     }
                 }
             }
-            
+
             foreach ($images as $index => $img) {
                 $path = null;
             
@@ -1220,14 +1220,17 @@ class ProductController extends Controller
                 try {
                     $row = array_map(fn($val) => mb_convert_encoding($val, 'UTF-8', 'auto'), $row);
 
-                    $brand = Brand::firstOrCreate(
-                        ['name' => $row['Brand Name']],
-                        ['slug' => Str::slug($row['Brand Name'])]
-                    );
+                    $brandName = $row['Brand Name'] ?? $row['Brand'] ?? 'Unknown Brand';
+                    $brand = Brand::create([
+                        'name' => $brandName,
+                        'slug' => Str::slug($brandName),
+                        'store_id' => $storeId
+                    ]);
 
-                    $category = Category::firstOrCreate(
-                        ['name' => $row['Category Name'] ?? 'Uncategorized'],
-                        ['slug' => Str::slug($row['Category Name'] ?? 'Uncategorized')]
+                   $categoryName = $row['Category Name'] ?? $row['Category'] ?? $row['GPS Category'] ?? 'Uncategorized';
+                    $category = Category::Create(
+                        ['name' => $categoryName, 'store_id' => $storeId],
+                        ['slug' => Str::slug($categoryName)]
                     );
 
                     $product = Product::create([
