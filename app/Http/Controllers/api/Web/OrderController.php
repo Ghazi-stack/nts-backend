@@ -2,15 +2,17 @@
 
 namespace App\Http\Controllers\api\Web;
 
-use App\Http\Controllers\Controller;
-use App\Http\Resources\OrderResource;
-use App\Models\Order;
+use Exception;
 use App\Models\Cart;
+use App\Models\Order;
+use Illuminate\Support\Str;
 use Illuminate\Http\Request;
+use App\Exports\OrdersExport;
+use App\Http\Controllers\Controller;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Http\Resources\OrderResource;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Exception;
-use Illuminate\Support\Str;
 
 class OrderController extends Controller
 {
@@ -186,6 +188,12 @@ class OrderController extends Controller
         } catch (ModelNotFoundException $e) {
             return response()->json(['status' => false, 'message' => 'Order not found'], 404);
         }
+    }
+
+
+    public function exportToExcel()
+    {
+        return Excel::download(new OrdersExport, 'orders.xlsx');
     }
 
 

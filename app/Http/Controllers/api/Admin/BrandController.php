@@ -25,7 +25,10 @@ class BrandController extends Controller
 
             $perPage = $request->query('perPage', 20);
 
-            $brands = Brand::where('store_id', $storeId)->paginate($perPage);
+            // $brands = Brand::where('store_id', $storeId)->paginate($perPage);
+            $brands = Brand::withCount('products')
+                ->where('store_id', $storeId)
+                ->paginate($perPage);
 
             return response()->json([
                 'status' => true,

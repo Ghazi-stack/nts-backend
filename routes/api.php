@@ -56,6 +56,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/list-orders', 'index'); // ✅ Get orders with filters, pagination
         Route::get('/show-order/{id}', 'show'); // ✅ View order details
         Route::patch('/update-status/{id}', 'updateOrderStatus'); // ✅ Update order status
+        Route::get('/export-orders', 'exportToExcel'); 
     });
     // Customers
 
