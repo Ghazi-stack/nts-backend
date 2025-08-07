@@ -460,12 +460,15 @@ class ProductController extends Controller
             $product->categories()->sync($validated['categoryIds']);
 
             // Remove old images from storage and DB
-            foreach ($product->images as $oldImage) {
-                $imagePath = public_path($oldImage->path);
-                if (file_exists($imagePath)) {
-                    @unlink($imagePath);
+            if (!empty($validated['image'])) {
+            // Remove old images from storage and DB
+                foreach ($product->images as $oldImage) {
+                    $imagePath = public_path($oldImage->path);
+                    if (file_exists($imagePath)) {
+                        @unlink($imagePath);
+                    }
+                    $oldImage->delete();
                 }
-                $oldImage->delete();
             }
 
             // Process new images
