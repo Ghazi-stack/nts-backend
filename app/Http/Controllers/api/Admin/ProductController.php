@@ -459,62 +459,88 @@ class ProductController extends Controller
             // Sync many-to-many categories
             $product->categories()->sync($validated['categoryIds']);
 
-            // Remove old images from storage and DB
-            if (!empty($validated['image'])) {
-            // Remove old images from storage and DB
-                foreach ($product->images as $oldImage) {
-                    $imagePath = public_path($oldImage->path);
-                    if (file_exists($imagePath)) {
-                        @unlink($imagePath);
-                    }
-                    $oldImage->delete();
+            // Remove old images
+        if (!empty($validated['image'])) {
+            foreach ($product->images as $oldImage) {
+                $imagePath = public_path($oldImage->path);
+                if (file_exists($imagePath)) {
+                    @unlink($imagePath);
                 }
+                $oldImage->delete();
             }
+        }
 
-            // Process new images
-            $images = [];
-            if (!empty($validated['image'])) {
-                foreach ($validated['image'] as $img) {
-                    if (is_array($img)) {
-                        $imageEntry = [
-                            'type' => null,
-                            'value' => null,
-                            'is_primary' => $img['isThumbnail'] ?? false,
-                            'alt_text' => $img['alt_text'] ?? null,
-                            'description' => $img['description'] ?? null,
-                        ];
+        // Process new images
+        $images = [];
+        if (!empty($validated['image'])) {
+            foreach ($validated['image'] as $img) {
+                if (is_array($img)) {
+                    $imageEntry = [
+                        'type' => null,
+                        'value' => null,
+                        'is_primary' => $img['isThumbnail'] ?? false,
+                        'alt_text' => $img['alt_text'] ?? null,
+                        'description' => $img['description'] ?? null,
+                    ];
 
-                        if (!empty($img['url']) && is_string($img['url'])) {
-                            $imageEntry['type'] = 'url';
-                            $imageEntry['value'] = $img['url'];
-                            $images[] = $imageEntry;
-                        }
+                    if (!empty($img['url']) && is_string($img['url'])) {
+                        $imageEntry['type'] = 'url';
+                        $imageEntry['value'] = $img['url'];
+                        $images[] = $imageEntry;
+                    }
 
-                        if (
-                            isset($img['file']) &&
-                            $img['file'] instanceof \Illuminate\Http\UploadedFile
-                        ) {
-                            $imageEntry['type'] = 'file';
-                            $imageEntry['value'] = $img['file'];
-                            $images[] = $imageEntry;
-                        }
+                    if (
+                        isset($img['file']) &&
+                        $img['file'] instanceof \Illuminate\Http\UploadedFile
+                    ) {
+                        $imageEntry['type'] = 'file';
+                        $imageEntry['value'] = $img['file'];
+                        $images[] = $imageEntry;
                     }
                 }
             }
+        }
 
-            foreach ($images as $index => $img) {
-                $path = null;
+        foreach ($images as $index => $img) {
+            $path = null;
 
-                if ($img['type'] === 'url') {
-                    if (!filter_var($img['value'], FILTER_VALIDATE_URL)) {
+            if ($img['type'] === 'url') {
+                $url = $img['value'];
+
+                if (!filter_var($url, FILTER_VALIDATE_URL)) {
+                    continue;
+                }
+
+                $parsedUrl = parse_url($url);
+                $host = $parsedUrl['host'] ?? '';
+
+                if (Str::contains($host, 'ecom.brokercell.com')) {
+                    $relativePath = $parsedUrl['path'] ?? null;
+                    $sourcePath = public_path($relativePath);
+
+                    if (file_exists($sourcePath)) {
+                        $extension = pathinfo($sourcePath, PATHINFO_EXTENSION);
+                        $imageName = time() . '_' . $index . '.' . $extension;
+                        $destinationPath = public_path('product_images/' . $imageName);
+                        copy($sourcePath, $destinationPath);
+                        $path = 'product_images/' . $imageName;
+                    } else {
                         continue;
                     }
-
+                } else {
                     try {
-                        $response = Http::timeout(5)->get($img['value']);
+                        $response = Http::timeout(5)->get($url);
                         if ($response->ok()) {
                             $imageContent = $response->body();
-                            $extension = pathinfo(parse_url($img['value'], PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+
+                            $directory = public_path('product_images');
+                            if (!file_exists($directory)) {
+                                mkdir($directory, 0755, true);
+                            }
+
+                            $extension = pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION);
+                            $extension = in_array(strtolower($extension), ['jpg', 'jpeg', 'png', 'gif', 'webp']) ? $extension : 'jpg';
+
                             $imageName = time() . '_' . $index . '.' . $extension;
                             $filePath = public_path('product_images/' . $imageName);
                             file_put_contents($filePath, $imageContent);
@@ -523,24 +549,25 @@ class ProductController extends Controller
                     } catch (\Exception $e) {
                         continue;
                     }
-                } elseif ($img['type'] === 'file') {
-                    $file = $img['value'];
-                    $imageName = time() . '_' . $index . '.' . $file->getClientOriginalExtension();
-                    $file->move(public_path('product_images'), $imageName);
-                    $path = "product_images/{$imageName}";
                 }
-
-                if (!$path) continue;
-
-                ProductImage::create([
-                    'store_id' => $storeId,
-                    'product_id' => $product->id,
-                    'path' => $path,
-                    'is_primary' => $img['is_primary'] ?? ($index === 0),
-                    'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
-                    'description' => $img['description'] ?? null,
-                ]);
+            } elseif ($img['type'] === 'file') {
+                $file = $img['value'];
+                $imageName = time() . '_' . $index . '.' . $file->getClientOriginalExtension();
+                $file->move(public_path('product_images'), $imageName);
+                $path = "product_images/{$imageName}";
             }
+
+            if (!$path) continue;
+
+            ProductImage::create([
+                'store_id' => $storeId,
+                'product_id' => $product->id,
+                'path' => $path,
+                'is_primary' => $img['is_primary'] ?? ($index === 0),
+                'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
+                'description' => $img['description'] ?? null,
+            ]);
+        }
 
             // Update content
             $product->content()->updateOrCreate(
