@@ -132,11 +132,12 @@ class OrderController extends Controller
                 'comments'        => $validated['comments'] ?? null,
                 'total_amount'    => $totalAmount,
             ]);
-
+            $storeId = current_store_id(); // make sure this is called earlier
             foreach ($cartItems as $item) {
                 if (!$item->product) continue;
 
                 $order->items()->create([
+                    'store_id'   => $storeId,
                     'product_id' => $item->product_id,
                     'quantity'   => $item->quantity,
                     'price'      => $item->product->price,
@@ -240,13 +241,17 @@ class OrderController extends Controller
         $order = Order::where('store_id', current_store_id())
             ->where('is_draft', true)
             ->findOrFail($id);
-    
+
         $order->delete();
-    
+
         return response()->json([
             'status' => true,
             'message' => 'Draft order deleted.'
         ]);
     }
+
+
+
+    
 
 }

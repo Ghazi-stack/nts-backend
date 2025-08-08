@@ -8,7 +8,7 @@ use App\Http\Controllers\api\Admin\{
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
-    WishlistController, StripePaymentController, StripeWebhookController,OrderItemController
+    WishlistController, StripePaymentController, StripeWebhookController,OrderItemController,ShipmentController
 };
 use App\Http\Controllers\api\AuthController;
 // ===============================
@@ -67,6 +67,15 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/add/{orderId}', 'store');
         Route::put('/update/{id}', 'update');
         Route::delete('/delete/{id}', 'destroy');
+    });
+
+    Route::prefix('shipments')->controller(ShipmentController::class)->group(function () {
+        Route::get('/list-shipment', 'index');              // List all shipments (paginated)
+        Route::get('/get-shipment/{id}', 'show');           // Get one shipment
+        Route::post('/add-shipment', 'store');             // Create shipment (optional tracking number)
+        Route::put('/update-shipment/{id}', 'update');         // Update shipped_to, date, or tracking
+        Route::delete('/destroy-shipment/{id}', 'destroy');     // Delete shipment
+        Route::get('/packing-slip/{id}','printPackingSlip');
     });
 
     // Customers
@@ -139,7 +148,9 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
 // 🔓 Public Routes (accessible without login)
 Route::prefix('web')->group(function () {
-
+    Route::middleware('auth:sanctum')->prefix('shipments')->controller(\App\Http\Controllers\Api\Web\ShipmentController::class)->group(function () {
+        Route::get('/', 'index');      // View only their orders' shipments
+    });
     // 📁 Public Categories
     Route::get('/categories', [CategoryController::class, 'index']);
     Route::get('/categories/{id}', [CategoryController::class, 'show']);
