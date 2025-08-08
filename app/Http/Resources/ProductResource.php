@@ -81,12 +81,19 @@ class ProductResource extends JsonResource
 
             // Content & Related
             'image' => ProductImageResource::collection($this->whenLoaded('images')),
-            'content' => new ProductContentResource($this->whenLoaded('content')),
+            'description' => optional($this->content)->description,
+            'warranty' => optional($this->content)->warranty,
+            'availabilityText' => optional($this->content)->availability_text,
+            'templateLayout' => optional($this->content)->template_layout,
+            // SEO fields flattened
+            'pageTitle' => optional($this->seo)->page_title,
+            'productUrl' => optional($this->seo)->product_url,
+            'metaDescription' => optional($this->seo)->meta_description,
             'mpn' => optional($this->identifiers)->mpn,
             'upc' => optional($this->identifiers)->upc,
             'gtin' => optional($this->identifiers)->gtin,
             'bpn' => optional($this->identifiers)->bpn,
-            'seo' => new ProductSeoResource($this->whenLoaded('seo')),
+            
 
             // Hierarchy
             'categoryHierarchy' => $this->whenLoaded('categories', function () {
