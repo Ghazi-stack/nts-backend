@@ -229,21 +229,21 @@ class CategoryController extends Controller
             try {
                 $category = Category::where('store_id', $storeId)->findOrFail($data['id']);
 
-                $slug = Str::slug($data['name']);
+                // $slug = Str::slug($data['name']);
 
-                if (Category::where('slug', $slug)
-                    ->where('id', '!=', $data['id'])
-                    ->where('store_id', $storeId)
-                    ->exists()) {
-                    return response()->json([
-                        'status' => false,
-                        'message' => "Slug already exists for: {$data['name']}"
-                    ], 422);
-                }
+                // if (Category::where('slug', $slug)
+                //     ->where('id', '!=', $data['id'])
+                //     ->where('store_id', $storeId)
+                //     ->exists()) {
+                //     return response()->json([
+                //         'status' => false,
+                //         'message' => "Slug already exists for: {$data['name']}"
+                //     ], 422);
+                // }
 
                 $category->update([
                     'name' => $data['name'],
-                    'slug' => $slug,
+                    // 'slug' => $slug,
                     'description' => $data['description'] ?? null,
                     'parent_id' => $data['parentId'] ?? null,
                     'is_visible' => isset($data['isVisible']) ? (bool)$data['isVisible'] : $category->is_visible,
