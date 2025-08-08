@@ -8,7 +8,7 @@ use App\Http\Controllers\api\Admin\{
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
-    WishlistController, StripePaymentController, StripeWebhookController
+    WishlistController, StripePaymentController, StripeWebhookController,OrderItemController
 };
 use App\Http\Controllers\api\AuthController;
 // ===============================
@@ -57,7 +57,18 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/show-order/{id}', 'show'); // ✅ View order details
         Route::patch('/update-status/{id}', 'updateOrderStatus'); // ✅ Update order status
         Route::get('/export-orders', 'exportToExcel'); 
+        Route::get('/list-drafts', 'listDraftOrders');        // GET all draft orders
+        Route::post('/create-draft', 'createDraftOrder');     // POST create new draft
+        Route::delete('/delete-draft/{id}', 'deleteDraftOrder'); // DELETE a draft order
     });
+
+    Route::prefix('order-items')->controller(OrderItemController::class)->group(function () {
+        Route::get('/{orderId}', 'index');
+        Route::post('/add/{orderId}', 'store');
+        Route::put('/update/{id}', 'update');
+        Route::delete('/delete/{id}', 'destroy');
+    });
+
     // Customers
 
       Route::prefix('customers')->group(function () {
@@ -165,6 +176,8 @@ Route::prefix('web')->group(function () {
         Route::post('/place-order', 'store');
         Route::get('/my-orders', 'index');
         Route::get('/show/{id}', 'show');
+
+        Route::get('/order-items/{orderId}', [\App\Http\Controllers\api\Web\OrderItemController::class, 'webIndex']);
     });
 
     // ⭐ Reviews

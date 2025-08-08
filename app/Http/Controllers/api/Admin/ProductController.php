@@ -32,7 +32,7 @@ class ProductController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = Product::with(['brand', 'categories', 'images'])
+            $query = Product::with(['brand', 'categories', 'images','seo','content'])
                 ->where('store_id', current_store_id());
 
             if ($request->has('isFeatured')) {
@@ -89,7 +89,7 @@ class ProductController extends Controller
     public function show($id)
     {
         try {
-            $product = Product::with(['brand', 'categories', 'images'])
+            $product = Product::with(['brand', 'categories', 'images','content','seo'])
                 ->where('store_id', current_store_id())
                 ->findOrFail($id);
 

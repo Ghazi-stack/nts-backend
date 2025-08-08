@@ -196,5 +196,57 @@ class OrderController extends Controller
         return Excel::download(new OrdersExport, 'orders.xlsx');
     }
 
+    public function listDraftOrders(Request $request)
+    {
+        $orders = Order::where('store_id', current_store_id())
+            ->where('is_draft', true)
+            ->latest()
+            ->paginate(20);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Draft orders retrieved.',
+            'data' => OrderResource::collection($orders),
+        ]);
+    }
+
+    public function createDraftOrder(Request $request)
+    {
+        $validated = $request->validate([
+            'channel' => 'required|string|max:255',
+        ]);
+
+        $user = auth('sanctum')->user();
+
+        $order = Order::create([
+            'store_id'     => current_store_id(),
+            'user_id'      => $user?->id,
+            'session_id'   => $user ? null : session()->getId(),
+            'order_number' => 'DRAFT-' . strtoupper(\Str::random(6)),
+            'status'       => 'Draft',
+            'is_draft'     => true,
+            'channel'      => $validated['channel'],
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Draft order created.',
+            'data' => new OrderResource($order),
+        ]);
+    }
+
+    public function deleteDraftOrder($id)
+    {
+        $order = Order::where('store_id', current_store_id())
+            ->where('is_draft', true)
+            ->findOrFail($id);
+    
+        $order->delete();
+    
+        return response()->json([
+            'status' => true,
+            'message' => 'Draft order deleted.'
+        ]);
+    }
 
 }

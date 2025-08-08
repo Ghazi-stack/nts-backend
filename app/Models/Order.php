@@ -13,19 +13,10 @@ class Order extends Model
 {
     use HasFactory;
     protected $fillable = [
-        'user_id', 
-        'session_id',
-        'name',
-        'email',
-        'phone',
-        'address',
-        'payment_method',
-        'shipping_method',
-        'shipping_cost',
-        'comments',
-        'total_amount',
-        'status',
-        'store_id' // ✅ Added 'store_id' to fillable attributes
+        'store_id', 'user_id', 'session_id', 'order_number',
+        'name', 'email', 'phone', 'address', 'status',
+        'is_draft', 'channel', 'payment_method', 'shipping_method',
+        'shipping_cost', 'comments', 'total_amount'
     ];
 
     public function items()
