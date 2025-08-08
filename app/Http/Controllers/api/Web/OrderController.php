@@ -8,9 +8,11 @@ use App\Models\Order;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use App\Exports\OrdersExport;
+use App\Models\ReturnRequest;
 use App\Http\Controllers\Controller;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Http\Resources\OrderResource;
+use App\Http\Resources\ReturnRequestResource;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
@@ -251,7 +253,51 @@ class OrderController extends Controller
     }
 
 
+    // RETURN REQUEST
 
+
+    public function submitReturnRequest(Request $request)
+    {
+        $user = auth('sanctum')->user();
+
+        $request->validate([
+            'orderId' => 'required|exists:orders,id',
+            'orderItemId' => 'nullable|exists:order_items,id',
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $order = Order::where('id', $request->orderId)
+            ->where('user_id', $user->id)
+            ->where('store_id', current_store_id())
+            ->firstOrFail();
+
+        $returnRequest = ReturnRequest::create([
+            'store_id' => current_store_id(),
+            'order_id' => $request->orderId,
+            'order_item_id' => $request->orderItemId,
+            'user_id' => $user->id,
+            'reason' => $request->reason,
+            'status' => 'Pending',
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Return request submitted successfully.',
+            'data' => new ReturnRequestResource($returnRequest->load('orderItem.product'))
+        ]);
+    }
+
+    public function listReturnRequestsForAdmin(Request $request)
+    {
+        $requests = ReturnRequest::with(['order', 'user', 'orderItem.product'])
+            ->where('store_id', current_store_id())
+            ->latest()
+            ->paginate(20);
     
-
+        return response()->json([
+            'status' => true,
+            'data' => ReturnRequestResource::collection($requests)
+        ]);
+    }
+ 
 }

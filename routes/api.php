@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\api\Admin\{
     BannerController, BrandController, CategoryController,
     ProductController, ProductFilterController, HomeController,
-    StoreController, CustomerController
+    StoreController, CustomerController,GlobalSearchController
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
@@ -38,7 +38,7 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
 
 Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     // Main Search
-    Route::get('/global-search', [\App\Http\Controllers\api\Admin\GlobalSearchController::class, 'search']);
+    Route::get('/global-search', [GlobalSearchController::class, 'search']);
     // 🏢 Store Management
 
     Route::prefix('stores')->controller(StoreController::class)->group(function () {
@@ -60,6 +60,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/list-drafts', 'listDraftOrders');        // GET all draft orders
         Route::post('/create-draft', 'createDraftOrder');     // POST create new draft
         Route::delete('/delete-draft/{id}', 'deleteDraftOrder'); // DELETE a draft order
+        Route::get('/get-return-order','listReturnRequestsForAdmin');
     });
 
     Route::prefix('order-items')->controller(OrderItemController::class)->group(function () {
@@ -148,26 +149,31 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
 // 🔓 Public Routes (accessible without login)
 Route::prefix('web')->group(function () {
-    Route::middleware('auth:sanctum')->prefix('shipments')->controller(\App\Http\Controllers\Api\Web\ShipmentController::class)->group(function () {
+    Route::prefix('shipments')->controller(ShipmentController::class)->group(function () {
         Route::get('/', 'index');      // View only their orders' shipments
     });
-    // 📁 Public Categories
-    Route::get('/categories', [CategoryController::class, 'index']);
-    Route::get('/categories/{id}', [CategoryController::class, 'show']);
-    Route::get('/categories/slug/{slug}', [CategoryController::class, 'showBySlug']);
-    // Public banner
 
-    Route::get('/list-banners',[BannerController::class, 'index']);
-
+    Route::prefix('categories')->controller(CategoryController::class)->group(function () {
+        Route::get('/categories', 'index');
+        Route::get('/categories/{id}', 'show');
+        Route::get('/categories/slug/{slug}','showBySlug');
+        
+    });    // Public banner
+    Route::prefix('banners')->controller(BrandController::class)->group(function () {
+        Route::get('/list-banners','index');
+    });
+    Route::prefix('brands')->controller(BrandController::class)->group(function () {       
+        Route::get('/brands','index');
+        Route::get('/brands/{id}','showBrands');
+    });
     // 🏷️ Public Brands
-    Route::get('/brands', [BrandController::class, 'index']);
-    Route::get('/brands/{id}', [BrandController::class, 'showBrands']);
+    
 
-    // 📦 Public Products
-    Route::get('/products', [ProductController::class, 'index']);
-    Route::get('/product/{slug}', [ProductController::class, 'showProduct']);
-    Route::get('/search-product', [ProductController::class, 'searchProduct']);
-
+    Route::prefix('products')->controller(ProductController::class)->group(function () {
+        Route::get('/products', 'index');
+        Route::get('/product/{slug}','showProduct');
+        Route::get('/search-product','searchProduct');
+    });
     // 🛒 Cart
     Route::prefix('cart')->controller(CartController::class)->group(function () {
         Route::get('/list', 'index');
@@ -181,16 +187,18 @@ Route::prefix('web')->group(function () {
         Route::post('/add', 'store');
         Route::delete('/remove/{id}', 'destroy');
     });
-
+    Route::prefix('orders')->controller(OrderController::class)->group(function () {
+        Route::post('/place-order', 'store');
+    });
     // 🧾 Orders (auth required)
     Route::prefix('orders')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {
-        Route::post('/place-order', 'store');
         Route::get('/my-orders', 'index');
         Route::get('/show/{id}', 'show');
-
-        Route::get('/order-items/{orderId}', [\App\Http\Controllers\api\Web\OrderItemController::class, 'webIndex']);
+        Route::post('/return-order','submitReturnRequest');
     });
-
+    Route::prefix('order-items')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () { 
+        Route::get('/order-items/{orderId}', 'webIndex'); 
+    }); 
     // ⭐ Reviews
     Route::prefix('reviews')->controller(ReviewController::class)->group(function () {
         Route::get('/product/{productId}', 'index'); // ✅ public
