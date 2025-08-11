@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\api\Admin\{
     BannerController, BrandController, CategoryController,
     ProductController, ProductFilterController, HomeController,
-    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController
+    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,PromotionController
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
@@ -128,7 +128,6 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // EMAIL Marketing
-
     Route::prefix('email-marketings')->controller(EmailMarketingController::class)->group(function(){
         Route::get('/get-email-marketing', 'show');
         Route::put('/email-marketing', 'update');
@@ -143,7 +142,14 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/preview/{key}', 'preview');      // render preview (subject/html/text)
         Route::post('/send-test/{key}', 'sendTest');   // send test email
     });
-
+    // 🏷️ Promotions
+    Route::prefix('promotions')->controller(PromotionController::class)->group(function () {
+        Route::get('/list-promotion', 'index');           // list (with optional ?status=&type=)
+        Route::get('/get-promotion/{id}', 'show');         // single
+        Route::post('/add-promotion', 'store');            // create
+        Route::post('/update-promotion/{id}', 'update');   // update (POST like banners/brands)
+        Route::delete('/delete-promotion/{id}', 'destroy'); // delete
+    });
 
     // 🔘 Product Filters
     Route::prefix('product-filters')->controller(ProductFilterController::class)->group(function () {
