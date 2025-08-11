@@ -216,37 +216,56 @@ class CategoryController extends Controller
         try {
             $category = Category::where('store_id', $storeId)->findOrFail($id);
 
-            // Validate only "extras" (no name/slug changes here)
+            // simple validation only (no unique rules)
             $request->validate([
-                'image'               => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
+                'name'                => 'nullable|string|max:255',
+                'slug'                => 'nullable|string|max:255',
+                'description'         => 'nullable|string',
+                'parentId'            => 'nullable|integer',   // remove exists if you want zero checks
+                'isVisible'           => 'nullable|boolean',
+                'channel'             => 'nullable|string|max:100',
+
+                'templateLayout'      => 'nullable|string|max:100',
+                'sortOrder'           => 'nullable|integer',
+                'defaultProductSort'  => 'nullable|string|max:100',
+
                 'seoHomeTitle'        => 'nullable|string|max:70',
                 'seoMetakeywords'     => 'nullable|string|max:255',
                 'seoMetaDescription'  => 'nullable|string|max:160',
                 'seoSearchKeywords'   => 'nullable|string|max:255',
-                'templateLayout'      => 'nullable|string|max:100',
-                'sortOrder'           => 'nullable|integer',
-                'defaultProductSort'  => 'nullable|string|max:100',
-                'isVisible'           => 'nullable|boolean',
-                'channel'             => 'nullable|string|max:100',
+
+                'image'               => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
             ]);
 
-            // Map only provided fields
-            $data = [
-                'seo_home_title'       => $request->seoHomeTitle,
-                'seo_meta_keywords'    => $request->seoMetakeywords,
-                'seo_meta_description' => $request->seoMetaDescription,
-                'seo_search_keywords'  => $request->seoSearchKeywords,
-                'template_layout'      => $request->templateLayout,
-                'sort_order'           => $request->sortOrder,
-                'default_product_sort' => $request->defaultProductSort,
-                'channel'              => $request->channel,
-            ];
-
-            if ($request->filled('isVisible')) {
-                $data['is_visible'] = $request->boolean('isVisible');
+            // figure out slug (no uniqueness check)
+            $finalSlug = $category->slug;
+            if ($request->filled('slug')) {
+                $finalSlug = Str::slug($request->slug);
+            } elseif ($request->filled('name')) {
+                $finalSlug = Str::slug($request->name);
             }
 
-            // Handle image upload (publicly accessible in /public)
+            // payload: only set fields that were sent
+            $data = [];
+
+            if ($request->filled('name'))               $data['name'] = $request->name;
+            if ($finalSlug !== $category->slug)         $data['slug'] = $finalSlug;
+
+            if ($request->exists('description'))        $data['description'] = $request->description;
+            if ($request->exists('parentId'))           $data['parent_id'] = $request->parentId;
+            if ($request->filled('isVisible'))          $data['is_visible'] = $request->boolean('isVisible');
+            if ($request->exists('channel'))            $data['channel'] = $request->channel;
+
+            if ($request->exists('templateLayout'))     $data['template_layout'] = $request->templateLayout;
+            if ($request->exists('sortOrder'))          $data['sort_order'] = $request->sortOrder;
+            if ($request->exists('defaultProductSort')) $data['default_product_sort'] = $request->defaultProductSort;
+
+            if ($request->exists('seoHomeTitle'))       $data['seo_home_title'] = $request->seoHomeTitle;
+            if ($request->exists('seoMetakeywords'))    $data['seo_meta_keywords'] = $request->seoMetakeywords;
+            if ($request->exists('seoMetaDescription')) $data['seo_meta_description'] = $request->seoMetaDescription;
+            if ($request->exists('seoSearchKeywords'))  $data['seo_search_keywords'] = $request->seoSearchKeywords;
+
+            // image (public)
             if ($request->hasFile('image')) {
                 $destinationPath = public_path("category_images/{$storeId}");
                 if (!file_exists($destinationPath)) {
@@ -259,31 +278,26 @@ class CategoryController extends Controller
 
                 $request->file('image')->move($destinationPath, $imageName);
 
-                // Remove previous image if exists
                 if (!empty($category->image)) {
                     $old = public_path($category->image);
-                    if (file_exists($old)) {
-                        @unlink($old);
-                    }
+                    if (file_exists($old)) @unlink($old);
                 }
 
-                $relativePath = "category_images/{$storeId}/{$imageName}";
-                $data['image'] = $relativePath;
+                $data['image'] = "category_images/{$storeId}/{$imageName}";
             }
 
-            // Update only non-null values
-            $category->update(array_filter($data, fn ($v) => !is_null($v)));
-
-            // Build a full URL for convenience in the response
-            $imageUrl = $category->image ? url($category->image) : null;
+            if (!empty($data)) {
+                $category->update($data);
+            }
 
             return response()->json([
-                'status'     => true,
-                'message'    => 'Category extras updated successfully',
-                'category'   => new CategoryResource(
-                    $category->fresh()->load(['childrenRecursive', 'products'])
+                'status'   => true,
+                'message'  => 'Category updated successfully',
+                'category' => new CategoryResource(
+                    $category->fresh()->load(['childrenRecursive','products'])
                 ),
             ]);
+
         } catch (ModelNotFoundException $e) {
             return response()->json(['status' => false, 'message' => 'Category not found'], 404);
         }
