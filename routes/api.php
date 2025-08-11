@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\api\Admin\{
     BannerController, BrandController, CategoryController,
     ProductController, ProductFilterController, HomeController,
-    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController
+    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
@@ -125,6 +125,13 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/import-csv', 'importCSV');
         Route::get('/export-csv', 'exportCSV');
         Route::delete('/delete-product/categories', 'destroyProductCategories');
+    });
+
+    // EMAIL Marketing
+
+    Route::prefix('email-marketings')->controller(EmailMarketingController::class)->group(function(){
+        Route::get('/get-email-marketing', 'show');
+        Route::put('/email-marketing', 'update');
     });
 
     // ✉️ Transactional Emails (store-wise)
