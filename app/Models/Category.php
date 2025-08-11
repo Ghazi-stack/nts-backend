@@ -12,7 +12,32 @@ class Category extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'slug', 'description', 'parent_id','is_visible','store_id'];
+    protected $fillable = 
+    [
+
+        'store_id',
+        'name',
+        'slug',
+        'description',
+        'parent_id',
+        'is_visible',
+        'channel',
+
+        // NEW
+        'image',
+        'seo_home_title',
+        'seo_meta_keywords',
+        'seo_meta_description',
+        'seo_search_keywords',
+        'template_layout',
+        'sort_order',
+        'default_product_sort',
+    ];
+
+    protected $casts = [
+        'is_visible' => 'boolean',
+        'sort_order' => 'integer',
+    ];
 
      // 🔁 Recursive relationship for nested categories
     public function parent()

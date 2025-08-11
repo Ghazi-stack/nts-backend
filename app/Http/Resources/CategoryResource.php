@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
+use App\Http\Resources\ProductResource;
 use App\Http\Resources\CategoryResource;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -26,6 +27,16 @@ class CategoryResource extends JsonResource
             'is_visible' => $this->is_visible,
             'parent_id' => $this->parent_id,
 
+              // NEW fields (no imageUrl accessor, as requested)
+            'image'           => $this->image ? url($this->image) : null, 
+            'seoHomeTitle'       => $this->seo_home_title,
+            'seoMetakeywords'    => $this->seo_meta_keywords,
+            'seoMetaDescription' => $this->seo_meta_description,
+            'seoSearchKeywords'  => $this->seo_search_keywords,
+            'templateLayout'     => $this->template_layout,
+            'sortOrder'          => $this->sort_order,
+            'defaultProductSort' => $this->default_product_sort,
+
             // ✅ Product counts
             'direct_products' => $directProducts,
             'in_subcategories' => $inSubcategories,
@@ -33,6 +44,7 @@ class CategoryResource extends JsonResource
 
             // ✅ Load subcategories if available
             'subcategories' => CategoryResource::collection($this->whenLoaded('childrenRecursive')),
+            'products'      => ProductResource::collection($this->whenLoaded('products')),
         ];
     }
 

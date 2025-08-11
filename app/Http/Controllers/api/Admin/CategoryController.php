@@ -206,6 +206,89 @@ class CategoryController extends Controller
         }
     }
 
+    public function updateCategoryExtras(Request $request, $id)
+    {
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json(['status' => false, 'message' => 'Missing store-id in headers.'], 400);
+        }
+
+        try {
+            $category = Category::where('store_id', $storeId)->findOrFail($id);
+
+            // Validate only "extras" (no name/slug changes here)
+            $request->validate([
+                'image'               => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
+                'seoHomeTitle'        => 'nullable|string|max:70',
+                'seoMetakeywords'     => 'nullable|string|max:255',
+                'seoMetaDescription'  => 'nullable|string|max:160',
+                'seoSearchKeywords'   => 'nullable|string|max:255',
+                'templateLayout'      => 'nullable|string|max:100',
+                'sortOrder'           => 'nullable|integer',
+                'defaultProductSort'  => 'nullable|string|max:100',
+                'isVisible'           => 'nullable|boolean',
+                'channel'             => 'nullable|string|max:100',
+            ]);
+
+            // Map only provided fields
+            $data = [
+                'seo_home_title'       => $request->seoHomeTitle,
+                'seo_meta_keywords'    => $request->seoMetakeywords,
+                'seo_meta_description' => $request->seoMetaDescription,
+                'seo_search_keywords'  => $request->seoSearchKeywords,
+                'template_layout'      => $request->templateLayout,
+                'sort_order'           => $request->sortOrder,
+                'default_product_sort' => $request->defaultProductSort,
+                'channel'              => $request->channel,
+            ];
+
+            if ($request->filled('isVisible')) {
+                $data['is_visible'] = $request->boolean('isVisible');
+            }
+
+            // Handle image upload (publicly accessible in /public)
+            if ($request->hasFile('image')) {
+                $destinationPath = public_path("category_images/{$storeId}");
+                if (!file_exists($destinationPath)) {
+                    mkdir($destinationPath, 0755, true);
+                }
+
+                $original  = $request->file('image')->getClientOriginalName();
+                $safeName  = preg_replace('/[^A-Za-z0-9.\-_]/', '_', $original);
+                $imageName = time() . '_' . $safeName;
+
+                $request->file('image')->move($destinationPath, $imageName);
+
+                // Remove previous image if exists
+                if (!empty($category->image)) {
+                    $old = public_path($category->image);
+                    if (file_exists($old)) {
+                        @unlink($old);
+                    }
+                }
+
+                $relativePath = "category_images/{$storeId}/{$imageName}";
+                $data['image'] = $relativePath;
+            }
+
+            // Update only non-null values
+            $category->update(array_filter($data, fn ($v) => !is_null($v)));
+
+            // Build a full URL for convenience in the response
+            $imageUrl = $category->image ? url($category->image) : null;
+
+            return response()->json([
+                'status'     => true,
+                'message'    => 'Category extras updated successfully',
+                'category'   => new CategoryResource(
+                    $category->fresh()->load(['childrenRecursive', 'products'])
+                ),
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['status' => false, 'message' => 'Category not found'], 404);
+        }
+    }
+
     public function updateBulkCategory(Request $request)
     {
         $storeId = current_store_id();

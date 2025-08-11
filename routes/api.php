@@ -100,6 +100,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::put('/update-bulk-category', 'updateBulkCategory');
         Route::delete('/delete-categories', 'destroyCategory'); // ✅ fixed: accepts body { ids: [] }
         Route::delete('/delete-subcategories/{id}', 'destroyOnlySubcategories');
+        Route::post('/update-categorySingle/{id}','updateCategoryExtras');
     });
 
     // 🏷️ Brands
