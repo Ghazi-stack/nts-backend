@@ -44,7 +44,7 @@ class CategoryResource extends JsonResource
 
             // ✅ Load subcategories if available
             'subcategories' => CategoryResource::collection($this->whenLoaded('childrenRecursive')),
-            'products'      => ProductResource::collection($this->whenLoaded('products')),
+            // 'products'      => ProductResource::collection($this->whenLoaded('products')),
         ];
     }
 
