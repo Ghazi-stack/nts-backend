@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\api\Admin\{
     BannerController, BrandController, CategoryController,
     ProductController, ProductFilterController, HomeController,
-    StoreController, CustomerController,GlobalSearchController
+    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
@@ -125,6 +125,17 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/import-csv', 'importCSV');
         Route::get('/export-csv', 'exportCSV');
     });
+
+    // ✉️ Transactional Emails (store-wise)
+    Route::prefix('transactional-emails')->controller(TransactionalEmailController::class)->group(function () {
+        Route::get('/get','index');        // list with pagination & search
+        Route::get('/get-single/{key}','show');         // get single template by key
+        Route::post('/create-key/{key}','upsert');       // create/update template
+        Route::patch('/toggle/{key}', 'toggle');       // enable/disable
+        Route::post('/preview/{key}', 'preview');      // render preview (subject/html/text)
+        Route::post('/send-test/{key}', 'sendTest');   // send test email
+    });
+
 
     // 🔘 Product Filters
     Route::prefix('product-filters')->controller(ProductFilterController::class)->group(function () {
