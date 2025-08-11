@@ -1384,4 +1384,77 @@ class ProductController extends Controller
         return Excel::download(new ProductExport($storeId), $fileName);
     }   
 
+
+    public function destroyProductCategories(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $data = $request->validate([
+                'productIds'    => 'required|array|min:1',
+                'productIds.*'  => 'integer|exists:products,id',
+                'categoryIds'   => 'required|array|min:1',
+                'categoryIds.*' => 'integer|exists:categories,id',
+            ]);
+
+            $results = [];
+            $failed  = [];
+
+            foreach ($data['productIds'] as $pid) {
+                $product = Product::with('categories')
+                    ->where('store_id', $storeId)
+                    ->find($pid);
+
+                if (!$product) {
+                    $failed[] = [
+                        'productId' => $pid,
+                        'error'     => 'Product not found in this store.'
+                    ];
+                    continue;
+                }
+
+                $attachedIds = $product->categories()->pluck('categories.id')->toArray();
+                $toDetach    = array_values(array_intersect($attachedIds, $data['categoryIds']));
+                $skipped     = array_values(array_diff($data['categoryIds'], $toDetach));
+
+                if (!empty($toDetach)) {
+                    $product->categories()->detach($toDetach);
+
+                    // If primary category is detached, update it
+                    if (!empty($product->category_id) && in_array((int)$product->category_id, $toDetach, true)) {
+                        $newPrimary = $product->categories()->value('categories.id');
+                        $product->category_id = $newPrimary;
+                        $product->save();
+                    }
+                }
+
+                $results[] = [
+                    'productId'            => $pid,
+                    'detachedIds'          => $toDetach,
+                    'skipped'              => $skipped,
+                    'remainingCategoryIds' => $product->categories()->pluck('categories.id')->toArray(),
+                ];
+            }
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Category detach process completed.',
+                'results' => $results,
+                'failed'  => $failed
+            ], 200);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }

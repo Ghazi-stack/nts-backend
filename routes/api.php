@@ -124,6 +124,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/advanced-search', 'searchAdvanced');
         Route::post('/import-csv', 'importCSV');
         Route::get('/export-csv', 'exportCSV');
+        Route::delete('/delete-product/categories', 'destroyProductCategories');
     });
 
     // ✉️ Transactional Emails (store-wise)
