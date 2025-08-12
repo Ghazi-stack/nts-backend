@@ -1384,81 +1384,65 @@ class ProductController extends Controller
         return Excel::download(new ProductExport($storeId), $fileName);
     }   
 
+    public function destroyProductCategories(Request $request, $id)
+{
+    try {
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
+        }
 
-    public function destroyProductCategories(Request $request)
-    {
-        try {
-            $storeId = current_store_id();
-            if (!$storeId) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Store not selected or token invalid.'
-                ], 400);
-            }
+        $request->validate([
+            'categoryIds'   => 'required|array|min:1',
+            'categoryIds.*' => 'integer'
+        ]);
 
-            $data = $request->validate([
-                'productIds'    => 'required|array|min:1',
-                'productIds.*'  => 'integer|exists:products,id',
-                'categoryIds'   => 'required|array|min:1',
-                'categoryIds.*' => 'integer|exists:categories,id',
-            ]);
+        $product = Product::where('store_id', $storeId)
+            ->with('categories:id')
+            ->findOrFail($id);
 
-            $results = [];
-            $failed  = [];
+        $attachedIds = $product->categories->pluck('id')->toArray();
 
-            foreach ($data['productIds'] as $pid) {
-                $product = Product::with('categories')
-                    ->where('store_id', $storeId)
-                    ->find($pid);
+        // Only detach categories that are attached and belong to same store
+        $validIds = Category::where('store_id', $storeId)
+            ->whereIn('id', $request->categoryIds)
+            ->pluck('id')
+            ->toArray();
 
-                if (!$product) {
-                    $failed[] = [
-                        'productId' => $pid,
-                        'error'     => 'Product not found in this store.'
-                    ];
-                    continue;
-                }
+        $toDetach = array_values(array_intersect($attachedIds, $validIds));
 
-                $attachedIds = $product->categoriesForCurrentStore()
-                    ->pluck('categories.id')
-                    ->toArray();
-                $toDetach    = array_values(array_intersect($attachedIds, $data['categoryIds']));
-                $skipped     = array_values(array_diff($data['categoryIds'], $toDetach));
-
-                if (!empty($toDetach)) {
-                    $product->categoriesForCurrentStore()->detach($toDetach);
-
-                    // If primary category is detached, update it
-                    if (!empty($product->category_id) && in_array((int)$product->category_id, $toDetach, true)) {
-                       $newPrimary = $product->categoriesForCurrentStore()->value('categories.id');
-                        $product->category_id = $newPrimary;
-                        $product->save();
-                    }
-                }
-
-                $results[] = [
-                    'productId'            => $pid,
-                    'detachedIds'          => $toDetach,
-                    'skipped'              => $skipped,
-                    'remainingCategoryIds' => $product->categoriesForCurrentStore()
-                                                    ->pluck('categories.id')
-                                                    ->toArray(),
-                ];
-            }
-
-            return response()->json([
-                'status'  => true,
-                'message' => 'Category detach process completed.',
-                'results' => $results,
-                'failed'  => $failed
-            ], 200);
-
-        } catch (\Throwable $e) {
+        if (empty($toDetach)) {
             return response()->json([
                 'status'  => false,
-                'message' => $e->getMessage()
-            ], 500);
+                'message' => 'No matching categories to detach.'
+            ], 422);
         }
+
+        // ✅ Allow removing even the last category (no remaining-count check)
+        $product->categories()->detach($toDetach);
+
+        // If primary category removed, set a new one or null
+        if (!empty($product->category_id) && in_array((int)$product->category_id, $toDetach, true)) {
+            $newPrimary = $product->categories()->pluck('categories.id')->first(); // could be null now
+            $product->update(['category_id' => $newPrimary]); // make sure products.category_id is nullable
+        }
+
+        return response()->json([
+            'status'      => true,
+            'message'     => 'Categories detached from product.',
+            'detachedIds' => $toDetach,
+            'data'        => new ProductResource($product->fresh(['categories','brand','images','content','seo']))
+        ]);
+
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        return response()->json(['status' => false, 'message' => 'Product not found.'], 404);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json(['errors' => $e->errors()], 422);
+    } catch (\Exception $e) {
+        return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
     }
+}
+
+  
 
 }

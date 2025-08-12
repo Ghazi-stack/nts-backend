@@ -132,7 +132,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/advanced-search', 'searchAdvanced');
         Route::post('/import-csv', 'importCSV');
         Route::get('/export-csv', 'exportCSV');
-        Route::delete('/delete-product/categories', 'destroyProductCategories');
+        Route::delete('/delete-product/categories/{id}', 'destroyProductCategories');
     });
 
     // EMAIL Marketing
