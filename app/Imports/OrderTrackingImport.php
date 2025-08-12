@@ -4,6 +4,7 @@ namespace App\Imports;
 
 use App\Models\Order;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
@@ -20,6 +21,12 @@ class OrderTrackingImport implements ToCollection, WithHeadingRow, WithCustomCsv
         'processed' => 0,
         'updated'   => 0,
         'skipped'   => 0,
+        'skipped_reasons' => [
+            'validation'      => 0,
+            'no_identifier'   => 0,
+            'not_found'       => 0,
+            'already_tracked' => 0,
+        ],
         'errors'    => [],
     ];
 
@@ -49,6 +56,7 @@ class OrderTrackingImport implements ToCollection, WithHeadingRow, WithCustomCsv
     {
         foreach ($rows as $i => $row) {
             $this->summary['processed']++;
+            $lineNo = $this->hasHeaders ? $i + 2 : $i + 1;
 
             // Build assoc for no-headers mode
             if (!$this->hasHeaders) {
@@ -79,6 +87,11 @@ class OrderTrackingImport implements ToCollection, WithHeadingRow, WithCustomCsv
             // Force integer or null for orderId
             $data['orderId'] = $this->toIntOrNull($data['orderId']);
 
+            // Normalize order number (strip a leading "#", trim)
+            if (!empty($data['orderNumber'])) {
+                $data['orderNumber'] = $this->normalizeOrderNumber($data['orderNumber']);
+            }
+
             // Normalize date
             $data['shippedAt'] = $this->normalizeDate($data['shippedAt']);
 
@@ -95,42 +108,43 @@ class OrderTrackingImport implements ToCollection, WithHeadingRow, WithCustomCsv
 
             if ($v->fails()) {
                 $this->summary['errors'][] = [
-                    'line'   => ($this->hasHeaders ? $i + 2 : $i + 1),
+                    'line'   => $lineNo,
                     'errors' => $v->errors()->all(),
+                    'input'  => $this->debugIdentifiers($data),
                 ];
                 $this->summary['skipped']++;
+                $this->summary['skipped_reasons']['validation']++;
                 continue;
             }
 
             if (empty($data['orderId']) && empty($data['orderNumber'])) {
                 $this->summary['errors'][] = [
-                    'line'   => ($this->hasHeaders ? $i + 2 : $i + 1),
+                    'line'   => $lineNo,
                     'errors' => ['Provide orderId or orderNumber'],
+                    'input'  => $this->debugIdentifiers($data),
                 ];
                 $this->summary['skipped']++;
+                $this->summary['skipped_reasons']['no_identifier']++;
                 continue;
             }
 
-            // Store-wise lookup
-            $query = Order::where('store_id', (int) $data['storeId']);
-            if (!empty($data['orderId'])) {
-                $query->where('id', (int) $data['orderId']);
-            } else {
-                $query->where('order_number', $data['orderNumber']);
-            }
+            // Store-scoped lookup (with a couple of helpful fallbacks)
+            $order = $this->findOrder($data);
 
-            $order = $query->first();
             if (!$order) {
                 $this->summary['errors'][] = [
-                    'line'   => ($this->hasHeaders ? $i + 2 : $i + 1),
+                    'line'   => $lineNo,
                     'errors' => ['Order not found for this store'],
+                    'input'  => $this->debugIdentifiers($data),
                 ];
                 $this->summary['skipped']++;
+                $this->summary['skipped_reasons']['not_found']++;
                 continue;
             }
 
             if (!$this->overrideExisting && $order->tracking_number) {
                 $this->summary['skipped']++;
+                $this->summary['skipped_reasons']['already_tracked']++;
                 continue;
             }
 
@@ -147,6 +161,45 @@ class OrderTrackingImport implements ToCollection, WithHeadingRow, WithCustomCsv
             $order->save();
             $this->summary['updated']++;
         }
+    }
+
+    private function findOrder(array $data): ?Order
+    {
+        // Always scope by store
+        $base = Order::query()->where('store_id', (int) $data['storeId']);
+
+        // Try by ID first if present
+        if (!empty($data['orderId'])) {
+            $byId = (clone $base)->where('id', (int) $data['orderId'])->first();
+            if ($byId) {
+                return $byId;
+            }
+        }
+
+        // Then by order number (with small helpers)
+        if (!empty($data['orderNumber'])) {
+            $orderNumber = $data['orderNumber'];
+
+            // 1) exact match
+            $q = (clone $base)->where('order_number', $orderNumber);
+
+            // 2) if numeric-like, also try matching to DB values with leading zeros (MySQL & Postgres variants)
+            if (ctype_digit($orderNumber)) {
+                $driver = DB::getDriverName();
+                if ($driver === 'mysql') {
+                    $q->orWhereRaw("TRIM(LEADING '0' FROM order_number) = ?", [$orderNumber]);
+                } elseif (in_array($driver, ['pgsql', 'postgres', 'postgresql'], true)) {
+                    $q->orWhereRaw("ltrim(order_number, '0') = ?", [$orderNumber]);
+                }
+            }
+
+            $byNumber = $q->first();
+            if ($byNumber) {
+                return $byNumber;
+            }
+        }
+
+        return null;
     }
 
     private function normalizeToCamelCase(array $assoc): array
@@ -226,6 +279,16 @@ class OrderTrackingImport implements ToCollection, WithHeadingRow, WithCustomCsv
         return $digits !== '' ? (int) $digits : null;
     }
 
+    private function normalizeOrderNumber(string $v): string
+    {
+        // Typical cleanup: remove a single leading "#", trim spaces
+        $v = trim($v);
+        if (strlen($v) && $v[0] === '#') {
+            $v = ltrim($v, '#');
+        }
+        return trim($v);
+    }
+
     private function normalizeDate($value): ?string
     {
         if ($value === null || $value === '') return null;
@@ -248,5 +311,14 @@ class OrderTrackingImport implements ToCollection, WithHeadingRow, WithCustomCsv
         }
 
         return null;
+    }
+
+    private function debugIdentifiers(array $data): array
+    {
+        return [
+            'storeId'     => $data['storeId'] ?? null,
+            'orderId'     => $data['orderId'] ?? null,
+            'orderNumber' => $data['orderNumber'] ?? null,
+        ];
     }
 }

@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\api\Admin;
 
-use App\Exports\OrdersExport;
 use App\Http\Controllers\Controller;
 use App\Imports\OrderTrackingImport;
 use App\Http\Resources\OrderResource;
@@ -13,7 +12,6 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class OrderTrackingImportController extends Controller
 {
-    // Matches your dropdown
     public const VALID_STATUSES = [
         'Pending',
         'Awaiting Payment',
@@ -67,17 +65,20 @@ class OrderTrackingImportController extends Controller
         abort_unless($order->store_id === current_store_id(), 403, 'Order not in current store.');
 
         $data = $request->validate([
-            'trackingNumber'  => 'required|string',
-            'carrierCode'     => 'nullable|string|max:50',
-            'carrierName'     => 'nullable|string|max:100',
-            'statusToSet'     => 'nullable|string|in:' . implode(',', self::VALID_STATUSES),
-            'overrideExisting'=> 'nullable|boolean',
-            'shippedAt'       => 'nullable|date',
+            'trackingNumber'   => 'required|string',
+            'carrierCode'      => 'nullable|string|max:50',
+            'carrierName'      => 'nullable|string|max:100',
+            'statusToSet'      => 'nullable|string|in:' . implode(',', self::VALID_STATUSES),
+            'overrideExisting' => 'nullable|boolean',
+            'shippedAt'        => 'nullable|date',
         ]);
 
         $override = (bool)($data['overrideExisting'] ?? true);
         if (!$override && $order->tracking_number) {
-            return response()->json(['status'=>false,'message'=>'Tracking already exists; set overrideExisting=true to replace.'], 409);
+            return response()->json([
+                'status'  => false,
+                'message' => 'Tracking already exists; set overrideExisting=true to replace.',
+            ], 409);
         }
 
         $order->tracking_number       = $data['trackingNumber'];
@@ -113,11 +114,4 @@ class OrderTrackingImportController extends Controller
             'Content-Disposition' => 'attachment; filename="tracking_template.csv"',
         ]);
     }
-
-    // // GET /api/admin/orders/export?status=Shipped
-    // public function export(Request $request)
-    // {
-    //     $status = $request->query('status');
-    //     return Excel::download(new OrdersExport(current_store_id(), $status), 'orders.xlsx');
-    // }
 }
