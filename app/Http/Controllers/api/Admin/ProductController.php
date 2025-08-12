@@ -1430,7 +1430,7 @@ class ProductController extends Controller
         return response()->json([
             'status'      => true,
             'message'     => 'Categories detached from product.',
-            'detachedIds' => $toDetach,
+            'deletedIds' => $toDetach,
             'data'        => new ProductResource($product->fresh(['categories','brand','images','content','seo']))
         ]);
 
