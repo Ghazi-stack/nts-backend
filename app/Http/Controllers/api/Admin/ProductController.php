@@ -1419,16 +1419,18 @@ class ProductController extends Controller
                     continue;
                 }
 
-                $attachedIds = $product->categories()->pluck('categories.id')->toArray();
+                $attachedIds = $product->categoriesForCurrentStore()
+                    ->pluck('categories.id')
+                    ->toArray();
                 $toDetach    = array_values(array_intersect($attachedIds, $data['categoryIds']));
                 $skipped     = array_values(array_diff($data['categoryIds'], $toDetach));
 
                 if (!empty($toDetach)) {
-                    $product->categories()->detach($toDetach);
+                    $product->categoriesForCurrentStore()->detach($toDetach);
 
                     // If primary category is detached, update it
                     if (!empty($product->category_id) && in_array((int)$product->category_id, $toDetach, true)) {
-                        $newPrimary = $product->categories()->value('categories.id');
+                       $newPrimary = $product->categoriesForCurrentStore()->value('categories.id');
                         $product->category_id = $newPrimary;
                         $product->save();
                     }
@@ -1438,7 +1440,9 @@ class ProductController extends Controller
                     'productId'            => $pid,
                     'detachedIds'          => $toDetach,
                     'skipped'              => $skipped,
-                    'remainingCategoryIds' => $product->categories()->pluck('categories.id')->toArray(),
+                    'remainingCategoryIds' => $product->categoriesForCurrentStore()
+                                                    ->pluck('categories.id')
+                                                    ->toArray(),
                 ];
             }
 

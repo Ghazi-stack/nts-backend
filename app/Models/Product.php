@@ -82,4 +82,9 @@ class Product extends Model
     {
         return $this->belongsTo(Store::class);
     }
+     public function categoriesForCurrentStore()
+    {
+        return $this->belongsToMany(Category::class, 'category_product', 'product_id', 'category_id')
+            ->where('categories.store_id', current_store_id());
+    }
 }
