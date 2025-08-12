@@ -22,15 +22,14 @@ class CategoryController extends Controller
             ], 400);
         }
 
-
         $categories = Category::with(['childrenRecursive', 'products'])
             ->where('store_id', $storeId)
             ->whereNull('parent_id')
             ->get();
 
-        $data = $categories->getCollection()->map(function ($category) {
+        $data = $categories->map(function ($category) {
             return $this->formatCategoryWithCounts($category);
-        });
+        })->values(); // optional: reset keys
 
         return response()->json([
             'status' => true,
