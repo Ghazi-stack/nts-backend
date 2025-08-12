@@ -22,12 +22,11 @@ class CategoryController extends Controller
             ], 400);
         }
 
-        $perPage = $request->query('perPage', 50);
 
         $categories = Category::with(['childrenRecursive', 'products'])
             ->where('store_id', $storeId)
             ->whereNull('parent_id')
-            ->paginate($perPage);
+            ->get();
 
         $data = $categories->getCollection()->map(function ($category) {
             return $this->formatCategoryWithCounts($category);
@@ -37,13 +36,6 @@ class CategoryController extends Controller
             'status' => true,
             'message' => 'Categories retrieved successfully',
             'data' => $data,
-            'pagination' => [
-                'total' => $categories->total(),
-                'count' => $categories->count(),
-                'perPage' => $categories->perPage(),
-                'currentPage' => $categories->currentPage(),
-                'totalPages' => $categories->lastPage(),
-            ]
         ]);
     }
 

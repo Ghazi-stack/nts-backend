@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\api\Admin\{
     BannerController, BrandController, CategoryController,
     ProductController, ProductFilterController, HomeController,
-    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,PromotionController
+    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,PromotionController,OrderTrackingImportController
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
@@ -61,6 +61,13 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/create-draft', 'createDraftOrder');     // POST create new draft
         Route::delete('/delete-draft/{id}', 'deleteDraftOrder'); // DELETE a draft order
         Route::get('/get-return-order','listReturnRequestsForAdmin');
+    });
+
+    Route::prefix('orders-tracking')->controller(OrderTrackingImportController::class)->group(function () {
+        Route::post('/tracking/import', 'import');
+        Route::get('/tracking/template', 'template');
+        Route::get('/tracking/export', 'export');
+        Route::post('/{order}/tracking', 'setSingle');
     });
 
     Route::prefix('order-items')->controller(OrderItemController::class)->group(function () {

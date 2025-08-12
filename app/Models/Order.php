@@ -16,9 +16,13 @@ class Order extends Model
         'store_id', 'user_id', 'session_id', 'order_number',
         'name', 'email', 'phone', 'address', 'status',
         'is_draft', 'channel', 'payment_method', 'shipping_method',
-        'shipping_cost', 'comments', 'total_amount'
+        'shipping_cost', 'comments', 'total_amount',
+          'tracking_number','tracking_carrier_code','tracking_carrier_name','shipped_at',
     ];
-
+    protected $casts = [
+        'is_draft'   => 'boolean',
+        'shipped_at' => 'datetime',
+    ];
     public function items()
     {
         return $this->hasMany(OrderItem::class)->with('product');
