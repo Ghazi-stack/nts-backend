@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Store;
 use App\Models\Payment;
 use App\Models\OrderItem;
+use App\Models\OrderNote;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -39,5 +40,9 @@ class Order extends Model
     public function store()
     {
         return $this->belongsTo(Store::class);
+    }
+    public function notes()
+    {
+        return $this->hasMany(OrderNote::class);
     }
 }

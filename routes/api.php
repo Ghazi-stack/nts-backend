@@ -61,6 +61,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/create-draft', 'createDraftOrder');     // POST create new draft
         Route::delete('/delete-draft/{id}', 'deleteDraftOrder'); // DELETE a draft order
         Route::get('/get-return-order','listReturnRequestsForAdmin');
+        Route::get('/get-notes/{orderId}', 'getOrderNotes');
     });
 
     Route::prefix('orders-tracking')->controller(OrderTrackingImportController::class)->group(function () {
@@ -222,6 +223,8 @@ Route::prefix('web')->group(function () {
     });
     Route::prefix('orders')->controller(OrderController::class)->group(function () {
         Route::post('/place-order', 'store');
+        Route::post('/track-order', 'trackOrder');
+        Route::post('/add-notes/{orderId}', 'addOrderNote');
     });
     // 🧾 Orders (auth required)
     Route::prefix('orders')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {

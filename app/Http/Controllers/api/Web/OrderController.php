@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api\Web;
 use Exception;
 use App\Models\Cart;
 use App\Models\Order;
+use App\Models\OrderNote;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use App\Exports\OrdersExport;
@@ -12,6 +13,7 @@ use App\Models\ReturnRequest;
 use App\Http\Controllers\Controller;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Http\Resources\OrderResource;
+use App\Http\Resources\OrderNoteResource;
 use App\Http\Resources\ReturnRequestResource;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -297,6 +299,127 @@ class OrderController extends Controller
         return response()->json([
             'status' => true,
             'data' => ReturnRequestResource::collection($requests)
+        ]);
+    }
+
+    public function cancelOrder(Request $request, $id)
+    {
+        try {
+            $user = auth('sanctum')->user();
+
+            $cancelableStatuses = [
+                'Pending',
+                'Awaiting Payment',
+                'Awaiting Fulfillment',
+                'Manual Verification Required',
+            ];
+
+            $order = Order::where('id', $id)
+                ->where('store_id', current_store_id())
+                ->where('user_id', $user->id)
+                ->whereIn('status', $cancelableStatuses)
+                ->firstOrFail();
+
+            $order->status = 'Cancelled';
+            $order->save();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Order cancelled successfully.',
+                'data' => new OrderResource($order),
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Order not found or cannot be cancelled.',
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function trackOrder(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'orderNumber' => 'required|string|max:255',
+                'email'       => 'required|email',
+            ]);
+
+            $order = Order::with('items.product')
+                ->where('order_number', $validated['orderNumber'])
+                ->where('email', $validated['email'])
+                ->where('store_id', current_store_id())
+                ->firstOrFail();
+
+            // Extract only product names from the order's items
+            $productNames = $order->items->map(function ($item) {
+                return optional($item->product)->name;
+            })->filter()->values();
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Order found successfully.',
+                'data'    => [
+                    'status'   => $order->status,
+                    'products' => $productNames
+                ]
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Order not found with provided details.',
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function addOrderNote(Request $request, $orderId)
+    {
+        $user = auth('sanctum')->user();
+
+        $request->validate([
+            'note' => 'required|string|max:1000',
+        ]);
+
+        $order = Order::where('store_id', current_store_id())
+                      ->where('id', $orderId)
+                      ->firstOrFail();
+
+        $note = OrderNote::create([
+            'order_id' => $order->id,
+            'user_id'  => $user->id,
+            'note'     => $request->note,
+            // 'is_admin' => $user->userRole != 1, // If not customer, assume admin
+        ]);
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Note added successfully.',
+            'data'    => new OrderNoteResource($note),
+        ]);
+    }
+
+    public function getOrderNotes($orderId)
+    {
+        $order = Order::where('store_id', current_store_id())
+                      ->where('id', $orderId)
+                      ->firstOrFail();
+
+        $notes = $order->notes()->with('user')->latest()->get();
+
+        return response()->json([
+            'status' => true,
+            'data'   => OrderNoteResource::collection($notes),
         ]);
     }
  
