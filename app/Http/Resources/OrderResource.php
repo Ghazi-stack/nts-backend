@@ -39,6 +39,7 @@ class OrderResource extends JsonResource
             'shippedAt'      => $this->shipped_at?->toDateTimeString(),
 
             'items'          => OrderItemResource::collection($this->whenLoaded('items')),
+            'customer'       => new CustomerResource($this->whenLoaded('customer')),
 
             // Timestamps as strings
             'createdAt'      => $this->created_at?->toDateTimeString(),

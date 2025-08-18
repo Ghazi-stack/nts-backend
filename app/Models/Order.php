@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\User;
 use App\Models\Store;
 use App\Models\Payment;
+use App\Models\Customer;
 use App\Models\OrderItem;
 use App\Models\OrderNote;
 use Illuminate\Database\Eloquent\Model;
@@ -44,5 +45,9 @@ class Order extends Model
     public function notes()
     {
         return $this->hasMany(OrderNote::class);
+    }
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class, 'customer_id');
     }
 }

@@ -422,5 +422,125 @@ class OrderController extends Controller
             'data'   => OrderNoteResource::collection($notes),
         ]);
     }
+
+    public function storeFromDashboard(Request $request)
+{
+    try {
+        // 🔒 Validation
+        $validated = $request->validate([
+            'firstName'                => 'required|string|max:255',
+            'lastName'                 => 'required|string|max:255',
+            'phoneNumber'              => 'required|string|max:20',
+            'email'                    => 'required|email',
+            'address1'                 => 'required|string',
+            'address2'                 => 'nullable|string',
+            'city'                     => 'nullable|string',
+            'state'                    => 'nullable|string',
+            'zip'                      => 'nullable|string',
+            'country'                  => 'nullable|string',
+            'companyName'              => 'nullable|string',
+
+            'paymentMethod'            => 'required|string',
+            'shippingCost'             => 'required|numeric',
+            'customerComments'         => 'nullable|string',
+            'staffNotes'               => 'nullable|string',
+
+            'shippingMethod.provider'  => 'required|string',
+
+            'selectedCustomer.id'      => 'required|integer',
+            'selectedCustomer.name'    => 'required|string',
+            'selectedCustomer.email'   => 'required|email',
+            'selectedCustomer.phone'   => 'nullable|string',
+            'selectedCustomer.company' => 'nullable|string',
+
+            'selectedProducts'             => 'required|array|min:1',
+            'selectedProducts.*.id'        => 'required|integer',
+            'selectedProducts.*.name'      => 'required|string',
+            'selectedProducts.*.slug'      => 'nullable|string',
+            'selectedProducts.*.sku'       => 'nullable|string',
+            'selectedProducts.*.price'     => 'required|numeric',
+            'selectedProducts.*.quantity'  => 'nullable|integer|min:1',
+
+            'search'             => 'nullable|string',
+            'destinationType'    => 'nullable|string',
+            'orderType'          => 'nullable|string',
+        ]);
+
+        $storeId = current_store_id();
+        $fullName = $request->firstName . ' ' . $request->lastName;
+
+        // 💰 Calculate total
+        $total = 0;
+        foreach ($request->selectedProducts as $item) {
+            $qty = $item['quantity'] ?? 1;
+            $total += $item['price'] * $qty;
+        }
+
+        $shippingCost = $request->shippingCost ?? 0;
+        $totalAmount = $total + $shippingCost;
+
+        // 📦 Create Order (only storing necessary fields)
+        $order = Order::create([
+            'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
+            'store_id'               => $storeId,
+            'customer_id'            => $request->selectedCustomer['id'],
+            'session_id'             => null,
+            'name'                   => $fullName,
+            'email'                  => $request->email,
+            'phone'                  => $request->phoneNumber,
+            'address'                => $request->address1 . ' ' . ($request->address2 ?? '') . ', ' .
+                                        ($request->city ?? '') . ', ' . ($request->state ?? '') . ', ' .
+                                        ($request->zip ?? '') . ', ' . ($request->country ?? ''),
+            'payment_method'         => $request->paymentMethod,
+            'shipping_method'        => $request->shippingMethod['provider'],
+            'shipping_cost'          => $shippingCost,
+            'total_amount'           => $totalAmount,
+            'comments'               => $request->customerComments ?? $request->staffNotes ?? null,
+            'status'                 => 'Pending',
+            'is_draft'               => false,
+            'channel'                => 'dashboard',
+            'tracking_number'        => null,
+            'tracking_carrier_code'  => null,
+            'tracking_carrier_name'  => null,
+            'shipped_at'             => null,
+        ]);
+
+        // 🛒 Store Order Items (only using product ID, quantity, and price)
+        foreach ($request->selectedProducts as $item) {
+            $order->items()->create([
+                'store_id'   => $storeId,
+                'product_id' => $item['id'],
+                'quantity'   => $item['quantity'] ?? 1,
+                'price'      => $item['price'],
+            ]);
+        }
+
+        // 🔁 Return same payload + order info
+        $responsePayload = $request->all(); // Same structure as frontend
+        $responsePayload['orderId']     = $order->id;
+        $responsePayload['orderNumber'] = $order->order_number;
+        $responsePayload['createdAt']   = $order->created_at?->toDateTimeString();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Order successfully created by Admin.',
+            'data'    => $responsePayload
+        ], 201);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'status'  => false,
+            'message' => 'Validation failed.',
+            'errors'  => $e->errors(),
+        ], 422);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status'  => false,
+            'message' => 'Something went wrong.',
+            'error'   => $e->getMessage(),
+        ], 500);
+    }
+}
+
  
 }

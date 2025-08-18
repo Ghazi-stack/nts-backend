@@ -62,6 +62,8 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::delete('/delete-draft/{id}', 'deleteDraftOrder'); // DELETE a draft order
         Route::get('/get-return-order','listReturnRequestsForAdmin');
         Route::get('/get-notes/{orderId}', 'getOrderNotes');
+        Route::post('/add-orders', 'storeFromDashboard');
+
     });
 
     Route::prefix('orders-tracking')->controller(OrderTrackingImportController::class)->group(function () {
