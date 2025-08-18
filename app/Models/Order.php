@@ -19,11 +19,12 @@ class Order extends Model
         'name', 'email', 'phone', 'address', 'status',
         'is_draft', 'channel', 'payment_method', 'shipping_method',
         'shipping_cost', 'comments', 'total_amount',
-        'tracking_number','tracking_carrier_code','tracking_carrier_name','shipped_at','customer_id','address_line2','staff_notes'
+        'tracking_number','tracking_carrier_code','tracking_carrier_name','shipped_at','customer_id','staff_notes'
     ];
     protected $casts = [
         'is_draft'   => 'boolean',
         'shipped_at' => 'datetime',
+        'address' => 'array',
     ];
     public function items()
     {

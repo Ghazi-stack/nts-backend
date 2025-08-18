@@ -450,12 +450,13 @@ class OrderController extends Controller
             'receiveOffers' => 'nullable|boolean',
 
             // Billing Info
-            'addressLine1' => 'required|string|max:255',
-            'addressLine2' => 'nullable|string|max:255',
-            'city' => 'nullable|string|max:100',
-            'state' => 'nullable|string|max:100',
-            'zip' => 'nullable|string|max:20',
-            'country' => 'nullable|string|max:100',
+            'address'                      => 'required|array',
+            'address.addressLine1'         => 'required|string|max:255',
+            'address.addressLine2'         => 'nullable|string|max:255',
+            'address.city'                 => 'nullable|string|max:100',
+            'address.state'                => 'nullable|string|max:100',
+            'address.zip'                  => 'nullable|string|max:20',
+            'address.country'              => 'nullable|string|max:100',
 
             // Order Info
             'shippingMethod' => 'required|string|max:100',
@@ -487,33 +488,46 @@ class OrderController extends Controller
                     'customer_group'         => $validated['customerGroup'] ?? null,
                     'receive_review_emails'  => $validated['receiveOffers'] ?? false,
                     'force_password_reset'   => true,
-                    'address'                => $validated['addressLine1'],
+                    'tax_exempt_code'        => null,
                 ]);
             }
 
             // ✅ Step 2: Create Order
             $order = Order::create([
-                'store_id'         => $storeId,
-                'customer_id'      => $customer->id,
-                'order_number'     => 'ORD-' . strtoupper(Str::random(8)),
-                'name'             => $customer->first_name . ' ' . $customer->last_name,
-                'email'            => $customer->email,
-                'phone'            => $customer->phone,
-                'address'          => $validated['addressLine1'],
-                'address_line2'    => $validated['addressLine2'] ?? null, // ✅ New line
-                'status'           => 'pending',
-                'is_draft'         => false,
-                'channel'          => 'admin-panel',
-                'payment_method'   => $validated['paymentMethod'],
-                'shipping_method'  => $validated['shippingMethod'],
-                'shipping_cost'    => 0,
-                'total_amount'     => 0,
-                'comments'         => $validated['comments'] ?? null,
-                'staff_notes' => $validated['staffNotes'] ?? null,
-            ]);
+                    'store_id'         => $storeId,
+                    'customer_id'      => $customer->id,
+                    'order_number'     => 'ORD-' . strtoupper(Str::random(8)),
+                    'name'             => $customer->first_name . ' ' . $customer->last_name,
+                    'email'            => $customer->email,
+                    'phone'            => $customer->phone,
 
-            // ✅ Step 3: Add products to order
-            $total = 0;
+                    // ❌ Old format (REMOVE these two lines)
+                    // 'address'          => $validated['addressLine1'],
+                    // 'address_line2'    => $validated['addressLine2'] ?? null,
+
+                    // ✅ New JSON format
+                    'address' => [
+                        'addressLine1' => $validated['address']['addressLine1'],
+                        'addressLine2' => $validated['address']['addressLine2'] ?? null,
+                        'city'         => $validated['address']['city'] ?? null,
+                        'state'        => $validated['address']['state'] ?? null,
+                        'zip'          => $validated['address']['zip'] ?? null,
+                        'country'      => $validated['address']['country'] ?? null,
+                    ],
+                
+                    'status'           => 'pending',
+                    'is_draft'         => false,
+                    'channel'          => 'admin-panel',
+                    'payment_method'   => $validated['paymentMethod'],
+                    'shipping_method'  => $validated['shippingMethod'],
+                    'shipping_cost'    => 0,
+                    'total_amount'     => 0,
+                    'comments'         => $validated['comments'] ?? null,
+                    'staff_notes'      => $validated['staffNotes'] ?? null,
+                ]);
+
+                // ✅ Step 3: Add products to order
+                $total = 0;
 
             foreach ($validated['products'] as $item) {
                 $product = Product::where('store_id', $storeId)->findOrFail($item['productId']);
@@ -547,15 +561,22 @@ class OrderController extends Controller
                     'order'     => new OrderResource($order),
                 ]
             ]);
+       } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+    DB::rollBack();
+    return response()->json([
+        'status' => false,
+        'message' => 'Order failed.',
+        'error' => 'One or more selected products could not be found. Please check your product list.'
+    ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'status' => false,
                 'message' => 'Order failed.',
-                'error' => $e->getMessage()
+                'error' => 'An unexpected error occurred. Please try again or contact support.'
             ], 500);
         }
-    }
+}
 }
 
                 
