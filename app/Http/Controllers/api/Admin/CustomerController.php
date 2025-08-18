@@ -322,4 +322,33 @@ class CustomerController extends Controller
         return Excel::download(new CustomerExport($storeId), $fileName);
     }
 
+    public function search(Request $request)
+    {
+        $storeId = current_store_id();
+    
+        if (!$storeId) {
+            return response()->json(['error' => 'Store not selected or token invalid.'], 400);
+        }
+    
+        $q = $request->input('query');
+    
+        if (!$q || strlen($q) < 2) {
+            return response()->json(['error' => 'Search query too short.'], 422);
+        }
+    
+        $results = Customer::where('store_id', $storeId)
+            ->where(function ($qBuilder) use ($q) {
+                $qBuilder->where('name', 'like', "%{$q}%")
+                         ->orWhere('email', 'like', "%{$q}%")
+                         ->orWhere('phone', 'like', "%{$q}%");
+            })
+            ->limit(10)
+            ->get();
+        
+        return response()->json([
+            'status' => true,
+            'data' => CustomerResource::collection($results)
+        ]);
+    }
+
 }
