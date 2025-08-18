@@ -19,7 +19,6 @@ class OrderResource extends JsonResource
             'id'             => $this->id,
             'orderNumber'    => $this->order_number,
             'storeId'        => $this->store_id,
-
             'name'           => $this->name,
             'email'          => $this->email,
             'phone'          => $this->phone,
@@ -28,7 +27,9 @@ class OrderResource extends JsonResource
             'paymentMethod'  => $this->payment_method,
             'shippingMethod' => $this->shipping_method,
             'shippingCost'   => $this->shipping_cost,
+            'addressLine2'   => $this->address_line2,
             'comments'       => $this->comments,
+            'staffNotes'     => $this->staff_notes,
             'isDraft'        => (bool) $this->is_draft,
             'totalAmount'    => $this->total_amount,
 

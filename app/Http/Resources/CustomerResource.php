@@ -16,21 +16,20 @@ class CustomerResource extends JsonResource
     {
         return [
             'id'                     => $this->id,
-            'store_id'               => $this->store_id,
-            'first_name'             => $this->first_name,
-            'last_name'              => $this->last_name,
-            'name'                   => $this->name,
-            'company_name'           => $this->company_name,
+            'storeId'               => $this->store_id,
+            'firstName'             => $this->first_name,
+            'lastName'              => $this->last_name,
+            'companyName'           => $this->company_name,
             'email'                  => $this->email,
-            'customer_group'         => $this->customer_group,
+            'customerGroup'         => $this->customer_group,
             'phone'                  => $this->phone,
             'address'                => $this->address,
-            'store_credit'           => $this->store_credit,
-            'receive_review_emails'  => (bool) $this->receive_review_emails,
-            'force_password_reset'   => (bool) $this->force_password_reset,
-            'tax_exempt_code'        => $this->tax_exempt_code,
-            'created_at'             => $this->created_at?->toDateTimeString(),
-            'updated_at'             => $this->updated_at?->toDateTimeString(),
+            'storeCredit'           => $this->store_credit,
+            'receiveReviewEmails'  => (bool) $this->receive_review_emails,
+            'forcePasswordReset'   => (bool) $this->force_password_reset,
+            'taxExemptCode'        => $this->tax_exempt_code,
+            'createdAt'             => $this->created_at?->toDateTimeString(),
+            'updatedAt'             => $this->updated_at?->toDateTimeString(),
         ];
     }
 }
