@@ -1,13 +1,62 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Reset Password</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reset Password</title>
 </head>
-<body>
-    <p>Hello,</p>
-    <p>We received a request to reset your password. Click the link below to set a new one:</p>
-    <p><a href="{{ $resetUrl }}">{{ $resetUrl }}</a></p>
-    <p>If you didn’t request this, please ignore this email.</p>
-    <p>Thanks,<br>Your Application Team</p>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f9f9f9;">
+  <table width="100%" cellspacing="0" cellpadding="0" bgcolor="#f9f9f9">
+    <tr>
+      <td align="center">
+        <table width="600" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="margin-top: 20px; border: 1px solid #e0e0e0;">
+          
+          <!-- Top Banner with Visible Logo -->
+          <tr bgcolor="#ff3d1f">
+            <td align="center" style="padding: 20px;">
+              <div style="background-color: white; padding: 10px 20px; display: inline-block; border-radius: 8px;">
+                <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/images/stencil/250x70/nts-newlogo_nts_1682517516__50628.original.png" alt="Newtown Spares Logo" width="180" style="display: block;" />
+              </div>
+            </td>
+          </tr>
+
+          <!-- Email Body -->
+          <tr>
+            <td style="padding: 30px;">
+              <p style="color: #555555; font-size: 16px;">
+                Hello,
+              </p>
+
+              <p style="color: #555555; font-size: 16px;">
+                We received a request to reset your password. Click the button below to set a new one:
+              </p>
+
+              <div style="text-align: center; margin-top: 30px;">
+                <a href="{{ $resetUrl }}" style="background-color: #ff3d1f; color: #ffffff; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 4px;">Reset Password</a>
+              </div>
+
+              <p style="color: #555555; font-size: 16px; margin-top: 30px;">
+                If you didn’t request this, you can safely ignore this email.
+              </p>
+
+              <p style="color: #555555; font-size: 16px;">
+                Thanks,<br />
+                <strong>Newtown Spares Team</strong>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr bgcolor="#f0f0f0">
+            <td align="center" style="font-size: 13px; color: #777777; padding: 20px;">
+              &copy; {{ date('Y') }} Newtown Spares. All rights reserved.<br />
+              <a href="https://newtownspares.com/unsubscribe" style="color: #777777;">Unsubscribe</a>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>

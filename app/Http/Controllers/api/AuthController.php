@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use App\Mail\UserRegistrationMail;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\UserResource;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use App\Http\Resources\StoreResource;
@@ -62,7 +63,7 @@ class AuthController extends Controller
                     'status' => true,
                     'message' => 'User registered successfully',
                     'user' => [
-                        $user
+                        UserResource::make($user)
                     ],
                 ], 201);
             

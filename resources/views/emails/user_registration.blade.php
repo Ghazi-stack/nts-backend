@@ -1,72 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Welcome to Newtown Spares</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f7f7f7;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            background-color: #ffffff;
-            max-width: 600px;
-            margin: 40px auto;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .logo {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .logo img {
-            max-width: 180px;
-        }
-        h1 {
-            color: #ff3c1f;
-            text-align: center;
-        }
-        p {
-            font-size: 16px;
-            color: #333333;
-            line-height: 1.6;
-        }
-        .btn {
-            display: inline-block;
-            padding: 12px 20px;
-            margin-top: 25px;
-            background-color: #ff3c1f;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-        }
-        .footer {
-            margin-top: 40px;
-            font-size: 12px;
-            color: #999999;
-            text-align: center;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to Newtown Spares</title>
 </head>
-<body>
-    <div class="container">
-        <div class="logo">
-            <img src="https://www.newtownspares.com/assets/logo.png" alt="Newtown Spares">
-        </div>
-        <h1>Hi {{ $user->name }},</h1>
-        <p>Thanks for registering with <strong>Newtown Spares</strong>!</p>
-        <p>We’re excited to have you on board. From high-quality server solutions to tech components, we’re here to elevate your digital game.</p>
-        <p>If you have any questions or need help with your order, feel free to reach out to our support team anytime.</p>
-        <p>
-            <a href="https://www.newtownspares.com" class="btn">Visit Our Store</a>
-        </p>
-        <div class="footer">
-            © {{ date('Y') }} Newtown Spares. All rights reserved.
-        </div>
-    </div>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f9f9f9;">
+  <table width="100%" cellspacing="0" cellpadding="0" bgcolor="#f9f9f9">
+    <tr>
+      <td align="center">
+        <table width="600" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="margin-top: 20px; border: 1px solid #e0e0e0;">
+          
+          <!-- Top Banner with Visible Logo -->
+          <tr bgcolor="#ff3d1f">
+            <td align="center" style="padding: 20px;">
+              <div style="background-color: white; padding: 10px 20px; display: inline-block; border-radius: 8px;">
+                <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/images/stencil/250x70/nts-newlogo_nts_1682517516__50628.original.png" alt="Newtown Spares Logo" width="180" style="display: block;" />
+              </div>
+            </td>
+          </tr>
+
+          <!-- Email Body -->
+          <tr>
+            <td style="padding: 30px;">
+              <h2 style="color: #333333;">Hi {{ $user->name }}</h2>
+              <p style="color: #555555; font-size: 16px;">
+                Thanks for registering with <strong>Newtown Spares</strong>!
+              </p>
+              <p style="color: #555555; font-size: 16px;">
+                We’re excited to have you on board. From high-quality server solutions to tech components, we’re here to elevate your digital game.
+              </p>
+              <p style="color: #555555; font-size: 16px;">
+                If you ever need support or have questions, feel free to contact our team — we’re happy to help.
+              </p>
+
+              <div style="text-align: center; margin-top: 30px;">
+                <a href="https://www.newtownspares.com" style="background-color: #ff3d1f; color: #ffffff; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 4px;">Visit Our Store</a>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr bgcolor="#f0f0f0">
+            <td align="center" style="font-size: 13px; color: #777777; padding: 20px;">
+              &copy; {{ date('Y') }} Newtown Spares. All rights reserved.<br />
+              <a href="https://newtownspares.com/unsubscribe" style="color: #777777;">Unsubscribe</a>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
