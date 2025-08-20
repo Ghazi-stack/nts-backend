@@ -268,10 +268,13 @@ class CustomerController extends Controller
                     $failed[] = ['id' => $cid, 'error' => $e->getMessage()];
                 }
             }
+              $message = count($deleted) === 1 
+            ? 'Your customer deleted.' 
+            : 'Bulk delete completed.';
 
             return response()->json([
                 'status' => true,
-                'message' => 'Bulk delete completed.',
+                'message' => $message,
                 'deletedIds' => $deleted,
                 'failed' => $failed
             ]);
