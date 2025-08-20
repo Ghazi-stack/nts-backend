@@ -154,7 +154,8 @@ class CustomerController extends Controller
                 'tax_exempt_code'       => 'nullable|string|max:50',
                 'receive_review_emails' => 'nullable|boolean',
                 'force_password_reset'  => 'nullable|boolean',
-                'password'              => 'nullable|string|min:7'
+                'password'              => 'nullable|string|min:7',
+                'password'              => 'nullable|string|min:7|confirmed',
             ]);
 
             $validated['store_id'] = $storeId;
