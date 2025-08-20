@@ -852,13 +852,12 @@ class ProductController extends Controller
             }
 
             $request->validate([
-                'query' => 'required|string|min:2'
+                'query' => 'required|string|min:1'
             ]);
 
             $queryStr = $request->input('query');
             $page = (int) $request->input('page', 1);
             $pageSize = (int) $request->input('pageSize', 50);
-
             $products = Product::where('store_id', $storeId)
                 ->where(function ($q) use ($queryStr) {
                     $q->where('name', 'like', "%$queryStr%")
@@ -870,6 +869,15 @@ class ProductController extends Controller
                       ->orWhereHas('brand', fn($q3) => $q3->where('name', 'like', "%$queryStr%"));
                 })
                 ->with(['categories', 'brand'])
+                ->orderByRaw("
+                    CASE
+                        WHEN name = ? THEN 0
+                        WHEN name LIKE ? THEN 1
+                        WHEN name LIKE ? THEN 2
+                        ELSE 3
+                    END
+                ", [$queryStr, "$queryStr%", "%$queryStr%"])
+                ->orderBy('name', 'asc')
                 ->paginate($pageSize, ['*'], 'page', $page);
 
             return response()->json([
