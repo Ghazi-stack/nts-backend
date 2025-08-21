@@ -339,8 +339,9 @@ class CustomerController extends Controller
                     'name'        => $validated['name'],
                     'email'       => $validated['email'],
                     'password'    => Hash::make($rawPassword),
-                    'phone_number' => $validated['phone'] ?? null, // Send null if not available
+                    'phone' => $validated['phone'] ?? null, // Send null if not available
                     'customer_id' => $customer->id,
+                    'store_id'    => $storeId
                 ]);
             }
         
