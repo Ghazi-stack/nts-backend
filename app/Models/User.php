@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Models\Order;
 use App\Models\Store;
+use App\Models\Customer;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
 use App\Notifications\CustomResetPassword;
@@ -65,5 +66,9 @@ class User extends Authenticatable
     public function stores()
     {
         return $this->belongsToMany(Store::class);
+    }
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class);
     }
 }

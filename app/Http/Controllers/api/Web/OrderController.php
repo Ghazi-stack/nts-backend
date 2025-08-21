@@ -32,13 +32,33 @@ class OrderController extends Controller
             $user = auth('sanctum')->user();
             $sessionId = $request->header('X-Session-ID') ?? session()->getId();
             $perPage = $request->query('perPage', 20);
+            $keyword = $request->query('keyword'); // ✅ New filter for search
 
-            $orders = Order::with('items.product')
-                ->where('store_id', current_store_id()) // ✅ Multi-store filtering
-                ->when($user, fn($q) => $q->where('user_id', $user->id))
-                ->when(!$user, fn($q) => $q->where('session_id', $sessionId))
-                ->latest()
-                ->paginate($perPage);
+            // $orders = Order::with('items.product')
+            //     ->where('store_id', current_store_id()) // ✅ Multi-store filtering
+            //     ->when($user, fn($q) => $q->where('user_id', $user->id))
+            //     ->when(!$user, fn($q) => $q->where('session_id', $sessionId))
+            //     ->latest()
+            //     ->paginate($perPage);
+            $orders = Order::with('items.product', 'customer') // include customer relation
+            ->where('store_id', current_store_id()) // ✅ Multi-store filtering
+            ->when($user, fn($q) => $q->where('user_id', $user->id))
+            ->when(!$user, fn($q) => $q->where('session_id', $sessionId))
+            ->when($keyword, function ($q) use ($keyword) {
+                $q->where(function ($query) use ($keyword) {
+                    $query->where('id', 'like', "%{$keyword}%")                          // Order ID
+                          ->orWhere('order_number', 'like', "%{$keyword}%")              // Order Number
+                          ->orWhere('status', 'like', "%{$keyword}%")                    // Status
+                          ->orWhere('total_amount', 'like', "%{$keyword}%")              // Total
+                          ->orWhereHas('customer', function ($q2) use ($keyword) {
+                              $q2->where('first_name', 'like', "%{$keyword}%")
+                                 ->orWhere('last_name', 'like', "%{$keyword}%")
+                                 ->orWhere('name', 'like', "%{$keyword}%");              // Full name
+                          });
+                });
+            })
+            ->latest()
+            ->paginate($perPage);
 
             return response()->json([
                 'status' => true,
