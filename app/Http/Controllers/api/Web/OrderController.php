@@ -594,160 +594,293 @@ class OrderController extends Controller
 //                 'status' => false,
 //                 'message' => 'Order failed.',
 //                 'error' => 'An unexpected error occurred. Please try again or contact support.'
-//             ], 500);
-//         }
-// }
+    //             ], 500);
+    //         }
+    // }
 
-public function storeFromDashboard(Request $request)
-{
-    $storeId = current_store_id();
+    public function storeFromDashboard(Request $request)
+    {
+        $storeId = current_store_id();
 
-    // ✅ Updated validation without customerType
-    $validated = $request->validate([
-        // Existing customer
-        'customerId' => 'nullable|exists:customers,id',
-
-        // New customer (if no customerId)
-        'email'      => 'required_without:customerId|email|unique:customers,email',
-        'password'   => 'nullable|string|min:6',
-        'firstName'  => 'required_without:customerId|string|max:255',
-        'lastName'   => 'required_without:customerId|string|max:255',
-        'phone'      => 'nullable|string|max:20',
-        'companyName' => 'nullable|string|max:255',
-        'customerGroup' => 'nullable|string|max:255',
-        'receiveOffers' => 'nullable|boolean',
-
-        // Billing Address
-        'address'                      => 'required|array',
-        'address.addressLine1'         => 'required|string|max:255',
-        'address.addressLine2'         => 'nullable|string|max:255',
-        'address.city'                 => 'nullable|string|max:100',
-        'address.state'                => 'nullable|string|max:100',
-        'address.zip'                  => 'nullable|string|max:20',
-        'address.country'              => 'nullable|string|max:100',
-
-        // Order Info
-        'shippingMethod' => 'required|string|max:100',
-        'paymentMethod' => 'required|string|max:100',
-        'comments' => 'nullable|string|max:1000',
-        'staffNotes' => 'nullable|string|max:1000',
-
-        // Product List
-        'products' => 'required|array|min:1',
-        'products.*.productId' => 'required|exists:products,id',
-        'products.*.quantity' => 'required|integer|min:1',
-    ]);
-
-    try {
-        DB::beginTransaction();
-
-        // ✅ Step 1: Handle customer
-        if (!empty($validated['customerId'])) {
+        // ✅ Updated validation without customerType
+        $validated = $request->validate([
             // Existing customer
-            $customer = Customer::where('store_id', $storeId)
-                                ->findOrFail($validated['customerId']);
-        } else {
-            // New customer
-            $customer = Customer::create([
-                'store_id'               => $storeId,
-                'email'                  => $validated['email'],
-                'password'               => isset($validated['password']) ? bcrypt($validated['password']) : null,
-                'first_name'             => $validated['firstName'],
-                'last_name'              => $validated['lastName'],
-                'company_name'           => $validated['companyName'] ?? null,
-                'phone'                  => $validated['phone'] ?? null,
-                'customer_group'         => $validated['customerGroup'] ?? null,
-                'receive_review_emails'  => $validated['receiveOffers'] ?? false,
-                'force_password_reset'   => true,
-                'tax_exempt_code'        => null,
-            ]);
-        }
+            'customerId' => 'nullable|exists:customers,id',
 
-        // ✅ Step 2: Create the order
-        $order = Order::create([
-            'store_id'        => $storeId,
-            'customer_id'     => $customer->id,
-            'order_number'    => 'ORD-' . strtoupper(Str::random(8)),
-            'name'            => $customer->first_name . ' ' . $customer->last_name,
-            'email'           => $customer->email,
-            'phone'           => $customer->phone,
+            // New customer (if no customerId)
+            'email'      => 'required_without:customerId|email|unique:customers,email',
+            'password'   => 'nullable|string|min:6',
+            'firstName'  => 'required_without:customerId|string|max:255',
+            'lastName'   => 'required_without:customerId|string|max:255',
+            'phone'      => 'nullable|string|max:20',
+            'companyName' => 'nullable|string|max:255',
+            'customerGroup' => 'nullable|string|max:255',
+            'receiveOffers' => 'nullable|boolean',
 
-            'address' => [
-                'addressLine1' => $validated['address']['addressLine1'],
-                'addressLine2' => $validated['address']['addressLine2'] ?? null,
-                'city'         => $validated['address']['city'] ?? null,
-                'state'        => $validated['address']['state'] ?? null,
-                'zip'          => $validated['address']['zip'] ?? null,
-                'country'      => $validated['address']['country'] ?? null,
-            ],
+            // Billing Address
+            'address'                      => 'required|array',
+            'address.addressLine1'         => 'required|string|max:255',
+            'address.addressLine2'         => 'nullable|string|max:255',
+            'address.city'                 => 'nullable|string|max:100',
+            'address.state'                => 'nullable|string|max:100',
+            'address.zip'                  => 'nullable|string|max:20',
+            'address.country'              => 'nullable|string|max:100',
 
-            'status'          => 'pending',
-            'is_draft'        => false,
-            'channel'         => 'admin-panel',
-            'payment_method'  => $validated['paymentMethod'],
-            'shipping_method' => $validated['shippingMethod'],
-            'shipping_cost'   => 0,
-            'total_amount'    => 0, // Will be calculated
-            'comments'        => $validated['comments'] ?? null,
-            'staff_notes'     => $validated['staffNotes'] ?? null,
+            // Order Info
+            'shippingMethod' => 'required|string|max:100',
+            'paymentMethod' => 'required|string|max:100',
+            'comments' => 'nullable|string|max:1000',
+            'staffNotes' => 'nullable|string|max:1000',
+
+            // Product List
+            'products' => 'required|array|min:1',
+            'products.*.productId' => 'required|exists:products,id',
+            'products.*.quantity' => 'required|integer|min:1',
         ]);
 
-        // ✅ Step 3: Attach products and calculate total
-        $total = 0;
+        try {
+            DB::beginTransaction();
 
-        foreach ($validated['products'] as $item) {
-            $product = Product::where('store_id', $storeId)
-                              ->findOrFail($item['productId']);
+            // ✅ Step 1: Handle customer
+            if (!empty($validated['customerId'])) {
+                // Existing customer
+                $customer = Customer::where('store_id', $storeId)
+                                    ->findOrFail($validated['customerId']);
+            } else {
+                // New customer
+                $customer = Customer::create([
+                    'store_id'               => $storeId,
+                    'email'                  => $validated['email'],
+                    'password'               => isset($validated['password']) ? bcrypt($validated['password']) : null,
+                    'first_name'             => $validated['firstName'],
+                    'last_name'              => $validated['lastName'],
+                    'company_name'           => $validated['companyName'] ?? null,
+                    'phone'                  => $validated['phone'] ?? null,
+                    'customer_group'         => $validated['customerGroup'] ?? null,
+                    'receive_review_emails'  => $validated['receiveOffers'] ?? false,
+                    'force_password_reset'   => true,
+                    'tax_exempt_code'        => null,
+                ]);
+            }
 
-            $qty = $item['quantity'];
-            $lineTotal = $product->price * $qty;
+            // ✅ Step 2: Create the order
+            $order = Order::create([
+                'store_id'        => $storeId,
+                'customer_id'     => $customer->id,
+                'order_number'    => 'ORD-' . strtoupper(Str::random(8)),
+                'name'            => $customer->first_name . ' ' . $customer->last_name,
+                'email'           => $customer->email,
+                'phone'           => $customer->phone,
 
-            OrderItem::create([
-                'order_id'   => $order->id,
-                'product_id' => $product->id,
-                'quantity'   => $qty,
-                'price'      => $product->price,
-                'total'      => $lineTotal,
-                'store_id'   => $storeId,
+                'address' => [
+                    'addressLine1' => $validated['address']['addressLine1'],
+                    'addressLine2' => $validated['address']['addressLine2'] ?? null,
+                    'city'         => $validated['address']['city'] ?? null,
+                    'state'        => $validated['address']['state'] ?? null,
+                    'zip'          => $validated['address']['zip'] ?? null,
+                    'country'      => $validated['address']['country'] ?? null,
+                ],
+
+                'status'          => 'pending',
+                'is_draft'        => false,
+                'channel'         => 'admin-panel',
+                'payment_method'  => $validated['paymentMethod'],
+                'shipping_method' => $validated['shippingMethod'],
+                'shipping_cost'   => 0,
+                'total_amount'    => 0, // Will be calculated
+                'comments'        => $validated['comments'] ?? null,
+                'staff_notes'     => $validated['staffNotes'] ?? null,
             ]);
 
-            $total += $lineTotal;
+            // ✅ Step 3: Attach products and calculate total
+            $total = 0;
+
+            foreach ($validated['products'] as $item) {
+                $product = Product::where('store_id', $storeId)
+                                  ->findOrFail($item['productId']);
+
+                $qty = $item['quantity'];
+                $lineTotal = $product->price * $qty;
+
+                OrderItem::create([
+                    'order_id'   => $order->id,
+                    'product_id' => $product->id,
+                    'quantity'   => $qty,
+                    'price'      => $product->price,
+                    'total'      => $lineTotal,
+                    'store_id'   => $storeId,
+                ]);
+
+                $total += $lineTotal;
+            }
+
+            // ✅ Step 4: Update order total
+            $order->update(['total_amount' => $total]);
+
+            DB::commit();
+
+            // ✅ Success response
+            return response()->json([
+                'status' => true,
+                'message' => 'Order placed successfully.',
+                'data' => [
+                    'customer' => new CustomerResource($customer),
+                    'products' => ProductResource::collection(
+                        $order->items()->with('product')->get()
+                    ),
+                    'order' => new OrderResource($order),
+                ]
+            ]);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Order failed.',
+                'error' => 'One or more selected products could not be found. Please check your product list.'
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Order failed.',
+                'error' => 'An unexpected error occurred. Please try again or contact support.'
+            ], 500);
         }
-
-        // ✅ Step 4: Update order total
-        $order->update(['total_amount' => $total]);
-
-        DB::commit();
-
-        // ✅ Success response
-        return response()->json([
-            'status' => true,
-            'message' => 'Order placed successfully.',
-            'data' => [
-                'customer' => new CustomerResource($customer),
-                'products' => ProductResource::collection(
-                    $order->items()->with('product')->get()
-                ),
-                'order' => new OrderResource($order),
-            ]
-        ]);
-
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-        DB::rollBack();
-        return response()->json([
-            'status' => false,
-            'message' => 'Order failed.',
-            'error' => 'One or more selected products could not be found. Please check your product list.'
-        ], 200);
-    } catch (\Exception $e) {
-        DB::rollBack();
-        return response()->json([
-            'status' => false,
-            'message' => 'Order failed.',
-            'error' => 'An unexpected error occurred. Please try again or contact support.'
-        ], 500);
     }
-}
+
+    public function advancedOrderSearch(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+        
+            $query = Order::with(['items.product', 'customer'])->where('store_id', $storeId);
+        
+            // 🔍 Keyword-based search
+            if ($request->filled('keywords')) {
+                $keywords = $request->keywords;
+                $query->where(function ($q) use ($keywords) {
+                    $q->where('order_number', 'like', "%{$keywords}%")
+                        ->orWhere('status', 'like', "%{$keywords}%")
+                        ->orWhere('email', 'like', "%{$keywords}%")
+                        ->orWhere('name', 'like', "%{$keywords}%")
+                        ->orWhere('phone', 'like', "%{$keywords}%");
+                });
+            }
+        
+            // 🔄 Filtering
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+        
+            if ($request->filled('paymentMethod')) {
+                $query->where('payment_method', $request->paymentMethod);
+            }
+        
+            if ($request->filled('shippingProvider')) {
+                $query->where('tracking_carrier_name', $request->shippingProvider);
+            }
+        
+            if ($request->filled('shippingMethod')) {
+                $query->where('shipping_method', $request->shippingMethod);
+            }
+        
+            if ($request->filled('orderIdFrom')) {
+                $query->where('id', '>=', $request->orderIdFrom);
+            }
+        
+            if ($request->filled('orderIdTo')) {
+                $query->where('id', '<=', $request->orderIdTo);
+            }
+        
+            if ($request->filled('orderTotalFrom')) {
+                $query->where('total_amount', '>=', $request->orderTotalFrom);
+            }
+        
+            if ($request->filled('orderTotalTo')) {
+                $query->where('total_amount', '<=', $request->orderTotalTo);
+            }
+        
+            if ($request->filled('guest')) {
+                $query->whereNull('user_id');
+            }
+        
+            if ($request->filled('preorderYes')) {
+                $query->where('channel', 'preorder');
+            }
+        
+            if ($request->filled('deletedOrder') && $request->deletedOrder === 'only') {
+                $query->onlyTrashed();
+            } elseif ($request->filled('deletedOrder') && $request->deletedOrder === 'ignore') {
+                // do nothing
+            } else {
+                $query->withTrashed();
+            }
+        
+            if ($request->filled('fulfillmentSource')) {
+                $query->where('fulfillment_source', $request->fulfillmentSource);
+            }
+        
+            if ($request->filled('coupon')) {
+                $query->where('coupon_code', $request->coupon);
+            }
+        
+            // 📅 Date filter
+            if ($request->filled('dateRange') && $request->filled('dateType')) {
+                $column = match ($request->dateType) {
+                    'order-date' => 'created_at',
+                    'shipped-date' => 'shipped_at',
+                    default => 'created_at'
+                };
+            
+                switch ($request->dateRange) {
+                    case 'Yesterday':
+                        $query->whereDate($column, today()->subDay());
+                        break;
+                    case 'Today':
+                        $query->whereDate($column, today());
+                        break;
+                    case 'Last7Days':
+                        $query->whereDate($column, '>=', now()->subDays(7));
+                        break;
+                    case 'Last30Days':
+                        $query->whereDate($column, '>=', now()->subDays(30));
+                        break;
+                }
+            }
+        
+            // ⬆️ Sorting
+            $query->orderBy($request->input('sortBy', 'id'), $request->input('sortDirection', 'asc'));
+        
+            // 📄 Pagination
+            $orders = $query->paginate($request->input('perPage', 20));
+        
+            return response()->json([
+                'status' => true,
+                'message' => 'Filtered orders fetched.',
+                'data' => OrderResource::collection($orders),
+                'pagination' => [
+                    'total' => $orders->total(),
+                    'count' => $orders->count(),
+                    'perPage' => $orders->perPage(),
+                    'currentPage' => $orders->currentPage(),
+                    'totalPages' => $orders->lastPage(),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to fetch orders.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 
 }
 

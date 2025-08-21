@@ -77,120 +77,54 @@ class AuthController extends Controller
             }
         }
 
-    //  public function login(Request $request)
-    // {
-    //     try {
-    //         $request->validate([
-    //             'email' => 'required|email',
-    //             'password' => 'required',
-    //         ]);
-
-    //         $user = User::where('email', $request->email)->first();
-
-    //         if (!$user || !Hash::check($request->password, $user->password)) {
-    //             return response()->json([
-    //                 'status' => false,
-    //                 'message' => 'Invalid email or password',
-    //                 'user' => null
-    //             ], 401);
-    //         }
-
-    //         $roleMessage = $user->userRole == 1 ? 'Admin login successful' : 'Customer login successful';
-
-    //          // ✅ Create token
-    //         $tokenResult = $user->createToken('api_token');
-    //         $plainTextToken = $tokenResult->plainTextToken;
-
-    //         // ✅ Set expiry before checking token
-    //         $expireAt = now()->addHours(12);
-    //         $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($plainTextToken);
-
-    //         if ($accessToken) {
-    //             $accessToken->expires_at = $expireAt;
-    //             $accessToken->save();
-    //         }
-
-    //         // ✅ Load stores
-    //         $stores = StoreResource::collection($user->stores()->get());
-
-    //         // ✅ Return with expireAt
-    //         return response()->json([
-    //             'status' => true,
-    //             'message' => $roleMessage,
-    //             'token' => $plainTextToken,
-    //             'expireAt' => $expireAt->toDateTimeString(), // ✅ Now this is always set
-    //             'user' => $user,
-    //             'stores' => $stores,
-    //         ]);
-    //     } catch (\Exception $e) {
-    //         \Log::error('Login failed: ' . $e->getMessage());
-
-    //         return response()->json([
-    //             'status' => false,
-    //             'message' => 'Something went wrong during login.',
-    //         ], 500);
-    //     }
-    // }
-    public function login(Request $request)
+     public function login(Request $request)
     {
         try {
-            // ✅ Get storeId from header
-            $storeId = $request->header('storeId');
-        
             $request->validate([
                 'email' => 'required|email',
-                'password' => 'required|string',
+                'password' => 'required',
             ]);
-        
-            // ✅ Validate store ID
-            if (!$storeId || !\App\Models\Store::where('id', $storeId)->exists()) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Invalid or missing store ID in header.',
-                ], 400);
-            }
-        
-            // ✅ Find user by email + store
-            $user = User::where('email', $request->email)
-                        ->where('store_id', $storeId)
-                        ->first();
-        
+
+            $user = User::where('email', $request->email)->first();
+
             if (!$user || !Hash::check($request->password, $user->password)) {
                 return response()->json([
                     'status' => false,
-                    'message' => 'Invalid email, password, or store.',
+                    'message' => 'Invalid email or password',
                     'user' => null
                 ], 401);
             }
-        
+
             $roleMessage = $user->userRole == 1 ? 'Admin login successful' : 'Customer login successful';
-        
-            // ✅ Create token
+
+             // ✅ Create token
             $tokenResult = $user->createToken('api_token');
             $plainTextToken = $tokenResult->plainTextToken;
-        
-            // ✅ Token expiry
+
+            // ✅ Set expiry before checking token
             $expireAt = now()->addHours(12);
-            $accessToken = PersonalAccessToken::findToken($plainTextToken);
+            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($plainTextToken);
+
             if ($accessToken) {
                 $accessToken->expires_at = $expireAt;
                 $accessToken->save();
             }
-        
-            // ✅ Return stores if needed (optional)
+
+            // ✅ Load stores
             $stores = StoreResource::collection($user->stores()->get());
-        
+
+            // ✅ Return with expireAt
             return response()->json([
                 'status' => true,
                 'message' => $roleMessage,
                 'token' => $plainTextToken,
-                'expireAt' => $expireAt->toDateTimeString(),
-                'user' => new UserResource($user),
+                'expireAt' => $expireAt->toDateTimeString(), // ✅ Now this is always set
+                'user' => $user,
                 'stores' => $stores,
             ]);
         } catch (\Exception $e) {
             \Log::error('Login failed: ' . $e->getMessage());
-        
+
             return response()->json([
                 'status' => false,
                 'message' => 'Something went wrong during login.',

@@ -63,6 +63,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/get-return-order','listReturnRequestsForAdmin');
         Route::get('/get-notes/{orderId}', 'getOrderNotes');
         Route::post('/add-orders', 'storeFromDashboard');
+        Route::post('/search-advanced', 'advancedOrderSearch');
 
     });
 
@@ -99,6 +100,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::delete('/delete-customer/{id?}', [CustomerController::class, 'destroy']);
         Route::post('/import', [CustomerController::class, 'importCSV']);
         Route::get('/export', [CustomerController::class, 'exportCSV']);
+        Route::post('/customer-search', [CustomerController::class, 'advancedSearch']);
     });
     // 📁 Categories
     Route::prefix('categories')->controller(CategoryController::class)->group(function () {
