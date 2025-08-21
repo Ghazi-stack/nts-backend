@@ -182,8 +182,8 @@ class CategoryController extends Controller
                 'name' => $request->name,
                 'slug' => $slug,
                 'description' => $request->description,
-                // 'parent_id' => $request->parentId,
-                'parent_id' => $request->filled('parentId') ? $request->parentId : $category->parent_id,
+                'parent_id' => $request->parentId,
+                // 'parent_id' => $request->filled('parentId') ? $request->parentId : $category->parent_id,
                 'is_visible' => $request->boolean('isVisible', $category->is_visible),
             ]);
 
