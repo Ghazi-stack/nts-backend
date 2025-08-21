@@ -29,7 +29,9 @@ class User extends Authenticatable
         'userRole',
         'store_name',
         'business_size',
-        'region'
+        'region',
+        'customer_id',
+        'store_id'
     ];
 
     /**
