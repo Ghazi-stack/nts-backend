@@ -119,9 +119,9 @@ class CustomerController extends Controller
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
-        
+
             $query = Customer::where('store_id', $storeId);
-        
+
             // 🔍 Unified keyword search (Filter by keyword)
             if ($request->filled('search')) {
                 $search = $request->search;
@@ -134,67 +134,67 @@ class CustomerController extends Controller
                       ->orWhere('customer_group', 'like', "%{$search}%"); // optional
                 });
             }
-        
+
             // 🔠 Starts with first name
             if ($request->filled('starts_with')) {
                 $query->where('first_name', 'like', $request->starts_with . '%');
             }
-        
+
             // ☎️ Phone filtering
             if ($request->filled('phone')) {
                 $query->where('phone', 'like', "%{$request->phone}%");
             }
-        
+
             // 🌍 Country/state filter (if available in your table)
             if ($request->filled('country')) {
                 $query->where('country', $request->country);
             }
-        
+
             if ($request->filled('state')) {
                 $query->where('state', $request->state);
             }
-        
+
             // 🔢 ID range filtering
             if ($request->filled('id_from')) {
                 $query->where('id', '>=', $request->id_from);
             }
-        
+
             if ($request->filled('id_to')) {
                 $query->where('id', '<=', $request->id_to);
             }
-        
+
             // 💳 Store credit range filtering
             if ($request->filled('credit_from')) {
                 $query->where('store_credit', '>=', $request->credit_from);
             }
-        
+
             if ($request->filled('credit_to')) {
                 $query->where('store_credit', '<=', $request->credit_to);
             }
-        
+
             // 👥 Customer group filtering
             if ($request->filled('customer_group')) {
                 $query->where('customer_group', $request->customer_group);
             }
-        
+
             // 📅 Created date range filtering
             if ($request->filled('created_from')) {
                 $query->whereDate('created_at', '>=', $request->created_from);
             }
-        
+
             if ($request->filled('created_to')) {
                 $query->whereDate('created_at', '<=', $request->created_to);
             }
-        
+
             // 🔃 Sorting
             $sortField = $request->input('sortBy', 'id');
             $sortOrder = $request->input('sortOrder', 'asc');
             $query->orderBy($sortField, $sortOrder);
-        
+
             // 📄 Pagination
             $pageSize = $request->input('pageSize', 50);
             $customers = $query->paginate($pageSize);
-        
+
             return response()->json([
                 'status' => true,
                 'message' => 'Customer list fetched.',
@@ -339,6 +339,7 @@ class CustomerController extends Controller
                     'name'        => $validated['name'],
                     'email'       => $validated['email'],
                     'password'    => Hash::make($rawPassword),
+                    'phone_number' => $validated['phone'] ?? null, // Send null if not available
                     'customer_id' => $customer->id,
                 ]);
             }
