@@ -85,6 +85,72 @@ class CustomerController extends Controller
         }
     }
 
+    // public function store(Request $request)
+    // {
+    //     try {
+    //         $storeId = current_store_id();
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Store not selected or token invalid.'
+    //             ], 400);
+    //         }
+        
+    //         $validated = $request->validate([
+    //             'firstName'            => 'nullable|string|max:255',
+    //             'lastName'             => 'nullable|string|max:255',
+    //             'email'                 => [
+    //                 'nullable',
+    //                 'email',
+    //                 Rule::unique('customers')->where(function ($query) use ($storeId) {
+    //                     return $query->where('store_id', $storeId);
+    //                 }),
+    //             ],
+    //             'phone'                 => 'nullable|string|max:20',
+    //             'address'               => 'nullable|string',
+    //             'companyName'          => 'nullable|string|max:255',
+    //             'customerGroup'        => 'nullable|string|max:255',
+    //             'storeCredit'          => 'nullable|numeric',
+    //             'country'               => 'nullable|string|max:100',
+    //             'state'                 => 'nullable|string|max:100',
+    //             'taxExemptCode'       => 'nullable|string|max:50',
+    //             'receiveReviewEmails' => 'nullable|boolean',
+    //             'forcePasswordReset'  => 'nullable|boolean',
+    //             'password'              => 'nullable|string|min:7|confirmed',
+    //         ]);
+        
+    //         $validated['store_id'] = $storeId;
+    //         $validated['name'] = trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? ''));
+        
+    //         if (!empty($validated['password'])) {
+    //             $rawPassword = $validated['password']; // keep original for user table
+    //             $validated['password'] = Hash::make($validated['password']);
+    //         }
+        
+    //         $customer = Customer::create($validated);
+        
+    //         // 🔑 Create corresponding User (for authentication)
+    //         if (!empty($validated['email']) && !empty($rawPassword ?? null)) {
+    //             User::create([
+    //                 'email'       => $validated['email'],
+    //                 'password'    => Hash::make($rawPassword),
+    //                 'customer_id' => $customer->id,
+    //                 'store_id'    => $storeId
+    //             ]);
+    //         }
+        
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Customer created.',
+    //             'data' => new CustomerResource($customer)
+    //         ], 201);
+        
+    //     } catch (ValidationException $e) {
+    //         return response()->json(['errors' => $e->errors()], 422);
+    //     } catch (\Exception $e) {
+    //         return response()->json(['error' => $e->getMessage()], 500);
+    //     }
+    // }
     public function store(Request $request)
     {
         try {
@@ -95,11 +161,11 @@ class CustomerController extends Controller
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
-        
+
             $validated = $request->validate([
                 'firstName'            => 'nullable|string|max:255',
                 'lastName'             => 'nullable|string|max:255',
-                'email'                 => [
+                'email'                => [
                     'nullable',
                     'email',
                     Rule::unique('customers')->where(function ($query) use ($storeId) {
@@ -108,45 +174,67 @@ class CustomerController extends Controller
                 ],
                 'phone'                 => 'nullable|string|max:20',
                 'address'               => 'nullable|string',
-                'companyName'          => 'nullable|string|max:255',
-                'customerGroup'        => 'nullable|string|max:255',
-                'storeCredit'          => 'nullable|numeric',
+                'companyName'           => 'nullable|string|max:255',
+                'customerGroup'         => 'nullable|string|max:255',
+                'storeCredit'           => 'nullable|numeric',
                 'country'               => 'nullable|string|max:100',
                 'state'                 => 'nullable|string|max:100',
-                'taxExemptCode'       => 'nullable|string|max:50',
-                'receiveReviewEmails' => 'nullable|boolean',
-                'forcePasswordReset'  => 'nullable|boolean',
+                'taxExemptCode'         => 'nullable|string|max:50',
+                'receiveReviewEmails'   => 'nullable|boolean',
+                'forcePasswordReset'    => 'nullable|boolean',
                 'password'              => 'nullable|string|min:7|confirmed',
             ]);
-        
+
             $validated['store_id'] = $storeId;
-            $validated['name'] = trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? ''));
-        
+
+            // ✅ Rename to match DB columns
+            $validated['first_name'] = $validated['firstName'] ?? null;
+            $validated['last_name'] = $validated['lastName'] ?? null;
+            $validated['company_name'] = $validated['companyName'] ?? null;
+            $validated['customer_group'] = $validated['customerGroup'] ?? null;
+            $validated['store_credit'] = $validated['storeCredit'] ?? null;
+            $validated['tax_exempt_code'] = $validated['taxExemptCode'] ?? null;
+
+            // ✅ Remove camelCase keys
+            unset(
+                $validated['firstName'],
+                $validated['lastName'],
+                $validated['companyName'],
+                $validated['customerGroup'],
+                $validated['storeCredit'],
+                $validated['taxExemptCode']
+            );
+
+            // ✅ Don't set name in $validated (no such column in customers)
+            // $validated['name'] = ...  ← REMOVE this line
+
+            // ✅ Handle password only for User
             if (!empty($validated['password'])) {
                 $rawPassword = $validated['password']; // keep original for user table
-                $validated['password'] = Hash::make($validated['password']);
+                unset($validated['password']); // Don't save password to customer
             }
-        
+
             $customer = Customer::create($validated);
-        
+
             // 🔑 Create corresponding User (for authentication)
-            if (!empty($validated['email']) && !empty($rawPassword ?? null)) {
+                if (!empty($validated['email']) && !empty($rawPassword ?? null)) {
+                $fullName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
+                
                 User::create([
-                    'name'        => $validated['name'],
-                    'email'       => $validated['email'],
+                    'name'        => $fullName,
+                    'email'       => $customer->email,
                     'password'    => Hash::make($rawPassword),
-                    'phone_number' => $validated['phone'] ?? null,
                     'customer_id' => $customer->id,
                     'store_id'    => $storeId
                 ]);
             }
-        
+
             return response()->json([
                 'status' => true,
                 'message' => 'Customer created.',
                 'data' => new CustomerResource($customer)
             ], 201);
-        
+
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
