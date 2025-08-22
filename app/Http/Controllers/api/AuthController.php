@@ -178,7 +178,7 @@ class AuthController extends Controller
                 return response()->json([
                     'status' => true,
                     'message' => 'Admin logged in successfully.',
-                    'plainTextToken' => $plainTextToken,
+                    'token' => $plainTextToken,
                     'expireAt' => $expireAt->toDateTimeString(),
                     'user' => new UserResource($admin),
                     'stores' => $stores,
