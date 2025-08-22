@@ -219,7 +219,7 @@ class AuthController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Customer logged in successfully.',
-                'plainTextToken' => $plainTextToken,
+                'token' => $plainTextToken,
                 'expireAt' => $expireAt->toDateTimeString(),
                 'customer' => new CustomerResource($customer->customer),
             ]);
