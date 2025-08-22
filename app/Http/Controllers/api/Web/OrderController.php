@@ -26,39 +26,36 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class OrderController extends Controller
 {
+     
     public function index(Request $request)
     {
         try {
             $user = auth('sanctum')->user();
             $sessionId = $request->header('X-Session-ID') ?? session()->getId();
             $perPage = $request->query('perPage', 20);
-            $keyword = $request->query('keyword'); // ✅ New filter for search
+            $keyword = $request->query('keyword');
 
-            // $orders = Order::with('items.product')
-            //     ->where('store_id', current_store_id()) // ✅ Multi-store filtering
-            //     ->when($user, fn($q) => $q->where('user_id', $user->id))
-            //     ->when(!$user, fn($q) => $q->where('session_id', $sessionId))
-            //     ->latest()
-            //     ->paginate($perPage);
-            $orders = Order::with('items.product', 'customer') // include customer relation
-            ->where('store_id', current_store_id()) // ✅ Multi-store filtering
-            ->when($user, fn($q) => $q->where('user_id', $user->id))
-            ->when(!$user, fn($q) => $q->where('session_id', $sessionId))
-            ->when($keyword, function ($q) use ($keyword) {
-                $q->where(function ($query) use ($keyword) {
-                    $query->where('id', 'like', "%{$keyword}%")                          // Order ID
-                          ->orWhere('order_number', 'like', "%{$keyword}%")              // Order Number
-                          ->orWhere('status', 'like', "%{$keyword}%")                    // Status
-                          ->orWhere('total_amount', 'like', "%{$keyword}%")              // Total
-                          ->orWhereHas('customer', function ($q2) use ($keyword) {
-                              $q2->where('first_name', 'like', "%{$keyword}%")
-                                 ->orWhere('last_name', 'like', "%{$keyword}%")
-                                 ->orWhere('name', 'like', "%{$keyword}%");              // Full name
-                          });
-                });
-            })
-            ->latest()
-            ->paginate($perPage);
+            $orders = Order::with(['items.product', 'customer'])
+                ->where('store_id', current_store_id())
+                ->when($user, fn($q) => $q->where('user_id', $user->id))
+                ->when(!$user, fn($q) => $q->where('session_id', $sessionId))
+                ->when($keyword, function ($q) use ($keyword) {
+                    $q->where(function ($query) use ($keyword) {
+                        $query->where('id', 'like', "%{$keyword}%")
+                              ->orWhere('order_number', 'like', "%{$keyword}%")
+                              ->orWhere('status', 'like', "%{$keyword}%")
+                              ->orWhere('total_amount', 'like', "%{$keyword}%")
+                              ->orWhereHas('customer', function ($q2) use ($keyword) {
+                                  $q2->where('first_name', 'like', "%{$keyword}%")
+                                     ->orWhere('last_name', 'like', "%{$keyword}%")
+                                     ->orWhere('name', 'like', "%{$keyword}%")
+                                     ->orWhere('email', 'like', "%{$keyword}%")
+                                     ->orWhere('phone', 'like', "%{$keyword}%");
+                              });
+                    });
+                })
+                ->latest()
+                ->paginate($perPage);
 
             return response()->json([
                 'status' => true,
@@ -80,6 +77,7 @@ class OrderController extends Controller
             ], 500);
         }
     }
+
 
     public function show(Request $request, $id)
     {
