@@ -26,6 +26,8 @@ class CustomerResource extends JsonResource
             'address'                => $this->address,
             'storeCredit'           => $this->store_credit,
             'receiveReviewEmails'  => (bool) $this->receive_review_emails,
+            'country'               => $this->country,
+            'state'                 => $this->state,
             'forcePasswordReset'   => (bool) $this->force_password_reset,
             'taxExemptCode'        => $this->tax_exempt_code,
             'createdAt'             => $this->created_at?->toDateTimeString(),

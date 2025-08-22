@@ -219,7 +219,7 @@ class CustomerController extends Controller
             // 🔑 Create corresponding User (for authentication)
                 if (!empty($validated['email']) && !empty($rawPassword ?? null)) {
                 $fullName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
-                
+
                 User::create([
                     'name'        => $fullName,
                     'email'       => $customer->email,
@@ -252,13 +252,13 @@ class CustomerController extends Controller
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
-
+        
             $customer = Customer::where('store_id', $storeId)->findOrFail($id);
-
+        
             $validated = $request->validate([
                 'firstName'            => 'sometimes|string|max:255',
                 'lastName'             => 'sometimes|string|max:255',
-                'email'                 => [
+                'email'                => [
                     'sometimes',
                     'email',
                     Rule::unique('customers')->ignore($id)->where(function ($query) use ($storeId) {
@@ -267,60 +267,90 @@ class CustomerController extends Controller
                 ],
                 'phone'                 => 'nullable|string|max:20',
                 'address'               => 'nullable|string',
-                'companyName'          => 'nullable|string|max:255',
-                'customerGroup'        => 'nullable|string|max:255',
-                'storeCredit'          => 'nullable|numeric',
+                'companyName'           => 'nullable|string|max:255',
+                'customerGroup'         => 'nullable|string|max:255',
+                'storeCredit'           => 'nullable|numeric',
                 'country'               => 'nullable|string|max:100',
                 'state'                 => 'nullable|string|max:100',
-                'taxExemptCode'       => 'nullable|string|max:50',
-                'receiveReviewEmails' => 'nullable|boolean',
-                'forcePasswordReset'  => 'nullable|boolean',
+                'taxExemptCode'         => 'nullable|string|max:50',
+                'receiveReviewEmails'   => 'nullable|boolean',
+                'forcePasswordReset'    => 'nullable|boolean',
                 'password'              => 'nullable|string|min:7',
             ]);
-
-            // Update full name if either part is present
-            if ($request->filled('firstName') || $request->filled('lastName')) {
-                $validated['name'] = trim(($request->firstName ?? $customer->first_name) . ' ' . ($request->lastName ?? $customer->last_name));
+        
+            // ✅ Rename camelCase to snake_case
+            if (isset($validated['firstName'])) {
+                $validated['first_name'] = $validated['firstName'];
+                unset($validated['firstName']);
             }
-
+        
+            if (isset($validated['lastName'])) {
+                $validated['last_name'] = $validated['lastName'];
+                unset($validated['lastName']);
+            }
+        
+            if (isset($validated['companyName'])) {
+                $validated['company_name'] = $validated['companyName'];
+                unset($validated['companyName']);
+            }
+        
+            if (isset($validated['customerGroup'])) {
+                $validated['customer_group'] = $validated['customerGroup'];
+                unset($validated['customerGroup']);
+            }
+        
+            if (isset($validated['storeCredit'])) {
+                $validated['store_credit'] = $validated['storeCredit'];
+                unset($validated['storeCredit']);
+            }
+        
+            if (isset($validated['taxExemptCode'])) {
+                $validated['tax_exempt_code'] = $validated['taxExemptCode'];
+                unset($validated['taxExemptCode']);
+            }
+        
             $rawPassword = null;
-
+        
+            // ✅ Only hash password for user (not customer)
             if (!empty($validated['password'])) {
                 $rawPassword = $validated['password'];
-                $validated['password'] = Hash::make($validated['password']);
+                unset($validated['password']);
             }
-
+        
             $customer->update($validated);
-
-            // 🔄 Also update linked user if exists
+        
+            // 🔄 Update user if exists
             $user = $customer->user;
-
+        
             if ($user) {
                 $userUpdate = [];
-
-                if (isset($validated['name'])) {
-                    $userUpdate['name'] = $validated['name'];
-                }
-
+            
+                // ✅ Create full name for user.name
+                $fullName = trim(
+                    ($validated['first_name'] ?? $customer->first_name) . ' ' .
+                    ($validated['last_name'] ?? $customer->last_name)
+                );
+                $userUpdate['name'] = $fullName;
+            
                 if (isset($validated['email'])) {
                     $userUpdate['email'] = $validated['email'];
                 }
-
+            
                 if ($rawPassword) {
                     $userUpdate['password'] = Hash::make($rawPassword);
                 }
-
+            
                 if (!empty($userUpdate)) {
                     $user->update($userUpdate);
                 }
             }
-
+        
             return response()->json([
                 'status' => true,
                 'message' => 'Customer updated.',
                 'data' => new CustomerResource($customer)
             ]);
-
+        
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {

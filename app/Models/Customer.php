@@ -24,7 +24,9 @@ class Customer extends Model
         'receive_review_emails',
         'force_password_reset',
         'tax_exempt_code',
-        'password'
+        'password',
+        'country',
+        'state',
     ];
 
     public function store()
