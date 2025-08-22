@@ -232,7 +232,7 @@ class CustomerController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Customer created.',
-                'data' => new CustomerResource($customer)
+                'customer' => new CustomerResource($customer)
             ], 201);
 
         } catch (ValidationException $e) {
@@ -252,9 +252,9 @@ class CustomerController extends Controller
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
-        
+
             $customer = Customer::where('store_id', $storeId)->findOrFail($id);
-        
+
             $validated = $request->validate([
                 'firstName'            => 'sometimes|string|max:255',
                 'lastName'             => 'sometimes|string|max:255',
@@ -277,80 +277,80 @@ class CustomerController extends Controller
                 'forcePasswordReset'    => 'nullable|boolean',
                 'password'              => 'nullable|string|min:7',
             ]);
-        
+
             // ✅ Rename camelCase to snake_case
             if (isset($validated['firstName'])) {
                 $validated['first_name'] = $validated['firstName'];
                 unset($validated['firstName']);
             }
-        
+
             if (isset($validated['lastName'])) {
                 $validated['last_name'] = $validated['lastName'];
                 unset($validated['lastName']);
             }
-        
+
             if (isset($validated['companyName'])) {
                 $validated['company_name'] = $validated['companyName'];
                 unset($validated['companyName']);
             }
-        
+
             if (isset($validated['customerGroup'])) {
                 $validated['customer_group'] = $validated['customerGroup'];
                 unset($validated['customerGroup']);
             }
-        
+
             if (isset($validated['storeCredit'])) {
                 $validated['store_credit'] = $validated['storeCredit'];
                 unset($validated['storeCredit']);
             }
-        
+
             if (isset($validated['taxExemptCode'])) {
                 $validated['tax_exempt_code'] = $validated['taxExemptCode'];
                 unset($validated['taxExemptCode']);
             }
-        
+
             $rawPassword = null;
-        
+
             // ✅ Only hash password for user (not customer)
             if (!empty($validated['password'])) {
                 $rawPassword = $validated['password'];
                 unset($validated['password']);
             }
-        
+
             $customer->update($validated);
-        
+
             // 🔄 Update user if exists
             $user = $customer->user;
-        
+
             if ($user) {
                 $userUpdate = [];
-            
+
                 // ✅ Create full name for user.name
                 $fullName = trim(
                     ($validated['first_name'] ?? $customer->first_name) . ' ' .
                     ($validated['last_name'] ?? $customer->last_name)
                 );
                 $userUpdate['name'] = $fullName;
-            
+
                 if (isset($validated['email'])) {
                     $userUpdate['email'] = $validated['email'];
                 }
-            
+
                 if ($rawPassword) {
                     $userUpdate['password'] = Hash::make($rawPassword);
                 }
-            
+
                 if (!empty($userUpdate)) {
                     $user->update($userUpdate);
                 }
             }
-        
+
             return response()->json([
                 'status' => true,
                 'message' => 'Customer updated.',
                 'data' => new CustomerResource($customer)
             ]);
-        
+
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
