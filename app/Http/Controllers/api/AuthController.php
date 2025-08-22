@@ -12,6 +12,7 @@ use App\Http\Resources\UserResource;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use App\Http\Resources\StoreResource;
+use App\Http\Resources\CustomerResource;
 use Illuminate\Support\Facades\Password;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
@@ -77,51 +78,152 @@ class AuthController extends Controller
             }
         }
 
-     public function login(Request $request)
+    // public function login(Request $request)
+    // {
+    //     try {
+    //         $request->validate([
+    //             'email' => 'required|email',
+    //             'password' => 'required',
+    //         ]);
+
+    //         $user = User::where('email', $request->email)->first();
+
+    //         if (!$user || !Hash::check($request->password, $user->password)) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Invalid email or password',
+    //                 'user' => null
+    //             ], 401);
+    //         }
+
+    //         $roleMessage = $user->userRole == 1 ? 'Admin login successful' : 'Customer login successful';
+
+    //          // ✅ Create token
+    //         $tokenResult = $user->createToken('api_token');
+    //         $plainTextToken = $tokenResult->plainTextToken;
+
+    //         // ✅ Set expiry before checking token
+    //         $expireAt = now()->addHours(12);
+    //         $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($plainTextToken);
+
+    //         if ($accessToken) {
+    //             $accessToken->expires_at = $expireAt;
+    //             $accessToken->save();
+    //         }
+
+    //         // ✅ Load stores
+    //         $stores = StoreResource::collection($user->stores()->get());
+
+    //         // ✅ Return with expireAt
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => $roleMessage,
+    //             'token' => $plainTextToken,
+    //             'expireAt' => $expireAt->toDateTimeString(), // ✅ Now this is always set
+    //             'user' => $user,
+    //             'stores' => $stores,
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         \Log::error('Login failed: ' . $e->getMessage());
+
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Something went wrong during login.',
+    //         ], 500);
+    //     }
+    // }
+
+
+    public function login(Request $request)
     {
         try {
+            // ✅ Validate request inputs (camelCase)
             $request->validate([
                 'email' => 'required|email',
                 'password' => 'required',
+                // 'storeId' => 'nullable|exists:stores,id', // Only required for customer
             ]);
 
-            $user = User::where('email', $request->email)->first();
+            $email = $request->email;
+            $password = $request->password;
 
-            if (!$user || !Hash::check($request->password, $user->password)) {
+            // ✅ Get storeId from either headers or request body
+            $storeId = $request->header('storeId', $request->input('storeId'));
+
+            // Admin Login
+            $admin = User::where('email', $email)
+                         ->where('userRole', 1)
+                         ->first();
+
+            if ($admin) {
+                if (!Hash::check($password, $admin->password)) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Invalid email or password.'
+                    ], 401);
+                }
+
+                $tokenResult = $admin->createToken('adminToken');
+                $plainTextToken = $tokenResult->plainTextToken;
+
+                $expireAt = now()->addHours(12);
+                $accessToken = PersonalAccessToken::findToken($plainTextToken);
+                if ($accessToken) {
+                    $accessToken->expires_at = $expireAt;
+                    $accessToken->save();
+                }
+
+                $stores = StoreResource::collection($admin->stores()->get());
+
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Admin logged in successfully.',
+                    'plainTextToken' => $plainTextToken,
+                    'expireAt' => $expireAt->toDateTimeString(),
+                    'user' => new UserResource($admin),
+                    'stores' => $stores,
+                ]);
+            }
+
+            // Customer Login
+            if (!$storeId) {
                 return response()->json([
                     'status' => false,
-                    'message' => 'Invalid email or password',
+                    'message' => 'Store ID is required to login as customer.',
+                ], 422);
+            }
+
+            $customer = User::where('email', $email)
+                            ->where('store_id', $storeId)
+                            ->where('userRole', 2)
+                            ->first();
+
+            if (!$customer || !Hash::check($password, $customer->password)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid email, password, or store.',
                     'user' => null
                 ], 401);
             }
 
-            $roleMessage = $user->userRole == 1 ? 'Admin login successful' : 'Customer login successful';
-
-             // ✅ Create token
-            $tokenResult = $user->createToken('api_token');
+            $tokenResult = $customer->createToken('customerToken');
             $plainTextToken = $tokenResult->plainTextToken;
 
-            // ✅ Set expiry before checking token
             $expireAt = now()->addHours(12);
-            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($plainTextToken);
-
+            $accessToken = PersonalAccessToken::findToken($plainTextToken);
             if ($accessToken) {
                 $accessToken->expires_at = $expireAt;
                 $accessToken->save();
             }
 
-            // ✅ Load stores
-            $stores = StoreResource::collection($user->stores()->get());
-
-            // ✅ Return with expireAt
             return response()->json([
                 'status' => true,
-                'message' => $roleMessage,
-                'token' => $plainTextToken,
-                'expireAt' => $expireAt->toDateTimeString(), // ✅ Now this is always set
-                'user' => $user,
-                'stores' => $stores,
+                'message' => 'Customer logged in successfully.',
+                'plainTextToken' => $plainTextToken,
+                'expireAt' => $expireAt->toDateTimeString(),
+                'customer' => new CustomerResource($customer->customer),
             ]);
+
         } catch (\Exception $e) {
             \Log::error('Login failed: ' . $e->getMessage());
 
@@ -131,6 +233,7 @@ class AuthController extends Controller
             ], 500);
         }
     }
+
 
 
     public function forgotPassword(Request $request)

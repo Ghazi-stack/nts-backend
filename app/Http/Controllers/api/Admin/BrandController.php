@@ -12,45 +12,7 @@ use Exception;
 
 class BrandController extends Controller
 {
-    // public function index(Request $request)
-    // {
-    //     try {
-    //         $storeId = current_store_id();
-    //         if (!$storeId) {
-    //             return response()->json([
-    //                 'status' => false,
-    //                 'message' => 'Store not selected or token invalid.'
-    //             ], 400);
-    //         }
-
-    //         $perPage = $request->query('perPage', 20);
-
-    //         // $brands = Brand::where('store_id', $storeId)->paginate($perPage);
-    //         $brands = Brand::withCount('products')
-    //             ->where('store_id', $storeId)
-    //             ->paginate($perPage);
-
-    //         return response()->json([
-    //             'status' => true,
-    //             'message' => 'Brands retrieved successfully',
-    //             'data' => BrandResource::collection($brands),
-    //             'pagination' => [
-    //                 'total' => $brands->total(),
-    //                 'count' => $brands->count(),
-    //                 'perPage' => $brands->perPage(),
-    //                 'currentPage' => $brands->currentPage(),
-    //                 'totalPages' => $brands->lastPage(),
-    //             ]
-    //         ], 200);
-    //     } catch (Exception $e) {
-    //         Log::error('Error fetching brands: ' . $e->getMessage());
-    //         return response()->json([
-    //             'status' => false,
-    //             'message' => 'Failed to retrieve brands',
-    //         ], 500);
-    //     }
-    // }
-
+    
     public function index(Request $request)
     {
         try {
