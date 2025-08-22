@@ -97,8 +97,8 @@ class CustomerController extends Controller
             }
         
             $validated = $request->validate([
-                'first_name'            => 'nullable|string|max:255',
-                'last_name'             => 'nullable|string|max:255',
+                'firstName'            => 'nullable|string|max:255',
+                'lastName'             => 'nullable|string|max:255',
                 'email'                 => [
                     'nullable',
                     'email',
@@ -108,14 +108,14 @@ class CustomerController extends Controller
                 ],
                 'phone'                 => 'nullable|string|max:20',
                 'address'               => 'nullable|string',
-                'company_name'          => 'nullable|string|max:255',
-                'customer_group'        => 'nullable|string|max:255',
-                'store_credit'          => 'nullable|numeric',
+                'companyName'          => 'nullable|string|max:255',
+                'customerGroup'        => 'nullable|string|max:255',
+                'storeCredit'          => 'nullable|numeric',
                 'country'               => 'nullable|string|max:100',
                 'state'                 => 'nullable|string|max:100',
-                'tax_exempt_code'       => 'nullable|string|max:50',
-                'receive_review_emails' => 'nullable|boolean',
-                'force_password_reset'  => 'nullable|boolean',
+                'taxExemptCode'       => 'nullable|string|max:50',
+                'receiveReviewEmails' => 'nullable|boolean',
+                'forcePasswordReset'  => 'nullable|boolean',
                 'password'              => 'nullable|string|min:7|confirmed',
             ]);
         
@@ -168,8 +168,8 @@ class CustomerController extends Controller
             $customer = Customer::where('store_id', $storeId)->findOrFail($id);
 
             $validated = $request->validate([
-                'first_name'            => 'sometimes|string|max:255',
-                'last_name'             => 'sometimes|string|max:255',
+                'firstName'            => 'sometimes|string|max:255',
+                'lastName'             => 'sometimes|string|max:255',
                 'email'                 => [
                     'sometimes',
                     'email',
@@ -179,20 +179,20 @@ class CustomerController extends Controller
                 ],
                 'phone'                 => 'nullable|string|max:20',
                 'address'               => 'nullable|string',
-                'company_name'          => 'nullable|string|max:255',
-                'customer_group'        => 'nullable|string|max:255',
-                'store_credit'          => 'nullable|numeric',
+                'companyName'          => 'nullable|string|max:255',
+                'customerGroup'        => 'nullable|string|max:255',
+                'storeCredit'          => 'nullable|numeric',
                 'country'               => 'nullable|string|max:100',
                 'state'                 => 'nullable|string|max:100',
-                'tax_exempt_code'       => 'nullable|string|max:50',
-                'receive_review_emails' => 'nullable|boolean',
-                'force_password_reset'  => 'nullable|boolean',
+                'taxExemptCode'       => 'nullable|string|max:50',
+                'receiveReviewEmails' => 'nullable|boolean',
+                'forcePasswordReset'  => 'nullable|boolean',
                 'password'              => 'nullable|string|min:7',
             ]);
 
             // Update full name if either part is present
-            if ($request->filled('first_name') || $request->filled('last_name')) {
-                $validated['name'] = trim(($request->first_name ?? $customer->first_name) . ' ' . ($request->last_name ?? $customer->last_name));
+            if ($request->filled('firstName') || $request->filled('lastName')) {
+                $validated['name'] = trim(($request->firstName ?? $customer->first_name) . ' ' . ($request->lastName ?? $customer->last_name));
             }
 
             $rawPassword = null;
@@ -390,9 +390,9 @@ class CustomerController extends Controller
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
-        
+
             $query = Customer::where('store_id', $storeId);
-        
+
             // 🔍 Keyword Search
             if ($request->filled('searchKeywords')) {
                 $search = $request->input('searchKeywords');
@@ -406,49 +406,49 @@ class CustomerController extends Controller
                       ->orWhere('company_name', 'like', "%{$search}%"); // ✅ added
                 });
             }
-        
+
             // 🔠 Starts with
             if ($request->filled('startsWith')) {
                 $query->where('first_name', 'like', $request->input('startsWith') . '%');
             }
-        
+
             // ☎️ Phone
             if ($request->filled('phone')) {
                 $query->where('phone', 'like', "%{$request->input('phone')}%");
             }
-        
+
             // 🌍 Country / State
             if ($request->filled('country')) {
                 $query->where('country', $request->input('country'));
             }
-        
+
             if ($request->filled('stateProvince')) {
                 $query->where('state', $request->input('stateProvince'));
             }
-        
+
             // 🔢 ID range
             if ($request->filled('customerIdFrom')) {
                 $query->where('id', '>=', $request->input('customerIdFrom'));
             }
-        
+
             if ($request->filled('customerIdTo')) {
                 $query->where('id', '<=', $request->input('customerIdTo'));
             }
-        
+
             // 💳 Credit range
             if ($request->filled('creditFrom')) {
                 $query->where('store_credit', '>=', $request->input('creditFrom'));
             }
-        
+
             if ($request->filled('creditTo')) {
                 $query->where('store_credit', '<=', $request->input('creditTo'));
             }
-        
+
             // 👥 Group
             if ($request->filled('customerGroup')) {
                 $query->where('customer_group', $request->input('customerGroup'));
             }
-        
+
             // 📅 Date Joined
             if ($request->filled('dateJoined')) {
                 switch ($request->input('dateJoined')) {
@@ -474,16 +474,16 @@ class CustomerController extends Controller
                         ], 422);
                 }
             }
-        
+
             // 🔃 Sorting
             $sortField = $request->input('sortBy', 'id');
             $sortOrder = $request->input('sortOrder', 'asc');
             $query->orderBy($sortField, $sortOrder);
-        
+
             // 📄 Pagination
             $pageSize = $request->input('pageSize', 50);
             $customers = $query->paginate($pageSize);
-        
+
             return response()->json([
                 'status' => true,
                 'message' => 'Advanced search result.',
