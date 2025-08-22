@@ -610,87 +610,85 @@ class OrderController extends Controller
                     'message' => 'Store not selected or token invalid.',
                 ], 400);
             }
-        
-            $query = Order::with(['items.product', 'customer'])->where('store_id', $storeId);
-        
+
+            $query = Order::with(['items.product']) // Removed 'customer' + trashed logic
+                ->where('store_id', $storeId);
+
             // 🔍 Keyword-based search
-            if ($request->filled('keywords')) {
-                $keywords = $request->keywords;
+           if ($request->filled('keywords')) {
+                $keywords = $request->input('keywords');
+                    
                 $query->where(function ($q) use ($keywords) {
-                    $q->where('order_number', 'like', "%{$keywords}%")
-                        ->orWhere('status', 'like', "%{$keywords}%")
-                        ->orWhere('email', 'like', "%{$keywords}%")
-                        ->orWhere('name', 'like', "%{$keywords}%")
-                        ->orWhere('phone', 'like', "%{$keywords}%");
+                    if (is_numeric($keywords)) {
+                        $q->where('id', $keywords); // exact match on order ID
+                    }
+                
+                    $q->orWhere('order_number', 'like', "%{$keywords}%")
+                      ->orWhere('status', 'like', "%{$keywords}%")
+                      ->orWhere('email', 'like', "%{$keywords}%")
+                      ->orWhere('name', 'like', "%{$keywords}%")
+                      ->orWhere('phone', 'like', "%{$keywords}%");
                 });
             }
-        
-            // 🔄 Filtering
+
+            // 🔄 Apply filters
             if ($request->filled('status')) {
-                $query->where('status', $request->status);
+                $query->where('status', $request->input('status'));
             }
-        
+
             if ($request->filled('paymentMethod')) {
-                $query->where('payment_method', $request->paymentMethod);
+                $query->where('payment_method', $request->input('paymentMethod'));
             }
-        
+
             if ($request->filled('shippingProvider')) {
-                $query->where('tracking_carrier_name', $request->shippingProvider);
+                $query->where('tracking_carrier_name', $request->input('shippingProvider'));
             }
-        
+
             if ($request->filled('shippingMethod')) {
-                $query->where('shipping_method', $request->shippingMethod);
+                $query->where('shipping_method', $request->input('shippingMethod'));
             }
-        
+
             if ($request->filled('orderIdFrom')) {
-                $query->where('id', '>=', $request->orderIdFrom);
+                $query->where('id', '>=', $request->input('orderIdFrom'));
             }
-        
+
             if ($request->filled('orderIdTo')) {
-                $query->where('id', '<=', $request->orderIdTo);
+                $query->where('id', '<=', $request->input('orderIdTo'));
             }
-        
+
             if ($request->filled('orderTotalFrom')) {
-                $query->where('total_amount', '>=', $request->orderTotalFrom);
+                $query->where('total_amount', '>=', $request->input('orderTotalFrom'));
             }
-        
+
             if ($request->filled('orderTotalTo')) {
-                $query->where('total_amount', '<=', $request->orderTotalTo);
+                $query->where('total_amount', '<=', $request->input('orderTotalTo'));
             }
-        
+
             if ($request->filled('guest')) {
                 $query->whereNull('user_id');
             }
-        
+
             if ($request->filled('preorderYes')) {
                 $query->where('channel', 'preorder');
             }
-        
-            if ($request->filled('deletedOrder') && $request->deletedOrder === 'only') {
-                $query->onlyTrashed();
-            } elseif ($request->filled('deletedOrder') && $request->deletedOrder === 'ignore') {
-                // do nothing
-            } else {
-                $query->withTrashed();
-            }
-        
+
             if ($request->filled('fulfillmentSource')) {
-                $query->where('fulfillment_source', $request->fulfillmentSource);
+                $query->where('fulfillment_source', $request->input('fulfillmentSource'));
             }
-        
+
             if ($request->filled('coupon')) {
-                $query->where('coupon_code', $request->coupon);
+                $query->where('coupon_code', $request->input('coupon'));
             }
-        
-            // 📅 Date filter
+
+            // 📅 Date filtering
             if ($request->filled('dateRange') && $request->filled('dateType')) {
-                $column = match ($request->dateType) {
+                $column = match ($request->input('dateType')) {
                     'order-date' => 'created_at',
                     'shipped-date' => 'shipped_at',
                     default => 'created_at'
                 };
-            
-                switch ($request->dateRange) {
+
+                switch ($request->input('dateRange')) {
                     case 'Yesterday':
                         $query->whereDate($column, today()->subDay());
                         break;
@@ -705,13 +703,17 @@ class OrderController extends Controller
                         break;
                 }
             }
-        
+
             // ⬆️ Sorting
-            $query->orderBy($request->input('sortBy', 'id'), $request->input('sortDirection', 'asc'));
-        
+            $query->orderBy(
+                $request->input('sortBy', 'id'),
+                $request->input('sortDirection', 'asc')
+            );
+
             // 📄 Pagination
-            $orders = $query->paginate($request->input('perPage', 20));
-        
+            $perPage = $request->input('perPage', 20);
+            $orders = $query->paginate($perPage);
+
             return response()->json([
                 'status' => true,
                 'message' => 'Filtered orders fetched.',
