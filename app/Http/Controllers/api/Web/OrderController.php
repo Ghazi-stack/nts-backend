@@ -451,23 +451,22 @@ class OrderController extends Controller
     {
         $storeId = current_store_id();
 
-        // ✅ Updated validation without customerType
         $validated = $request->validate([
             // Existing customer
             'customerId' => 'nullable|exists:customers,id',
 
             // New customer (if no customerId)
-            'email'      => 'required_without:customerId|email|unique:customers,email',
-            'password'   => 'nullable|string|min:6',
-            'firstName'  => 'required_without:customerId|string|max:255',
-            'lastName'   => 'required_without:customerId|string|max:255',
-            'phone'      => 'nullable|string|max:20',
+            'email'       => 'required_without:customerId|email|unique:customers,email',
+            'password'    => 'nullable|string|min:6|confirmed',
+            'firstName'   => 'required_without:customerId|string|max:255',
+            'lastName'    => 'required_without:customerId|string|max:255',
+            'phone'       => 'nullable|string|max:20',
             'companyName' => 'nullable|string|max:255',
             'customerGroup' => 'nullable|string|max:255',
             'receiveOffers' => 'nullable|boolean',
 
             // Billing Address
-            'address'                      => 'required|array',
+            'address'                       => 'required|array',
             'address.addressLine1'         => 'required|string|max:255',
             'address.addressLine2'         => 'nullable|string|max:255',
             'address.city'                 => 'nullable|string|max:100',
@@ -477,9 +476,9 @@ class OrderController extends Controller
 
             // Order Info
             'shippingMethod' => 'required|string|max:100',
-            'paymentMethod' => 'required|string|max:100',
-            'comments' => 'nullable|string|max:1000',
-            'staffNotes' => 'nullable|string|max:1000',
+            'paymentMethod'  => 'required|string|max:100',
+            'comments'       => 'nullable|string|max:1000',
+            'staffNotes'     => 'nullable|string|max:1000',
 
             // Product List
             'products' => 'required|array|min:1',
@@ -492,15 +491,16 @@ class OrderController extends Controller
 
             // ✅ Step 1: Handle customer
             if (!empty($validated['customerId'])) {
-                // Existing customer
+                // Use existing customer
                 $customer = Customer::where('store_id', $storeId)
                                     ->findOrFail($validated['customerId']);
             } else {
-                // New customer
-                $customer = Customer::create([
+                // Create new customer (like store() logic)
+                $rawPassword = $validated['password'] ?? null;
+
+                $customerData = [
                     'store_id'               => $storeId,
                     'email'                  => $validated['email'],
-                    'password'               => isset($validated['password']) ? bcrypt($validated['password']) : null,
                     'first_name'             => $validated['firstName'],
                     'last_name'              => $validated['lastName'],
                     'company_name'           => $validated['companyName'] ?? null,
@@ -509,10 +509,27 @@ class OrderController extends Controller
                     'receive_review_emails'  => $validated['receiveOffers'] ?? false,
                     'force_password_reset'   => true,
                     'tax_exempt_code'        => null,
-                ]);
+                    'country'                => $validated['address']['country'] ?? null,
+                    'state'                  => $validated['address']['state'] ?? null,
+                ];
+
+                $customer = Customer::create($customerData);
+
+                // 🔑 Create corresponding User (if email & password provided)
+                if (!empty($validated['email']) && !empty($rawPassword)) {
+                    $fullName = trim($validated['firstName'] . ' ' . $validated['lastName']);
+
+                    User::create([
+                        'name'        => $fullName,
+                        'email'       => $validated['email'],
+                        'password'    => Hash::make($rawPassword),
+                        'customer_id' => $customer->id,
+                        'store_id'    => $storeId,
+                    ]);
+                }
             }
 
-            // ✅ Step 2: Create the order
+            // ✅ Step 2: Create Order
             $order = Order::create([
                 'store_id'        => $storeId,
                 'customer_id'     => $customer->id,
@@ -520,8 +537,7 @@ class OrderController extends Controller
                 'name'            => $customer->first_name . ' ' . $customer->last_name,
                 'email'           => $customer->email,
                 'phone'           => $customer->phone,
-
-                'address' => [
+                'address'         => [
                     'addressLine1' => $validated['address']['addressLine1'],
                     'addressLine2' => $validated['address']['addressLine2'] ?? null,
                     'city'         => $validated['address']['city'] ?? null,
@@ -529,24 +545,22 @@ class OrderController extends Controller
                     'zip'          => $validated['address']['zip'] ?? null,
                     'country'      => $validated['address']['country'] ?? null,
                 ],
-
                 'status'          => 'pending',
                 'is_draft'        => false,
                 'channel'         => 'admin-panel',
                 'payment_method'  => $validated['paymentMethod'],
                 'shipping_method' => $validated['shippingMethod'],
                 'shipping_cost'   => 0,
-                'total_amount'    => 0, // Will be calculated
+                'total_amount'    => 0, // to be calculated
                 'comments'        => $validated['comments'] ?? null,
                 'staff_notes'     => $validated['staffNotes'] ?? null,
             ]);
 
-            // ✅ Step 3: Attach products and calculate total
+            // ✅ Step 3: Add Order Items
             $total = 0;
 
             foreach ($validated['products'] as $item) {
-                $product = Product::where('store_id', $storeId)
-                                  ->findOrFail($item['productId']);
+                $product = Product::where('store_id', $storeId)->findOrFail($item['productId']);
 
                 $qty = $item['quantity'];
                 $lineTotal = $product->price * $qty;
@@ -563,24 +577,20 @@ class OrderController extends Controller
                 $total += $lineTotal;
             }
 
-            // ✅ Step 4: Update order total
+            // ✅ Step 4: Finalize order total
             $order->update(['total_amount' => $total]);
 
             DB::commit();
 
-            // ✅ Success response
             return response()->json([
-                'status' => true,
-                'message' => 'Order placed successfully.',
-                'data' => [
-                    'customer' => new CustomerResource($customer),
-                    'products' => ProductResource::collection(
-                        $order->items()->with('product')->get()
-                    ),
-                    'order' => new OrderResource($order),
-                ]
+                'status'   => true,
+                'message'  => 'Order placed successfully.',
+                'customer' => new CustomerResource($customer),
+                'order'    => new OrderResource($order),
+                'products' => ProductResource::collection(
+                    $order->items()->with('product')->get()
+                )
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             DB::rollBack();
             return response()->json([
