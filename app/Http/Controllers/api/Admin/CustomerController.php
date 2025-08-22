@@ -390,78 +390,76 @@ class CustomerController extends Controller
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
-
+        
             $query = Customer::where('store_id', $storeId);
-
+        
             // 🔍 Keyword Search
             if ($request->filled('searchKeywords')) {
-                $search = $request->searchKeywords;
+                $search = $request->input('searchKeywords');
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'like', "%{$search}%")
                       ->orWhere('email', 'like', "%{$search}%")
                       ->orWhere('phone', 'like', "%{$search}%")
                       ->orWhere('first_name', 'like', "%{$search}%")
                       ->orWhere('last_name', 'like', "%{$search}%")
-                      ->orWhere('customer_group', 'like', "%{$search}%");
+                      ->orWhere('customer_group', 'like', "%{$search}%")
+                      ->orWhere('company_name', 'like', "%{$search}%"); // ✅ added
                 });
             }
-
+        
             // 🔠 Starts with
             if ($request->filled('startsWith')) {
-                $query->where('first_name', 'like', $request->startsWith . '%');
+                $query->where('first_name', 'like', $request->input('startsWith') . '%');
             }
-
+        
             // ☎️ Phone
             if ($request->filled('phone')) {
-                $query->where('phone', 'like', "%{$request->phone}%");
+                $query->where('phone', 'like', "%{$request->input('phone')}%");
             }
-
+        
             // 🌍 Country / State
             if ($request->filled('country')) {
-                $query->where('country', $request->country);
+                $query->where('country', $request->input('country'));
             }
-
+        
             if ($request->filled('stateProvince')) {
-                $query->where('state', $request->stateProvince);
+                $query->where('state', $request->input('stateProvince'));
             }
-
+        
             // 🔢 ID range
             if ($request->filled('customerIdFrom')) {
-                $query->where('id', '>=', $request->customerIdFrom);
+                $query->where('id', '>=', $request->input('customerIdFrom'));
             }
-
+        
             if ($request->filled('customerIdTo')) {
-                $query->where('id', '<=', $request->customerIdTo);
+                $query->where('id', '<=', $request->input('customerIdTo'));
             }
-
+        
             // 💳 Credit range
             if ($request->filled('creditFrom')) {
-                $query->where('store_credit', '>=', $request->creditFrom);
+                $query->where('store_credit', '>=', $request->input('creditFrom'));
             }
-
+        
             if ($request->filled('creditTo')) {
-                $query->where('store_credit', '<=', $request->creditTo);
+                $query->where('store_credit', '<=', $request->input('creditTo'));
             }
-
+        
             // 👥 Group
             if ($request->filled('customerGroup')) {
-                $query->where('customer_group', $request->customerGroup);
+                $query->where('customer_group', $request->input('customerGroup'));
             }
-
+        
             // 📅 Date Joined
             if ($request->filled('dateJoined')) {
-                switch ($request->dateJoined) {
+                switch ($request->input('dateJoined')) {
                     case 'last_24_hours':
-                        $from = now()->subHours(24)->toDateTimeString();
-                        $query->where('created_at', '>=', $from);
+                        $query->where('created_at', '>=', now()->subHours(24));
                         break;
                     case 'last_7_days':
-                        $from = now()->subDays(7)->toDateString();
-                        $query->whereDate('created_at', '>=', $from);
+                        $query->whereDate('created_at', '>=', now()->subDays(7)->toDateString());
                         break;
                     case 'last_30_days':
-                        $from = now()->subDays(30)->toDateString();
-                        $query->whereDate('created_at', '>=', $from);
+                        $query->whereDate('created_at', '>=', now()->subDays(30)->toDateString());
                         break;
                     case 'today':
                         $query->whereDate('created_at', today());
@@ -470,19 +468,22 @@ class CustomerController extends Controller
                         $query->whereDate('created_at', today()->subDay());
                         break;
                     default:
-                        return response()->json(['error' => 'Invalid date filter.'], 422);
+                        return response()->json([
+                            'status' => false,
+                            'message' => 'Invalid date filter.'
+                        ], 422);
                 }
             }
-
+        
             // 🔃 Sorting
             $sortField = $request->input('sortBy', 'id');
             $sortOrder = $request->input('sortOrder', 'asc');
             $query->orderBy($sortField, $sortOrder);
-
+        
             // 📄 Pagination
             $pageSize = $request->input('pageSize', 50);
             $customers = $query->paginate($pageSize);
-
+        
             return response()->json([
                 'status' => true,
                 'message' => 'Advanced search result.',
@@ -495,9 +496,12 @@ class CustomerController extends Controller
                 ]
             ]);
         } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
-
 
 }
