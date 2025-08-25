@@ -65,6 +65,10 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/add-orders', 'storeFromDashboard');
         Route::post('/search-advanced', 'advancedOrderSearch');
         Route::put('/update-order/{id}', 'update');
+        Route::get('/invoice/{id}', 'downloadInvoice');
+        Route::post('/resend-invoice/{id}', 'resendInvoice');
+        Route::post('/refund/{id}', 'refund');
+        Route::get('/timeline/{id}', 'getOrderTimeline');
 
     });
 
@@ -87,8 +91,9 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/get-shipment/{id}', 'show');           // Get one shipment
         Route::post('/add-shipment', 'store');             // Create shipment (optional tracking number)
         Route::put('/update-shipment/{id}', 'update');         // Update shipped_to, date, or tracking
-        Route::delete('/destroy-shipment/{id}', 'destroy');     // Delete shipment
+        Route::delete('/destroy-shipment', 'destroy');     // Delete shipment
         Route::get('/packing-slip/{id}','printPackingSlip');
+        Route::post('/advanced-search','advancedSearch');
     });
 
     // Customers

@@ -13,12 +13,14 @@ use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use App\Exports\OrdersExport;
 use App\Models\ReturnRequest;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Http\Resources\OrderResource;
 use App\Http\Resources\ProductResource;
 use App\Http\Resources\CustomerResource;
+use App\Http\Resources\ShipmentResource;
 use App\Http\Resources\OrderNoteResource;
 use App\Http\Resources\ReturnRequestResource;
 use Illuminate\Validation\ValidationException;
@@ -797,7 +799,98 @@ class OrderController extends Controller
         }
     }
  
+    public function downloadInvoice($id)
+    {
+       $storeId = current_store_id();
 
+        $order = Order::with(['items.product'])
+                      ->where('store_id', $storeId)
+                      ->findOrFail($id);
+
+        $logoPath = public_path('logo/nts-logo.png');
+        $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+
+        $pdf = Pdf::loadView('pdf.invoice', [
+            'order' => $order,
+            'logoBase64' => $logoBase64,
+        ]);
+
+        return $pdf->download('invoice-' . $order->order_number . '.pdf');
+    }
+
+    public function resendInvoice($id)
+    {
+        $order = Order::with('items.product')->where('store_id', current_store_id())->findOrFail($id);
+
+        $pdf = Pdf::loadView('pdf.invoice', [
+            'order' => $order,
+            'logoBase64' => $logoBase64,
+        ])->output();
+
+        Mail::send('emails.invoice', ['order' => $order], function ($message) use ($order, $pdf) {
+            $message->to($order->email)
+                    ->subject('Your Invoice for Order #' . $order->order_number)
+                    ->attachData($pdf, 'invoice-' . $order->order_number . '.pdf');
+        });
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Invoice resent to ' . $order->email,
+        ]);
+    }
+
+    public function getOrderTimeline($id)
+    {
+        $order = Order::with([
+            'notes.user',
+            'items.product',
+            'shipments'
+        ])->where('store_id', current_store_id())
+          ->findOrFail($id);
+        
+        return response()->json([
+            'status' => true,
+            'data' => [
+                'order' => new OrderResource($order),
+                'notes' => OrderNoteResource::collection($order->notes),
+                'shipments' => ShipmentResource::collection($order->shipments),
+                'status' => $order->status,
+                'created_at' => $order->created_at,
+                'updated_at' => $order->updated_at,
+            ],
+        ]);
+    }
+
+    public function refund($id)
+    {
+        try {
+            $order = Order::where('id', $id)
+                          ->where('store_id', current_store_id())
+                          ->firstOrFail();
+        
+            if (in_array($order->status, ['Refunded', 'Cancelled'])) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Order already refunded or cancelled.',
+                ], 400);
+            }
+        
+            $order->status = 'Refunded';
+            $order->save();
+        
+            return response()->json([
+                'status' => true,
+                'message' => 'Order refunded successfully.',
+                'data' => new OrderResource($order),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Refund failed.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
 
                 

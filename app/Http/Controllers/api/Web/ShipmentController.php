@@ -18,11 +18,22 @@ class ShipmentController extends Controller
     public function index(Request $request)
     {
         $storeId = current_store_id();
+        $keyword = $request->get('keyword');
 
-        $shipments = Shipment::with(['order.items.product'])
-            ->where('store_id', $storeId)
-            ->orderByDesc('id')
-            ->paginate($request->get('pageSize', 20));
+        $query = Shipment::with(['order.items.product'])
+            ->where('store_id', $storeId);
+
+        if ($keyword) {
+            $query->where(function ($q) use ($keyword) {
+                $q->where('shipped_to', 'like', '%' . $keyword . '%')
+                  ->orWhere('tracking_number', 'like', '%' . $keyword . '%')
+                  ->orWhereHas('order', function ($q2) use ($keyword) {
+                      $q2->where('name', 'like', '%' . $keyword . '%');
+                  });
+            });
+        }
+
+        $shipments = $query->orderByDesc('id')->paginate($request->get('pageSize', 20));
 
         return response()->json([
             'status' => true,
@@ -128,16 +139,22 @@ class ShipmentController extends Controller
     /**
      * Delete a shipment.
      */
-    public function destroy($id)
+    public function destroy(Request $request)
     {
         $storeId = current_store_id();
-
-        $shipment = Shipment::where('store_id', $storeId)->findOrFail($id);
-        $shipment->delete();
-
+    
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|exists:shipments,id'
+        ]);
+    
+        $deleted = Shipment::where('store_id', $storeId)
+            ->whereIn('id', $validated['ids'])
+            ->delete();
+    
         return response()->json([
             'status' => true,
-            'message' => 'Shipment deleted.'
+            'message' => "$deleted shipment(s) deleted successfully."
         ]);
     }
 
@@ -172,5 +189,91 @@ class ShipmentController extends Controller
     private function generateTrackingNumber()
     {
         return 'TRK-' . strtoupper(Str::random(10));
+    }
+
+    public function advancedSearch(Request $request)
+    {
+        $storeId = current_store_id();
+
+        $query = Shipment::with(['order.items.product'])
+            ->where('store_id', $storeId)
+            ->where(function ($mainQuery) use ($request) {
+                $filtersApplied = false;
+
+                // ✅ Keyword-based OR search
+                if ($request->filled('keyword')) {
+                    $filtersApplied = true;
+                    $keyword = $request->keyword;
+
+                    $mainQuery->where(function ($q) use ($keyword) {
+                        $q->where('shipped_to', 'like', "%$keyword%")
+                          ->orWhere('tracking_number', 'like', "%$keyword%")
+                          ->orWhereHas('order', function ($q2) use ($keyword) {
+                              $q2->where('name', 'like', "%$keyword%");
+                          });
+                    });
+                }
+
+                // ✅ Shipment ID Range
+                if ($request->filled('shipmentIdFrom')) {
+                    $filtersApplied = true;
+                    $mainQuery->orWhere('id', '>=', $request->shipmentIdFrom);
+                }
+
+                if ($request->filled('shipmentIdTo')) {
+                    $filtersApplied = true;
+                    $mainQuery->orWhere('id', '<=', $request->shipmentIdTo);
+                }
+
+                // ✅ Order ID Range
+                if ($request->filled('orderIdFrom')) {
+                    $filtersApplied = true;
+                    $mainQuery->orWhere('order_id', '>=', $request->orderIdFrom);
+                }
+
+                if ($request->filled('orderIdTo')) {
+                    $filtersApplied = true;
+                    $mainQuery->orWhere('order_id', '<=', $request->orderIdTo);
+                }
+
+                // ✅ Shipping Date
+                if ($request->filled('shippingDate')) {
+                    $filtersApplied = true;
+                    $mainQuery->orWhereDate('date_shipped', $request->shippingDate);
+                }
+
+                // ✅ Order Date
+                if ($request->filled('orderDate')) {
+                    $filtersApplied = true;
+                    $mainQuery->orWhereHas('order', function ($q) use ($request) {
+                        $q->whereDate('created_at', $request->orderDate);
+                    });
+                }
+
+                // ❌ If no filters provided, block results
+                if (!$filtersApplied) {
+                    $mainQuery->whereRaw('0 = 1');
+                }
+            });
+
+        // ✅ Sorting
+        $sortField = $request->get('sortField', 'id');
+        $sortDirection = $request->get('sortDirection', 'asc');
+        $query->orderBy($sortField, $sortDirection);
+
+        // ✅ Pagination
+        $shipments = $query->paginate($request->get('pageSize', 20));
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Advanced search results.',
+            'data' => ShipmentResource::collection($shipments),
+            'pagination' => [
+                'total' => $shipments->total(),
+                'page' => $shipments->currentPage(),
+                'pageSize' => $shipments->perPage(),
+                'lastPage' => $shipments->lastPage()
+            ]
+        ]);
     }
 }
