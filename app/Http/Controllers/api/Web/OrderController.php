@@ -197,6 +197,66 @@ class OrderController extends Controller
         }
     }
 
+    public function update(Request $request, $id)
+    {
+        try {
+            $order = Order::where('id', $id)
+                          ->where('store_id', current_store_id())
+                          ->firstOrFail();
+        
+            // List of updatable fields (whitelisted)
+            $updatableFields = [
+                'name',
+                'email',
+                'phone',
+                'address',
+                'payment_method',
+                'shipping_method',
+                'shipping_cost',
+                'total_amount',
+                'coupon_code',
+                'comments',
+                'staff_notes',
+                'status',
+                'is_draft',
+                'channel',
+                'fulfillment_source',
+                'tracking_number',
+                'tracking_carrier_code',
+                'tracking_carrier_name',
+                'shipped_at',
+            ];
+        
+            // Loop through each field and update if present in request
+            foreach ($updatableFields as $field) {
+                if ($request->has($field)) {
+                    $order->{$field} = $request->input($field);
+                }
+            }
+        
+            $order->save();
+        
+            return response()->json([
+                'status' => true,
+                'message' => 'Order updated successfully.',
+                'data' => new OrderResource($order),
+            ]);
+        
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Order not found or unauthorized.',
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Order update failed.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
     public function updateOrderStatus(Request $request, $id)
     {
         $request->validate(['status' => 'required|string']);

@@ -64,6 +64,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/get-notes/{orderId}', 'getOrderNotes');
         Route::post('/add-orders', 'storeFromDashboard');
         Route::post('/search-advanced', 'advancedOrderSearch');
+        Route::put('/update-order/{id}', 'update');
 
     });
 
