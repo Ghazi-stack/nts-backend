@@ -1,81 +1,192 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Invoice</title>
+    <meta charset="UTF-8">
+    <title>Payment Invoice</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 13px;
+            color: #333;
+            margin: 40px;
+            background-color: #fff;
+            position: relative;
+            z-index: 0;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 100%;
+            /* background-image: url('{{ $logoBase64 }}'); */
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: 80%;
+            opacity: 0.08;
+            transform: translate(-50%, -50%);
+            z-index: -1;
+        }
+
+        .header {
+            text-align: center;
+            padding: 20px 0;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .header img {
+            max-height: 60px;
+        }
+
+        .title {
+            font-size: 26px;
+            font-weight: bold;
+            color: #FF5722;
+            margin-top: 10px;
+            letter-spacing: 1px;
+        }
+
+        .info-table {
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            background-color: #fff;
+            margin-bottom: 30px;
+        }
+
+        .info-table td {
+            padding: 8px 10px;
+            vertical-align: top;
+        }
+
+        .info-table td strong {
+            color: #444;
+            display: inline-block;
+            width: 130px;
+        }
+
+        h3 {
+            font-size: 18px;
+            margin-bottom: 10px;
+            color: #444;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 5px;
+        }
+
+        .product-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #fff;
+            border: 1px solid #ddd;
+        }
+
+        .product-table th {
+            background-color: #f9f9f9;
+            color: #444;
+            font-weight: 600;
+            padding: 12px 10px;
+            border: 1px solid #ddd;
+        }
+
+        .product-table td {
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .total {
+            margin-top: 15px;
+            text-align: right;
+            font-weight: bold;
+            font-size: 16px;
+            color: #222;
+        }
+
+        .footer {
+            font-size: 11px;
+            color: #999;
+            text-align: center;
+            margin-top: 50px;
+        }
+
+        @media print {
+            body {
+                background-color: #fff;
+                margin: 0;
+            }
+
+            body::before {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
+<body>
 
-  <div style="max-width: 800px; margin: 40px auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
-
-    <!-- Header -->
-    <div style="background-color: #ff3d1f; padding: 30px 20px; text-align: center;">
-      <img src="{{ $logoBase64 }}" alt="Newtown Spares" style="max-width: 180px;">
+    <div class="header">
+        <img src="{{ public_path('logo/nts-logo.png') }}" alt="NTS Logo">
+        <div class="title">Payment Invoice</div>
     </div>
 
-    <!-- Invoice Title -->
-    <div style="padding: 30px 40px 10px 40px; text-align: center;">
-      <h2 style="color: #8B3EFF; margin: 0; font-size: 24px;">Payment Invoice</h2>
-    </div>
+    <table class="info-table">
+        <tr>
+            <td><strong>Order Number:</strong> {{ $order->order_number ?? $order->id }}</td>
+            <td><strong>Date:</strong> {{ $order->created_at->format('d M Y') }}</td>
+        </tr>
+        <tr>
+            <td><strong>Status:</strong> {{ ucfirst($order->status) }}</td>
+            <td><strong>Payment Method:</strong> {{ ucfirst($order->payment_method) }}</td>
+        </tr>
+        <tr>
+            <td><strong>Customer:</strong> {{ $order->name }}</td>
+            <td><strong>Phone:</strong> {{ $order->phone }}</td>
+        </tr>
+        <tr>
+            <td><strong>Email:</strong> {{ $order->email }}</td>
+            <td><strong>Billing Address:</strong> {{ $order->address }}</td>
+        </tr>
+    </table>
 
-    <!-- Order Details -->
-    <div style="padding: 10px 40px 30px 40px;">
-      <table width="100%" style="font-size: 14px; color: #333;">
-        <tr>
-          <td style="padding: 8px 0;"><strong>Order Number:</strong></td>
-          <td style="padding: 8px 0;">{{ $order->order_number }}</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px 0;"><strong>Total Amount:</strong></td>
-          <td style="padding: 8px 0;">${{ number_format($order->total_amount, 2) }}</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px 0;"><strong>Status:</strong></td>
-          <td style="padding: 8px 0;">{{ ucfirst($order->status) }}</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px 0;"><strong>Date:</strong></td>
-          <td style="padding: 8px 0;">{{ \Carbon\Carbon::parse($order->created_at)->format('d M Y') }}</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px 0;"><strong>Payment Method:</strong></td>
-          <td style="padding: 8px 0;">{{ ucfirst($order->payment_method) }}</td>
-        </tr>
-      </table>
-    </div>
+    <h3>Purchased Products</h3>
 
-    <!-- Product List -->
-    <div style="padding: 0 40px 30px 40px;">
-      <h3 style="margin-bottom: 10px; font-size: 16px;">Products:</h3>
-      <table width="100%" cellpadding="8" cellspacing="0" style="border-collapse: collapse; font-size: 13px;">
+    <table class="product-table">
         <thead>
-          <tr style="background-color: #f5f5f5;">
-            <th align="left" style="border: 1px solid #ddd;">Product</th>
-            <th align="center" style="border: 1px solid #ddd;">Qty</th>
-            <th align="right" style="border: 1px solid #ddd;">Unit Price</th>
-            <th align="right" style="border: 1px solid #ddd;">Total</th>
-          </tr>
+            <tr>
+                <th>#</th>
+                <th>Product</th>
+                <th>Qty</th>
+                <th>Unit Price</th>
+                <th class="text-right">Total</th>
+            </tr>
         </thead>
         <tbody>
-          @foreach($order->items as $item)
-            <tr>
-              <td style="border: 1px solid #ddd;">{{ $item->product->name ?? 'Deleted Product' }}</td>
-              <td align="center" style="border: 1px solid #ddd;">{{ $item->quantity }}</td>
-              <td align="right" style="border: 1px solid #ddd;">${{ number_format($item->price, 2) }}</td>
-              <td align="right" style="border: 1px solid #ddd;">${{ number_format($item->price * $item->quantity, 2) }}</td>
-            </tr>
-          @endforeach
+            @foreach ($order->items as $index => $item)
+                <tr>
+                    <td>{{ $index + 1 }}</td>
+                    <td>{{ $item->product->name ?? 'N/A' }}</td>
+                    <td>{{ $item->quantity }}</td>
+                    <td>${{ number_format($item->price, 2) }}</td>
+                    <td class="text-right">${{ number_format($item->price * $item->quantity, 2) }}</td>
+                </tr>
+            @endforeach
         </tbody>
-      </table>
+    </table>
+
+    <div class="total">
+        Total Paid: ${{ number_format($order->total_amount, 2) }}
     </div>
 
-    <!-- Footer -->
-    <div style="text-align: center; font-size: 12px; color: #777; padding: 20px;">
-      <p>This is a system-generated invoice. No signature is required.</p>
-      <p style="margin-top: 5px;">&copy; {{ date('Y') }} Newtown Spares. All rights reserved.</p>
+    <div class="footer">
+        This is a system-generated invoice. No signature required.
     </div>
-
-  </div>
 
 </body>
 </html>
