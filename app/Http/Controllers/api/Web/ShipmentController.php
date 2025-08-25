@@ -12,17 +12,16 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class ShipmentController extends Controller
 {
-    /**
-     * List all shipments with pagination.
-     */
     public function index(Request $request)
     {
         $storeId = current_store_id();
         $keyword = $request->get('keyword');
-
+        
+        // Eager-load related order, items, and products
         $query = Shipment::with(['order.items.product'])
             ->where('store_id', $storeId);
-
+        
+        // Apply keyword search (if provided)
         if ($keyword) {
             $query->where(function ($q) use ($keyword) {
                 $q->where('shipped_to', 'like', '%' . $keyword . '%')
@@ -32,9 +31,11 @@ class ShipmentController extends Controller
                   });
             });
         }
-
+    
+        // Paginate results
         $shipments = $query->orderByDesc('id')->paginate($request->get('pageSize', 20));
-
+    
+        // Return response
         return response()->json([
             'status' => true,
             'message' => 'Shipments fetched successfully.',
@@ -194,52 +195,52 @@ class ShipmentController extends Controller
     public function advancedSearch(Request $request)
     {
         $storeId = current_store_id();
-        
+
         $query = Shipment::with(['order.items.product'])
             ->where('store_id', $storeId)
             ->where(function ($mainQuery) use ($request) {
                 $filtersApplied = false;
-            
+
                 // ✅ Keyword search (in shipped_to, tracking_number, or ID)
                 if ($request->filled('keyword')) {
                     $filtersApplied = true;
                     $keyword = $request->keyword;
-                
+
                     $mainQuery->where(function ($q) use ($keyword) {
                         $q->where('shipped_to', 'like', "%$keyword%")
                           ->orWhere('tracking_number', 'like', "%$keyword%")
                           ->orWhere('id', $keyword); // ID search
                     });
                 }
-            
+
                 // ✅ Shipment ID Range
                 if ($request->filled('shipmentIdFrom')) {
                     $filtersApplied = true;
                     $mainQuery->where('id', '>=', $request->shipmentIdFrom);
                 }
-            
+
                 if ($request->filled('shipmentIdTo')) {
                     $filtersApplied = true;
                     $mainQuery->where('id', '<=', $request->shipmentIdTo);
                 }
-            
+
                 // ✅ Order ID Range
                 if ($request->filled('orderIdFrom')) {
                     $filtersApplied = true;
                     $mainQuery->where('order_id', '>=', $request->orderIdFrom);
                 }
-            
+
                 if ($request->filled('orderIdTo')) {
                     $filtersApplied = true;
                     $mainQuery->where('order_id', '<=', $request->orderIdTo);
                 }
-            
+
                 // ✅ Shipping Date (date_shipped column)
                 if ($request->filled('shippingDate')) {
                     $filtersApplied = true;
                     $mainQuery->whereDate('date_shipped', $request->shippingDate);
                 }
-            
+
                 // ✅ Order Date (from orders table)
                 if ($request->filled('orderDate')) {
                     $filtersApplied = true;
@@ -247,21 +248,21 @@ class ShipmentController extends Controller
                         $q->whereDate('created_at', $request->orderDate);
                     });
                 }
-            
+
                 // ❌ No filters at all? Return no results
                 if (!$filtersApplied) {
                     $mainQuery->whereRaw('0 = 1');
                 }
             });
-        
+
         // ✅ Sorting
         $sortField = $request->get('sortField', 'id');
         $sortDirection = $request->get('sortDirection', 'asc');
         $query->orderBy($sortField, $sortDirection);
-        
+
         // ✅ Pagination
         $shipments = $query->paginate($request->get('pageSize', 20));
-        
+
         return response()->json([
             'status' => true,
             'message' => 'Advanced search results.',
