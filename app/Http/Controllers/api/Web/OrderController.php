@@ -64,16 +64,7 @@ class OrderController extends Controller
             //     ->paginate($perPage);
 
             $orders = Order::with(['items.product', 'customer'])
-                ->where('store_id', current_store_id())
-                ->where(function ($query) use ($user, $sessionId) {
-                    $query->when($user, function ($q) use ($user) {
-                        $q->where('user_id', $user->id)
-                          ->orWhereNull('user_id'); // ✅ Include orders with no user
-                    })->when(!$user, function ($q) use ($sessionId) {
-                        $q->where('session_id', $sessionId)
-                          ->orWhereNull('session_id'); // ✅ Include orders with no session
-                    });
-                })
+                ->where('store_id', current_store_id()) // ✅ Only filter by store_id
                 ->when($keyword, function ($q) use ($keyword) {
                     $q->where(function ($query) use ($keyword) {
                         $query->where('id', 'like', "%{$keyword}%")
@@ -91,7 +82,7 @@ class OrderController extends Controller
                 })
                 ->latest()
                 ->paginate($perPage);
-
+            
             return response()->json([
                 'status' => true,
                 'message' => 'Orders retrieved successfully',
