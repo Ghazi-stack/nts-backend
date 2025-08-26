@@ -24,6 +24,7 @@ use App\Http\Resources\OrderResource;
 use App\Http\Resources\ProductResource;
 use App\Http\Resources\CustomerResource;
 use App\Http\Resources\ShipmentResource;
+use App\Http\Resources\OrderItemResource;
 use App\Http\Resources\OrderNoteResource;
 use App\Http\Resources\ReturnRequestResource;
 use Illuminate\Validation\ValidationException;
@@ -652,9 +653,10 @@ class OrderController extends Controller
                 'message'  => 'Order placed successfully.',
                 'customer' => new CustomerResource($customer),
                 'order'    => new OrderResource($order),
-                'products' => ProductResource::collection(
+                'products' => OrderItemResource::collection(
                     $order->items()->with('product')->get()
                 )
+
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             DB::rollBack();
@@ -881,7 +883,7 @@ class OrderController extends Controller
             ])
             ->where('store_id', current_store_id())
             ->findOrFail($id);
-            
+
             return response()->json([
                 'status' => true,
                 'data' => [
@@ -893,20 +895,20 @@ class OrderController extends Controller
                     'updated_at' => $order->updated_at,
                 ],
             ]);
-        
+
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => false,
                 'message' => 'Order not found for this store.',
             ], 404);
-        
+
         } catch (\Exception $e) {
             // Optional: log unexpected errors
             Log::error('Error fetching order timeline', [
                 'order_id' => $id,
                 'error' => $e->getMessage(),
             ]);
-        
+
             return response()->json([
                 'status' => false,
                 'message' => 'An unexpected error occurred while retrieving the order timeline.',
