@@ -41,10 +41,39 @@ class OrderController extends Controller
             $perPage = $request->query('perPage', 20);
             $keyword = $request->query('keyword');
 
+            // $orders = Order::with(['items.product', 'customer'])
+            //     ->where('store_id', current_store_id())
+            //     ->when($user, fn($q) => $q->where('user_id', $user->id))
+            //     ->when(!$user, fn($q) => $q->where('session_id', $sessionId))
+            //     ->when($keyword, function ($q) use ($keyword) {
+            //         $q->where(function ($query) use ($keyword) {
+            //             $query->where('id', 'like', "%{$keyword}%")
+            //                   ->orWhere('order_number', 'like', "%{$keyword}%")
+            //                   ->orWhere('status', 'like', "%{$keyword}%")
+            //                   ->orWhere('total_amount', 'like', "%{$keyword}%")
+            //                   ->orWhereHas('customer', function ($q2) use ($keyword) {
+            //                       $q2->where('first_name', 'like', "%{$keyword}%")
+            //                          ->orWhere('last_name', 'like', "%{$keyword}%")
+            //                          ->orWhere('name', 'like', "%{$keyword}%")
+            //                          ->orWhere('email', 'like', "%{$keyword}%")
+            //                          ->orWhere('phone', 'like', "%{$keyword}%");
+            //                   });
+            //         });
+            //     })
+            //     ->latest()
+            //     ->paginate($perPage);
+
             $orders = Order::with(['items.product', 'customer'])
                 ->where('store_id', current_store_id())
-                ->when($user, fn($q) => $q->where('user_id', $user->id))
-                ->when(!$user, fn($q) => $q->where('session_id', $sessionId))
+                ->where(function ($query) use ($user, $sessionId) {
+                    $query->when($user, function ($q) use ($user) {
+                        $q->where('user_id', $user->id)
+                          ->orWhereNull('user_id'); // ✅ Include orders with no user
+                    })->when(!$user, function ($q) use ($sessionId) {
+                        $q->where('session_id', $sessionId)
+                          ->orWhereNull('session_id'); // ✅ Include orders with no session
+                    });
+                })
                 ->when($keyword, function ($q) use ($keyword) {
                     $q->where(function ($query) use ($keyword) {
                         $query->where('id', 'like', "%{$keyword}%")
