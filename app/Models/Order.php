@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Store;
 use App\Models\Payment;
 use App\Models\Customer;
+use App\Models\Shipment;
 use App\Models\OrderItem;
 use App\Models\OrderNote;
 use Illuminate\Database\Eloquent\Model;
@@ -50,5 +51,9 @@ class Order extends Model
     public function customer()
     {
         return $this->belongsTo(Customer::class, 'customer_id');
+    }
+    public function shipments()
+    {
+        return $this->hasMany(Shipment::class); // Adjust class name if your model is namespaced
     }
 }

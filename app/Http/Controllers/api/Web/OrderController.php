@@ -16,6 +16,7 @@ use App\Models\ReturnRequest;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Mail\PaymentInvoiceMail;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Mail;
 use Maatwebsite\Excel\Facades\Excel;
@@ -839,45 +840,79 @@ class OrderController extends Controller
 
     public function resendInvoice($id)
     {
-        $order = Order::with('items.product')->where('store_id', current_store_id())->findOrFail($id);
-
-        $pdf = Pdf::loadView('pdf.invoice', [
-            'order' => $order,
-            'logoBase64' => $logoBase64,
-        ])->output();
-
-        Mail::send('emails.invoice', ['order' => $order], function ($message) use ($order, $pdf) {
-            $message->to($order->email)
-                    ->subject('Your Invoice for Order #' . $order->order_number)
-                    ->attachData($pdf, 'invoice-' . $order->order_number . '.pdf');
-        });
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Invoice resent to ' . $order->email,
-        ]);
+        try {
+            $order = Order::with('items.product')->where('store_id', current_store_id())->findOrFail($id);
+        
+            // Assuming $logoBase64 is available or generated somewhere above
+            $pdf = Pdf::loadView('pdf.invoice', [
+                'order' => $order,
+                'logoBase64' => $logoBase64 ?? null, // ensure it doesn't break if undefined
+            ]);
+        
+            // Send using the Mailable class
+            Mail::to($order->email)->send(new PaymentInvoiceMail($order, $pdf));
+        
+            return response()->json([
+                'status' => true,
+                'message' => 'Invoice resent to ' . $order->email,
+            ]);
+        } catch (\Exception $e) {
+            // Log the error for debugging
+            Log::error('Failed to resend invoice: ' . $e->getMessage(), [
+                'order_id' => $id,
+                'exception' => $e,
+            ]);
+        
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to resend invoice. Please try again later.',
+                'error' => $e->getMessage(), // optional, remove in production
+            ], 500);
+        }
     }
 
     public function getOrderTimeline($id)
     {
-        $order = Order::with([
-            'notes.user',
-            'items.product',
-            'shipments'
-        ])->where('store_id', current_store_id())
-          ->findOrFail($id);
+        try {
+            $order = Order::with([
+                'notes.user',
+                'items.product',
+                'shipments'
+            ])
+            ->where('store_id', current_store_id())
+            ->findOrFail($id);
+            
+            return response()->json([
+                'status' => true,
+                'data' => [
+                    'order' => new OrderResource($order),
+                    'notes' => OrderNoteResource::collection($order->notes),
+                    'shipments' => ShipmentResource::collection($order->shipments),
+                    'status' => $order->status,
+                    'created_at' => $order->created_at,
+                    'updated_at' => $order->updated_at,
+                ],
+            ]);
         
-        return response()->json([
-            'status' => true,
-            'data' => [
-                'order' => new OrderResource($order),
-                'notes' => OrderNoteResource::collection($order->notes),
-                'shipments' => ShipmentResource::collection($order->shipments),
-                'status' => $order->status,
-                'created_at' => $order->created_at,
-                'updated_at' => $order->updated_at,
-            ],
-        ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Order not found for this store.',
+            ], 404);
+        
+        } catch (\Exception $e) {
+            // Optional: log unexpected errors
+            Log::error('Error fetching order timeline', [
+                'order_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+        
+            return response()->json([
+                'status' => false,
+                'message' => 'An unexpected error occurred while retrieving the order timeline.',
+                'error' => $e->getMessage(), // optional in production
+            ], 500);
+        }
     }
 
     public function refund($id)
