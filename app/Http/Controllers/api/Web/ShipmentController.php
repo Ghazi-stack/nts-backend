@@ -4,11 +4,12 @@ namespace App\Http\Controllers\Api\Web;
 
 use App\Models\Order;
 use App\Models\Shipment;
+use Illuminate\Support\Str;
 use Illuminate\Http\Request;
+use App\Events\ShipmentCreated;
+use Barryvdh\DomPDF\Facade\Pdf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ShipmentResource;
-use Illuminate\Support\Str;
-use Barryvdh\DomPDF\Facade\Pdf;
 
 class ShipmentController extends Controller
 {
@@ -102,6 +103,10 @@ class ShipmentController extends Controller
             'tracking_number' => $validated['trackingNumber'] ?? $this->generateTrackingNumber(),
         ]);
 
+        $order->tracking_number = $shipment->tracking_number;
+        $order->save();
+
+        event(new ShipmentCreated($shipment));
         return response()->json([
             'status' => true,
             'message' => 'Shipment created successfully.',
