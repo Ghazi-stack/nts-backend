@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use App\Events\ShipmentCreated;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Cache;
 use App\Http\Resources\ShipmentResource;
 
 class ShipmentController extends Controller
@@ -107,6 +108,10 @@ class ShipmentController extends Controller
         $order->save();
 
         event(new ShipmentCreated($shipment));
+         sleep(1);
+
+        // ✅ Check email result from cache
+        $emailStatus = Cache::pull('shipment_email_status_' . $shipment->id);
         return response()->json([
             'status' => true,
             'message' => 'Shipment created successfully.',

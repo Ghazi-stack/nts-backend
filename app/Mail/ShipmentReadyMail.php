@@ -20,11 +20,11 @@ class ShipmentReadyMail extends Mailable
 
     public function build()
     {
-        return $this->subject('Your Shipment is Ready - Newtown Spares')
+        return $this->subject('Your Shipment is Ready')
                     ->view('emails.shipment-ready')
                     ->with([
                         'shipment' => $this->shipment,
-                        'order'    => $this->shipment->order,
+                        'order' => $this->shipment->order,
                     ]);
     }
 }

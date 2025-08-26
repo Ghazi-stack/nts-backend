@@ -25,31 +25,43 @@
             <td style="padding: 30px;">
               <h2 style="text-align: center; margin-bottom: 25px;">Your Order is Ready to Ship</h2>
 
-              <p style="font-size: 15px; color: #333333;">
-                Hello <strong>{{ $order->name }}</strong>,
-              </p>
-
-              <p style="font-size: 15px; color: #333333;">
-                Your order <strong>#{{ $order->order_number }}</strong> has been packed and is ready for shipment.
-              </p>
-
-              <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 15px; color: #333333; border-collapse: collapse; margin: 20px 0;">
+              <!-- Order Info -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 15px; color: #333333; border-collapse: collapse; margin-bottom: 30px;">
                 <tr>
-                  <td style="padding: 8px; border-bottom: 1px solid #eeeeee;"><strong>Tracking Number:</strong></td>
-                  <td style="padding: 8px; border-bottom: 1px solid #eeeeee;">{{ $shipment->tracking_number }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #eeeeee;"><strong>Order ID:</strong></td>
+                  <td style="padding: 8px; border-bottom: 1px solid #eeeeee;">{{ $order->order_number }}</td>
                 </tr>
                 <tr>
-                  <td style="padding: 8px;"><strong>Shipping To:</strong></td>
-                  <td style="padding: 8px;">{{ $shipment->shipped_to }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #eeeeee;"><strong>Customer Name:</strong></td>
+                  <td style="padding: 8px; border-bottom: 1px solid #eeeeee;">{{ $order->name }}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px;"><strong>Email:</strong></td>
+                  <td style="padding: 8px;">{{ $order->email }}</td>
+                </tr>
+              </table>
+
+              <!-- Shipment Info -->
+              <h3 style="margin: 20px 0 10px; font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Shipment Details</h3>
+
+              <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 14px; color: #333; border-collapse: collapse; margin-bottom: 30px;">
+                <tr>
+                  <td style="padding: 10px; border: 1px solid #ddd;"><strong>Tracking Number:</strong></td>
+                  <td style="padding: 10px; border: 1px solid #ddd;">{{ $shipment->tracking_number }}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px; border: 1px solid #ddd;"><strong>Shipping To:</strong></td>
+                  <td style="padding: 10px; border: 1px solid #ddd;">{{ $shipment->shipped_to }}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px; border: 1px solid #ddd;"><strong>Shipped Date:</strong></td>
+                  <td style="padding: 10px; border: 1px solid #ddd;">{{ \Carbon\Carbon::parse($shipment->date_shipped)->format('d M Y') }}</td>
                 </tr>
               </table>
 
               <p style="font-size: 14px; color: #555;">
-                You will receive another notification once the order is out for delivery or delivered.
-              </p>
-
-              <p style="font-size: 14px; color: #555;">
-                Thank you for choosing {{ config('app.name') }}.
+                You will receive another update once your order is out for delivery.<br>
+                Thank you for shopping with <strong>Newtown Spares</strong>!
               </p>
             </td>
           </tr>
