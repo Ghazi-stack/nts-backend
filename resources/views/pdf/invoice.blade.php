@@ -37,10 +37,6 @@
             border-bottom: 2px solid #e0e0e0;
         }
 
-        .header img {
-            max-height: 60px;
-        }
-
         .title {
             font-size: 26px;
             font-weight: bold;
@@ -132,7 +128,7 @@
 <body>
 
     <div class="header">
-        <img src="{{ public_path('logo/nts-logo.png') }}" alt="NTS Logo">
+        <img src="{{ $logoBase64 }}" alt="NTS Logo" height="60">
         <div class="title">Payment Invoice</div>
     </div>
 

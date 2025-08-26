@@ -14,8 +14,10 @@ use Illuminate\Http\Request;
 use App\Exports\OrdersExport;
 use App\Models\ReturnRequest;
 use Barryvdh\DomPDF\Facade\Pdf;
+use App\Mail\PaymentInvoiceMail;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Mail;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Http\Resources\OrderResource;
 use App\Http\Resources\ProductResource;
@@ -816,6 +818,23 @@ class OrderController extends Controller
         ]);
 
         return $pdf->download('invoice-' . $order->order_number . '.pdf');
+    }
+
+    public function sendPaymentInvoice($orderId)
+    {
+        $order = Order::with('items.product')->findOrFail($orderId);
+    
+        $logoPath = public_path('logo/nts-logo.png');
+        $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+    
+        $pdf = Pdf::loadView('pdf.invoice', [
+            'order' => $order,
+            'logoBase64' => $logoBase64,
+        ]);
+    
+        Mail::to($order->email)->send(new PaymentInvoiceMail($order, $pdf));
+    
+        return response()->json(['message' => 'Invoice email sent successfully']);
     }
 
     public function resendInvoice($id)
