@@ -40,7 +40,7 @@
         .title {
             font-size: 26px;
             font-weight: bold;
-            color: #FF5722;
+            /* color: #FF5722; */
             margin-top: 10px;
             letter-spacing: 1px;
         }
