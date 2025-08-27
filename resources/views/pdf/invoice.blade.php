@@ -21,7 +21,7 @@
             left: 50%;
             width: 100%;
             height: 100%;
-            /* background-image: url('{{ $logoBase64 }}'); */
+            background-image: url('{{ is_string($logoBase64) ? $logoBase64 : '' }}');
             background-repeat: no-repeat;
             background-position: center;
             background-size: 80%;
@@ -128,26 +128,30 @@
 <body>
 
     <div class="header">
-        <img src="{{ $logoBase64 }}" alt="NTS Logo" height="60">
+        <img src="{{ is_string($logoBase64) ? $logoBase64 : '' }}" alt="NTS Logo" height="60">
         <div class="title">Payment Invoice</div>
     </div>
 
     <table class="info-table">
         <tr>
-            <td><strong>Order Number:</strong> {{ $order->order_number ?? $order->id }}</td>
-            <td><strong>Date:</strong> {{ $order->created_at->format('d M Y') }}</td>
+            <td><strong>Order Number:</strong> 
+                {{ is_scalar($order->order_number ?? $order->id) ? ($order->order_number ?? $order->id) : 'N/A' }}
+            </td>
+            <td><strong>Date:</strong> 
+                {{ $order->created_at instanceof \Illuminate\Support\Carbon ? $order->created_at->format('d M Y') : 'N/A' }}
+            </td>
         </tr>
         <tr>
-            <td><strong>Status:</strong> {{ ucfirst($order->status) }}</td>
-            <td><strong>Payment Method:</strong> {{ ucfirst($order->payment_method) }}</td>
+            <td><strong>Status:</strong> {{ is_string($order->status) ? ucfirst($order->status) : 'N/A' }}</td>
+            <td><strong>Payment Method:</strong> {{ is_string($order->payment_method) ? ucfirst($order->payment_method) : 'N/A' }}</td>
         </tr>
         <tr>
-            <td><strong>Customer:</strong> {{ $order->name }}</td>
-            <td><strong>Phone:</strong> {{ $order->phone }}</td>
+            <td><strong>Customer:</strong> {{ is_string($order->name) ? $order->name : 'N/A' }}</td>
+            <td><strong>Phone:</strong> {{ is_string($order->phone) ? $order->phone : 'N/A' }}</td>
         </tr>
         <tr>
-            <td><strong>Email:</strong> {{ $order->email }}</td>
-            <td><strong>Billing Address:</strong> {{ $order->address }}</td>
+            <td><strong>Email:</strong> {{ is_string($order->email) ? $order->email : 'N/A' }}</td>
+            <td><strong>Billing Address:</strong> {{ is_string($order->address) ? $order->address : 'N/A' }}</td>
         </tr>
     </table>
 
@@ -167,17 +171,25 @@
             @foreach ($order->items as $index => $item)
                 <tr>
                     <td>{{ $index + 1 }}</td>
-                    <td>{{ $item->product->name ?? 'N/A' }}</td>
-                    <td>{{ $item->quantity }}</td>
-                    <td>${{ number_format($item->price, 2) }}</td>
-                    <td class="text-right">${{ number_format($item->price * $item->quantity, 2) }}</td>
+                    <td>
+                        {{
+                            is_object($item->product) && isset($item->product->name)
+                                ? $item->product->name
+                                : (is_array($item->product) && isset($item->product['name'])
+                                    ? $item->product['name']
+                                    : 'N/A')
+                        }}
+                    </td>
+                    <td>{{ is_numeric($item->quantity) ? $item->quantity : '0' }}</td>
+                    <td>${{ number_format($item->price ?? 0, 2) }}</td>
+                    <td class="text-right">${{ number_format(($item->price ?? 0) * ($item->quantity ?? 0), 2) }}</td>
                 </tr>
             @endforeach
         </tbody>
     </table>
 
     <div class="total">
-        Total Paid: ${{ number_format($order->total_amount, 2) }}
+        Total Paid: ${{ number_format($order->total_amount ?? 0, 2) }}
     </div>
 
     <div class="footer">
@@ -186,3 +198,4 @@
 
 </body>
 </html>
+ 

@@ -822,7 +822,7 @@ class OrderController extends Controller
 
     public function sendPaymentInvoice($orderId)
     {
-        $order = Order::with('items.product')->findOrFail($orderId);
+        $order = Order::with('items.product')->findOrFail($orderId); 
     
         $logoPath = public_path('logo/nts-logo.png');
         $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
