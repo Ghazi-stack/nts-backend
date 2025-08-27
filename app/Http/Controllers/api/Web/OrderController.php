@@ -667,7 +667,7 @@ class OrderController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'Order failed.',
-                'error' => 'An unexpected error occurred. Please try again or contact support.'
+                'error' => $e->getMessage() // 👉 shows actual exception message
             ], 500);
         }
     }
