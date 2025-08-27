@@ -666,7 +666,7 @@ class OrderController extends Controller
             DB::rollBack();
             return response()->json([
                 'status' => false,
-                'message' => 'Order failed.',
+                'message' => $e->getMessage(),
                 'error' => $e->getMessage() // 👉 shows actual exception message
             ], 500);
         }
