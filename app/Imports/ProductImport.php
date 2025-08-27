@@ -32,21 +32,16 @@ class ProductImport implements ToArray
             try {
                 $data = array_combine($header, $row);
 
-                // $brand = Brand::firstOrCreate(
-                //     ['name' => $data['Brand Name'] ?? 'Unknown Brand'],
-                //     ['slug' => Str::slug($data['Brand Name'] ?? 'Unknown Brand')]
-                // );
                 $brandName = $data['Brand Name'] ?? $data['Brand'] ?? 'Unknown Brand';
                 $brand = Brand::firstOrCreate(
                     ['name' => $brandName, 'store_id' => $this->storeId],
                     ['slug' => Str::slug($brandName)]
                 );
 
-                $categoryName = $row['Category Name'] ?? $row['Category'] ?? $row['GPS Category'] ?? 'Uncategorized';
-                $category = Category::firstOrCreate(
-                    ['name' => $categoryName, 'store_id' => $this->storeId],
-                    ['slug' => Str::slug($categoryName)]
-                );
+                // ✅ Handle full category path like Android/Phone/iPhone/16 Promax
+                $categoryPath = $data['Category'] ?? 'Uncategorized';
+                $category = $this->resolveCategoryPath($categoryPath);
+
                 $product = Product::create([
                     'store_id' => $this->storeId,
                     'item_type' => $data['Item Type'] ?? null,
@@ -87,6 +82,8 @@ class ProductImport implements ToArray
                     'updated_at' => Carbon::now(),
                 ]);
 
+                $product->categories()->syncWithoutDetaching([$category->id]);
+
                 ProductContent::create([
                     'store_id' => $this->storeId,
                     'product_id' => $product->id,
@@ -115,35 +112,63 @@ class ProductImport implements ToArray
                     'redirect_old_url' => $this->toBool($data['Redirect Old URL?'] ?? 'N'),
                 ]);
 
-                // ✅ Improved image detection logic
+                // ✅ Auto-detect image
                 $imagePath = collect($data)->map(fn($v) => trim($v))->first(function ($value) {
-                if (!is_string($value)) return false;
-                return preg_match('/\.(jpg|jpeg|png|gif|webp)$/i', $value); // Accepts image file names or full URLs
-            });
-            
-            if ($imagePath) {
-                $isUrl = filter_var($imagePath, FILTER_VALIDATE_URL);
-            
-                // Prefix internal image paths
-                $finalPath = $isUrl ? $imagePath : 'product_images/' . ltrim($imagePath, '/');
-            
-                Log::info("Image path detected for SKU {$data['Product Code/SKU']}: {$finalPath}");
-            
-                ProductImage::create([
-                    'store_id' => $this->storeId,
-                    'product_id' => $product->id,
-                    'path' => $finalPath,
-                    'alt_text' => $data['Product Name'] ?? '',
-                    'is_primary' => true,
-                ]);
-            } else {
-                Log::info("No image found for SKU: {$data['Product Code/SKU']}");
-            }
+                    if (!is_string($value)) return false;
+                    return preg_match('/\.(jpg|jpeg|png|gif|webp)$/i', $value);
+                });
+
+                if ($imagePath) {
+                    $isUrl = filter_var($imagePath, FILTER_VALIDATE_URL);
+                    $finalPath = $isUrl ? $imagePath : 'product_images/' . ltrim($imagePath, '/');
+
+                    Log::info("Image path detected for SKU {$data['Product Code/SKU']}: {$finalPath}");
+
+                    ProductImage::create([
+                        'store_id' => $this->storeId,
+                        'product_id' => $product->id,
+                        'path' => $finalPath,
+                        'alt_text' => $data['Product Name'] ?? '',
+                        'is_primary' => true,
+                    ]);
+                } else {
+                    Log::info("No image found for SKU: {$data['Product Code/SKU']}");
+                }
 
             } catch (\Throwable $e) {
                 Log::error("Import error for row: " . json_encode($row) . ' — ' . $e->getMessage());
             }
         }
+    }
+
+    private function resolveCategoryPath($path)
+    {
+        // ✅ Split by `/` (forward slash)
+        $segments = array_map('trim', explode('/', $path));
+        $parentId = null;
+        $category = null;
+
+        foreach ($segments as $segment) {
+            if (!$segment) continue;
+
+            $slug = Str::slug($segment);
+
+            $category = Category::firstOrCreate(
+                [
+                    'store_id' => $this->storeId,
+                    'slug' => $slug,
+                    'parent_id' => $parentId,
+                ],
+                [
+                    'name' => $segment,
+                    'is_visible' => true,
+                ]
+            );
+
+            $parentId = $category->id;
+        }
+
+        return $category;
     }
 
     private function parseCustomFields($fieldString)
