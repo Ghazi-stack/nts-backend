@@ -2,17 +2,76 @@
 
 namespace App\Http\Controllers\api\Admin;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use Exception;
 use App\Models\Brand;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use App\Http\Controllers\Controller;
 use App\Http\Resources\BrandResource;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Exception;
 
 class BrandController extends Controller
 {
     
+    // public function index(Request $request)
+    // {
+    //     try {
+    //         $storeId = current_store_id();
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Store not selected or token invalid.'
+    //             ], 400);
+    //         }
+
+    //         $perPage = (int) $request->query('perPage', 20);
+    //         $keyword = trim((string) $request->query('keyword', ''));
+
+    //         $query = Brand::withCount('products')
+    //             ->where('store_id', $storeId);
+
+    //         if ($keyword !== '') {
+    //             // Escape %, _ and \ so LIKE works safely
+    //             $escaped = addcslashes($keyword, '%_\\');
+
+    //             // Match anywhere…
+    //             $query->where('name', 'like', "%{$escaped}%")
+    //                 // …but prioritize names that START with the keyword
+    //                 ->orderByRaw(
+    //                     "CASE WHEN name LIKE ? THEN 0 ELSE 1 END",
+    //                     ["{$escaped}%"]
+    //                 )
+    //                 // Then alphabetical inside each group
+    //                 ->orderBy('name', 'asc');
+    //         } else {
+    //             // Default ordering when no keyword is provided
+    //             $query->orderBy('name', 'asc');
+    //         }
+
+    //         $brands = $query->paginate($perPage);
+
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Brands retrieved successfully',
+    //             'data' => BrandResource::collection($brands),
+    //             'pagination' => [
+    //                 'total' => $brands->total(),
+    //                 'count' => $brands->count(),
+    //                 'perPage' => $brands->perPage(),
+    //                 'currentPage' => $brands->currentPage(),
+    //                 'totalPages' => $brands->lastPage(),
+    //             ]
+    //         ], 200);
+    //     } catch (Exception $e) {
+    //         Log::error('Error fetching brands: ' . $e->getMessage());
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Failed to retrieve brands',
+    //         ], 500);
+    //     }
+    // }
+
     public function index(Request $request)
     {
         try {
@@ -23,45 +82,55 @@ class BrandController extends Controller
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
-
+        
             $perPage = (int) $request->query('perPage', 20);
             $keyword = trim((string) $request->query('keyword', ''));
-
-            $query = Brand::withCount('products')
-                ->where('store_id', $storeId);
-
+        
+            $query = Brand::select('name', DB::raw('SUM(products_count) as products_count'))
+                ->where('store_id', $storeId)
+                ->groupBy('name');
+        
+            // Eager-load product count relation if needed (assumes `withCount('products')` is being handled elsewhere)
+            $brandsWithProducts = Brand::withCount('products')
+                ->where('store_id', $storeId)
+                ->get();
+        
+            // Merge duplicated brand names and their product counts
+            $merged = $brandsWithProducts->groupBy('name')->map(function ($items, $name) {
+                return [
+                    'name' => $name,
+                    'productsCount' => $items->sum('products_count'),
+                ];
+            })->values();
+        
+            // Apply keyword filtering
             if ($keyword !== '') {
-                // Escape %, _ and \ so LIKE works safely
-                $escaped = addcslashes($keyword, '%_\\');
-
-                // Match anywhere…
-                $query->where('name', 'like', "%{$escaped}%")
-                    // …but prioritize names that START with the keyword
-                    ->orderByRaw(
-                        "CASE WHEN name LIKE ? THEN 0 ELSE 1 END",
-                        ["{$escaped}%"]
-                    )
-                    // Then alphabetical inside each group
-                    ->orderBy('name', 'asc');
-            } else {
-                // Default ordering when no keyword is provided
-                $query->orderBy('name', 'asc');
+                $merged = $merged->filter(function ($item) use ($keyword) {
+                    return stripos($item['name'], $keyword) !== false;
+                })->sortBy(function ($item) use ($keyword) {
+                    // Prioritize names that start with the keyword
+                    return stripos($item['name'], $keyword) === 0 ? 0 : 1;
+                })->values();
             }
-
-            $brands = $query->paginate($perPage);
-
+        
+            // Paginate manually
+            $page = (int) $request->query('page', 1);
+            $paged = $merged->forPage($page, $perPage);
+            $total = $merged->count();
+        
             return response()->json([
                 'status' => true,
                 'message' => 'Brands retrieved successfully',
-                'data' => BrandResource::collection($brands),
+                'data' => $paged->values(),
                 'pagination' => [
-                    'total' => $brands->total(),
-                    'count' => $brands->count(),
-                    'perPage' => $brands->perPage(),
-                    'currentPage' => $brands->currentPage(),
-                    'totalPages' => $brands->lastPage(),
+                    'total' => $total,
+                    'count' => $paged->count(),
+                    'perPage' => $perPage,
+                    'currentPage' => $page,
+                    'totalPages' => ceil($total / $perPage),
                 ]
             ], 200);
+        
         } catch (Exception $e) {
             Log::error('Error fetching brands: ' . $e->getMessage());
             return response()->json([
