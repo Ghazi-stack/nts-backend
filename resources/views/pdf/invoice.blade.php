@@ -21,7 +21,7 @@
             left: 50%;
             width: 100%;
             height: 100%;
-            background-image: url('{{ is_string($logoBase64) ? $logoBase64 : '' }}');
+            /* background-image: url('{{ is_string($logoBase64) ? $logoBase64 : '' }}'); */
             background-repeat: no-repeat;
             background-position: center;
             background-size: 80%;
