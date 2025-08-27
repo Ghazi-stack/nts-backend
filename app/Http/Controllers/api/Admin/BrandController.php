@@ -14,64 +14,6 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 class BrandController extends Controller
 {
     
-    // public function index(Request $request)
-    // {
-    //     try {
-    //         $storeId = current_store_id();
-    //         if (!$storeId) {
-    //             return response()->json([
-    //                 'status' => false,
-    //                 'message' => 'Store not selected or token invalid.'
-    //             ], 400);
-    //         }
-
-    //         $perPage = (int) $request->query('perPage', 20);
-    //         $keyword = trim((string) $request->query('keyword', ''));
-
-    //         $query = Brand::withCount('products')
-    //             ->where('store_id', $storeId);
-
-    //         if ($keyword !== '') {
-    //             // Escape %, _ and \ so LIKE works safely
-    //             $escaped = addcslashes($keyword, '%_\\');
-
-    //             // Match anywhere…
-    //             $query->where('name', 'like', "%{$escaped}%")
-    //                 // …but prioritize names that START with the keyword
-    //                 ->orderByRaw(
-    //                     "CASE WHEN name LIKE ? THEN 0 ELSE 1 END",
-    //                     ["{$escaped}%"]
-    //                 )
-    //                 // Then alphabetical inside each group
-    //                 ->orderBy('name', 'asc');
-    //         } else {
-    //             // Default ordering when no keyword is provided
-    //             $query->orderBy('name', 'asc');
-    //         }
-
-    //         $brands = $query->paginate($perPage);
-
-    //         return response()->json([
-    //             'status' => true,
-    //             'message' => 'Brands retrieved successfully',
-    //             'data' => BrandResource::collection($brands),
-    //             'pagination' => [
-    //                 'total' => $brands->total(),
-    //                 'count' => $brands->count(),
-    //                 'perPage' => $brands->perPage(),
-    //                 'currentPage' => $brands->currentPage(),
-    //                 'totalPages' => $brands->lastPage(),
-    //             ]
-    //         ], 200);
-    //     } catch (Exception $e) {
-    //         Log::error('Error fetching brands: ' . $e->getMessage());
-    //         return response()->json([
-    //             'status' => false,
-    //             'message' => 'Failed to retrieve brands',
-    //         ], 500);
-    //     }
-    // }
-
     public function index(Request $request)
     {
         try {
