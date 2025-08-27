@@ -18,6 +18,7 @@ use Illuminate\Validation\ValidationException;
 
 class CustomerController extends Controller
 {
+   
     public function index(Request $request)
     {
         try {
@@ -31,16 +32,17 @@ class CustomerController extends Controller
 
             $query = Customer::where('store_id', $storeId);
 
-            // 🔍 Only search logic
+            // 🔍 Search by keyword
             if ($request->filled('search')) {
-                $search = $request->search;
+                $search = $request->input('search');
                 $query->where(function ($q) use ($search) {
-                    $q->where('name', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%")
-                        ->orWhere('phone', 'like', "%{$search}%")
-                        ->orWhere('first_name', 'like', "%{$search}%")
-                        ->orWhere('last_name', 'like', "%{$search}%")
-                        ->orWhere('customer_group', 'like', "%{$search}%");
+                    $q->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'like', "%{$search}%")
+                      ->orWhere('first_name', 'like', "%{$search}%")
+                      ->orWhere('last_name', 'like', "%{$search}%")
+                      ->orWhere('email', 'like', "%{$search}%")
+                      ->orWhere('phone', 'like', "%{$search}%")
+                      ->orWhere('customer_group', 'like', "%{$search}%")
+                      ->orWhere('company_name', 'like', "%{$search}%");
                 });
             }
 
@@ -60,10 +62,13 @@ class CustomerController extends Controller
                 ]
             ]);
         } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
-
     public function show($id)
     {
         try {
@@ -86,72 +91,6 @@ class CustomerController extends Controller
         }
     }
 
-    // public function store(Request $request)
-    // {
-    //     try {
-    //         $storeId = current_store_id();
-    //         if (!$storeId) {
-    //             return response()->json([
-    //                 'status' => false,
-    //                 'message' => 'Store not selected or token invalid.'
-    //             ], 400);
-    //         }
-        
-    //         $validated = $request->validate([
-    //             'firstName'            => 'nullable|string|max:255',
-    //             'lastName'             => 'nullable|string|max:255',
-    //             'email'                 => [
-    //                 'nullable',
-    //                 'email',
-    //                 Rule::unique('customers')->where(function ($query) use ($storeId) {
-    //                     return $query->where('store_id', $storeId);
-    //                 }),
-    //             ],
-    //             'phone'                 => 'nullable|string|max:20',
-    //             'address'               => 'nullable|string',
-    //             'companyName'          => 'nullable|string|max:255',
-    //             'customerGroup'        => 'nullable|string|max:255',
-    //             'storeCredit'          => 'nullable|numeric',
-    //             'country'               => 'nullable|string|max:100',
-    //             'state'                 => 'nullable|string|max:100',
-    //             'taxExemptCode'       => 'nullable|string|max:50',
-    //             'receiveReviewEmails' => 'nullable|boolean',
-    //             'forcePasswordReset'  => 'nullable|boolean',
-    //             'password'              => 'nullable|string|min:7|confirmed',
-    //         ]);
-        
-    //         $validated['store_id'] = $storeId;
-    //         $validated['name'] = trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? ''));
-        
-    //         if (!empty($validated['password'])) {
-    //             $rawPassword = $validated['password']; // keep original for user table
-    //             $validated['password'] = Hash::make($validated['password']);
-    //         }
-        
-    //         $customer = Customer::create($validated);
-        
-    //         // 🔑 Create corresponding User (for authentication)
-    //         if (!empty($validated['email']) && !empty($rawPassword ?? null)) {
-    //             User::create([
-    //                 'email'       => $validated['email'],
-    //                 'password'    => Hash::make($rawPassword),
-    //                 'customer_id' => $customer->id,
-    //                 'store_id'    => $storeId
-    //             ]);
-    //         }
-        
-    //         return response()->json([
-    //             'status' => true,
-    //             'message' => 'Customer created.',
-    //             'data' => new CustomerResource($customer)
-    //         ], 201);
-        
-    //     } catch (ValidationException $e) {
-    //         return response()->json(['errors' => $e->errors()], 422);
-    //     } catch (\Exception $e) {
-    //         return response()->json(['error' => $e->getMessage()], 500);
-    //     }
-    // }
     public function store(Request $request)
     {
         try {
@@ -509,9 +448,9 @@ class CustomerController extends Controller
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
-        
+
             $query = Customer::where('store_id', $storeId);
-        
+
             // 🔍 Keyword Search
             if ($request->filled('searchKeywords')) {
                 $search = $request->input('searchKeywords');
@@ -525,49 +464,49 @@ class CustomerController extends Controller
                       ->orWhere('company_name', 'like', "%{$search}%");
                 });
             }
-        
+
             // 🔠 Starts with
             if ($request->filled('startsWith')) {
                 $query->where('first_name', 'like', $request->input('startsWith') . '%');
             }
-        
+
             // ☎️ Phone
             if ($request->filled('phone')) {
                 $query->where('phone', 'like', "%{$request->input('phone')}%");
             }
-        
+
             // 🌍 Country / State
             if ($request->filled('country')) {
                 $query->where('country', $request->input('country'));
             }
-        
+
             if ($request->filled('stateProvince')) {
                 $query->where('state', $request->input('stateProvince'));
             }
-        
+
             // 🔢 ID range
             if ($request->filled('customerIdFrom')) {
                 $query->where('id', '>=', $request->input('customerIdFrom'));
             }
-        
+
             if ($request->filled('customerIdTo')) {
                 $query->where('id', '<=', $request->input('customerIdTo'));
             }
-        
+
             // 💳 Credit range
             if ($request->filled('creditFrom')) {
                 $query->where('store_credit', '>=', $request->input('creditFrom'));
             }
-        
+
             if ($request->filled('creditTo')) {
                 $query->where('store_credit', '<=', $request->input('creditTo'));
             }
-        
+
             // 👥 Group
             if ($request->filled('customerGroup')) {
                 $query->where('customer_group', $request->input('customerGroup'));
             }
-        
+
             // 📅 Date Joined
             if ($request->filled('dateJoined')) {
                 switch ($request->input('dateJoined')) {
@@ -593,16 +532,16 @@ class CustomerController extends Controller
                         ], 422);
                 }
             }
-        
+
             // 🔃 Sorting
             $sortField = $request->input('sortBy', 'id');
             $sortOrder = $request->input('sortOrder', 'asc');
             $query->orderBy($sortField, $sortOrder);
-        
+
             // 📄 Pagination
             $pageSize = $request->input('pageSize', 50);
             $customers = $query->paginate($pageSize);
-        
+
             return response()->json([
                 'status' => true,
                 'message' => 'Advanced search result.',
