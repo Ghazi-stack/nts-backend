@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use App\Exports\CustomerExport;
 use App\Imports\CustomerImport;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Hash;
 use Maatwebsite\Excel\Facades\Excel;
@@ -508,65 +509,65 @@ class CustomerController extends Controller
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
-
+        
             $query = Customer::where('store_id', $storeId);
-
+        
             // 🔍 Keyword Search
             if ($request->filled('searchKeywords')) {
                 $search = $request->input('searchKeywords');
                 $query->where(function ($q) use ($search) {
-                    $q->where('name', 'like', "%{$search}%")
+                    $q->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'like', "%{$search}%")
                       ->orWhere('email', 'like', "%{$search}%")
                       ->orWhere('phone', 'like', "%{$search}%")
                       ->orWhere('first_name', 'like', "%{$search}%")
                       ->orWhere('last_name', 'like', "%{$search}%")
                       ->orWhere('customer_group', 'like', "%{$search}%")
-                      ->orWhere('company_name', 'like', "%{$search}%"); // ✅ added
+                      ->orWhere('company_name', 'like', "%{$search}%");
                 });
             }
-
+        
             // 🔠 Starts with
             if ($request->filled('startsWith')) {
                 $query->where('first_name', 'like', $request->input('startsWith') . '%');
             }
-
+        
             // ☎️ Phone
             if ($request->filled('phone')) {
                 $query->where('phone', 'like', "%{$request->input('phone')}%");
             }
-
+        
             // 🌍 Country / State
             if ($request->filled('country')) {
                 $query->where('country', $request->input('country'));
             }
-
+        
             if ($request->filled('stateProvince')) {
                 $query->where('state', $request->input('stateProvince'));
             }
-
+        
             // 🔢 ID range
             if ($request->filled('customerIdFrom')) {
                 $query->where('id', '>=', $request->input('customerIdFrom'));
             }
-
+        
             if ($request->filled('customerIdTo')) {
                 $query->where('id', '<=', $request->input('customerIdTo'));
             }
-
+        
             // 💳 Credit range
             if ($request->filled('creditFrom')) {
                 $query->where('store_credit', '>=', $request->input('creditFrom'));
             }
-
+        
             if ($request->filled('creditTo')) {
                 $query->where('store_credit', '<=', $request->input('creditTo'));
             }
-
+        
             // 👥 Group
             if ($request->filled('customerGroup')) {
                 $query->where('customer_group', $request->input('customerGroup'));
             }
-
+        
             // 📅 Date Joined
             if ($request->filled('dateJoined')) {
                 switch ($request->input('dateJoined')) {
@@ -592,16 +593,16 @@ class CustomerController extends Controller
                         ], 422);
                 }
             }
-
+        
             // 🔃 Sorting
             $sortField = $request->input('sortBy', 'id');
             $sortOrder = $request->input('sortOrder', 'asc');
             $query->orderBy($sortField, $sortOrder);
-
+        
             // 📄 Pagination
             $pageSize = $request->input('pageSize', 50);
             $customers = $query->paginate($pageSize);
-
+        
             return response()->json([
                 'status' => true,
                 'message' => 'Advanced search result.',
