@@ -599,7 +599,7 @@ class OrderController extends Controller
                 'order_number'    => 'ORD-' . strtoupper(Str::random(8)),
                 'name'            => $customer->first_name . ' ' . $customer->last_name,
                 'email'           => $customer->email,
-                'phone'           => $customer->phone,
+                'phone'           => $customer->phone ?? null,
                 'address'         => [
                     'addressLine1' => $validated['address']['addressLine1'],
                     'addressLine2' => $validated['address']['addressLine2'] ?? null,
