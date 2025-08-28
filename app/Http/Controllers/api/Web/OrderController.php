@@ -88,7 +88,7 @@ class OrderController extends Controller
             $user = auth('sanctum')->user();
             $sessionId = $request->header('X-Session-ID') ?? session()->getId();
 
-            $order = Order::with('items.product')
+            $order = Order::with(['items.product', 'customer'])
                 ->where('id', $id)
                 ->where('store_id', current_store_id()); // ✅ Filter by store
 
