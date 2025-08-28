@@ -90,10 +90,20 @@ class OrderController extends Controller
 
             $order = Order::with('items.product')
                 ->where('id', $id)
-                ->where('store_id', current_store_id()) // ✅ Filter by store
-                ->when($user, fn($q) => $q->where('user_id', $user->id))
-                ->when(!$user, fn($q) => $q->where('session_id', $sessionId))
-                ->firstOrFail();
+                ->where('store_id', current_store_id()); // ✅ Filter by store
+
+                $isAdmin = $user && (int)($user->userRole ?? $user->userRole ?? 0) == 1;
+
+                if (!$isAdmin) {
+                    $order->when($user, fn($q) => $q->where('user_id', $user->id))
+                        ->when(!$user, fn($q) => $q->where('session_id', $sessionId));
+                }
+
+                $order = $order->firstOrFail();
+                // ->when($user, fn($q) => $q->where('user_id', $user->id))
+                // ->when(!$user, fn($q) => $q->where('session_id', $sessionId))
+                // ->firstOrFail();
+                
 
             return response()->json([
                 'status' => true,

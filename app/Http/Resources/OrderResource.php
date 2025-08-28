@@ -27,7 +27,6 @@ class OrderResource extends JsonResource
             'paymentMethod'  => $this->payment_method,
             'shippingMethod' => $this->shipping_method,
             'shippingCost'   => $this->shipping_cost,
-            'addressLine2'   => $this->address_line2,
             'comments'       => $this->comments,
             'staffNotes'     => $this->staff_notes,
             'isDraft'        => (bool) $this->is_draft,
@@ -39,7 +38,7 @@ class OrderResource extends JsonResource
             'carrierName'    => $this->tracking_carrier_name,
             'shippedAt'      => $this->shipped_at?->toDateTimeString(),
 
-            'items'          => OrderItemResource::collection($this->whenLoaded('items')),
+            'products'          => OrderItemResource::collection($this->whenLoaded('items')),
             'customer'       => new CustomerResource($this->whenLoaded('customer')),
 
             // Timestamps as strings
