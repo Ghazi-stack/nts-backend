@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use Illuminate\Http\Request;
 use App\Http\Resources\OrderItemResource;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Http\Resources\BillingInformationResource;
 
 class OrderResource extends JsonResource
 {
@@ -24,8 +25,7 @@ class OrderResource extends JsonResource
             // 'phone'          => $this->phone,
             'status'         => $this->status,
             // 'address'        => $this->address,
-            'paymentMethod'  => $this->payment_method,
-            'shippingMethod' => $this->shipping_method,
+            'billingInformation' => new BillingInformationResource($this->whenLoaded('billingInformation')),
             'shippingCost'   => $this->shipping_cost,
             'comments'       => $this->comments,
             'staffNotes'     => $this->staff_notes,
