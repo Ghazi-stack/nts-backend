@@ -50,7 +50,7 @@ class OrderController extends Controller
                 ], 403);
             }
 
-            $orders = Order::with(['items.product', 'customer', 'billingInformation'])
+            $orders = Order::with(['items.product', 'customer', 'billingInformation','notes'])
                 ->where('store_id', $storeId)
                 ->when($keyword, function ($q) use ($keyword) {
                     $q->where(function ($query) use ($keyword) {
