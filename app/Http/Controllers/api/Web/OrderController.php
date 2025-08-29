@@ -40,7 +40,7 @@ class OrderController extends Controller
             $perPage = $request->query('perPage', 20);
             $keyword = $request->query('keyword');
 
-            $orders = Order::with(['items.product', 'customer'])
+            $orders = Order::with(['items.product', 'customer','billingInformation'])
                 ->where('store_id', current_store_id())
                 ->when($keyword, function ($q) use ($keyword) {
                     $q->where(function ($query) use ($keyword) {
