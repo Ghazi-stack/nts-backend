@@ -30,7 +30,7 @@ class CustomerController extends Controller
                 ], 400);
             }
 
-            $query = Customer::with('billingInformations')->where('store_id', $storeId);
+            $query = Customer::where('store_id', $storeId);
 
             // 🔍 Search by keyword
             if ($request->filled('search')) {
