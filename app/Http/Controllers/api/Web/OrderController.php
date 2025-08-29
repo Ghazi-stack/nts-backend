@@ -4,26 +4,27 @@ namespace App\Http\Controllers\api\Web;
 
 use Exception;
 use App\Models\Cart;
-use App\Models\Order;
 use App\Models\User;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\Customer;
 use App\Models\OrderItem;
 use App\Models\OrderNote;
-use App\Models\ReturnRequest;
-use App\Models\BillingInformation;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
+use App\Exports\OrdersExport;
+use App\Models\ReturnRequest;
+use Barryvdh\DomPDF\Facade\Pdf;
+use App\Mail\PaymentInvoiceMail;
+use App\Models\BillingInformation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
-use App\Http\Controllers\Controller;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Maatwebsite\Excel\Facades\Excel;
-use App\Mail\PaymentInvoiceMail;
-use App\Exports\OrdersExport;
 use App\Http\Resources\OrderResource;
+use App\Http\Resources\CustomerResource;
 use App\Http\Resources\ShipmentResource;
 use App\Http\Resources\OrderNoteResource;
 use App\Http\Resources\ReturnRequestResource;
@@ -40,8 +41,17 @@ class OrderController extends Controller
             $perPage = $request->query('perPage', 20);
             $keyword = $request->query('keyword');
 
-            $orders = Order::with(['items.product', 'customer','billingInformation'])
-                ->where('store_id', current_store_id())
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not found or unauthorized.',
+                ], 403);
+            }
+
+            $orders = Order::with(['items.product', 'customer', 'billingInformation'])
+                ->where('store_id', $storeId)
                 ->when($keyword, function ($q) use ($keyword) {
                     $q->where(function ($query) use ($keyword) {
                         $query->where('id', 'like', "%{$keyword}%")
@@ -55,8 +65,7 @@ class OrderController extends Controller
                                     ->orWhere('phone', 'like', "%{$keyword}%");
                               })
                               ->orWhereHas('billingInformation', function ($b) use ($keyword) {
-                                  $b->where('email', 'like', "%{$keyword}%")
-                                    ->orWhere('first_name', 'like', "%{$keyword}%")
+                                  $b->where('first_name', 'like', "%{$keyword}%")
                                     ->orWhere('last_name', 'like', "%{$keyword}%")
                                     ->orWhere('phone', 'like', "%{$keyword}%")
                                     ->orWhere('payment_method', 'like', "%{$keyword}%")
@@ -646,7 +655,7 @@ class OrderController extends Controller
                 'first_name'       => $b['firstName'],
                 'last_name'        => $b['lastName'],
                 'company_name'     => $b['companyName'] ?? null,
-                'email'            => $b['email'],
+                // 'email'            => $b['email'],
                 'phone'            => $b['phone'] ?? null,
                 'address_line_1'   => $b['addressLine1'],
                 'address_line_2'   => $b['addressLine2'] ?? null,
@@ -700,7 +709,7 @@ class OrderController extends Controller
             return response()->json([
                 'status'   => true,
                 'message'  => 'Order placed successfully.',
-                'customer' => new \App\Http\Resources\CustomerResource($customer),
+                'customer' => new CustomerResource($customer),
                 'order'    => new OrderResource($order->load('items.product', 'billingInformation')),
             ]);
         } catch (ModelNotFoundException $e) {
@@ -1029,7 +1038,7 @@ class OrderController extends Controller
             'first_name'      => $data['first_name'],
             'last_name'       => $data['last_name'],
             'company_name'    => $data['company_name'] ?? null,
-            'email'           => $data['email'],
+            // 'email'           => $data['email'],
             'phone'           => $data['phone'] ?? null,
             'address_line_1'  => $data['address_line_1'],
             'address_line_2'  => $data['address_line_2'] ?? null,
