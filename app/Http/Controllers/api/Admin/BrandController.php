@@ -40,7 +40,7 @@ class BrandController extends Controller
             // Merge duplicated brand names and their product counts
             $merged = $brandsWithProducts->groupBy('name')->map(function ($items, $name) {
                 return [
-                    'name' => $name,
+                    'brand' => new BrandResource($items->first()),
                     'productsCount' => $items->sum('products_count'),
                 ];
             })->values();
