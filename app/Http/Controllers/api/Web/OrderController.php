@@ -582,7 +582,7 @@ class OrderController extends Controller
             'billingInformation' => 'required|array',
             'billingInformation.firstName'      => 'required|string|max:255',
             'billingInformation.lastName'       => 'required|string|max:255',
-            'billingInformation.email'          => 'required|email',
+            // 'billingInformation.email'          => 'required|email',
             'billingInformation.phone'          => 'nullable|string|max:20',
             'billingInformation.companyName'    => 'nullable|string|max:255',
             'billingInformation.addressLine1'   => 'required|string|max:255',
