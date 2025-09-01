@@ -35,6 +35,7 @@ class ProductExport implements FromCollection, WithHeadings, WithMapping
             optional($product->brand)->name,
             optional($product->category)->name, // May still be null
             $product->price,
+            $product->quantity,
             $product->cost_price,
             $product->sale_price,
             $product->fixed_shipping_cost,

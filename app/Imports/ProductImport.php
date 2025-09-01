@@ -57,6 +57,7 @@ class ProductImport implements ToArray
                         'name' => $data['Product Name'] ?? 'Unnamed',
                         'slug' => Str::slug($data['Product Name'] ?? 'Unnamed') . '-' . uniqid(),
                         'price' => $data['Retail Price'] ?? 0,
+                        'quantity' => $data['Quantity'] ?? null,
                         'brand_id' => $brand->id,
                         'category_id' => $category->id,
                         'condition' => $data['Product Condition'] ?? null,
