@@ -648,40 +648,23 @@ class OrderController extends Controller
 
             // Step 2: Save billing information
             $b = $validated['billingInformation'] ?? [];
-            // $billing = $this->saveBillingInformation([
-            //     'store_id'         => $storeId,
-            //     'customer_id'      => $customer?->id,
-            //     'user_id'          => $user?->id,
-            //     'first_name'       => $b['firstName'],
-            //     'last_name'        => $b['lastName'],
-            //     'company_name'     => $b['companyName'] ?? null,
-            //     // 'email'            => $b['email'],
-            //     'phone'            => $b['phone'] ?? null,
-            //     'address_line_1'   => $b['addressLine1'],
-            //     'address_line_2'   => $b['addressLine2'] ?? null,
-            //     'city'             => $b['city'] ?? null,
-            //     'state'            => $b['state'] ?? null,
-            //     'zip'              => $b['zip'] ?? null,
-            //     'country'          => $b['country'] ?? null,
-            //     'payment_method'   => $b['paymentMethod'],
-            //     'shipping_method'  => $b['shippingMethod'],
-            // ], $user, $customer);
             $billing = $this->saveBillingInformation([
                 'store_id'         => $storeId,
                 'customer_id'      => $customer?->id,
                 'user_id'          => $user?->id,
-                'first_name'       => $b['firstName'] ?? null,
-                'last_name'        => $b['lastName'] ?? null,
+                'first_name'       => $b['firstName'],
+                'last_name'        => $b['lastName'],
                 'company_name'     => $b['companyName'] ?? null,
+                // 'email'            => $b['email'],
                 'phone'            => $b['phone'] ?? null,
-                'address_line_1'   => $b['addressLine1'] ?? null,
+                'address_line_1'   => $b['addressLine1'],
                 'address_line_2'   => $b['addressLine2'] ?? null,
                 'city'             => $b['city'] ?? null,
                 'state'            => $b['state'] ?? null,
                 'zip'              => $b['zip'] ?? null,
                 'country'          => $b['country'] ?? null,
-                'payment_method'   => $b['paymentMethod'] ?? null,
-                'shipping_method'  => $b['shippingMethod'] ?? null,
+                'payment_method'   => $b['paymentMethod'],
+                'shipping_method'  => $b['shippingMethod'],
             ], $user, $customer);
 
             // Step 3: Create the order
@@ -778,8 +761,7 @@ class OrderController extends Controller
                             ->orWhere('phone', 'like', "%{$keywords}%");
                       })
                       ->orWhereHas('billingInformation', function ($b) use ($keywords) {
-                          $b->where('email', 'like', "%{$keywords}%")
-                            ->orWhere('first_name', 'like', "%{$keywords}%")
+                          $b->where('first_name', 'like', "%{$keywords}%")
                             ->orWhere('last_name', 'like', "%{$keywords}%")
                             ->orWhere('phone', 'like', "%{$keywords}%")
                             ->orWhere('payment_method', 'like', "%{$keywords}%")
