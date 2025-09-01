@@ -225,7 +225,7 @@ class OrderController extends Controller
             return response()->json([
                 'status'  => true,
                 'message' => 'Order placed successfully.',
-                'data'    => new OrderResource($order->load('items.product', 'billingInformation')),
+                'data'    => new OrderResource($order->load('items.product.images', 'billingInformation','customer')),
             ]);
         } catch (ValidationException $e) {
             return response()->json([
@@ -309,7 +309,7 @@ class OrderController extends Controller
             return response()->json([
                 'status'  => true,
                 'message' => 'Order updated successfully.',
-                'data'    => new OrderResource($order->fresh()->load('items.product', 'billingInformation','customer')),
+                'data'    => new OrderResource($order->fresh()->load('items.product.images', 'billingInformation','customer')),
             ]);
         } catch (ModelNotFoundException $e) {
             return response()->json([
@@ -340,7 +340,7 @@ class OrderController extends Controller
             return response()->json([
                 'status'  => true,
                 'message' => 'Order status updated.',
-                'data'    => new OrderResource($order->load('items.product', 'billingInformation')),
+                'data'    => new OrderResource($order->load('items.product.images', 'billingInformation')),
             ]);
         } catch (ModelNotFoundException $e) {
             return response()->json(['status' => false, 'message' => 'Order not found'], 404);
@@ -710,7 +710,7 @@ class OrderController extends Controller
                 'status'   => true,
                 'message'  => 'Order placed successfully.',
                 'customer' => new CustomerResource($customer),
-                'order'    => new OrderResource($order->load('items.product', 'billingInformation')),
+                'order'    => new OrderResource($order->load('items.product.images', 'billingInformation')),
             ]);
         } catch (ModelNotFoundException $e) {
             DB::rollBack();
@@ -729,304 +729,159 @@ class OrderController extends Controller
         }
     }
 
-    // public function advancedOrderSearch(Request $request)
-    // {
-    //     try {
-    //         $storeId = current_store_id();
-    //         if (!$storeId) {
-    //             return response()->json([
-    //                 'status'  => false,
-    //                 'message' => 'Store not selected or token invalid.',
-    //             ], 400);
-    //         }
-
-    //         $query = Order::with(['items.product', 'billingInformation'])
-    //             ->where('store_id', $storeId);
-
-    //         $query->where(function ($q) use ($request) {
-
-    //             if ($request->filled('keywords')) {
-    //                 $keywords = $request->input('keywords');
-
-    //                 if (is_numeric($keywords)) {
-    //                     $q->orWhere('id', $keywords);
-    //                 }
-
-    //                 $q->orWhere('status', 'like', "%{$keywords}%")
-    //                   ->orWhere('total_amount', 'like', "%{$keywords}%")
-    //                   ->orWhereHas('customer', function ($c) use ($keywords) {
-    //                       $c->where('first_name', 'like', "%{$keywords}%")
-    //                         ->orWhere('last_name', 'like', "%{$keywords}%")
-    //                         ->orWhere('email', 'like', "%{$keywords}%")
-    //                         ->orWhere('phone', 'like', "%{$keywords}%");
-    //                   })
-    //                   ->orWhereHas('billingInformation', function ($b) use ($keywords) {
-    //                       $b->where('first_name', 'like', "%{$keywords}%")
-    //                         ->orWhere('last_name', 'like', "%{$keywords}%")
-    //                         ->orWhere('phone', 'like', "%{$keywords}%")
-    //                         ->orWhere('payment_method', 'like', "%{$keywords}%")
-    //                         ->orWhere('shipping_method', 'like', "%{$keywords}%");
-    //                   });
-    //             }
-
-    //             if ($request->filled('status')) {
-    //                 $q->orWhere('status', $request->input('status'));
-    //             }
-
-    //             // moved to billing_information
-    //             if ($request->filled('paymentMethod')) {
-    //                 $q->orWhereHas('billingInformation', function ($b) use ($request) {
-    //                     $b->where('payment_method', $request->input('paymentMethod'));
-    //                 });
-    //             }
-
-    //             if ($request->filled('shippingMethod')) {
-    //                 $q->orWhereHas('billingInformation', function ($b) use ($request) {
-    //                     $b->where('shipping_method', $request->input('shippingMethod'));
-    //                 });
-    //             }
-
-    //             if ($request->filled('shippingProvider') && $request->input('shippingProvider') !== 'any') {
-    //                 $q->orWhere('tracking_carrier_name', $request->input('shippingProvider'));
-    //             }
-
-    //             if ($request->filled('coupon') && $request->input('coupon') !== 'any') {
-    //                 $q->orWhere('coupon_code', $request->input('coupon'));
-    //             }
-
-    //             if ($request->filled('fulfillmentSource') && $request->input('fulfillmentSource') !== 'any') {
-    //                 $q->orWhere('fulfillment_source', $request->input('fulfillmentSource'));
-    //             }
-
-    //             if ($request->filled('guest')) {
-    //                 $q->orWhereNull('user_id');
-    //             }
-
-    //             if ($request->filled('preorderYes')) {
-    //                 $q->orWhere('channel', 'preorder');
-    //             }
-
-    //             if ($request->filled('orderIdFrom')) {
-    //                 $q->orWhere('id', '>=', $request->input('orderIdFrom'));
-    //             }
-
-    //             if ($request->filled('orderIdTo')) {
-    //                 $q->orWhere('id', '<=', $request->input('orderIdTo'));
-    //             }
-
-    //             if ($request->filled('orderTotalFrom')) {
-    //                 $q->orWhere('total_amount', '>=', $request->input('orderTotalFrom'));
-    //             }
-
-    //             if ($request->filled('orderTotalTo')) {
-    //                 $q->orWhere('total_amount', '<=', $request->input('orderTotalTo'));
-    //             }
-
-    //             if ($request->filled('dateRange') && $request->filled('dateType')) {
-    //                 $column = match ($request->input('dateType')) {
-    //                     'order-date'   => 'created_at',
-    //                     'shipped-date' => 'shipped_at',
-    //                     default        => 'created_at'
-    //                 };
-
-    //                 switch ($request->input('dateRange')) {
-    //                     case 'Yesterday':
-    //                         $q->orWhereDate($column, today()->subDay());
-    //                         break;
-    //                     case 'Today':
-    //                         $q->orWhereDate($column, today());
-    //                         break;
-    //                     case 'Last7Days':
-    //                         $q->orWhereDate($column, '>=', now()->subDays(7));
-    //                         break;
-    //                     case 'Last30Days':
-    //                         $q->orWhereDate($column, '>=', now()->subDays(30));
-    //                         break;
-    //                 }
-    //             }
-    //         });
-
-    //         $query->orderBy(
-    //             $request->input('sortBy', 'id'),
-    //             $request->input('sortDirection', 'asc')
-    //         );
-
-    //         $perPage = $request->input('perPage', 20);
-    //         $orders  = $query->paginate($perPage);
-
-    //         return response()->json([
-    //             'status' => true,
-    //             'message' => 'Filtered orders fetched.',
-    //             'data' => OrderResource::collection($orders),
-    //             'pagination' => [
-    //                 'total' => $orders->total(),
-    //                 'count' => $orders->count(),
-    //                 'perPage' => $orders->perPage(),
-    //                 'currentPage' => $orders->currentPage(),
-    //                 'totalPages' => $orders->lastPage(),
-    //             ]
-    //         ]);
-    //     } catch (\Exception $e) {
-    //         return response()->json([
-    //             'status'  => false,
-    //             'message' => 'Failed to fetch orders.',
-    //             'error'   => $e->getMessage(),
-    //         ], 500);
-    //     }
-    // }
 
    public function advancedOrderSearch(Request $request)
-{
-    try {
-        $storeId = current_store_id();
+    {
+        try {
+            $storeId = current_store_id();
 
-        if (!$storeId) {
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
+            $query = Order::with([
+                'items.product',
+                'billingInformation',
+                'customer'
+            ])->where('store_id', $storeId);
+
+            // ✅ If 'keywords' is filled, ONLY apply keyword-based filters
+            if ($request->filled('keywords')) {
+                $keywords = $request->input('keywords');
+
+                $query->where(function ($q) use ($keywords) {
+                    if (is_numeric($keywords)) {
+                        $q->orWhere('id', $keywords);
+                    }
+
+                    $q->orWhere('status', 'like', "%{$keywords}%")
+                      ->orWhere('total_amount', 'like', "%{$keywords}%")
+                      ->orWhereHas('customer', function ($c) use ($keywords) {
+                          $c->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keywords}%"])
+                            ->orWhere('first_name', 'like', "%{$keywords}%")
+                            ->orWhere('last_name', 'like', "%{$keywords}%")
+                            ->orWhere('email', 'like', "%{$keywords}%")
+                            ->orWhere('phone', 'like', "%{$keywords}%");
+                      })
+                      ->orWhereHas('billingInformation', function ($b) use ($keywords) {
+                          $b->where('first_name', 'like', "%{$keywords}%")
+                            ->orWhere('last_name', 'like', "%{$keywords}%")
+                            ->orWhere('phone', 'like', "%{$keywords}%")
+                            ->orWhere('payment_method', 'like', "%{$keywords}%")
+                            ->orWhere('shipping_method', 'like', "%{$keywords}%");
+                      });
+                });
+            } else {
+                // ✅ Only apply filters if 'keywords' is NOT provided
+                $query->where(function ($q) use ($request) {
+                    if ($request->filled('status')) {
+                        $q->orWhere('status', $request->input('status'));
+                    }
+
+                    if ($request->filled('paymentMethod')) {
+                        $q->orWhereHas('billingInformation', function ($b) use ($request) {
+                            $b->where('payment_method', $request->input('paymentMethod'));
+                        });
+                    }
+
+                    if ($request->filled('shippingMethod')) {
+                        $q->orWhereHas('billingInformation', function ($b) use ($request) {
+                            $b->where('shipping_method', $request->input('shippingMethod'));
+                        });
+                    }
+
+                    if ($request->filled('shippingProvider') && $request->input('shippingProvider') !== 'any') {
+                        $q->orWhere('tracking_carrier_name', $request->input('shippingProvider'));
+                    }
+
+                    if ($request->filled('coupon') && $request->input('coupon') !== 'any') {
+                        $q->orWhere('coupon_code', $request->input('coupon'));
+                    }
+
+                    if ($request->filled('fulfillmentSource') && $request->input('fulfillmentSource') !== 'any') {
+                        $q->orWhere('fulfillment_source', $request->input('fulfillmentSource'));
+                    }
+
+                    if ($request->filled('guest')) {
+                        $q->orWhereNull('user_id');
+                    }
+
+                    if ($request->filled('preorderYes')) {
+                        $q->orWhere('channel', 'preorder');
+                    }
+
+                    if ($request->filled('orderIdFrom')) {
+                        $q->orWhere('id', '>=', $request->input('orderIdFrom'));
+                    }
+
+                    if ($request->filled('orderIdTo')) {
+                        $q->orWhere('id', '<=', $request->input('orderIdTo'));
+                    }
+
+                    if ($request->filled('orderTotalFrom')) {
+                        $q->orWhere('total_amount', '>=', $request->input('orderTotalFrom'));
+                    }
+
+                    if ($request->filled('orderTotalTo')) {
+                        $q->orWhere('total_amount', '<=', $request->input('orderTotalTo'));
+                    }
+
+                    if ($request->filled('dateRange') && $request->filled('dateType')) {
+                        $column = match ($request->input('dateType')) {
+                            'order-date'   => 'created_at',
+                            'shipped-date' => 'shipped_at',
+                            default        => 'created_at'
+                        };
+
+                        switch ($request->input('dateRange')) {
+                            case 'Yesterday':
+                                $q->orWhereDate($column, today()->subDay());
+                                break;
+                            case 'Today':
+                                $q->orWhereDate($column, today());
+                                break;
+                            case 'Last7Days':
+                                $q->orWhereDate($column, '>=', now()->subDays(7));
+                                break;
+                            case 'Last30Days':
+                                $q->orWhereDate($column, '>=', now()->subDays(30));
+                                break;
+                        }
+                    }
+                });
+            }
+
+            $query->orderBy(
+                $request->input('sortBy', 'id'),
+                $request->input('sortDirection', 'asc')
+            );
+
+            $perPage = $request->input('perPage', 20);
+            $orders = $query->paginate($perPage);
+
+            return response()->json([
+                'status'     => true,
+                'message'    => 'Filtered orders fetched.',
+                'data'       => OrderResource::collection($orders),
+                'pagination' => [
+                    'total'        => $orders->total(),
+                    'count'        => $orders->count(),
+                    'perPage'      => $orders->perPage(),
+                    'currentPage'  => $orders->currentPage(),
+                    'totalPages'   => $orders->lastPage(),
+                ]
+            ]);
+        } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
-                'message' => 'Store not selected or token invalid.',
-            ], 400);
+                'message' => 'Failed to fetch orders.',
+                'error'   => $e->getMessage(),
+            ], 500);
         }
-
-        $query = Order::with([
-            'items.product',
-            'billingInformation',
-            'customer'
-        ])->where('store_id', $storeId);
-
-        // ✅ If 'keywords' is filled, ONLY apply keyword-based filters
-        if ($request->filled('keywords')) {
-            $keywords = $request->input('keywords');
-
-            $query->where(function ($q) use ($keywords) {
-                if (is_numeric($keywords)) {
-                    $q->orWhere('id', $keywords);
-                }
-
-                $q->orWhere('status', 'like', "%{$keywords}%")
-                  ->orWhere('total_amount', 'like', "%{$keywords}%")
-                  ->orWhereHas('customer', function ($c) use ($keywords) {
-                      $c->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keywords}%"])
-                        ->orWhere('first_name', 'like', "%{$keywords}%")
-                        ->orWhere('last_name', 'like', "%{$keywords}%")
-                        ->orWhere('email', 'like', "%{$keywords}%")
-                        ->orWhere('phone', 'like', "%{$keywords}%");
-                  })
-                  ->orWhereHas('billingInformation', function ($b) use ($keywords) {
-                      $b->where('first_name', 'like', "%{$keywords}%")
-                        ->orWhere('last_name', 'like', "%{$keywords}%")
-                        ->orWhere('phone', 'like', "%{$keywords}%")
-                        ->orWhere('payment_method', 'like', "%{$keywords}%")
-                        ->orWhere('shipping_method', 'like', "%{$keywords}%");
-                  });
-            });
-        } else {
-            // ✅ Only apply filters if 'keywords' is NOT provided
-            $query->where(function ($q) use ($request) {
-                if ($request->filled('status')) {
-                    $q->orWhere('status', $request->input('status'));
-                }
-
-                if ($request->filled('paymentMethod')) {
-                    $q->orWhereHas('billingInformation', function ($b) use ($request) {
-                        $b->where('payment_method', $request->input('paymentMethod'));
-                    });
-                }
-
-                if ($request->filled('shippingMethod')) {
-                    $q->orWhereHas('billingInformation', function ($b) use ($request) {
-                        $b->where('shipping_method', $request->input('shippingMethod'));
-                    });
-                }
-
-                if ($request->filled('shippingProvider') && $request->input('shippingProvider') !== 'any') {
-                    $q->orWhere('tracking_carrier_name', $request->input('shippingProvider'));
-                }
-
-                if ($request->filled('coupon') && $request->input('coupon') !== 'any') {
-                    $q->orWhere('coupon_code', $request->input('coupon'));
-                }
-
-                if ($request->filled('fulfillmentSource') && $request->input('fulfillmentSource') !== 'any') {
-                    $q->orWhere('fulfillment_source', $request->input('fulfillmentSource'));
-                }
-
-                if ($request->filled('guest')) {
-                    $q->orWhereNull('user_id');
-                }
-
-                if ($request->filled('preorderYes')) {
-                    $q->orWhere('channel', 'preorder');
-                }
-
-                if ($request->filled('orderIdFrom')) {
-                    $q->orWhere('id', '>=', $request->input('orderIdFrom'));
-                }
-
-                if ($request->filled('orderIdTo')) {
-                    $q->orWhere('id', '<=', $request->input('orderIdTo'));
-                }
-
-                if ($request->filled('orderTotalFrom')) {
-                    $q->orWhere('total_amount', '>=', $request->input('orderTotalFrom'));
-                }
-
-                if ($request->filled('orderTotalTo')) {
-                    $q->orWhere('total_amount', '<=', $request->input('orderTotalTo'));
-                }
-
-                if ($request->filled('dateRange') && $request->filled('dateType')) {
-                    $column = match ($request->input('dateType')) {
-                        'order-date'   => 'created_at',
-                        'shipped-date' => 'shipped_at',
-                        default        => 'created_at'
-                    };
-
-                    switch ($request->input('dateRange')) {
-                        case 'Yesterday':
-                            $q->orWhereDate($column, today()->subDay());
-                            break;
-                        case 'Today':
-                            $q->orWhereDate($column, today());
-                            break;
-                        case 'Last7Days':
-                            $q->orWhereDate($column, '>=', now()->subDays(7));
-                            break;
-                        case 'Last30Days':
-                            $q->orWhereDate($column, '>=', now()->subDays(30));
-                            break;
-                    }
-                }
-            });
-        }
-
-        $query->orderBy(
-            $request->input('sortBy', 'id'),
-            $request->input('sortDirection', 'asc')
-        );
-
-        $perPage = $request->input('perPage', 20);
-        $orders = $query->paginate($perPage);
-
-        return response()->json([
-            'status'     => true,
-            'message'    => 'Filtered orders fetched.',
-            'data'       => OrderResource::collection($orders),
-            'pagination' => [
-                'total'        => $orders->total(),
-                'count'        => $orders->count(),
-                'perPage'      => $orders->perPage(),
-                'currentPage'  => $orders->currentPage(),
-                'totalPages'   => $orders->lastPage(),
-            ]
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'status'  => false,
-            'message' => 'Failed to fetch orders.',
-            'error'   => $e->getMessage(),
-        ], 500);
     }
-}
 
 
     public function downloadInvoice($id)
@@ -1112,7 +967,7 @@ class OrderController extends Controller
         try {
             $order = Order::with([
                 'notes.user',
-                'items.product',
+                'items.product.images',
                 'shipments',
                 'billingInformation',
             ])
