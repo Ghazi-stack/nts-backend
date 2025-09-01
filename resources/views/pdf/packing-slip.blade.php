@@ -14,7 +14,6 @@
             z-index: 0;
         }
 
-        /* Watermark background using Base64 logo */
         body::before {
             content: "";
             position: fixed;
@@ -22,7 +21,6 @@
             left: 50%;
             width: 100%;
             height: 100%;
-            /* background-image: url('{{ $logoBase64 }}'); */
             background-repeat: no-repeat;
             background-position: center;
             background-size: 80%;
@@ -30,7 +28,6 @@
             transform: translate(-50%, -50%);
             z-index: -1;
         }
-
 
         .header {
             text-align: center;
@@ -46,7 +43,7 @@
         .title {
             font-size: 26px;
             font-weight: bold;
-            color: #FF5722;
+            /* color: #FF5722; */
             margin-top: 10px;
             letter-spacing: 1px;
         }
@@ -134,26 +131,44 @@
 <body>
 
     <div class="header">
-        <img src="{{ public_path('logo/nts-logo.png') }}" alt="NTS Logo">
+        <img src="{{ $logoBase64 ?? '' }}" alt="NTS Logo">
         <div class="title">Packing Slip</div>
     </div>
 
     <table class="info-table">
         <tr>
             <td><strong>Order ID:</strong> {{ $order->order_number ?? $order->id }}</td>
-            <td><strong>Order Date:</strong> {{ $order->created_at->format('d M Y') }}</td>
+            <td><strong>Order Date:</strong> {{ optional($order->created_at)->format('d M Y') }}</td>
         </tr>
         <tr>
-            <td><strong>Customer:</strong> {{ $order->name }}</td>
-            <td><strong>Phone:</strong> {{ $order->phone }}</td>
+            <td><strong>Customer:</strong> 
+                {{ optional($order->customer)->first_name }} {{ optional($order->customer)->last_name }}
+            </td>
+            <td><strong>Phone:</strong> 
+                {{ optional($order->billingInformation)->phone ?? optional($order->customer)->phone ?? 'N/A' }}
+            </td>
         </tr>
         <tr>
-            <td><strong>Email:</strong> {{ $order->email }}</td>
-            <td><strong>Shipping Address:</strong> {{ $order->address }}</td>
+            <td><strong>Email:</strong> 
+                {{ optional($order->customer)->email ?? 'N/A' }}
+            </td>
+            <td><strong>Shipping Address:</strong> 
+                @php
+                    $billing = $order->billingInformation;
+                @endphp
+                {{
+                    $billing && $billing->address_line_1
+                        ? $billing->address_line_1 . ', ' .
+                          ($billing->city ?? '') . ', ' .
+                          ($billing->state ?? '') . ', ' .
+                          ($billing->country ?? '')
+                        : 'N/A'
+                }}
+            </td>
         </tr>
         <tr>
-            <td><strong>Tracking #:</strong> {{ $shipment->tracking_number }}</td>
-            <td><strong>Shipped On:</strong> {{ \Carbon\Carbon::parse($shipment->date_shipped)->format('d M Y') }}</td>
+            <td><strong>Tracking #:</strong> {{ $shipment->tracking_number ?? 'N/A' }}</td>
+            <td><strong>Shipped On:</strong> {{ optional($shipment->date_shipped) ? \Carbon\Carbon::parse($shipment->date_shipped)->format('d M Y') : 'N/A' }}</td>
         </tr>
     </table>
 
@@ -173,17 +188,17 @@
             @foreach ($order->items as $index => $item)
                 <tr>
                     <td>{{ $index + 1 }}</td>
-                    <td>{{ $item->product->name ?? 'N/A' }}</td>
-                    <td>{{ $item->quantity }}</td>
-                    <td>${{ number_format($item->price, 2) }}</td>
-                    <td class="text-right">${{ number_format($item->price * $item->quantity, 2) }}</td>
+                    <td>{{ optional($item->product)->name ?? 'N/A' }}</td>
+                    <td>{{ $item->quantity ?? 0 }}</td>
+                    <td>${{ number_format($item->price ?? 0, 2) }}</td>
+                    <td class="text-right">${{ number_format(($item->price ?? 0) * ($item->quantity ?? 0), 2) }}</td>
                 </tr>
             @endforeach
         </tbody>
     </table>
 
     <div class="total">
-        Total Amount: ${{ number_format($order->total_amount, 2) }}
+        Total Amount: ${{ number_format($order->total_amount ?? 0, 2) }}
     </div>
 
     <div class="footer">

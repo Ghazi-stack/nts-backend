@@ -21,7 +21,6 @@
             left: 50%;
             width: 100%;
             height: 100%;
-            /* background-image: url('{{ is_string($logoBase64) ? $logoBase64 : '' }}'); */
             background-repeat: no-repeat;
             background-position: center;
             background-size: 80%;
@@ -40,7 +39,6 @@
         .title {
             font-size: 26px;
             font-weight: bold;
-            /* color: #FF5722; */
             margin-top: 10px;
             letter-spacing: 1px;
         }
@@ -128,7 +126,7 @@
 <body>
 
     <div class="header">
-        <img src="{{ is_string($logoBase64) ? $logoBase64 : '' }}" alt="NTS Logo" height="60">
+        <img src="{{ is_string($logoBase64 ?? '') ? $logoBase64 : '' }}" alt="NTS Logo" height="60">
         <div class="title">Payment Invoice</div>
     </div>
 
@@ -142,16 +140,38 @@
             </td>
         </tr>
         <tr>
-            <td><strong>Status:</strong> {{ is_string($order->status) ? ucfirst($order->status) : 'N/A' }}</td>
-            <td><strong>Payment Method:</strong> {{ is_string($order->payment_method) ? ucfirst($order->payment_method) : 'N/A' }}</td>
+            <td><strong>Status:</strong> 
+                {{ ucfirst($order->status ?? 'N/A') }}
+            </td>
+            <td><strong>Payment Method:</strong> 
+                {{ optional($order->billingInformation)->payment_method ?? 'N/A' }}
+            </td>
         </tr>
         <tr>
-            <td><strong>Customer:</strong> {{ is_string($order->name) ? $order->name : 'N/A' }}</td>
-            <td><strong>Phone:</strong> {{ is_string($order->phone) ? $order->phone : 'N/A' }}</td>
+            <td><strong>Customer:</strong> 
+                {{ optional($order->customer)->first_name }} {{ optional($order->customer)->last_name }}
+            </td>
+            <td><strong>Phone:</strong> 
+                {{ optional($order->billingInformation)->phone ?? optional($order->customer)->phone ?? 'N/A' }}
+            </td>
         </tr>
         <tr>
-            <td><strong>Email:</strong> {{ is_string($order->email) ? $order->email : 'N/A' }}</td>
-            <td><strong>Billing Address:</strong> {{ is_string($order->address) ? $order->address : 'N/A' }}</td>
+            <td><strong>Email:</strong> 
+                {{ optional($order->customer)->email ?? 'N/A' }}
+            </td>
+            <td><strong>Billing Address:</strong> 
+                @php
+                    $billing = $order->billingInformation;
+                @endphp
+                {{
+                    $billing && $billing->address_line_1
+                        ? $billing->address_line_1 . ', ' .
+                          ($billing->city ?? '') . ', ' .
+                          ($billing->state ?? '') . ', ' .
+                          ($billing->country ?? '')
+                        : 'N/A'
+                }}
+            </td>
         </tr>
     </table>
 
@@ -198,4 +218,3 @@
 
 </body>
 </html>
- 
