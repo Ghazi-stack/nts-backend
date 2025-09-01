@@ -918,7 +918,7 @@ class OrderController extends Controller
         // Use billing email
         $email = optional($order->billingInformation)->email;
         if ($email) {
-            Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf));
+            Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64));
         }
 
         return response()->json(['message' => 'Invoice email sent successfully']);
@@ -941,7 +941,7 @@ class OrderController extends Controller
 
             $email = optional($order->billingInformation)->email;
             if ($email) {
-                Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf));
+                Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64));
             }
 
             return response()->json([
