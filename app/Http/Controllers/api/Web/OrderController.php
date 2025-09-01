@@ -647,24 +647,41 @@ class OrderController extends Controller
             }
 
             // Step 2: Save billing information
-            $b = $validated['billingInformation'];
+            $b = $validated['billingInformation'] ?? [];
+            // $billing = $this->saveBillingInformation([
+            //     'store_id'         => $storeId,
+            //     'customer_id'      => $customer?->id,
+            //     'user_id'          => $user?->id,
+            //     'first_name'       => $b['firstName'],
+            //     'last_name'        => $b['lastName'],
+            //     'company_name'     => $b['companyName'] ?? null,
+            //     // 'email'            => $b['email'],
+            //     'phone'            => $b['phone'] ?? null,
+            //     'address_line_1'   => $b['addressLine1'],
+            //     'address_line_2'   => $b['addressLine2'] ?? null,
+            //     'city'             => $b['city'] ?? null,
+            //     'state'            => $b['state'] ?? null,
+            //     'zip'              => $b['zip'] ?? null,
+            //     'country'          => $b['country'] ?? null,
+            //     'payment_method'   => $b['paymentMethod'],
+            //     'shipping_method'  => $b['shippingMethod'],
+            // ], $user, $customer);
             $billing = $this->saveBillingInformation([
                 'store_id'         => $storeId,
                 'customer_id'      => $customer?->id,
                 'user_id'          => $user?->id,
-                'first_name'       => $b['firstName'],
-                'last_name'        => $b['lastName'],
+                'first_name'       => $b['firstName'] ?? null,
+                'last_name'        => $b['lastName'] ?? null,
                 'company_name'     => $b['companyName'] ?? null,
-                // 'email'            => $b['email'],
                 'phone'            => $b['phone'] ?? null,
-                'address_line_1'   => $b['addressLine1'],
+                'address_line_1'   => $b['addressLine1'] ?? null,
                 'address_line_2'   => $b['addressLine2'] ?? null,
                 'city'             => $b['city'] ?? null,
                 'state'            => $b['state'] ?? null,
                 'zip'              => $b['zip'] ?? null,
                 'country'          => $b['country'] ?? null,
-                'payment_method'   => $b['paymentMethod'],
-                'shipping_method'  => $b['shippingMethod'],
+                'payment_method'   => $b['paymentMethod'] ?? null,
+                'shipping_method'  => $b['shippingMethod'] ?? null,
             ], $user, $customer);
 
             // Step 3: Create the order
