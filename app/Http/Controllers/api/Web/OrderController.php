@@ -50,7 +50,7 @@ class OrderController extends Controller
                 ], 403);
             }
 
-            $orders = Order::with(['items.product', 'customer', 'billingInformation','notes'])
+            $orders = Order::with(['items.product.images', 'customer', 'billingInformation','notes'])
                 ->where('store_id', $storeId)
                 ->when($keyword, function ($q) use ($keyword) {
                     $q->where(function ($query) use ($keyword) {
@@ -103,7 +103,7 @@ class OrderController extends Controller
             $user = auth('sanctum')->user();
             $sessionId = $request->header('X-Session-ID') ?? session()->getId();
 
-            $order = Order::with(['items.product', 'customer', 'billingInformation'])
+            $order = Order::with(['items.product.images', 'customer', 'billingInformation'])
                 ->where('id', $id)
                 ->where('store_id', current_store_id());
 
@@ -474,7 +474,7 @@ class OrderController extends Controller
             return response()->json([
                 'status'  => true,
                 'message' => 'Order cancelled successfully.',
-                'data'    => new OrderResource($order->load('items.product', 'billingInformation')),
+                'data'    => new OrderResource($order->load('items.product.images', 'billingInformation')),
             ]);
         } catch (ModelNotFoundException $e) {
             return response()->json([
@@ -498,7 +498,7 @@ class OrderController extends Controller
                 'email'       => 'required|email',
             ]);
 
-            $order = Order::with(['items.product', 'billingInformation'])
+            $order = Order::with(['items.product.images', 'billingInformation'])
                 ->where('order_number', $validated['orderNumber'])
                 ->where('store_id', current_store_id())
                 ->whereHas('billingInformation', function ($q) use ($validated) {
@@ -743,7 +743,7 @@ class OrderController extends Controller
             }
 
             $query = Order::with([
-                'items.product',
+                'items.product.images',
                 'billingInformation',
                 'customer'
             ])->where('store_id', $storeId);
@@ -888,7 +888,7 @@ class OrderController extends Controller
     {
         $storeId = current_store_id();
 
-        $order = Order::with(['items.product', 'billingInformation'])
+        $order = Order::with(['items.product.images', 'billingInformation'])
                       ->where('store_id', $storeId)
                       ->findOrFail($id);
 
@@ -905,7 +905,7 @@ class OrderController extends Controller
 
     public function sendPaymentInvoice($orderId)
     {
-        $order = Order::with(['items.product', 'billingInformation'])->findOrFail($orderId);
+        $order = Order::with(['items.product.images', 'billingInformation'])->findOrFail($orderId);
 
         $logoPath  = public_path('logo/nts-logo.png');
         $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
@@ -927,7 +927,7 @@ class OrderController extends Controller
     public function resendInvoice($id)
     {
         try {
-            $order = Order::with(['items.product', 'billingInformation'])
+            $order = Order::with(['items.product.images', 'billingInformation'])
                 ->where('store_id', current_store_id())
                 ->findOrFail($id);
 
@@ -1026,7 +1026,7 @@ class OrderController extends Controller
             return response()->json([
                 'status'  => true,
                 'message' => 'Order refunded successfully.',
-                'data'    => new OrderResource($order->load('items.product', 'billingInformation')),
+                'data'    => new OrderResource($order->load('items.product.images', 'billingInformation')),
             ]);
         } catch (\Exception $e) {
             return response()->json([
