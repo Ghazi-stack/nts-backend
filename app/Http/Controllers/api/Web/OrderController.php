@@ -588,20 +588,20 @@ class OrderController extends Controller
             'receiveOffers' => 'nullable|boolean',
 
             // Nested Billing Information
-            'billingInformation' => 'required|array',
-            'billingInformation.firstName'      => 'required|string|max:255',
-            'billingInformation.lastName'       => 'required|string|max:255',
+            'billingInformation' => 'array',
+            'billingInformation.firstName'      => 'nullable|string|max:255',
+            'billingInformation.lastName'       => 'nullable|string|max:255',
             // 'billingInformation.email'          => 'required|email',
             'billingInformation.phone'          => 'nullable|string|max:20',
             'billingInformation.companyName'    => 'nullable|string|max:255',
-            'billingInformation.addressLine1'   => 'required|string|max:255',
+            'billingInformation.addressLine1'   => 'nullable|string|max:255',
             'billingInformation.addressLine2'   => 'nullable|string|max:255',
             'billingInformation.city'           => 'nullable|string|max:100',
             'billingInformation.state'          => 'nullable|string|max:100',
             'billingInformation.zip'            => 'nullable|string|max:20',
             'billingInformation.country'        => 'nullable|string|max:100',
-            'billingInformation.paymentMethod'  => 'required|string|max:100',
-            'billingInformation.shippingMethod' => 'required|string|max:100',
+            'billingInformation.paymentMethod'  => 'nullable|string|max:100',
+            'billingInformation.shippingMethod' => 'nullable|string|max:100',
 
             // Order Info
             'comments'   => 'nullable|string|max:1000',
