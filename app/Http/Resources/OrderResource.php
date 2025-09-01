@@ -33,7 +33,9 @@ class OrderResource extends JsonResource
             'carrierName'        => $this->tracking_carrier_name,
             'shippedAt'          => $this->shipped_at?->toDateTimeString(),
 
-            'billingInformation' => new BillingInformationResource($this->whenLoaded('billingInformation')),
+            'billingInformation' => $this->billingInformation
+                ? new BillingInformationResource($this->billingInformation)
+                : null,
             'notes' => $this->whenLoaded('notes', function () {
                     return $this->notes->pluck('note');
                 }),
