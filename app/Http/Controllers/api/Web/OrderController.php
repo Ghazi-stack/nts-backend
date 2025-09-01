@@ -309,7 +309,7 @@ class OrderController extends Controller
             return response()->json([
                 'status'  => true,
                 'message' => 'Order updated successfully.',
-                'data'    => new OrderResource($order->fresh()->load('items.product', 'billingInformation')),
+                'data'    => new OrderResource($order->fresh()->load('items.product', 'billingInformation','customer')),
             ]);
         } catch (ModelNotFoundException $e) {
             return response()->json([
