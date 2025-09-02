@@ -35,7 +35,7 @@ class ProductResource extends JsonResource
             'slug' => $this->slug,
             'sku' => $this->sku,
             'price' => $this->price,
-            'quantity' => $this->quantity,
+            'quantity' => $this->additional['quantity'] ?? $this->quantity,
             'msrp' => $this->msrp,
             'costPrice' => $this->cost_price,
             'salePrice' => $this->sale_price,

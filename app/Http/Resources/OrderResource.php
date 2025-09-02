@@ -40,9 +40,17 @@ class OrderResource extends JsonResource
                     return $this->notes->pluck('note');
                 }),
             // ✅ Only product details here
-            'products' => ProductResource::collection(
-                $this->whenLoaded('items', fn() => $this->items->pluck('product'))
-            ),
+            // 'products' => ProductResource::collection(
+            //     $this->whenLoaded('items', fn() => $this->items->pluck('product'))
+            // ),
+            'products' => $this->whenLoaded('items', function () {
+                    return $this->items->map(function ($item) {
+                        return (new ProductResource($item->product))->additional([
+                            'quantity' => $item->quantity,
+                            'price' => $item->price,
+                        ]);
+                    });
+                }),
             // 'items'    => OrderItemResource::collection($this->whenLoaded('items')),
             'customer' => new CustomerResource($this->whenLoaded('customer')),
 
