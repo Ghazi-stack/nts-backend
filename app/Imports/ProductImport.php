@@ -33,102 +33,113 @@ class ProductImport implements ToArray
         $this->preloadCategories();
         $this->preloadBrands();
 
-        foreach ($rows as $row) {
+        foreach ($rows as $index => $row) {
             try {
                 $data = array_combine($header, $row);
 
-                // ✅ Resolve brand
-                $brandName = $data['Brand Name'] ?? $data['Brand'] ?? 'Unknown Brand';
-                $brand = $this->resolveBrand($brandName);
+                // ✅ Check required fields
+                if (empty($data['Product Code/SKU']) || empty($data['Product Name'])) {
+                    Log::warning("❌ Row $index skipped: Missing SKU or Product Name.");
+                    continue;
+                }
 
-                // ✅ Resolve category using proper nested logic
-                $categoryPath = $data['Category'] ?? 'Uncategorized';
-                $category = $this->resolveCategoryPath($categoryPath);
+                // ✅ Resolve brand (must already exist)
+                $brandName = trim($data['Brand Name'] ?? $data['Brand'] ?? '');
+                $brand = $this->existingBrands->get($brandName);
 
-                // ✅ Create or update product
-                $product = Product::updateOrCreate(
-                    [
-                        'sku' => $data['Product Code/SKU'] ?? null,
-                        'store_id' => $this->storeId
+                if (!$brand) {
+                    Log::warning("❌ Row $index skipped: Brand '$brandName' not found.");
+                    continue;
+                }
+
+                // ✅ Resolve category (must already exist)
+                $categoryPath = $data['Category'] ?? '';
+                $category = $this->findCategoryPath($categoryPath);
+
+                if (!$category) {
+                    Log::warning("❌ Row $index skipped: Category path '$categoryPath' not found.");
+                    continue;
+                }
+
+                // ✅ Generate unique slug
+                $slug = Str::slug($data['Product Name']) . '-' . uniqid();
+
+                // ✅ Create product
+                $product = Product::create([
+                    'sku' => $data['Product Code/SKU'] . '-' . uniqid(), // Ensure uniqueness
+                    'store_id' => $this->storeId,
+                    'item_type' => $data['Item Type'] ?? null,
+                    'product_type' => $data['Product Type'] ?? null,
+                    'name' => $data['Product Name'],
+                    'slug' => $slug,
+                    'price' => $data['Retail Price'] ?? 0,
+                    'brand_id' => $brand->id,
+                    'category_id' => $category->id,
+                    'condition' => $data['Product Condition'] ?? null,
+                    'dimensions' => [
+                        'weight' => $data['Product Weight'] ?? null,
+                        'width' => $data['Product Width'] ?? null,
+                        'height' => $data['Product Height'] ?? null,
+                        'depth' => $data['Product Depth'] ?? null,
                     ],
-                    [
-                        'item_type' => $data['Item Type'] ?? null,
-                        'product_type' => $data['Product Type'] ?? null,
-                        'name' => $data['Product Name'] ?? 'Unnamed',
-                        'slug' => Str::slug($data['Product Name'] ?? 'Unnamed') . '-' . uniqid(),
-                        'price' => $data['Retail Price'] ?? 0,
-                        'quantity' => $data['Quantity'] ?? null,
-                        'brand_id' => $brand->id,
-                        'category_id' => $category->id,
-                        'condition' => $data['Product Condition'] ?? null,
-                        'dimensions' => [
-                            'weight' => $data['Product Weight'] ?? null,
-                            'width' => $data['Product Width'] ?? null,
-                            'height' => $data['Product Height'] ?? null,
-                            'depth' => $data['Product Depth'] ?? null,
-                        ],
-                        'track_inventory' => $this->toBool($data['Track Inventory'] ?? 'N'),
-                        'current_stock' => $data['Current Stock Level'] ?? 0,
-                        'low_stock' => $data['Low Stock Level'] ?? 0,
-                        'visible_on_storefront' => $this->toBool($data['Product Visible?'] ?? 'Y'),
-                        'free_shipping' => $this->toBool($data['Free Shipping'] ?? 'N'),
-                        'allow_purchase' => $this->toBool($data['Allow Purchases?'] ?? 'Y'),
-                        'option_set' => $data['Option Set'] ?? null,
-                        'option_set_align' => $data['Option Set Align'] ?? null,
-                        'cost_price' => $data['Cost Price'] ?? null,
-                        'sale_price' => $data['Sale Price'] ?? null,
-                        'fixed_shipping_cost' => $data['Fixed Shipping Cost'] ?? null,
-                        'custom_fields' => $this->parseCustomFields($data['Product Custom Fields'] ?? ''),
-                        'is_featured' => false,
-                        'show_condition' => $this->toBool($data['Show Product Condition?'] ?? 'Y'),
-                        'sort_order' => $data['Sort Order'] ?? 0,
-                        'search_keywords' => $data['Search Keywords'] ?? '',
-                        'stop_processing_rules' => $this->toBool($data['Stop Processing Rules'] ?? 'N'),
-                        'tax_class' => $data['Product Tax Class'] ?? null,
-                        'tax_provider_code' => $data['Tax Provider Tax Code'] ?? null,
-                        'updated_at' => Carbon::now(),
-                        'created_at' => Carbon::now(),
-                    ]
-                );
+                    'track_inventory' => $this->toBool($data['Track Inventory'] ?? 'N'),
+                    'current_stock' => $data['Current Stock Level'] ?? 0,
+                    'low_stock' => $data['Low Stock Level'] ?? 0,
+                    'visible_on_storefront' => $this->toBool($data['Product Visible?'] ?? 'Y'),
+                    'free_shipping' => $this->toBool($data['Free Shipping'] ?? 'N'),
+                    'allow_purchase' => $this->toBool($data['Allow Purchases?'] ?? 'Y'),
+                    'option_set' => $data['Option Set'] ?? null,
+                    'option_set_align' => $data['Option Set Align'] ?? null,
+                    'cost_price' => $data['Cost Price'] ?? null,
+                    'sale_price' => $data['Sale Price'] ?? null,
+                    'fixed_shipping_cost' => $data['Fixed Shipping Cost'] ?? null,
+                    'custom_fields' => $this->parseCustomFields($data['Product Custom Fields'] ?? ''),
+                    'is_featured' => false,
+                    'show_condition' => $this->toBool($data['Show Product Condition?'] ?? 'Y'),
+                    'sort_order' => $data['Sort Order'] ?? 0,
+                    'search_keywords' => $data['Search Keywords'] ?? '',
+                    'stop_processing_rules' => $this->toBool($data['Stop Processing Rules'] ?? 'N'),
+                    'tax_class' => $data['Product Tax Class'] ?? null,
+                    'tax_provider_code' => $data['Tax Provider Tax Code'] ?? null,
+                    'updated_at' => Carbon::now(),
+                    'created_at' => Carbon::now(),
+                ]);
 
-                // ✅ Attach product to nested category
+                // ✅ Attach product to category
                 $product->categories()->syncWithoutDetaching([$category->id]);
 
-                // ✅ Content
-                ProductContent::updateOrCreate(
-                    ['store_id' => $this->storeId, 'product_id' => $product->id],
-                    [
-                        'description' => $data['Product Description'] ?? '',
-                        'warranty' => $data['Product Warranty'] ?? '',
-                        'availability_text' => $data['Product Availability'] ?? '',
-                        'template_layout' => 'default',
-                    ]
-                );
+                // ✅ Product content
+                ProductContent::create([
+                    'store_id' => $this->storeId,
+                    'product_id' => $product->id,
+                    'description' => $data['Product Description'] ?? '',
+                    'warranty' => $data['Product Warranty'] ?? '',
+                    'availability_text' => $data['Product Availability'] ?? '',
+                    'template_layout' => 'default',
+                ]);
 
-                // ✅ Identifiers
-                ProductIdentifier::updateOrCreate(
-                    ['store_id' => $this->storeId, 'product_id' => $product->id],
-                    [
-                        'mpn' => $data['Manufacturer Part Number'] ?? '',
-                        'upc' => $data['Product UPC/EAN'] ?? '',
-                        'gtin' => $data['Global Trade Item Number'] ?? '',
-                        'bpn' => $data['Bin Picking Number'] ?? '',
-                    ]
-                );
+                // ✅ Product identifiers
+                ProductIdentifier::create([
+                    'store_id' => $this->storeId,
+                    'product_id' => $product->id,
+                    'mpn' => $data['Manufacturer Part Number'] ?? '',
+                    'upc' => $data['Product UPC/EAN'] ?? '',
+                    'gtin' => $data['Global Trade Item Number'] ?? '',
+                    'bpn' => $data['Bin Picking Number'] ?? '',
+                ]);
 
-                // ✅ SEO
-                ProductSeo::updateOrCreate(
-                    ['store_id' => $this->storeId, 'product_id' => $product->id],
-                    [
-                        'page_title' => $data['Page Title'] ?? $data['Product Name'] ?? '',
-                        'product_url' => ltrim($data['Product Url'] ?? '', '/'),
-                        'meta_description' => $data['Meta Description'] ?? '',
-                        'meta_keywords' => $data['Meta Keywords'] ?? '',
-                        'redirect_old_url' => $this->toBool($data['Redirect Old URL?'] ?? 'N'),
-                    ]
-                );
+                // ✅ Product SEO
+                ProductSeo::create([
+                    'store_id' => $this->storeId,
+                    'product_id' => $product->id,
+                    'page_title' => $data['Page Title'] ?? $data['Product Name'] ?? '',
+                    'product_url' => ltrim($data['Product Url'] ?? '', '/'),
+                    'meta_description' => $data['Meta Description'] ?? '',
+                    'meta_keywords' => $data['Meta Keywords'] ?? '',
+                    'redirect_old_url' => $this->toBool($data['Redirect Old URL?'] ?? 'N'),
+                ]);
 
-                // ✅ Auto-detect image
+                // ✅ Product image (auto-detect from any column)
                 $imagePath = collect($data)->map(fn($v) => trim($v))->first(function ($value) {
                     if (!is_string($value)) return false;
                     return preg_match('/\.(jpg|jpeg|png|gif|webp)$/i', $value);
@@ -138,59 +149,23 @@ class ProductImport implements ToArray
                     $isUrl = filter_var($imagePath, FILTER_VALIDATE_URL);
                     $finalPath = $isUrl ? $imagePath : 'product_images/' . ltrim($imagePath, '/');
 
-                    ProductImage::updateOrCreate(
-                        [
-                            'store_id' => $this->storeId,
-                            'product_id' => $product->id,
-                            'path' => $finalPath,
-                        ],
-                        [
-                            'alt_text' => $data['Product Name'] ?? '',
-                            'is_primary' => true,
-                        ]
-                    );
+                    ProductImage::create([
+                        'store_id' => $this->storeId,
+                        'product_id' => $product->id,
+                        'path' => $finalPath,
+                        'alt_text' => $data['Product Name'],
+                        'is_primary' => true,
+                    ]);
                 }
 
+                Log::info("✅ Row $index: Product '{$product->name}' created successfully.");
+
             } catch (\Throwable $e) {
-                Log::error("Import error for row: " . json_encode($row) . ' — ' . $e->getMessage());
+                Log::error("❌ Row $index: Error during import");
+                Log::error("➡️ Message: " . $e->getMessage());
+                Log::error("➡️ Trace: " . $e->getTraceAsString());
             }
         }
-    }
-
-    // ✅ Proper category tree builder
-    private function resolveCategoryPath($path)
-    {
-        $segments = array_map('trim', explode('/', $path));
-        $parentId = null;
-        $category = null;
-
-        foreach ($segments as $segment) {
-            if (!$segment) continue;
-
-            $slug = Str::slug($segment);
-
-            $existing = $this->existingCategories->first(function ($cat) use ($slug, $parentId) {
-                return $cat->slug === $slug && $cat->parent_id == $parentId;
-            });
-
-            if ($existing) {
-                $category = $existing;
-            } else {
-                $category = Category::create([
-                    'store_id' => $this->storeId,
-                    'name' => $segment,
-                    'slug' => $slug,
-                    'parent_id' => $parentId,
-                    'is_visible' => true,
-                ]);
-
-                $this->existingCategories->push($category);
-            }
-
-            $parentId = $category->id;
-        }
-
-        return $category;
     }
 
     private function preloadCategories()
@@ -203,21 +178,30 @@ class ProductImport implements ToArray
         $this->existingBrands = Brand::where('store_id', $this->storeId)->get()->keyBy('name');
     }
 
-    private function resolveBrand($name)
+    // 🔍 Only finds existing category paths — no creation
+    private function findCategoryPath($path)
     {
-        if ($this->existingBrands->has($name)) {
-            return $this->existingBrands->get($name);
+        $segments = array_map('trim', explode('/', $path));
+        $parentId = null;
+        $category = null;
+
+        foreach ($segments as $segment) {
+            if (!$segment) continue;
+
+            $slug = Str::slug($segment);
+
+            $category = $this->existingCategories->first(function ($cat) use ($slug, $parentId) {
+                return $cat->slug === $slug && $cat->parent_id == $parentId;
+            });
+
+            if (!$category) {
+                return null; // Stop if any segment is missing
+            }
+
+            $parentId = $category->id;
         }
 
-        $brand = Brand::create([
-            'store_id' => $this->storeId,
-            'name' => $name,
-            'slug' => Str::slug($name)
-        ]);
-
-        $this->existingBrands->put($name, $brand);
-
-        return $brand;
+        return $category;
     }
 
     private function parseCustomFields($fieldString)
