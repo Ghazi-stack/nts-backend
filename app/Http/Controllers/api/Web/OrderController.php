@@ -671,6 +671,7 @@ class OrderController extends Controller
             $order = Order::create([
                 'store_id'               => $storeId,
                 'customer_id'            => $customer->id,
+                'user_id'                => $user->id,
                 'billing_information_id' => $billing->id,
                 'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
                 'status'                 => 'pending',
