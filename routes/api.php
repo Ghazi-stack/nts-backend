@@ -64,7 +64,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/get-notes/{orderId}', 'getOrderNotes');
         Route::post('/add-orders', 'storeFromDashboard');
         Route::post('/search-advanced', 'advancedOrderSearch');
-        Route::put('/update-order/{id}', 'update');
+        Route::put('/update-order/{id}', 'updateFromDashboard');
         Route::get('/invoice/{id}', 'downloadInvoice');
         Route::post('/resend-invoice/{id}', 'resendInvoice');
         Route::post('/refund/{id}', 'refund');
