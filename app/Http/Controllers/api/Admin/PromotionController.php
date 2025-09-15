@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\api\Admin;
 
 use App\Models\Promotion;
 use Illuminate\Http\Request;
