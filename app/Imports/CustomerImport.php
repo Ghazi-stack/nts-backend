@@ -28,7 +28,9 @@ class CustomerImport implements ToModel, WithHeadingRow, WithValidation, WithMap
             'phone'                 => isset($row['phone']) ? (string)$row['phone'] : null,
             'address'               => $row['address_1'] ?? null,
             'company_name'          => $row['company'] ?? null,
-            'customer_group'        => $row['customer_group'] ?? null,
+            'customer_group'        => isset($row['customer_group']) 
+                                        ? strtolower($row['customer_group']) 
+                                        : null, // ✅ lowercase only
             'store_credit'          => $row['store_credit'] ?? 0,
             'country'               => $row['country'] ?? null,
             'state'                 => $row['state'] ?? null,
@@ -48,7 +50,7 @@ class CustomerImport implements ToModel, WithHeadingRow, WithValidation, WithMap
             'phone'                 => $row['phone'],
             'address'               => $row['address'],
             'company_name'          => $row['company_name'],
-            'customer_group' => $row['customer_group'] ?? $row['Customer Group'] ?? null,
+            'customer_group'        => $row['customer_group'], // already lowercased
             'store_credit'          => $row['store_credit'],
             'country'               => $row['country'],
             'state'                 => $row['state'],
@@ -67,9 +69,10 @@ class CustomerImport implements ToModel, WithHeadingRow, WithValidation, WithMap
             'email'                 => ['nullable', 'email', Rule::unique('customers', 'email')],
             'phone'                 => 'nullable|string|max:20',
             'store_credit'          => 'nullable|numeric',
-            'receive_review_emails'=> 'nullable|boolean',
-            'force_password_reset' => 'nullable|boolean',
+            'receive_review_emails' => 'nullable|boolean',
+            'force_password_reset'  => 'nullable|boolean',
             'password'              => 'nullable|string|min:7',
+            'customer_group'        => 'nullable|string|max:255', // no specific values
         ];
     }
 }
