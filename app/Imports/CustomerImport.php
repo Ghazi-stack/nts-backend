@@ -48,7 +48,7 @@ class CustomerImport implements ToModel, WithHeadingRow, WithValidation, WithMap
             'phone'                 => $row['phone'],
             'address'               => $row['address'],
             'company_name'          => $row['company_name'],
-            'customer_group'        => $row['customer_group'],
+            'customer_group' => $row['customer_group'] ?? $row['Customer Group'] ?? null,
             'store_credit'          => $row['store_credit'],
             'country'               => $row['country'],
             'state'                 => $row['state'],
