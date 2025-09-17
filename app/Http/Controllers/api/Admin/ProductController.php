@@ -306,7 +306,7 @@ class ProductController extends Controller
                     'store_id' => $storeId,
                     'product_id' => $product->id,
                     'path' => $path,
-                    'is_primary' => $img['is_primary'] ?? ($index === 0),
+                    'is_primary' => filter_var($img['is_primary'] ?? ($index === 0), FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
                     'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
                     'description' => $img['description'] ?? null,
                 ]);
