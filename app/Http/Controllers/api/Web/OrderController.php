@@ -932,79 +932,78 @@ class OrderController extends Controller
                       });
                 });
             } else {
-                // ✅ Only apply filters if 'keywords' is NOT provided
                 $query->where(function ($q) use ($request) {
                     if ($request->filled('status')) {
-                        $q->orWhere('status', $request->input('status'));
+                        $q->where('status', $request->input('status'));
                     }
-
+                
                     if ($request->filled('paymentMethod')) {
-                        $q->orWhereHas('billingInformation', function ($b) use ($request) {
+                        $q->whereHas('billingInformation', function ($b) use ($request) {
                             $b->where('payment_method', $request->input('paymentMethod'));
                         });
                     }
-
+                
                     if ($request->filled('shippingMethod')) {
-                        $q->orWhereHas('billingInformation', function ($b) use ($request) {
+                        $q->whereHas('billingInformation', function ($b) use ($request) {
                             $b->where('shipping_method', $request->input('shippingMethod'));
                         });
                     }
-
+                
                     if ($request->filled('shippingProvider') && $request->input('shippingProvider') !== 'any') {
-                        $q->orWhere('tracking_carrier_name', $request->input('shippingProvider'));
+                        $q->where('tracking_carrier_name', $request->input('shippingProvider'));
                     }
-
+                
                     if ($request->filled('coupon') && $request->input('coupon') !== 'any') {
-                        $q->orWhere('coupon_code', $request->input('coupon'));
+                        $q->where('coupon_code', $request->input('coupon'));
                     }
-
+                
                     if ($request->filled('fulfillmentSource') && $request->input('fulfillmentSource') !== 'any') {
-                        $q->orWhere('fulfillment_source', $request->input('fulfillmentSource'));
+                        $q->where('fulfillment_source', $request->input('fulfillmentSource'));
                     }
-
+                
                     if ($request->filled('guest')) {
-                        $q->orWhereNull('user_id');
+                        $q->whereNull('user_id');
                     }
-
+                
                     if ($request->filled('preorderYes')) {
-                        $q->orWhere('channel', 'preorder');
+                        $q->where('channel', 'preorder');
                     }
-
+                
                     if ($request->filled('orderIdFrom')) {
-                        $q->orWhere('id', '>=', $request->input('orderIdFrom'));
+                        $q->where('id', '>=', $request->input('orderIdFrom'));
                     }
-
+                
                     if ($request->filled('orderIdTo')) {
-                        $q->orWhere('id', '<=', $request->input('orderIdTo'));
+                        $q->where('id', '<=', $request->input('orderIdTo'));
                     }
-
+                
                     if ($request->filled('orderTotalFrom')) {
-                        $q->orWhere('total_amount', '>=', $request->input('orderTotalFrom'));
+                        $q->where('total_amount', '>=', $request->input('orderTotalFrom'));
                     }
-
+                
                     if ($request->filled('orderTotalTo')) {
-                        $q->orWhere('total_amount', '<=', $request->input('orderTotalTo'));
+                        $q->where('total_amount', '<=', $request->input('orderTotalTo'));
                     }
-
+                
                     if ($request->filled('dateRange') && $request->filled('dateType')) {
                         $column = match ($request->input('dateType')) {
                             'order-date'   => 'created_at',
                             'shipped-date' => 'shipped_at',
                             default        => 'created_at'
                         };
-
+                    
                         switch ($request->input('dateRange')) {
                             case 'Yesterday':
-                                $q->orWhereDate($column, today()->subDay());
+                                $q->whereDate($column, today()->subDay());
                                 break;
                             case 'Today':
-                                $q->orWhereDate($column, today());
+                                $q->whereDate($column, today());
                                 break;
                             case 'Last7Days':
-                                $q->orWhereDate($column, '>=', now()->subDays(7));
+                                $q->whereDate($column, '>=', now()->subDays(7));
                                 break;
                             case 'Last30Days':
-                                $q->orWhereDate($column, '>=', now()->subDays(30));
+                                $q->whereDate($column, '>=', now()->subDays(30));
                                 break;
                         }
                     }
