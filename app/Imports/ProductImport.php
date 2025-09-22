@@ -19,6 +19,7 @@ class ProductImport implements ToArray
     protected $storeId;
     protected $existingCategories;
     protected $existingBrands;
+    protected $ignoredColumns = [];
 
     public function __construct($storeId)
     {
@@ -30,49 +31,127 @@ class ProductImport implements ToArray
         $header = array_map('trim', $rows[0]);
         unset($rows[0]);
 
+        $this->ignoredColumns = collect($header)
+            ->filter(fn($col) => strtolower($col) === 'ignore')
+            ->keys()
+            ->toArray();
+
+        foreach ($this->ignoredColumns as $index) {
+            unset($header[$index]);
+        }
+
+        $header = array_values($header);
+
         $this->preloadCategories();
         $this->preloadBrands();
 
         foreach ($rows as $index => $row) {
             try {
+                foreach ($this->ignoredColumns as $i) {
+                    unset($row[$i]);
+                }
+
+                $row = array_values($row);
                 $data = array_combine($header, $row);
 
-                // ✅ Check required fields
                 if (empty($data['Product Code/SKU']) || empty($data['Product Name'])) {
                     Log::warning("❌ Row $index skipped: Missing SKU or Product Name.");
                     continue;
                 }
 
-                // ✅ Resolve brand (must already exist)
+                $sku = $data['Product Code/SKU'];
+                $existingProduct = Product::where('sku', $sku)->first();
+
                 $brandName = trim($data['Brand Name'] ?? $data['Brand'] ?? '');
                 $brand = $this->existingBrands->get($brandName);
-
                 if (!$brand) {
                     Log::warning("❌ Row $index skipped: Brand '$brandName' not found.");
                     continue;
                 }
 
-                // ✅ Resolve category (must already exist)
                 $categoryPath = $data['Category'] ?? '';
                 $category = $this->findCategoryPath($categoryPath);
-
                 if (!$category) {
                     Log::warning("❌ Row $index skipped: Category path '$categoryPath' not found.");
                     continue;
                 }
 
-                // ✅ Generate unique slug
+                $fieldsToCheck = [
+                    'name' => 'Product Name',
+                    'item_type' => 'Item Type',
+                    'product_type' => 'Product Type',
+                    'price' => 'Price',
+                    'msrp' => 'Retail Price',
+                    'brand_id' => $brand->id,
+                    'category_id' => $category->id,
+                    'condition' => 'Product Condition',
+                    'cost_price' => 'Cost Price',
+                    'sale_price' => 'Sale Price',
+                    'fixed_shipping_cost' => 'Fixed Shipping Cost',
+                    'tax_class' => 'Product Tax Class',
+                    'tax_provider_code' => 'Tax Provider Tax Code',
+                    'track_inventory' => $this->toBool($data['Track Inventory'] ?? 'N'),
+                    'current_stock' => 'Current Stock Level',
+                    'low_stock' => 'Low Stock Level',
+                    'visible_on_storefront' => $this->toBool($data['Product Visible?'] ?? 'Y'),
+                    'free_shipping' => $this->toBool($data['Free Shipping'] ?? 'N'),
+                    'allow_purchase' => $this->toBool($data['Allow Purchases?'] ?? 'Y'),
+                    'search_keywords' => 'Search Keywords',
+                    'stop_processing_rules' => $this->toBool($data['Stop Processing Rules'] ?? 'N'),
+                    'show_condition' => $this->toBool($data['Show Product Condition?'] ?? 'Y'),
+                    'sort_order' => 'Sort Order',
+                    'option_set' => 'Option Set',
+                    'option_set_align' => 'Option Set Align',
+                ];
+
+                if ($existingProduct) {
+                    $updates = [];
+
+                    foreach ($fieldsToCheck as $field => $column) {
+                        $columnKey = is_string($column) ? $column : null;
+                        if ($columnKey && !array_key_exists($columnKey, $data)) continue;
+
+                        $newValue = is_string($column) ? ($data[$column] ?? null) : $column;
+                        $existingValue = $existingProduct->$field;
+
+                        if (is_bool($newValue)) {
+                            $newValue = (bool)$newValue;
+                            $existingValue = (bool)$existingValue;
+                        } elseif (is_numeric($newValue)) {
+                            $newValue = (float)$newValue;
+                            $existingValue = (float)$existingValue;
+                        } else {
+                            $newValue = trim((string)$newValue);
+                            $existingValue = trim((string)$existingValue);
+                        }
+
+                        if ($newValue != $existingValue) {
+                            $updates[$field] = $newValue;
+                        }
+                    }
+
+                    if (!empty($updates)) {
+                        $updates['updated_at'] = Carbon::now();
+                        $existingProduct->update($updates);
+                        Log::info("🔁 Row $index: Product '{$existingProduct->name}' updated.");
+                    } else {
+                        Log::info("⚠️ Row $index: Product '{$existingProduct->name}' is identical. Skipping.");
+                    }
+
+                    continue;
+                }
+
                 $slug = Str::slug($data['Product Name']) . '-' . uniqid();
 
-                // ✅ Create product
                 $product = Product::create([
-                    'sku' => $data['Product Code/SKU'] . '-' . uniqid(), // Ensure uniqueness
+                    'sku' => $sku,
                     'store_id' => $this->storeId,
                     'item_type' => $data['Item Type'] ?? null,
                     'product_type' => $data['Product Type'] ?? null,
                     'name' => $data['Product Name'],
                     'slug' => $slug,
-                    'price' => $data['Retail Price'] ?? 0,
+                    'price' => $data['Price'] ?? 0,
+                    'msrp' => $data['Retail Price'] ?? null,
                     'brand_id' => $brand->id,
                     'category_id' => $category->id,
                     'condition' => $data['Product Condition'] ?? null,
@@ -105,10 +184,8 @@ class ProductImport implements ToArray
                     'created_at' => Carbon::now(),
                 ]);
 
-                // ✅ Attach product to category
                 $product->categories()->syncWithoutDetaching([$category->id]);
 
-                // ✅ Product content
                 ProductContent::create([
                     'store_id' => $this->storeId,
                     'product_id' => $product->id,
@@ -118,7 +195,6 @@ class ProductImport implements ToArray
                     'template_layout' => 'default',
                 ]);
 
-                // ✅ Product identifiers
                 ProductIdentifier::create([
                     'store_id' => $this->storeId,
                     'product_id' => $product->id,
@@ -128,7 +204,6 @@ class ProductImport implements ToArray
                     'bpn' => $data['Bin Picking Number'] ?? '',
                 ]);
 
-                // ✅ Product SEO
                 ProductSeo::create([
                     'store_id' => $this->storeId,
                     'product_id' => $product->id,
@@ -139,10 +214,8 @@ class ProductImport implements ToArray
                     'redirect_old_url' => $this->toBool($data['Redirect Old URL?'] ?? 'N'),
                 ]);
 
-                // ✅ Product image (auto-detect from any column)
                 $imagePath = collect($data)->map(fn($v) => trim($v))->first(function ($value) {
-                    if (!is_string($value)) return false;
-                    return preg_match('/\.(jpg|jpeg|png|gif|webp)$/i', $value);
+                    return is_string($value) && preg_match('/\.(jpg|jpeg|png|gif|webp)$/i', $value);
                 });
 
                 if ($imagePath) {
@@ -158,8 +231,7 @@ class ProductImport implements ToArray
                     ]);
                 }
 
-                Log::info("✅ Row $index: Product '{$product->name}' created successfully.");
-
+                Log::info("✅ Row $index: New product '{$product->name}' created.");
             } catch (\Throwable $e) {
                 Log::error("❌ Row $index: Error during import");
                 Log::error("➡️ Message: " . $e->getMessage());
@@ -178,7 +250,6 @@ class ProductImport implements ToArray
         $this->existingBrands = Brand::where('store_id', $this->storeId)->get()->keyBy('name');
     }
 
-    // 🔍 Only finds existing category paths — no creation
     private function findCategoryPath($path)
     {
         $segments = array_map('trim', explode('/', $path));
@@ -195,7 +266,7 @@ class ProductImport implements ToArray
             });
 
             if (!$category) {
-                return null; // Stop if any segment is missing
+                return null;
             }
 
             $parentId = $category->id;

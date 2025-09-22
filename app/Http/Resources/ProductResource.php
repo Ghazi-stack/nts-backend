@@ -7,18 +7,12 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class ProductResource extends JsonResource
 {
-    /**
-     * Transform the resource into an array.
-     *
-     * @return array<string, mixed>
-     */
     public function toArray(Request $request): array
     {
         $price = $this->price ?? 0;
         $msrp = $this->msrp ?? 0;
         $cost = $this->cost_price ?? 0;
 
-        // Calculated fields
         $savings = ($msrp > $price) ? $msrp - $price : 0;
         $savingPercent = ($msrp > 0 && $savings > 0)
             ? round(($savings / $msrp) * 100, 2)
@@ -34,10 +28,9 @@ class ProductResource extends JsonResource
             'name' => $this->name,
             'slug' => $this->slug,
             'sku' => $this->sku,
-            'price' => $this->price,
-            'quantity' => $this->additional['quantity'] ?? $this->quantity,
-            'msrp' => $this->msrp,
-            'costPrice' => $this->cost_price,
+            'price' => $price,
+            'msrp' => $msrp,
+            'costPrice' => $cost,
             'salePrice' => $this->sale_price,
             'fixedShippingCost' => $this->fixed_shipping_cost,
             'productType' => $this->product_type,
@@ -47,24 +40,17 @@ class ProductResource extends JsonResource
             'stopProcessingRules' => $this->stop_processing_rules,
             'taxClass' => $this->tax_class,
             'taxProviderCode' => $this->tax_provider_code,
-
-            // IDs (matching payload)
             'brandId' => (int) $this->brand_id,
             'categoryIds' => $this->whenLoaded('categories', fn () => $this->categories->pluck('id')),
-
-            // Relationship data (optional for frontend)
             'brand' => new BrandResource($this->whenLoaded('brand')),
             'categories' => CategoryResource::collection($this->whenLoaded('categories')),
-
-            // Dimensions
             'dimensions' => [
                 'weight' => $this->dimensions['weight'] ?? null,
                 'width' => $this->dimensions['width'] ?? null,
                 'height' => $this->dimensions['height'] ?? null,
                 'depth' => $this->dimensions['depth'] ?? null,
             ],
-
-            // Inventory & visibility
+            'quantity' => $this->additional['quantity'] ?? $this->quantity,
             'trackInventory' => $this->track_inventory,
             'currentStock' => $this->current_stock,
             'lowStock' => $this->low_stock,
@@ -74,19 +60,14 @@ class ProductResource extends JsonResource
             'sortOrder' => $this->sort_order,
             'searchKeywords' => $this->search_keywords,
             'customFields' => $this->custom_fields,
-
-            // Meta
             'storeId' => $this->store_id,
             'createdAt' => $this->created_at,
             'updatedAt' => $this->updated_at,
-
-            // Content & Related
             'image' => ProductImageResource::collection($this->whenLoaded('images')),
             'description' => optional($this->content)->description,
             'warranty' => optional($this->content)->warranty,
             'availabilityText' => optional($this->content)->availability_text,
             'templateLayout' => optional($this->content)->template_layout,
-            // SEO fields flattened
             'pageTitle' => optional($this->seo)->page_title,
             'productUrl' => optional($this->seo)->product_url,
             'metaDescription' => optional($this->seo)->meta_description,
@@ -94,21 +75,14 @@ class ProductResource extends JsonResource
             'upc' => optional($this->identifiers)->upc,
             'gtin' => optional($this->identifiers)->gtin,
             'bpn' => optional($this->identifiers)->bpn,
-            
-
-            // Hierarchy
             'categoryHierarchy' => $this->whenLoaded('categories', function () {
                 $primaryCategory = $this->categories->first();
                 return $primaryCategory ? $this->buildCategoryHierarchy($primaryCategory) : null;
             }),
-
-            // Calculated values
             'savingAmount' => $savings,
             'savingPercent' => $savingPercent,
             'profit' => $profit,
             'profitMargin' => $profitMargin,
-
-            // Purchase limits
             'purchasabilityStatus' => $this->purchasability_status,
             'minPurchaseQuantity' => $this->min_purchase_quantity,
             'maxPurchaseQuantity' => $this->max_purchase_quantity,
