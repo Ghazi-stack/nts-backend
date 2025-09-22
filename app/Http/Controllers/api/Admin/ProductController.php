@@ -1201,26 +1201,95 @@ class ProductController extends Controller
     public function importCSV(Request $request)
     {
         try {
+            // ✅ Validate file
             $request->validate([
                 'file' => 'required|file|mimes:csv,txt,xlsx,xls'
             ]);
         
+            // ✅ Get current store
             $storeId = current_store_id();
             if (!$storeId) {
                 return response()->json(['error' => 'Store not selected.'], 400);
             }
         
+            // ✅ Save uploaded file
             $file = $request->file('file');
             $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
         
-            Excel::import(new ProductImport($storeId), storage_path("app/{$path}"));
+            // ✅ Production-safe column mapping
+            $columnMapping = [
+                // Required fields
+                'Product Name' => 'Product Name',
+                'Product Code/SKU' => 'Product Code/SKU',
+                'Brand Name' => 'Brand Name',
+                'Distributor Name' => 'Distributor Name',
+                'GPS Category' => 'GPS Category',
+            
+                // Pricing
+                'Retail Price' => 'Ignore',
+                'Cost Price' => 'Ignore',
+                'Sale Price' => 'Ignore',
+                'Price' => 'Ignore',
+                'Fixed Shipping Cost' => 'Ignore',
+            
+                // Inventory
+                'Track Inventory' => 'Track Inventory',
+                'Current Stock Level' => 'Current Stock Level',
+                'Low Stock Level' => 'Ignore',
+                'Allow Purchases?' => 'Allow Purchases?',
+                'Product Visible?' => 'Product Visible?',
+            
+                // Meta fields
+                'Product Type' => 'Ignore',
+                'Item Type' => 'Ignore',
+                'Product Description' => 'Ignore',
+                'Product Warranty' => 'Ignore',
+                'Product Availability' => 'Ignore',
+                'Option Set' => 'Ignore',
+                'Option Set Align' => 'Ignore',
+            
+                // Dimensions
+                'Product Weight' => 'Ignore',
+                'Product Width' => 'Ignore',
+                'Product Height' => 'Ignore',
+                'Product Depth' => 'Ignore',
+            
+                // SEO
+                'Page Title' => 'Ignore',
+                'Product Url' => 'Ignore',
+                'Meta Description' => 'Ignore',
+                'Meta Keywords' => 'Ignore',
+                'Redirect Old URL?' => 'Ignore',
+            
+                // Identifiers
+                'GPS Manufacturer Part Number' => 'GPS Manufacturer Part Number',
+                'GPS Global Trade Item Number' => 'Ignore',
+                'Bin Picking Number' => 'Ignore',
+            
+                // Advanced
+                'Product Condition' => 'Ignore',
+                'Show Product Condition?' => 'Ignore',
+                'Sort Order' => 'Ignore',
+                'Search Keywords' => 'Ignore',
+                'Stop Processing Rules' => 'Ignore',
+                'Product Tax Class' => 'Ignore',
+                'Tax Provider Tax Code' => 'Ignore',
+                'Product Custom Fields' => 'Ignore',
+            ];
+        
+            // ✅ Run import with mapping
+            Excel::import(new ProductImport($storeId, $columnMapping), storage_path("app/{$path}"));
         
             return response()->json([
                 'status' => true,
-                'message' => 'Import completed.'
+                'message' => 'Import completed successfully.'
             ]);
+        
         } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
+            return response()->json([
+                'status' => false,
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 
