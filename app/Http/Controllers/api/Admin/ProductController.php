@@ -1198,87 +1198,176 @@ class ProductController extends Controller
 
 
 
+    // public function importCSV(Request $request)
+    // {
+    //     try {
+    //         // ✅ Validate file
+    //         $request->validate([
+    //             'file' => 'required|file|mimes:csv,txt,xlsx,xls'
+    //         ]);
+        
+    //         // ✅ Get current store
+    //         $storeId = current_store_id();
+    //         if (!$storeId) {
+    //             return response()->json(['error' => 'Store not selected.'], 400);
+    //         }
+        
+    //         // ✅ Save uploaded file
+    //         $file = $request->file('file');
+    //         $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
+        
+    //         // ✅ Production-safe column mapping
+    //         $columnMapping = [
+    //             // Required fields
+    //             'Product Name' => 'Product Name',
+    //             'Product Code/SKU' => 'Product Code/SKU',
+    //             'Brand Name' => 'Brand Name',
+    //             'Distributor Name' => 'Distributor Name',
+    //             'GPS Category' => 'GPS Category',
+            
+    //             // Pricing
+    //             'Retail Price' => 'Ignore',
+    //             'Cost Price' => 'Ignore',
+    //             'Sale Price' => 'Ignore',
+    //             'Price' => 'Ignore',
+    //             'Fixed Shipping Cost' => 'Ignore',
+            
+    //             // Inventory
+    //             'Track Inventory' => 'Track Inventory',
+    //             'Current Stock Level' => 'Current Stock Level',
+    //             'Low Stock Level' => 'Ignore',
+    //             'Allow Purchases?' => 'Allow Purchases?',
+    //             'Product Visible?' => 'Product Visible?',
+            
+    //             // Meta fields
+    //             'Product Type' => 'Ignore',
+    //             'Item Type' => 'Ignore',
+    //             'Product Description' => 'Ignore',
+    //             'Product Warranty' => 'Ignore',
+    //             'Product Availability' => 'Ignore',
+    //             'Option Set' => 'Ignore',
+    //             'Option Set Align' => 'Ignore',
+            
+    //             // Dimensions
+    //             'Product Weight' => 'Ignore',
+    //             'Product Width' => 'Ignore',
+    //             'Product Height' => 'Ignore',
+    //             'Product Depth' => 'Ignore',
+            
+    //             // SEO
+    //             'Page Title' => 'Ignore',
+    //             'Product Url' => 'Ignore',
+    //             'Meta Description' => 'Ignore',
+    //             'Meta Keywords' => 'Ignore',
+    //             'Redirect Old URL?' => 'Ignore',
+            
+    //             // Identifiers
+    //             'GPS Manufacturer Part Number' => 'GPS Manufacturer Part Number',
+    //             'GPS Global Trade Item Number' => 'Ignore',
+    //             'Bin Picking Number' => 'Ignore',
+            
+    //             // Advanced
+    //             'Product Condition' => 'Ignore',
+    //             'Show Product Condition?' => 'Ignore',
+    //             'Sort Order' => 'Ignore',
+    //             'Search Keywords' => 'Ignore',
+    //             'Stop Processing Rules' => 'Ignore',
+    //             'Product Tax Class' => 'Ignore',
+    //             'Tax Provider Tax Code' => 'Ignore',
+    //             'Product Custom Fields' => 'Ignore',
+    //         ];
+        
+    //         // ✅ Run import with mapping
+    //         Excel::import(new ProductImport($storeId, $columnMapping), storage_path("app/{$path}"));
+        
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Import completed successfully.'
+    //         ]);
+        
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'error' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
     public function importCSV(Request $request)
     {
         try {
-            // ✅ Validate file
             $request->validate([
                 'file' => 'required|file|mimes:csv,txt,xlsx,xls'
             ]);
         
-            // ✅ Get current store
             $storeId = current_store_id();
             if (!$storeId) {
                 return response()->json(['error' => 'Store not selected.'], 400);
             }
         
-            // ✅ Save uploaded file
             $file = $request->file('file');
             $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
         
-            // ✅ Production-safe column mapping
+            // ✅ Updated column mapping based on your CSV structure
             $columnMapping = [
-                // Required fields
                 'Product Name' => 'Product Name',
                 'Product Code/SKU' => 'Product Code/SKU',
                 'Brand Name' => 'Brand Name',
-                'Distributor Name' => 'Distributor Name',
-                'GPS Category' => 'GPS Category',
+                'GPS Category' => 'Category', // 👈 THIS FIXES THE CATEGORY ISSUE
             
-                // Pricing
-                'Retail Price' => 'Ignore',
-                'Cost Price' => 'Ignore',
-                'Sale Price' => 'Ignore',
-                'Price' => 'Ignore',
-                'Fixed Shipping Cost' => 'Ignore',
+                // Optional pricing fields
+                'Retail Price' => 'Retail Price',
+                'Cost Price' => 'Cost Price',
+                'Sale Price' => 'Sale Price',
+                'Fixed Shipping Cost' => 'Fixed Shipping Cost',
+                'Free Shipping' => 'Free Shipping',
             
                 // Inventory
                 'Track Inventory' => 'Track Inventory',
                 'Current Stock Level' => 'Current Stock Level',
-                'Low Stock Level' => 'Ignore',
+                'Low Stock Level' => 'Low Stock Level',
                 'Allow Purchases?' => 'Allow Purchases?',
                 'Product Visible?' => 'Product Visible?',
             
-                // Meta fields
-                'Product Type' => 'Ignore',
-                'Item Type' => 'Ignore',
-                'Product Description' => 'Ignore',
-                'Product Warranty' => 'Ignore',
-                'Product Availability' => 'Ignore',
-                'Option Set' => 'Ignore',
-                'Option Set Align' => 'Ignore',
+                // Product info
+                'Item Type' => 'Item Type',
+                'Product Type' => 'Product Type',
+                'Product Description' => 'Product Description',
+                'Product Warranty' => 'Product Warranty',
+                'Product Availability' => 'Product Availability',
+                'Option Set' => 'Option Set',
+                'Option Set Align' => 'Option Set Align',
             
                 // Dimensions
-                'Product Weight' => 'Ignore',
-                'Product Width' => 'Ignore',
-                'Product Height' => 'Ignore',
-                'Product Depth' => 'Ignore',
+                'Product Weight' => 'Product Weight',
+                'Product Width' => 'Product Width',
+                'Product Height' => 'Product Height',
+                'Product Depth' => 'Product Depth',
             
                 // SEO
-                'Page Title' => 'Ignore',
-                'Product Url' => 'Ignore',
-                'Meta Description' => 'Ignore',
-                'Meta Keywords' => 'Ignore',
-                'Redirect Old URL?' => 'Ignore',
+                'Page Title' => 'Page Title',
+                'Product Url' => 'Product URL',
+                'Meta Description' => 'Meta Description',
+                'Meta Keywords' => 'Meta Keywords',
+                'Redirect Old URL?' => 'Redirect Old URL?', // You can leave this as 'Ignore' if not used
             
                 // Identifiers
-                'GPS Manufacturer Part Number' => 'GPS Manufacturer Part Number',
-                'GPS Global Trade Item Number' => 'Ignore',
-                'Bin Picking Number' => 'Ignore',
+                'GPS Manufacturer Part Number' => 'Manufacturer Part Number',
+                'GPS Global Trade Item Number' => 'Global Trade Item Number',
+                'Product UPC/EAN' => 'Product UPC/EAN',
+                'Bin Picking Number' => 'Bin Picking Number',
             
                 // Advanced
-                'Product Condition' => 'Ignore',
-                'Show Product Condition?' => 'Ignore',
-                'Sort Order' => 'Ignore',
-                'Search Keywords' => 'Ignore',
-                'Stop Processing Rules' => 'Ignore',
-                'Product Tax Class' => 'Ignore',
-                'Tax Provider Tax Code' => 'Ignore',
-                'Product Custom Fields' => 'Ignore',
+                'Product Condition' => 'Product Condition',
+                'Show Product Condition?' => 'Show Product Condition?',
+                'Sort Order' => 'Sort Order',
+                'Search Keywords' => 'Search Keywords',
+                'Stop Processing Rules' => 'Stop Processing Rules',
+                'Product Tax Class' => 'Product Tax Class',
+                'Tax Provider Tax Code' => 'Tax Provider Tax Code',
+                'Product Custom Fields' => 'Product Custom Fields',
             ];
         
-            // ✅ Run import with mapping
-            Excel::import(new ProductImport($storeId, $columnMapping), storage_path("app/{$path}"));
+            Excel::import(new \App\Imports\ProductImport($storeId, $columnMapping), storage_path("app/{$path}"));
         
             return response()->json([
                 'status' => true,
@@ -1292,7 +1381,6 @@ class ProductController extends Controller
             ], 500);
         }
     }
-
 
 
     private function parseCustomFields($fieldString)
