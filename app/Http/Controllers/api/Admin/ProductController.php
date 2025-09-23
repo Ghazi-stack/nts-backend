@@ -1305,7 +1305,9 @@ class ProductController extends Controller
             }
         
             $file = $request->file('file');
+            $originalFileName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
             $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
+            session()->put("import_file_name_{$storeId}", $originalFileName);
         
             // ✅ Updated column mapping based on your CSV structure
             $columnMapping = [
@@ -1421,9 +1423,13 @@ class ProductController extends Controller
             ], 400);
         }
 
-        $fileName = 'products_export_' . now()->format('Ymd_His') . '.xlsx';
+        // 🧠 Get original import file name from session (default fallback)
+        $originalFileName = session()->get("import_file_name_{$storeId}", 'products_export');
+
+        $fileName = $originalFileName . '_export_' . now()->format('Ymd_His') . '.xlsx';
+
         return Excel::download(new ProductExport($storeId), $fileName);
-    }   
+    }
 
     public function destroyProductCategories(Request $request, $id)
 {
