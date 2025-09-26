@@ -216,7 +216,7 @@ Route::prefix('web')->group(function () {
 
     Route::prefix('products')->controller(ProductController::class)->group(function () {
         Route::get('/products', 'index');
-        Route::get('/product/{slug}','showProduct');
+        Route::get('/get-product/{slug}','showProduct');
         Route::get('/search-product','searchProduct');
     });
     // 🛒 Cart
