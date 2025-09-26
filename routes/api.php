@@ -199,7 +199,7 @@ Route::prefix('web')->group(function () {
     });
 
     Route::prefix('categories')->controller(CategoryController::class)->group(function () {
-        Route::get('/categories', 'index');
+        Route::get('/get-categories', 'index');
         Route::get('/categories/{id}', 'show');
         Route::get('/categories/slug/{slug}','showBySlug');
         
