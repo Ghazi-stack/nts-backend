@@ -59,7 +59,9 @@ class ProductResource extends JsonResource
             'showCondition' => $this->show_condition,
             'sortOrder' => $this->sort_order,
             'searchKeywords' => $this->search_keywords,
-            'customFields' => $this->custom_fields,
+            'customFields' => collect($this->custom_fields ?? [])->mapWithKeys(function ($value, $key) {
+                return [trim($key, "\"") => is_string($value) ? trim($value, "\"") : $value];
+            }),
             'storeId' => $this->store_id,
             'createdAt' => $this->created_at,
             'updatedAt' => $this->updated_at,

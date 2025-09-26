@@ -18,6 +18,7 @@ use App\Imports\ProductImport;
 use App\Models\ProductContent;
 use App\Models\ProductIdentifier;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
@@ -112,29 +113,69 @@ class ProductController extends Controller
         }
     }
 
-    public function showProduct($slug)
+    public function showProduct($slug, Request $request)
     {
         try {
+            $storeId = current_store_id();
+        
+            // Logging for debugging
+            Log::info('🔍 Slug requested: ' . $slug);
+            Log::info('🏬 Store ID: ' . $storeId);
+        
+            // Main query
             $product = Product::with([
                 'brand',
-                'categories.parent.parent.parent.parent', // support 5-level
+                'categories.parent.parent.parent.parent',
                 'images',
                 'content',
                 'identifiers',
                 'seo'
-            ])->where('slug', $slug)->firstOrFail();
-
-            $product->increment('views');
-
+            ])
+            ->where('slug', $slug)
+            ->where('store_id', $storeId)
+            ->first();
+            
+            // Fallback using LIKE if exact match fails
+            if (!$product) {
+                Log::warning("⚠️ Exact slug match failed, trying LIKE fallback...");
+                $product = Product::with([
+                    'brand',
+                    'categories.parent.parent.parent.parent',
+                    'images',
+                    'content',
+                    'identifiers',
+                    'seo'
+                ])
+                ->where('slug', 'like', "%$slug%")
+                ->where('store_id', $storeId)
+                ->first();
+            }
+        
+            // Still not found? Return 404
+            if (!$product) {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Product not found.',
+                    'slug' => $slug,
+                    'store_id' => $storeId
+                ], 404);
+            }
+        
+            // Return product
             return response()->json([
                 'status' => true,
                 'message' => 'Product Retrieved',
                 'data' => new ProductResource($product)
             ]);
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Product not found.'], 404);
+        
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Failed to retrieve product.'], 500);
+            Log::error('❌ Exception in showProduct(): ' . $e->getMessage());
+        
+            return response()->json([
+                'status' => false,
+                'error' => 'Failed to retrieve product.',
+                'debug' => $e->getMessage()
+            ], 500);
         }
     }
 
