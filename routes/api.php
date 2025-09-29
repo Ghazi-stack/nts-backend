@@ -202,6 +202,7 @@ Route::prefix('web')->group(function () {
         Route::get('/get-categories', 'index');
         Route::get('/categories/{id}', 'show');
         Route::get('/categories/slug/{slug}','showBySlug');
+        Route::get('/category-filter', 'filter');
         
     });    // Public banner
     Route::prefix('banners')->controller(BrandController::class)->group(function () {

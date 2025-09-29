@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\api\Admin;
 
+use App\Models\Product;
 use App\Models\Category;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ProductResource;
 use App\Http\Resources\CategoryResource;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
@@ -384,4 +386,86 @@ class CategoryController extends Controller
             'notFoundIds' => $notFound,
         ]);
     }
+
+    public function filter(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+        
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Missing store-id in headers.',
+                ], 400);
+            }
+        
+            $query = Product::query()
+                ->where('store_id', $storeId)
+                ->with(['brand', 'categories', 'images', 'content', 'seo']);
+        
+            // ✅ Filters
+            if ($request->filled('categoryId')) {
+                $query->where('category_id', $request->categoryId);
+            }
+        
+            if ($request->filled('brandId')) {
+                $query->where('brand_id', $request->brandId);
+            }
+        
+            if ($request->filled('minPrice')) {
+                $query->where('price', '>=', $request->minPrice);
+            }
+        
+            if ($request->filled('maxPrice')) {
+                $query->where('price', '<=', $request->maxPrice);
+            }
+        
+            // ✅ Sorting
+            if ($request->filled('sortBy')) {
+                switch ($request->sortBy) {
+                    case 'priceLowToHigh':
+                        $query->orderBy('price', 'asc');
+                        break;
+                    case 'priceHighToLow':
+                        $query->orderBy('price', 'desc');
+                        break;
+                    case 'latest':
+                        $query->orderBy('created_at', 'desc');
+                        break;
+                    case 'bestSelling':
+                        $query->orderBy('sold_count', 'desc');
+                        break;
+                    default:
+                        $query->orderBy('id', 'desc');
+                }
+            } else {
+                $query->orderBy('id', 'desc');
+            }
+        
+            // ✅ Pagination
+            $page = (int) $request->input('page', 1);
+            $pageSize = (int) $request->input('pageSize', 12);
+            $products = $query->paginate($pageSize, ['*'], 'page', $page);
+        
+            // ✅ Clean response with ProductResource + Pagination Meta
+            return response()->json([
+                'status' => true,
+                'message' => 'Filtered products retrieved successfully',
+                'data' => ProductResource::collection($products),
+                'pagination' => [
+                    'total' => $products->total(),
+                    'page' => $products->currentPage(),
+                    'pageSize' => $products->perPage(),
+                    'lastPage' => $products->lastPage()
+                ]
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
 }
