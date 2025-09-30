@@ -215,6 +215,8 @@ class OrderController extends Controller
                     'quantity'   => $item->quantity,
                     'price'      => $item->product->price,
                 ]);
+                $product = $item->product;
+                $product->increment('sold_count', $item->quantity);
             }
 
             // Clear cart
@@ -643,6 +645,7 @@ class OrderController extends Controller
                         'customer_id' => $customer->id,
                         'store_id'    => $storeId,
                     ]);
+
                 }
             }
 
@@ -700,6 +703,7 @@ class OrderController extends Controller
                 ]);
 
                 $total += $lineTotal;
+                $product->increment('sold_count', $qty);
             }
 
             // Step 5: Finalize order total

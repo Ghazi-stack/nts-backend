@@ -433,7 +433,8 @@ class CategoryController extends Controller
                         $query->orderBy('created_at', 'desc');
                         break;
                     case 'bestSelling':
-                        $query->orderBy('sold_count', 'desc');
+                        $query->where('sold_count','>',0)
+                            ->orderBy('sold_count','desc');
                         break;
                     default:
                         $query->orderBy('id', 'desc');
