@@ -404,8 +404,15 @@ class CategoryController extends Controller
                 ->with(['brand', 'categories', 'images', 'content', 'seo']);
         
             // ✅ Filters
-            if ($request->filled('categoryId')) {
-                $query->where('category_id', $request->categoryId);
+            // if ($request->filled('categoryId')) {
+            //     $query->where('category_id', $request->categoryId);
+            // }
+
+            if ($request->filled('categoryIds')) {
+                $categoryIds = explode(',', $request->categoryIds); // support multiple IDs
+                $query->whereHas('categories', function ($q) use ($categoryIds) {
+                    $q->whereIn('categories.id', $categoryIds);
+                });
             }
         
             if ($request->filled('brandId')) {
