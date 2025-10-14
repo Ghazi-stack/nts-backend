@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Models\Cart;
 use App\Models\User;
+use App\Models\Customer;
 use Illuminate\Http\Request;
 use App\Mail\UserRegistrationMail;
 use Illuminate\Support\Facades\DB;
@@ -22,61 +23,99 @@ class AuthController extends Controller
 {
     public function register(Request $request)
     {
-          try {
-                $validator = Validator::make($request->all(), [
-                    'name'         => 'required|string|max:100',
-                    'email'        => 'required|email|unique:users',
-                    'password'     => 'required|min:6',
-                    'phoneNumber'  => 'required|string|max:20|unique:users,phone_number',
-                    'storeName'    => 'required|string|max:255',
-                    'businessSize' => 'required|string',
-                    'region'        => 'required|string',
-                    'userRole'     => 'nullable|in:1,2'
-                ]);
-            
-                if ($validator->fails()) {
-                    return response()->json([
-                        'status' => false,
-                        'message' => 'Validation errors',
-                        'errors' => $validator->errors()
-                    ], 422);
-                }
-            
-                $user = User::create([
-                    'name'         => $request->name,
-                    'email'        => $request->email,
-                    'password'     => bcrypt($request->password),
-                    'phone_number' => $request->phoneNumber, // Ensure phone_number is stored correctly
-                    'userRole'         => $request->input('userRole', 2), // Default to customer
-                    'store_name'     => $request->storeName,
-                    'business_size'  => $request->businessSize,
-                    'region'         => $request->region,
+        try {
+            $validator = Validator::make($request->all(), [
+                'firstName'            => 'nullable|string|max:100',
+                'lastName'             => 'nullable|string|max:100',
+                'email'                => 'nullable|email|unique:users,email',
+                'phoneNumber' => 'nullable|string|max:20|unique:customers,phone',
+                'password'             => 'nullable|string|min:6|confirmed',
+                'companyName'          => 'nullable|string|max:255',
+                'addressLine1'         => 'nullable|string|max:255',
+                'addressLine2'         => 'nullable|string|max:255',
+                'suburb'               => 'nullable|string|max:255',
+                'country'              => 'nullable|string|max:100',
+                'state'                => 'nullable|string|max:100',
+                'zip'                  => 'nullable|string|max:20',
+                'storeName'            => 'nullable|string|max:255',
+                'businessSize'         => 'nullable|string|max:100',
+                'region'               => 'nullable|string|max:100',
+                'userRole'             => 'nullable|in:1,2'
+            ]);
 
-                ]);
-            
-                try {
-                    Mail::to($user->email)->send(new UserRegistrationMail($user));
-                } catch (Exception $mailException) {
-                    Log::error('Mail sending failed: ' . $mailException->getMessage());
-                }
-            
-                return response()->json([
-                    'status' => true,
-                    'message' => 'User registered successfully',
-                    'user' => [
-                        UserResource::make($user)
-                    ],
-                ], 201);
-            
-            } catch (Exception $e) {
-                Log::error('Registration failed: ' . $e->getMessage());
-            
+            if ($validator->fails()) {
                 return response()->json([
                     'status' => false,
-                    'message' => 'Something went wrong during registration. Please try again.',
-                ], 500);
+                    'message' => 'Validation errors',
+                    'errors' => $validator->errors()
+                ], 422);
             }
+
+            DB::beginTransaction();
+
+            // ✅ Step 1: Create User
+            $user = User::create([
+                'name'         => $request->firstName . ' ' . $request->lastName,
+                'email'        => $request->email,
+                'password'     => bcrypt($request->password),
+                'userRole'     => $request->input('userRole', 2), // default: customer
+                'store_name'   => $request->storeName,
+                'business_size'=> $request->businessSize,
+                'region'       => $request->region,
+                'store_id'     => current_store_id(), // Assuming a function to get current store
+            ]);
+
+            $storeId = current_store_id(); 
+
+            $customer = Customer::create([
+                'store_id'        => $storeId,
+                'first_name'      => $request->firstName,
+                'last_name'       => $request->lastName,
+                'email'           => $request->email,
+                'phone'           => $request->phoneNumber,
+                'company_name'    => $request->companyName,
+                'address'         => $request->addressLine1,
+                'address_line_2'  => $request->addressLine2,
+                'city'            => $request->suburb,
+                'country'         => $request->country,
+                'state'           => $request->state,
+                'zip'             => $request->zip,
+                'store_credit'    => 0,
+                'receive_review_emails' => false,
+                'force_password_reset'  => false,
+            ]);
+
+            // ✅ Step 3: Link user and customer
+            $user->customer_id = $customer->id;
+            $user->save();
+
+            DB::commit();
+
+            // ✅ Step 4: Send registration email
+            try {
+                Mail::to($user->email)->send(new UserRegistrationMail($user));
+            } catch (Exception $mailException) {
+                \Log::error('Mail sending failed: ' . $mailException->getMessage());
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'User and Customer registered successfully',
+                'user' => new UserResource($user),
+                'customer' => new CustomerResource($customer)
+            ], 201);
+
+        } catch (Exception $e) {
+            DB::rollBack();
+            \Log::error('Registration failed: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong during registration. Please try again.',
+                'error' => $e->getMessage()
+            ], 500);
         }
+    }
 
     // public function login(Request $request)
     // {
