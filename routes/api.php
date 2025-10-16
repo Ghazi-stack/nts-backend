@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\api\Admin\{
     BannerController, BrandController, CategoryController,
     ProductController, ProductFilterController, HomeController,
-    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,PromotionController,OrderTrackingImportController
+    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,PromotionController,OrderTrackingImportController,WebPageController
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
@@ -71,6 +71,15 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/timeline/{id}', 'getOrderTimeline');
         Route::get('/send-payment-invoice/{id}', 'sendPaymentInvoice');
 
+    });
+
+    // Web Pages
+    Route::prefix('webpages')->controller(WebPageController::class)->group(function(){
+        Route::get('/web-pages','index');
+        Route::get('/single-page/{id}','show');
+        Route::post('/create-page','store');
+        Route::put('update/{id}','update');
+        Route::delete('/delete/{ids}','destroy');
     });
 
     Route::prefix('orders-tracking')->controller(OrderTrackingImportController::class)->group(function () {
