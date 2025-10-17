@@ -222,7 +222,10 @@ Route::prefix('web')->group(function () {
         Route::get('/brands/{id}','showBrands');
     });
     // 🏷️ Public Brands
-    
+    Route::prefix('webpages')->controller(WebPageController::class)->group(function(){
+        Route::get('/web-pages','index');
+        Route::get('/single-page/{id}','show');
+    });
 
     Route::prefix('products')->controller(ProductController::class)->group(function () {
         Route::get('/products', 'index');
