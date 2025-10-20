@@ -1,0 +1,32 @@
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class BlogPostResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'storeId' => $this->store_id,
+            'title' => $this->title,
+            'body' => $this->body,
+            'author' => $this->author,
+            'tags' => $this->tags,
+            'thumbnailImage' => $this->thumbnail_image,
+            'thumbnailUrl' => $this->thumbnail_url, 
+            'postUrl' => $this->post_url,
+            'metaDescription' => $this->meta_description,
+            'createdAt' => $this->created_at,
+            'updatedAt' => $this->updated_at,
+        ];
+    }
+}

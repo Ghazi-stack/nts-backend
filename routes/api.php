@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\api\Admin\{
     BannerController, BrandController, CategoryController,
     ProductController, ProductFilterController, HomeController,
-    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,PromotionController,OrderTrackingImportController,WebPageController
+    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,PromotionController,OrderTrackingImportController,WebPageController,BlogPostController
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
@@ -193,7 +193,19 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/update-banner/{id}', 'updateBanner');
         Route::delete('/delete-banner/{id}', 'destroyBanner');
     });
+
+    // 📝 Blog Posts
+    Route::prefix('blogs')->controller(BlogPostController::class)->group(function () {
+        Route::get('/get-blog', [BlogPostController::class, 'index']);
+        Route::get('/get-blogSingle/{id}', [BlogPostController::class, 'show']);
+        Route::post('/add-blog', [BlogPostController::class, 'store']);
+        Route::post('/update-blog/{id}', [BlogPostController::class, 'update']); // or PUT
+        Route::delete('/delete-blog/{ids}', [BlogPostController::class, 'destroy']);
+    });
 });
+
+
+
 
 
 // ===============================
@@ -202,9 +214,15 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
 
 // 🔓 Public Routes (accessible without login)
+
 Route::prefix('web')->group(function () {
     Route::prefix('shipments')->controller(ShipmentController::class)->group(function () {
         Route::get('/', 'index');      // View only their orders' shipments
+    });
+
+    Route::prefix('blogs')->controller(BlogPostController::class)->group(function () {
+        Route::get('/blog-posts', [BlogPostController::class, 'index']);
+        Route::get('/blog-posts/{id}', [BlogPostController::class, 'show']);
     });
 
     Route::prefix('categories')->controller(CategoryController::class)->group(function () {
