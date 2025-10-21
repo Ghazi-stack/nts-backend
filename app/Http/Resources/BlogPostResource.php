@@ -22,7 +22,7 @@ class BlogPostResource extends JsonResource
             'author' => $this->author,
             'tags' => $this->tags,
             'thumbnailImage' => $this->thumbnail_image,
-            'thumbnailUrl' => $this->thumbnail_url, 
+            'thumbnail' => $this->thumbnail_url, 
             'postUrl' => $this->post_url,
             'metaDescription' => $this->meta_description,
             'createdAt' => $this->created_at,

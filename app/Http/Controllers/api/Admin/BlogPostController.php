@@ -164,13 +164,13 @@ class BlogPostController extends Controller
             ]);
         
             $validated = $request->validate([
-                'title' => 'nullable|string|max:255',
-                'body' => 'nullable|string',
-                'author' => 'nullable|string|max:255',
-                'tags' => 'nullable|string|max:255',
-                'thumbnail' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
+                'title' => 'nullable',
+                'body' => 'nullable',
+                'author' => 'nullable',
+                'tags' => 'nullable',
+                'thumbnail' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp',
                 'post_url' => 'nullable|string|max:255|unique:blog_posts,post_url,' . $id,
-                'meta_description' => 'nullable|string|max:1000',
+                'meta_description' => 'nullable',
             ]);
         
             // ✅ Handle new thumbnail upload
