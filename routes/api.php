@@ -201,6 +201,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/add-blog', [BlogPostController::class, 'store']);
         Route::post('/update-blog/{id}', [BlogPostController::class, 'update']); // or PUT
         Route::delete('/delete-blog/{ids}', [BlogPostController::class, 'destroy']);
+        Route::get('/draft-blogs', [BlogPostController::class, 'drafts']);
     });
 });
 

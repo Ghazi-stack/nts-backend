@@ -18,10 +18,12 @@ class BlogPost extends Model
         'thumbnail_image',
         'post_url',
         'meta_description',
+        'is_draft',
     ];
 
     protected $casts = [
-        'tags' => 'array', 
+        'tags' => 'array',
+        'is_draft' => 'boolean',
     ];
     protected $appends = ['thumbnail_url'];
     public function getThumbnailUrlAttribute()

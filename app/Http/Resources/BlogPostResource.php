@@ -27,6 +27,7 @@ class BlogPostResource extends JsonResource
             'metaDescription' => $this->meta_description,
             'createdAt' => $this->created_at,
             'updatedAt' => $this->updated_at,
+            'isDraft' => $this->is_draft,
         ];
     }
 }

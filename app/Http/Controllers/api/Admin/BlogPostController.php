@@ -14,7 +14,7 @@ class BlogPostController extends Controller
     /**
      * Display a paginated list of blog posts for the current store.
      */
-    public function index(Request $request)
+   public function index(Request $request)
     {
         try {
             $storeId = current_store_id();
@@ -27,16 +27,17 @@ class BlogPostController extends Controller
             }
 
             $posts = BlogPost::where('store_id', $storeId)
+                ->where('is_draft', false) // Only published
                 ->orderBy('id', 'desc')
                 ->paginate($request->get('perPage', 20));
 
             return response()->json([
                 'status' => true,
-                'message' => 'Blog posts retrieved successfully',
+                'message' => 'Published blog posts retrieved successfully',
                 'data' => BlogPostResource::collection($posts),
             ]);
         } catch (Exception $e) {
-            Log::error('Error fetching blog posts: ' . $e->getMessage());
+            Log::error('Error fetching published blog posts: ' . $e->getMessage());
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to retrieve posts',
@@ -96,6 +97,7 @@ class BlogPostController extends Controller
             $request->merge([
                 'post_url' => $request->postUrl,
                 'meta_description' => $request->metaDescription,
+                'is_draft' => $request->isDraft, // 👈 new field
             ]);
 
             $validated = $request->validate([
@@ -106,6 +108,7 @@ class BlogPostController extends Controller
                 'thumbnail' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048', // frontend sends "thumbnail"
                 'post_url' => 'nullable|string|max:255|unique:blog_posts,post_url',
                 'meta_description' => 'nullable|string|max:1000',
+                'is_draft' => 'nullable|boolean', // ✅ added
             ]);
 
             // ✅ Upload thumbnail if exists
@@ -126,6 +129,8 @@ class BlogPostController extends Controller
                 'thumbnail_image' => $thumbnailName,
                 'post_url' => $validated['post_url'] ?? null,
                 'meta_description' => $validated['meta_description'] ?? null,
+                'is_draft' => $validated['is_draft'] ?? false,
+                
             ]);
 
             return response()->json([
@@ -161,6 +166,7 @@ class BlogPostController extends Controller
             $request->merge([
                 'post_url' => $request->postUrl,
                 'meta_description' => $request->metaDescription,
+                'is_draft' => $request->isDraft, 
             ]);
         
             $validated = $request->validate([
@@ -171,6 +177,7 @@ class BlogPostController extends Controller
                 'thumbnail' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp',
                 'post_url' => 'nullable|string|max:255|unique:blog_posts,post_url,' . $id,
                 'meta_description' => 'nullable',
+                'is_draft' => 'nullable|boolean', // ✅ added
             ]);
         
             // ✅ Handle new thumbnail upload
@@ -194,11 +201,12 @@ class BlogPostController extends Controller
                 'thumbnail_image' => $validated['thumbnail_image'] ?? $post->thumbnail_image,
                 'post_url' => $validated['post_url'] ?? $post->post_url,
                 'meta_description' => $validated['meta_description'] ?? $post->meta_description,
+                'is_draft' => $validated['is_draft'] ?? $post->is_draft,
             ]);
         
             return response()->json([
                 'status' => true,
-                'message' => 'Blog post updated successfully',
+                'message' => $post->is_draft ? 'Blog draft updated successfully' : 'Blog post updated successfully',
                 'data' => new BlogPostResource($post),
             ]);
         
@@ -212,6 +220,37 @@ class BlogPostController extends Controller
         }
     }
 
+    public function drafts(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+        
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+        
+            $drafts = BlogPost::where('store_id', $storeId)
+                ->where('is_draft', true) // Only drafts
+                ->orderBy('id', 'desc')
+                ->paginate($request->get('perPage', 20));
+        
+            return response()->json([
+                'status' => true,
+                'message' => 'Draft posts retrieved successfully',
+                'data' => BlogPostResource::collection($drafts),
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error fetching draft posts: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve drafts',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
 
     /**
