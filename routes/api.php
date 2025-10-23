@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\api\Admin\{
     BannerController, BrandController, CategoryController,
     ProductController, ProductFilterController, HomeController,
-    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,PromotionController,OrderTrackingImportController,WebPageController,BlogPostController
+    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,PromotionController,OrderTrackingImportController,WebPageController,BlogPostController,CarouselController,LogoController
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
@@ -203,6 +203,22 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::delete('/delete-blog/{ids}', [BlogPostController::class, 'destroy']);
         Route::get('/draft-blogs', [BlogPostController::class, 'drafts']);
     });
+
+
+    Route::prefix('carousels')->controller(CarouselController::class)->group(function () {
+        Route::get('/get-crousel', 'index');
+        Route::get('/get-single/{id}', 'show');             // Get all carousels
+        Route::post('/add-crousel', 'store');
+        Route::post('/update-carousel/{id}', 'update');         //    // Update carousel
+        Route::delete('/delete-carousel/{id}', 'destroy'); // Delete carousel       // Add new carousel
+    // You can add update/delete routes if needed
+    });
+
+// Logo Routes
+    Route::prefix('logos')->controller(LogoController::class)->group(function () {
+        Route::get('/get-logos', 'show');            // Get current logo
+        Route::post('/add-or-update', 'store'); // Add or update logo
+    });
 });
 
 
@@ -282,6 +298,11 @@ Route::prefix('web')->group(function () {
     Route::prefix('reviews')->controller(ReviewController::class)->group(function () {
         Route::get('/product/{productId}', 'index'); // ✅ public
         Route::middleware('auth:sanctum')->post('/add', 'store'); // 🔐 secure
+    });
+
+    Route::prefix('carousels')->controller(CarouselController::class)->group(function () {
+        Route::get('/get-crousel', 'index');
+        Route::get('/get-single/{id}', 'show');   
     });
 
     // 💳 Stripe

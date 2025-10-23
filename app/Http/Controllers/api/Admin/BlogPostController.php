@@ -14,11 +14,10 @@ class BlogPostController extends Controller
     /**
      * Display a paginated list of blog posts for the current store.
      */
-   public function index(Request $request)
+    public function index(Request $request)
     {
         try {
             $storeId = current_store_id();
-
             if (!$storeId) {
                 return response()->json([
                     'status' => false,
@@ -26,16 +25,33 @@ class BlogPostController extends Controller
                 ], 400);
             }
 
-            $posts = BlogPost::where('store_id', $storeId)
-                ->where('is_draft', false) // Only published
-                ->orderBy('id', 'desc')
-                ->paginate($request->get('perPage', 20));
+            $perPage = (int) $request->query('perPage', 20);
+            $page = (int) $request->query('page', 1);
+
+            $query = BlogPost::where('store_id', $storeId)
+                ->where('is_draft', false)
+                ->orderBy('id', 'desc');
+
+            // Optional: search/filter by keyword
+            if ($keyword = $request->query('keyword')) {
+                $query->where('title', 'like', "%{$keyword}%");
+            }
+
+            $posts = $query->paginate($perPage, ['*'], 'page', $page);
 
             return response()->json([
                 'status' => true,
                 'message' => 'Published blog posts retrieved successfully',
                 'data' => BlogPostResource::collection($posts),
+                'pagination' => [
+                    'total' => $posts->total(),
+                    'count' => $posts->count(),
+                    'perPage' => $posts->perPage(),
+                    'currentPage' => $posts->currentPage(),
+                    'totalPages' => $posts->lastPage(),
+                ]
             ]);
+
         } catch (Exception $e) {
             Log::error('Error fetching published blog posts: ' . $e->getMessage());
             return response()->json([
@@ -224,24 +240,35 @@ class BlogPostController extends Controller
     {
         try {
             $storeId = current_store_id();
-        
             if (!$storeId) {
                 return response()->json([
                     'status' => false,
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
-        
-            $drafts = BlogPost::where('store_id', $storeId)
-                ->where('is_draft', true) // Only drafts
-                ->orderBy('id', 'desc')
-                ->paginate($request->get('perPage', 20));
-        
+
+            $perPage = (int) $request->query('perPage', 20);
+            $page = (int) $request->query('page', 1);
+
+            $query = BlogPost::where('store_id', $storeId)
+                             ->where('is_draft', true)
+                             ->orderBy('id', 'desc');
+
+            $drafts = $query->paginate($perPage, ['*'], 'page', $page);
+
             return response()->json([
                 'status' => true,
                 'message' => 'Draft posts retrieved successfully',
                 'data' => BlogPostResource::collection($drafts),
+                'pagination' => [
+                    'total' => $drafts->total(),
+                    'count' => $drafts->count(),
+                    'perPage' => $drafts->perPage(),
+                    'currentPage' => $drafts->currentPage(),
+                    'totalPages' => $drafts->lastPage(),
+                ]
             ]);
+
         } catch (Exception $e) {
             Log::error('Error fetching draft posts: ' . $e->getMessage());
             return response()->json([

@@ -23,14 +23,32 @@ class WebPageController extends Controller
                 ], 400);
             }
 
-            $pages = WebPage::where('store_id', $storeId)
-                ->orderBy('id', 'desc')
-                ->paginate($request->get('perPage', 20));
+            $perPage = (int) $request->query('perPage', 20);
+            $page = (int) $request->query('page', 1);
+
+            // Optional keyword search
+            $keyword = trim((string) $request->query('keyword', ''));
+
+            $query = WebPage::where('store_id', $storeId)
+                            ->orderBy('id', 'desc');
+
+            if ($keyword !== '') {
+                $query->where('page_name', 'like', "%{$keyword}%");
+            }
+
+            $pages = $query->paginate($perPage, ['*'], 'page', $page);
 
             return response()->json([
                 'status' => true,
                 'message' => 'Web pages retrieved successfully',
                 'data' => WebPageResource::collection($pages),
+                'pagination' => [
+                    'total' => $pages->total(),
+                    'count' => $pages->count(),
+                    'perPage' => $pages->perPage(),
+                    'currentPage' => $pages->currentPage(),
+                    'totalPages' => $pages->lastPage(),
+                ]
             ]);
         } catch (Exception $e) {
             Log::error('Error fetching web pages: ' . $e->getMessage());
