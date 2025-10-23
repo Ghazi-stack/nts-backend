@@ -16,13 +16,14 @@ class CarouselResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'altText' => $this->alt_text,
             'heading' => $this->heading,
-            'buttonText' => $this->button_text,
             'text' => $this->text,
+            'buttonText' => $this->button_text,
             'link' => $this->link,
-            'imageUrl' => $this->image_url, // Full URL returned
+            'altText' => $this->alt_text,
+            'image' => $this->image_url,
             'order' => $this->order,
         ];
+
     }
 }
