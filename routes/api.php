@@ -214,10 +214,12 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     // You can add update/delete routes if needed
     });
 
-// Logo Routes
-    Route::prefix('logos')->controller(LogoController::class)->group(function () {
-        Route::get('/get-logos', 'show');            // Get current logo
-        Route::post('/add-or-update', 'store'); // Add or update logo
+    Route::prefix('logos')->controller(LogoController::class)->group(function(){
+        Route::get('/get-logos','index');          // Paginated list
+        Route::get('/get-logo/{id}','showById');   // Get single logo by ID
+        Route::post('/add-logo','store');            // Create new logo
+        Route::post('/update-logo/{id}','update');      // Update existing logo
+        Route::delete('/delete-logo/{ids}','destroy');  // Delete one or multiple logos
     });
 });
 
@@ -303,6 +305,11 @@ Route::prefix('web')->group(function () {
     Route::prefix('carousels')->controller(CarouselController::class)->group(function () {
         Route::get('/get-crousel', 'index');
         Route::get('/get-single/{id}', 'show');   
+    });
+
+    Route::prefix('logos')->controller(LogoController::class)->group(function(){
+        Route::get('/get-logos','index');          // Paginated list
+        Route::get('/get-logo/{id}','showById');   // Get single logo by ID
     });
 
     // 💳 Stripe

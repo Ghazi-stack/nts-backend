@@ -10,11 +10,16 @@ class Logo extends Model
     use HasFactory;
     protected $fillable = [
         'store_id',
-        'logo_type',
         'logo_text',
+        'logo_type',
         'logo_url',
         'favicon_url',
         'logo_size',
+        'dimensions',
+    ];
+
+    protected $casts = [
+        'dimensions' => 'array', // width & height object
     ];
 
     public function store()
