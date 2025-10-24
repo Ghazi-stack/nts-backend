@@ -82,62 +82,91 @@ class LogoController extends Controller
     {
         try {
             $storeId = current_store_id();
-            if (!$storeId) return response()->json(['status'=>false,'message'=>'Store not selected'],400);
-
+            if (!$storeId) {
+                return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
+            }
+        
             $validated = $request->validate([
-                'logoText'=>'nullable|string',
-                'logoType'=>'nullable|string',
-                'logoSize'=>'nullable|string',
-                'image'=>'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
-                'favicon'=>'nullable|image|mimes:ico,png|max:1024',
-                'dimensions'=>'nullable|array',
-                'dimensions.width'=>'required_with:dimensions|integer',
-                'dimensions.height'=>'required_with:dimensions|integer',
+                'logoText' => 'nullable|string',
+                'logoType' => 'nullable|string',
+                'logoSize' => 'nullable|string',
+                'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
+                'favicon' => 'nullable|image|mimes:ico,png|max:1024',
+                'dimensions' => 'nullable|array',
+                'dimensions.width' => 'nullable|integer',
+                'dimensions.height' => 'nullable|integer',
             ]);
-
-            // Handle logo image
-            $logoUrl = null;
+        
+            // Check if logo already exists for this store
+            $logo = Logo::where('store_id', $storeId)->first();
+        
+            // Handle image upload
             if ($request->hasFile('image')) {
+                // delete old image if exists
+                if ($logo && $logo->logo_url) {
+                    $old = public_path('logos/' . basename($logo->logo_url));
+                    if (file_exists($old)) unlink($old);
+                }
+            
                 $file = $request->file('image');
-                $imageName = time().'_'.uniqid().'.'.$file->getClientOriginalExtension();
-                $file->move(public_path('logos'), $imageName);
-                $logoUrl = url('logos/'.$imageName);
+                $name = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $file->move(public_path('logos'), $name);
+                $logoUrl = url('logos/' . $name);
+            } else {
+                $logoUrl = $logo->logo_url ?? null;
             }
-
-            // Handle favicon
-            $faviconUrl = null;
+        
+            // Handle favicon upload
             if ($request->hasFile('favicon')) {
+                if ($logo && $logo->favicon_url) {
+                    $old = public_path('logos/' . basename($logo->favicon_url));
+                    if (file_exists($old)) unlink($old);
+                }
+            
                 $file = $request->file('favicon');
-                $favName = time().'_'.uniqid().'.'.$file->getClientOriginalExtension();
-                $file->move(public_path('logos'), $favName);
-                $faviconUrl = url('logos/'.$favName);
+                $name = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $file->move(public_path('logos'), $name);
+                $faviconUrl = url('logos/' . $name);
+            } else {
+                $faviconUrl = $logo->favicon_url ?? null;
             }
-
-            $logo = Logo::create([
-                'store_id'=>$storeId,
-                'logo_text'=>$validated['logoText']??null,
-                'logo_type'=>$validated['logoType']??null,
-                'logo_size'=>$validated['logoSize']??null,
-                'logo_url'=>$logoUrl,
-                'favicon_url'=>$faviconUrl,
-                'dimensions'=>$validated['dimensions']??null,
+        
+            // Prepare data
+            $data = [
+                'store_id' => $storeId,
+                'logo_text' => $validated['logoText'] ?? $logo->logo_text ?? null,
+                'logo_type' => $validated['logoType'] ?? $logo->logo_type ?? null,
+                'logo_size' => $validated['logoSize'] ?? $logo->logo_size ?? null,
+                'logo_url' => $logoUrl,
+                'favicon_url' => $faviconUrl,
+                'dimensions' => $validated['dimensions'] ?? $logo->dimensions ?? null,
+            ];
+        
+            // If logo exists -> update, else -> create new
+            if ($logo) {
+                $logo->update($data);
+                $message = 'Logo updated successfully';
+            } else {
+                $logo = Logo::create($data);
+                $message = 'Logo created successfully';
+            }
+        
+            return response()->json([
+                'status' => true,
+                'message' => $message,
+                'data' => new LogoResource($logo)
             ]);
-
-            return response()->json([
-                'status'=>true,
-                'message'=>'Logo created successfully',
-                'data'=>new LogoResource($logo)
-            ],201);
-
+        
         } catch (Exception $e) {
-            Log::error('Error creating logo: '.$e->getMessage());
+            Log::error('Error saving logo: ' . $e->getMessage());
             return response()->json([
-                'status'=>false,
-                'message'=>'Failed to create logo',
-                'error'=>$e->getMessage()
-            ],500);
+                'status' => false,
+                'message' => 'Failed to save logo',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
+
 
     /**
      * Update existing logo with optional image/fav upload.
