@@ -154,6 +154,8 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/import-csv', 'importCSV');
         Route::get('/export-csv', 'exportCSV');
         Route::delete('/delete-product/categories/{id}', 'destroyProductCategories');
+        Route::get('/featured-products', 'featuredProducts');
+
     });
 
     // EMAIL Marketing
@@ -268,6 +270,8 @@ Route::prefix('web')->group(function () {
         Route::get('/products', 'index');
         Route::get('/get-product/{slug}','showProduct');
         Route::get('/search-product','searchProduct');
+        Route::get('/featured-products', 'featuredProducts');
+        Route::get('/popular-products', 'popularProducts');
     });
     // 🛒 Cart
     Route::prefix('cart')->controller(CartController::class)->group(function () {
