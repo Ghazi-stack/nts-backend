@@ -9,6 +9,7 @@ use App\Models\Category;
 use App\Models\Condition;
 use App\Models\ProductSeo;
 use App\Models\ProductImage;
+use App\Models\ProductSearch;
 use App\Models\ProductContent;
 use App\Models\ProductAttribute;
 use App\Models\ProductIdentifier;
@@ -87,5 +88,10 @@ class Product extends Model
     {
         return $this->belongsToMany(Category::class, 'category_product', 'product_id', 'category_id')
             ->where('categories.store_id', current_store_id());
+    }
+
+    public function searchStats()
+    {
+        return $this->hasOne(ProductSearch::class, 'product_id')->where('store_id', current_store_id());
     }
 }
