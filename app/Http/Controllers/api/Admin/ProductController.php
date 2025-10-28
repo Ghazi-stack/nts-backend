@@ -1013,7 +1013,7 @@ class ProductController extends Controller
 
         $popularProducts = Product::where('store_id', $storeId)
             ->whereHas('searchStats') 
-            ->with(['categories', 'brand'])
+            ->with(['categories', 'brand','images'])
             ->withCount(['searchStats as search_count' => function($q) use ($storeId){
                 $q->where('store_id', $storeId);
             }])
