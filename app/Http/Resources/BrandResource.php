@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -17,6 +18,7 @@ class BrandResource extends JsonResource
         return [
             'id'               => $this->id,
             'name'             => $this->name,
+            'slug'             => Str::slug($this->name), // generate from name
             'productsCount' => $this->products_count ?? 0,
             'page_title'       => $this->page_title,
             'meta_keywords'    => $this->meta_keywords,

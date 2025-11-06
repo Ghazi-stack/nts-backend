@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -90,6 +91,7 @@ class ProductResource extends JsonResource
             'minPurchaseQuantity' => $this->min_purchase_quantity,
             'maxPurchaseQuantity' => $this->max_purchase_quantity,
             'relatedProductsEnabled' => $this->related_products_enabled,
+            'schema' => $this->formatSchema() 
         ];
     }
 
@@ -106,4 +108,124 @@ class ProductResource extends JsonResource
 
         return array_reverse($data);
     }
+
+    private function formatSchema(): array
+{
+    // Reviews
+    $reviews = $this->reviews->map(function ($review) {
+        return [
+            "@type" => "Review",
+            "author" => [
+                "@type" => "Person",
+                "name" => $review->user->name ?? 'Anonymous'
+            ],
+            "datePublished" => $review->created_at->format('M d, Y'),
+            "reviewBody" => $review->comment ?? '',
+            "name" => substr($review->comment ?? '', 0, 50) . '...',
+            "reviewRating" => [
+                "@type" => "Rating",
+                "bestRating" => "5",
+                "ratingValue" => $review->rating,
+                "worstRating" => "1"
+            ]
+        ];
+    });
+
+    // Images
+    $images = $this->images->map(fn($img) => url($img->path))->toArray();
+    $primaryImage = $this->images->where('is_primary', 1)->first()?->path ? url($this->images->where('is_primary', 1)->first()->path) : ($images[0] ?? '');
+
+    // Ratings
+    $averageRating = round($this->reviews->avg('rating') ?? 0, 1);
+    $reviewCount = $this->reviews->count();
+
+    return [
+        "@context" => "https://schema.org/",
+        "@type" => "Product",
+        "name" => $this->name,
+        "sku" => $this->sku,
+        "mpn" => $this->identifiers->mpn ?? $this->sku,
+        "url" => url("/web/products/get-product/{$this->slug}"),
+        "brand" => [
+            "@type" => "Brand",
+            "name" => $this->brand->name ?? '',
+            "url" => url("/web/brands/brand/" . Str::slug($this->brand->name ?? ''))
+        ],
+
+        "description" => $this->content->description ?? '',
+        "image" => $primaryImage,
+        "additionalImage" => $images,
+        "aggregateRating" => [
+            "@type" => "AggregateRating",
+            "ratingValue" => $averageRating,
+            "reviewCount" => $reviewCount
+        ],
+        "review" => $reviews,
+        "offers" => [
+            "@type" => "Offer",
+            "priceCurrency" => "USD",
+            "price" => $this->price,
+            "itemCondition" => "https://schema.org/NewCondition",
+            "availability" => $this->current_stock > 0 
+                              ? "https://schema.org/InStock" 
+                              : "https://schema.org/OutOfStock",
+            "url" => url("/web/products/get-product/{$this->slug}"),
+            "priceValidUntil" => now()->addYear()->format('Y-m-d'),
+            "hasMerchantReturnPolicy" => [
+                "@type" => "MerchantReturnPolicy",
+                "name" => "Return Policy",
+                "url" => "https://nts-ecommerce.vercel.app/returnPolicy",
+                "returnPolicyCategory" => "https://schema.org/MerchantReturnFiniteReturnWindow",
+                "merchantReturnDays" => 30,
+                "returnFees" => "FreeReturn",
+                "returnMethod" => "https://schema.org/ReturnByMail",
+                "applicableCountry" => "US"
+            ],
+            "shippingDetails" => [[
+                "@type" => "OfferShippingDetails",
+                "shippingDestination" => [[
+                    "@type" => "DefinedRegion",
+                    "addressCountry" => "US",
+                    "addressRegion" => [
+                        "AL","AK","AS","AZ","AR","AE","AA","AP","CA","CO","CT","DE","DC","FM",
+                        "FL","GA","GU","HI","ID","IL","IN","IA","KS","KY","LA","ME","MH","MD",
+                        "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND",
+                        "MP","OH","OK","OR","PW","PA","PR","RI","SC","SD","TN","TX","UT","VT",
+                        "VI","VA","WA","WV","WI","WY"
+                    ]
+                ]],
+                "shippingRate" => [
+                    "@type" => "MonetaryAmount",
+                    "value" => $this->price,
+                    "currency" => "USD"
+                ],
+                "deliveryTime" => [
+                    "handlingTime" => [
+                        "@type" => "QuantitativeValue",
+                        "minValue" => 1,
+                        "maxValue" => 2,
+                        "unitCode" => "DAY"
+                    ],
+                    "transitTime" => [
+                        "@type" => "QuantitativeValue",
+                        "minValue" => 3,
+                        "maxValue" => 5,
+                        "unitCode" => "DAY"
+                    ]
+                ]
+            ]]
+        ],
+        "minPurchaseQuantity" => $this->min_purchase_quantity,
+        "maxPurchaseQuantity" => $this->max_purchase_quantity,
+        "relatedProductsEnabled" => $this->related_products_enabled,
+        "hasMerchantReturnPolicy" => [
+            "@type" => "MerchantReturnPolicy",
+            "url" => "https://nts-ecommerce.vercel.app/returnPolicy",
+            "returnPolicyCategory" => "https://schema.org/MerchantReturnFiniteReturnWindow",
+            "merchantReturnDays" => 30
+        ]
+    ];
+}
+
+
 }

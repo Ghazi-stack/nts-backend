@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\User;
 use App\Models\Brand;
 use App\Models\Store;
+use App\Models\Review;
 use App\Models\Category;
 use App\Models\Condition;
 use App\Models\ProductSeo;
@@ -93,5 +94,10 @@ class Product extends Model
     public function searchStats()
     {
         return $this->hasOne(ProductSearch::class, 'product_id')->where('store_id', current_store_id());
+    }
+    public function reviews()
+    {
+        return $this->hasMany(Review::class)
+                    ->where('approved', 1); // only approved reviews
     }
 }

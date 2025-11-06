@@ -129,7 +129,8 @@ class ProductController extends Controller
                 'images',
                 'content',
                 'identifiers',
-                'seo'
+                'seo',
+                'reviews.user'
             ])
             ->where('slug', $slug)
             ->where('store_id', $storeId)
@@ -144,7 +145,8 @@ class ProductController extends Controller
                     'images',
                     'content',
                     'identifiers',
-                    'seo'
+                    'seo',
+                    'reviews.user'
                 ])
                 ->where('slug', 'like', "%$slug%")
                 ->where('store_id', $storeId)
@@ -987,7 +989,15 @@ class ProductController extends Controller
 
             $products = Product::where('store_id', $storeId)
                 ->where('is_featured', true)
-                ->with(['categories', 'brand'])
+                 ->with([
+                'categories',
+                'brand',
+                'images',
+                'reviews.user',
+                'content',
+                'identifiers',
+                'seo'
+            ])
                 ->latest()
                 ->take(10)
                 ->get();
@@ -1013,7 +1023,15 @@ class ProductController extends Controller
 
         $popularProducts = Product::where('store_id', $storeId)
             ->whereHas('searchStats') 
-            ->with(['categories', 'brand','images'])
+           ->with([
+                'categories',
+                'brand',
+                'images',
+                'reviews.user',
+                'content',
+                'identifiers',
+                'seo'
+            ])
             ->withCount(['searchStats as search_count' => function($q) use ($storeId){
                 $q->where('store_id', $storeId);
             }])
