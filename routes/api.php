@@ -317,6 +317,11 @@ Route::prefix('web')->group(function () {
     });
 
     // 💳 Stripe
-    Route::post('/stripe/create-session', [StripePaymentController::class, 'createCheckoutSession']);
-    Route::post('/stripe/webhook', [StripeWebhookController::class, 'handle']);
+    Route::post('/stripe/create-intent', [StripePaymentController::class, 'createPaymentIntent']);
+
+    // 2️⃣ (Optional) Check payment status
+    Route::get('/stripe/status/{orderId}', [StripePaymentController::class, 'checkPaymentStatus']);
+
+    // 3️⃣ Webhook for Stripe event notifications
+    Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
 });

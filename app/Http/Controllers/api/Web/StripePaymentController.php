@@ -5,65 +5,110 @@ namespace App\Http\Controllers\api\Web;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Stripe\Stripe;
-use Stripe\Checkout\Session;
+use Stripe\PaymentIntent;
+use Stripe\Webhook;
 use App\Models\Order;
 use App\Models\Payment;
 
 class StripePaymentController extends Controller
 {
-   public function createCheckoutSession(Request $request)
-{
-    try {
-        \Log::info('Stripe session creation started.');
+    /**
+     * 🧱 1️⃣ Create a PaymentIntent
+     * Frontend will call this when user proceeds to pay
+     */
+    public function createPaymentIntent(Request $request)
+    {
+        try {
+            $request->validate([
+                'orderId' => 'required|exists:orders,id',
+            ]);
 
-        $request->validate([
-            'orderId' => 'required|exists:orders,id',
-        ]);
+            $order = Order::findOrFail($request->orderId);
 
-        $order = \App\Models\Order::findOrFail($request->orderId);
-        \Log::info('Stripe Secret ENV:', ['key' => env('STRIPE_SECRET')]);
-        \Log::info('Stripe Config:', ['key' => config('services.stripe.secret')]);
+            Stripe::setApiKey(env('STRIPE_SECRET'));
 
-
-        \Stripe\Stripe::setApiKey(env('STRIPE_SECRET'));
-
-        $session = \Stripe\Checkout\Session::create([
-            'payment_method_types' => ['card'],
-            'line_items' => [[
-                'price_data' => [
-                    'currency' => 'usd',
-                    'product_data' => [
-                        'name' => 'Order #' . $order->id,
-                    ],
-                    'unit_amount' => intval($order->total_amount * 100),
+            // Create PaymentIntent in Stripe
+            $intent = PaymentIntent::create([
+                'amount' => intval($order->total_amount * 100), // cents
+                'currency' => 'usd',
+                'metadata' => [
+                    'order_id' => $order->id,
                 ],
-                'quantity' => 1,
-            ]],
-            'mode' => 'payment',
-            // 'success_url' => env('FRONTEND_URL', 'http://localhost:3000') . '/payment-success?session_id={CHECKOUT_SESSION_ID}',
-            // 'cancel_url'  => env('FRONTEND_URL', 'http://localhost:3000') . '/payment-cancelled',
-            'success_url' => 'https://example.com/success',
-            'cancel_url'  => 'https://example.com/cancel',
-        ]);
+            ]);
 
-        \App\Models\Payment::create([
-            'order_id' => $order->id,
-            'stripe_session_id' => $session->id,
-            'amount' => $order->total_amount,
-            'payment_status' => 'pending',
-        ]);
+            // Store PaymentIntent ID in local DB
+            Payment::create([
+                'order_id' => $order->id,
+                'stripe_session_id' => $intent->id,
+                'amount' => $order->total_amount,
+                'payment_status' => 'pending',
+            ]);
 
-        return response()->json(['id' => $session->id]);
-
-    } catch (\Exception $e) {
-        \Log::error('Stripe Checkout Session Error:', [
-            'message' => $e->getMessage(),
-            'line' => $e->getLine(),
-            'file' => $e->getFile(),
-        ]);
-
-        return response()->json(['error' => $e->getMessage()], 500);
+            return response()->json([
+                'clientSecret' => $intent->client_secret,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Stripe PaymentIntent error:', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
-}
 
+    /**
+     * 🧾 2️⃣ Check Payment Status (optional)
+     * Frontend can call this after payment attempt
+     */
+    public function checkPaymentStatus($orderId)
+    {
+        try {
+            $order = Order::findOrFail($orderId);
+            Stripe::setApiKey(env('STRIPE_SECRET'));
+
+            $intent = PaymentIntent::retrieve($order->stripe_payment_intent);
+
+            return response()->json([
+                'status' => $intent->status,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * 📩 3️⃣ Stripe Webhook
+     * Stripe will call this automatically after successful payment
+     */
+    public function handleWebhook(Request $request)
+    {
+        $payload = @file_get_contents('php://input');
+        $sig_header = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? null;
+        $endpoint_secret = env('STRIPE_WEBHOOK_SECRET');
+
+        try {
+            $event = Webhook::constructEvent(
+                $payload,
+                $sig_header,
+                $endpoint_secret
+            );
+        } catch (\Exception $e) {
+            \Log::error('Stripe webhook verification failed:', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+
+        // Handle successful payment
+        if ($event->type === 'payment_intent.succeeded') {
+            $intent = $event->data->object;
+            $orderId = $intent->metadata->order_id ?? null;
+
+            if ($orderId) {
+                $order = Order::find($orderId);
+                if ($order) {
+                    $order->update(['status' => 'paid']);
+                   Payment::where('stripe_session_id', $intent->id)
+                            ->update(['payment_status' => 'completed']);
+                }
+            }
+        }
+
+        return response()->json(['status' => 'success']);
+    }
 }

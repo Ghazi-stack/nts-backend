@@ -27,6 +27,7 @@ use App\Http\Resources\ProductResource;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Jobs\ProcessProductImport;
 
 class ProductController extends Controller
 {
@@ -1365,107 +1366,192 @@ class ProductController extends Controller
     //         ], 500);
     //     }
     // }
-    public function importCSV(Request $request)
-    {
-        try {
-            $request->validate([
-                'file' => 'required|file|mimes:csv,txt,xlsx,xls'
-            ]);
+    // public function importCSV(Request $request)
+    // {
+    //     try {
+    //         $request->validate([
+    //             'file' => 'required|file|mimes:csv,txt,xlsx,xls'
+    //         ]);
         
-            $storeId = current_store_id();
-            if (!$storeId) {
-                return response()->json(['error' => 'Store not selected.'], 400);
-            }
+    //         $storeId = current_store_id();
+    //         if (!$storeId) {
+    //             return response()->json(['error' => 'Store not selected.'], 400);
+    //         }
         
-            $file = $request->file('file');
-            $originalFileName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
-            $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
-            session()->put("import_file_name_{$storeId}", $originalFileName);
+    //         $file = $request->file('file');
+    //         $originalFileName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+    //         $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
+    //         session()->put("import_file_name_{$storeId}", $originalFileName);
         
-            // ✅ Updated column mapping based on your CSV structure
-            $columnMapping = [
-                'Product Name' => 'Product Name',
-                'Product Code/SKU' => 'Product Code/SKU',
-                'Brand Name' => 'Brand Name',
-                'GPS Category' => 'Category', // 👈 THIS FIXES THE CATEGORY ISSUE
+    //         // ✅ Updated column mapping based on your CSV structure
+    //         $columnMapping = [
+    //             'Product Name' => 'Product Name',
+    //             'Product Code/SKU' => 'Product Code/SKU',
+    //             'Brand Name' => 'Brand Name',
+    //             'GPS Category' => 'Category', // 👈 THIS FIXES THE CATEGORY ISSUE
             
-                // Optional pricing fields
-                'Retail Price' => 'Retail Price',
-                'Cost Price' => 'Cost Price',
-                'Sale Price' => 'Sale Price',
-                'Fixed Shipping Cost' => 'Fixed Shipping Cost',
-                'Free Shipping' => 'Free Shipping',
+    //             // Optional pricing fields
+    //             'Retail Price' => 'Retail Price',
+    //             'Cost Price' => 'Cost Price',
+    //             'Sale Price' => 'Sale Price',
+    //             'Fixed Shipping Cost' => 'Fixed Shipping Cost',
+    //             'Free Shipping' => 'Free Shipping',
             
-                // Inventory
-                'Track Inventory' => 'Track Inventory',
-                'Current Stock Level' => 'Current Stock Level',
-                'Low Stock Level' => 'Low Stock Level',
-                'Allow Purchases?' => 'Allow Purchases?',
-                'Product Visible?' => 'Product Visible?',
+    //             // Inventory
+    //             'Track Inventory' => 'Track Inventory',
+    //             'Current Stock Level' => 'Current Stock Level',
+    //             'Low Stock Level' => 'Low Stock Level',
+    //             'Allow Purchases?' => 'Allow Purchases?',
+    //             'Product Visible?' => 'Product Visible?',
             
-                // Product info
-                'Item Type' => 'Item Type',
-                'Product Type' => 'Product Type',
-                'Product Description' => 'Product Description',
-                'Product Warranty' => 'Product Warranty',
-                'Product Availability' => 'Product Availability',
-                'Option Set' => 'Option Set',
-                'Option Set Align' => 'Option Set Align',
+    //             // Product info
+    //             'Item Type' => 'Item Type',
+    //             'Product Type' => 'Product Type',
+    //             'Product Description' => 'Product Description',
+    //             'Product Warranty' => 'Product Warranty',
+    //             'Product Availability' => 'Product Availability',
+    //             'Option Set' => 'Option Set',
+    //             'Option Set Align' => 'Option Set Align',
             
-                // Dimensions
-                'Product Weight' => 'Product Weight',
-                'Product Width' => 'Product Width',
-                'Product Height' => 'Product Height',
-                'Product Depth' => 'Product Depth',
+    //             // Dimensions
+    //             'Product Weight' => 'Product Weight',
+    //             'Product Width' => 'Product Width',
+    //             'Product Height' => 'Product Height',
+    //             'Product Depth' => 'Product Depth',
             
-                // SEO
-                'Page Title' => 'Page Title',
-                'Product Url' => 'Product URL',
-                'Meta Description' => 'Meta Description',
-                'Meta Keywords' => 'Meta Keywords',
-                'Redirect Old URL?' => 'Redirect Old URL?', // You can leave this as 'Ignore' if not used
+    //             // SEO
+    //             'Page Title' => 'Page Title',
+    //             'Product Url' => 'Product URL',
+    //             'Meta Description' => 'Meta Description',
+    //             'Meta Keywords' => 'Meta Keywords',
+    //             'Redirect Old URL?' => 'Redirect Old URL?', // You can leave this as 'Ignore' if not used
             
-                // Identifiers
-                'GPS Manufacturer Part Number' => 'Manufacturer Part Number',
-                'GPS Global Trade Item Number' => 'Global Trade Item Number',
-                'Product UPC/EAN' => 'Product UPC/EAN',
-                'Bin Picking Number' => 'Bin Picking Number',
+    //             // Identifiers
+    //             'GPS Manufacturer Part Number' => 'Manufacturer Part Number',
+    //             'GPS Global Trade Item Number' => 'Global Trade Item Number',
+    //             'Product UPC/EAN' => 'Product UPC/EAN',
+    //             'Bin Picking Number' => 'Bin Picking Number',
             
-                // Advanced
-                'Product Condition' => 'Product Condition',
-                'Show Product Condition?' => 'Show Product Condition?',
-                'Sort Order' => 'Sort Order',
-                'Search Keywords' => 'Search Keywords',
-                'Stop Processing Rules' => 'Stop Processing Rules',
-                'Product Tax Class' => 'Product Tax Class',
-                'Tax Provider Tax Code' => 'Tax Provider Tax Code',
-                'Product Custom Fields' => 'Product Custom Fields',
-            ];
+    //             // Advanced
+    //             'Product Condition' => 'Product Condition',
+    //             'Show Product Condition?' => 'Show Product Condition?',
+    //             'Sort Order' => 'Sort Order',
+    //             'Search Keywords' => 'Search Keywords',
+    //             'Stop Processing Rules' => 'Stop Processing Rules',
+    //             'Product Tax Class' => 'Product Tax Class',
+    //             'Tax Provider Tax Code' => 'Tax Provider Tax Code',
+    //             'Product Custom Fields' => 'Product Custom Fields',
+    //         ];
         
-            Excel::import(new \App\Imports\ProductImport($storeId, $columnMapping), storage_path("app/{$path}"));
+    //         Excel::import(new \App\Imports\ProductImport($storeId, $columnMapping), storage_path("app/{$path}"));
         
-            return response()->json([
-                'status' => true,
-                'message' => 'Import completed successfully.'
-            ]);
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Import completed successfully.'
+    //         ]);
         
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'error' => $e->getMessage()
-            ], 500);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'error' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
+   public function importCSV(Request $request)
+{
+    try {
+        $request->validate([
+            'file' => 'required|file|mimes:csv,txt,xlsx,xls',
+            'ignore_columns' => 'nullable|array',
+        ]);
+
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json(['error' => 'Store not selected.'], 400);
         }
+
+        $file = $request->file('file');
+        $originalFileName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+        $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
+        session()->put("import_file_name_{$storeId}", $originalFileName);
+
+        $filePath = storage_path("app/{$path}");
+        $csvHeaders = [];
+
+        if (($handle = fopen($filePath, 'r')) !== false) {
+            $csvHeaders = fgetcsv($handle);
+            fclose($handle);
+        }
+
+        if (!$csvHeaders) {
+            return response()->json(['status' => false, 'error' => 'CSV file is empty or invalid.'], 400);
+        }
+
+        // Allowed columns for import
+        $allowedColumns = [
+            'Item Type', 'Distributor Name', 'Distributor SKU', 'Product Name', 'Product Type',
+            'Product Code/SKU', 'Bin Picking Number', 'Brand Name', 'Option Set Align',
+            'Product Description', 'Price', 'Cost Price', 'Retail Price', 'Sale Price',
+            'Fixed Shipping Cost', 'Free Shipping', 'Product Warranty', 'Product Weight',
+            'Product Width', 'Product Height', 'Product Depth', 'Allow Purchases?', 'Product Visible?',
+            'Product Availability', 'Track Inventory', 'Current Stock Level', 'Low Stock Level',
+            'Category', 'Product Image ID - 1', 'Product Image File - 1', 'Product Image Description - 1',
+            'Product Image Is Thumbnail - 1', 'Product Image Sort - 1', 'Search Keywords', 'Page Title',
+            'Meta Keywords', 'Meta Description', 'Product Condition', 'Product Tax Class', 'Product UPC/EAN',
+            'Product Url', 'GPS Global Trade Item Number', 'GPS Manufacturer Part Number', 'GPS Category',
+            'GPS Enabled', 'Show Product Condition?'
+        ];
+
+        // Build column mapping with ignore logic
+        $columnMapping = [];
+        foreach ($csvHeaders as $header) {
+            $header = mb_convert_encoding($header, 'UTF-8', 'UTF-8');
+            $columnMapping[$header] = in_array($header, $allowedColumns) ? $header : 'Ignore';
+        }
+
+        // Override with user-selected ignore columns if any
+        if ($request->has('ignore_columns') && is_array($request->ignore_columns)) {
+            foreach ($request->ignore_columns as $ignoreHeader) {
+                $ignoreHeader = mb_convert_encoding($ignoreHeader, 'UTF-8', 'UTF-8');
+                if (array_key_exists($ignoreHeader, $columnMapping)) {
+                    $columnMapping[$ignoreHeader] = 'Ignore';
+                }
+            }
+        }
+
+        // Ensure UTF-8 for keys and values
+        $columnMapping = collect($columnMapping)->mapWithKeys(function ($value, $key) {
+            return [mb_convert_encoding($key, 'UTF-8', 'UTF-8') => mb_convert_encoding($value, 'UTF-8', 'UTF-8')];
+        })->toArray();
+
+        // Dispatch background job
+        ProcessProductImport::dispatch($filePath, $storeId, $columnMapping)->onQueue('imports');
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Import started. Processing in background.'
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
 
 
+    /**
+     * Parse custom fields for ProductImport
+     */
     private function parseCustomFields($fieldString)
     {
-       if (!$fieldString) return [];
+        if (!$fieldString) return [];
 
-        // Step 1: Try decoding directly (if already JSON but escaped)
+        // Try JSON first
         $decoded = json_decode($fieldString, true);
         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-            // Clean keys & values from escaped quotes
             return collect($decoded)->mapWithKeys(function ($value, $key) {
                 return [
                     trim(str_replace('"', '', $key)) => trim(str_replace('"', '', $value))
@@ -1473,19 +1559,17 @@ class ProductController extends Controller
             })->toArray();
         }
 
-        // Step 2: Fallback if it's in semicolon format (key=value;key2=value2)
+        // Fallback to key=value;key2=value2 format
         $fields = [];
         $pairs = explode(';', $fieldString);
         foreach ($pairs as $pair) {
             if (strpos($pair, '=') !== false) {
-                [$key, $value] = explode('=', trim($pair));
+                [$key, $value] = explode('=', trim($pair), 2);
                 $fields[trim($key)] = trim($value);
             }
         }
         return $fields;
     }
-
-
     public function exportCSV()
     {
         $storeId = current_store_id();
