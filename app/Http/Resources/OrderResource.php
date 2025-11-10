@@ -53,7 +53,7 @@ class OrderResource extends JsonResource
                 }),
             // 'items'    => OrderItemResource::collection($this->whenLoaded('items')),
             'customer' => new CustomerResource($this->whenLoaded('customer')),
-
+            'shippingDestinations' => ShippingDestinationResource::collection($this->whenLoaded('shippingDestinations')),
             'createdAt' => $this->created_at?->toDateTimeString(),
             'updatedAt' => $this->updated_at?->toDateTimeString(),
         ];

@@ -10,6 +10,7 @@ use App\Models\Shipment;
 use App\Models\OrderItem;
 use App\Models\OrderNote;
 use App\Models\BillingInformation;
+use App\Models\ShippingDestination;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -61,4 +62,9 @@ class Order extends Model
     {
         return $this->belongsTo(BillingInformation::class);
     }
+    public function shippingDestinations()
+    {
+        return $this->hasMany(ShippingDestination::class);
+    }
+
 }
