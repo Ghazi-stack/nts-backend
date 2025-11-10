@@ -135,9 +135,202 @@ class OrderController extends Controller
         }
     }
 
-    public function store(Request $request)
+    // public function store(Request $request)
+    // {
+    //     try {
+    //         $validated = $request->validate([
+    //             'firstName'      => 'required|string|max:255',
+    //             'lastName'       => 'required|string|max:255',
+    //             'companyName'    => 'nullable|string|max:255',
+    //             'email'          => 'required|email',
+    //             'phone'          => 'nullable|string|max:20',
+    //             'addressLine1'   => 'required|string|max:255',
+    //             'addressLine2'   => 'nullable|string|max:255',
+    //             'city'           => 'nullable|string|max:100',
+    //             'state'          => 'nullable|string|max:100',
+    //             'zip'            => 'nullable|string|max:20',
+    //             'country'        => 'nullable|string|max:100',
+    //             'paymentMethod'  => 'required|string|max:100',
+    //             'shippingMethod' => 'required|string|max:100',
+    //             'shippingCost'   => 'required|numeric',
+    //             'comments'       => 'nullable|string|max:1000',
+    //         ]);
+
+    //         $user = auth('sanctum')->user();
+    //         $sessionId = $request->header('X-Session-ID') ?? session()->getId();
+
+    //         $cartItems = Cart::with('product')
+    //             ->when($user, fn ($q) => $q->where('user_id', $user->id))
+    //             ->when(!$user, fn ($q) => $q->where('session_id', $sessionId))
+    //             ->get();
+
+    //         if ($cartItems->isEmpty()) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Cart is empty.',
+    //             ], 400);
+    //         }
+
+    //         $cartTotal = $cartItems->sum(fn ($item) => optional($item->product)->price * $item->quantity);
+    //         $shippingCost = $validated['shippingCost'];
+    //         $totalAmount  = $cartTotal + $shippingCost;
+
+    //         // Save billing info
+    //         $billing = $this->saveBillingInformation([
+    //             'first_name'      => $validated['firstName'],
+    //             'last_name'       => $validated['lastName'],
+    //             'company_name'    => $validated['companyName'] ?? null,
+    //             'email'           => $validated['email'],
+    //             'phone'           => $validated['phone'] ?? null,
+    //             'address_line_1'  => $validated['addressLine1'],
+    //             'address_line_2'  => $validated['addressLine2'] ?? null,
+    //             'city'            => $validated['city'] ?? null,
+    //             'state'           => $validated['state'] ?? null,
+    //             'zip'             => $validated['zip'] ?? null,
+    //             'country'         => $validated['country'] ?? null,
+    //             'payment_method'  => $validated['paymentMethod'],
+    //             'shipping_method' => $validated['shippingMethod'],
+    //         ], $user);
+
+    //         // Create order
+    //         $order = Order::create([
+    //             'store_id'               => current_store_id(),
+    //             'user_id'                => $user?->id,
+    //             'session_id'             => $user ? null : $sessionId,
+    //             'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
+    //             'billing_information_id' => $billing->id,
+    //             'status'                 => 'Pending',
+    //             'shipping_cost'          => $shippingCost,
+    //             'comments'               => $validated['comments'] ?? null,
+    //             'total_amount'           => $totalAmount,
+    //         ]);
+
+    //         // Items
+    //         foreach ($cartItems as $item) {
+    //             if (!$item->product) continue;
+
+    //             $order->items()->create([
+    //                 'store_id'   => current_store_id(),
+    //                 'product_id' => $item->product_id,
+    //                 'quantity'   => $item->quantity,
+    //                 'price'      => $item->product->price,
+    //             ]);
+    //             $product = $item->product;
+    //             $product->increment('sold_count', $item->quantity);
+    //         }
+
+    //         // Clear cart
+    //         Cart::when($user, fn ($q) => $q->where('user_id', $user->id))
+    //             ->when(!$user, fn ($q) => $q->where('session_id', $sessionId))
+    //             ->delete();
+
+    //         return response()->json([
+    //             'status'  => true,
+    //             'message' => 'Order placed successfully.',
+    //             'data'    => new OrderResource($order->load('items.product.images', 'billingInformation','customer')),
+    //         ]);
+    //     } catch (ValidationException $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Validation failed.',
+    //             'errors'  => $e->errors(),
+    //         ], 422);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Order creation failed.',
+    //             'error'   => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
+    // public function update(Request $request, $id)
+    // {
+    //     try {
+    //         $order = Order::with('billingInformation')
+    //             ->where('id', $id)
+    //             ->where('store_id', current_store_id())
+    //             ->firstOrFail();
+
+    //         // Updatable fields on orders table only
+    //         $orderFields = [
+    //             'shipping_cost',
+    //             'total_amount',
+    //             'coupon_code',
+    //             'comments',
+    //             'staff_notes',
+    //             'status',
+    //             'is_draft',
+    //             'channel',
+    //             'fulfillment_source',
+    //             'tracking_number',
+    //             'tracking_carrier_code',
+    //             'tracking_carrier_name',
+    //             'shipped_at',
+    //         ];
+
+    //         foreach ($orderFields as $field) {
+    //             if ($request->has($field)) {
+    //                 $order->{$field} = $request->input($field);
+    //             }
+    //         }
+
+    //         // Updatable fields that are now in billing_information
+    //         $billing = $order->billingInformation;
+    //         if ($billing) {
+    //             $billingMap = [
+    //                 'first_name'      => ['first_name', 'firstName'],
+    //                 'last_name'       => ['last_name', 'lastName'],
+    //                 'company_name'    => ['company_name', 'companyName'],
+    //                 'email'           => ['email'],
+    //                 'phone'           => ['phone'],
+    //                 'address_line_1'  => ['address_line_1', 'addressLine1'],
+    //                 'address_line_2'  => ['address_line_2', 'addressLine2'],
+    //                 'city'            => ['city'],
+    //                 'state'           => ['state'],
+    //                 'zip'             => ['zip'],
+    //                 'country'         => ['country'],
+    //                 'payment_method'  => ['payment_method', 'paymentMethod'],
+    //                 'shipping_method' => ['shipping_method', 'shippingMethod'],
+    //             ];
+
+    //             foreach ($billingMap as $column => $aliases) {
+    //                 foreach ($aliases as $key) {
+    //                     if ($request->has($key)) {
+    //                         $billing->{$column} = $request->input($key);
+    //                         break;
+    //                     }
+    //                 }
+    //             }
+
+    //             $billing->save();
+    //         }
+
+    //         $order->save();
+
+    //         return response()->json([
+    //             'status'  => true,
+    //             'message' => 'Order updated successfully.',
+    //             'data'    => new OrderResource($order->fresh()->load('items.product.images', 'billingInformation','customer')),
+    //         ]);
+    //     } catch (ModelNotFoundException $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Order not found or unauthorized.',
+    //         ], 404);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Order update failed.',
+    //             'error'   => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+    
+       public function store(Request $request)
     {
         try {
+            // Step 1: Validate input
             $validated = $request->validate([
                 'firstName'      => 'required|string|max:255',
                 'lastName'       => 'required|string|max:255',
@@ -154,28 +347,27 @@ class OrderController extends Controller
                 'shippingMethod' => 'required|string|max:100',
                 'shippingCost'   => 'required|numeric',
                 'comments'       => 'nullable|string|max:1000',
+                'products'       => 'required|array|min:1',
+                'products.*.product_id' => 'required|integer|exists:products,id',
+                'products.*.quantity'   => 'required|integer|min:1',
             ]);
 
             $user = auth('sanctum')->user();
-            $sessionId = $request->header('X-Session-ID') ?? session()->getId();
 
-            $cartItems = Cart::with('product')
-                ->when($user, fn ($q) => $q->where('user_id', $user->id))
-                ->when(!$user, fn ($q) => $q->where('session_id', $sessionId))
-                ->get();
+            // Step 2: Calculate totals from frontend products
+            $cartItems = $validated['products'];
+            $cartTotal = 0;
 
-            if ($cartItems->isEmpty()) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Cart is empty.',
-                ], 400);
+            foreach ($cartItems as $item) {
+                $product = Product::find($item['product_id']);
+                if (!$product) continue;
+                $cartTotal += $product->price * $item['quantity'];
             }
 
-            $cartTotal = $cartItems->sum(fn ($item) => optional($item->product)->price * $item->quantity);
             $shippingCost = $validated['shippingCost'];
             $totalAmount  = $cartTotal + $shippingCost;
 
-            // Save billing info
+            // Step 3: Save billing information
             $billing = $this->saveBillingInformation([
                 'first_name'      => $validated['firstName'],
                 'last_name'       => $validated['lastName'],
@@ -192,11 +384,11 @@ class OrderController extends Controller
                 'shipping_method' => $validated['shippingMethod'],
             ], $user);
 
-            // Create order
+            // Step 4: Create order
             $order = Order::create([
                 'store_id'               => current_store_id(),
                 'user_id'                => $user?->id,
-                'session_id'             => $user ? null : $sessionId,
+                'session_id'             => $user ? null : session()->getId(),
                 'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
                 'billing_information_id' => $billing->id,
                 'status'                 => 'Pending',
@@ -205,36 +397,32 @@ class OrderController extends Controller
                 'total_amount'           => $totalAmount,
             ]);
 
-            // Items
+            // Step 5: Create order items
             foreach ($cartItems as $item) {
-                if (!$item->product) continue;
+                $product = Product::find($item['product_id']);
+                if (!$product) continue;
 
                 $order->items()->create([
                     'store_id'   => current_store_id(),
-                    'product_id' => $item->product_id,
-                    'quantity'   => $item->quantity,
-                    'price'      => $item->product->price,
+                    'product_id' => $product->id,
+                    'quantity'   => $item['quantity'],
+                    'price'      => $product->price,
                 ]);
-                $product = $item->product;
-                $product->increment('sold_count', $item->quantity);
             }
-
-            // Clear cart
-            Cart::when($user, fn ($q) => $q->where('user_id', $user->id))
-                ->when(!$user, fn ($q) => $q->where('session_id', $sessionId))
-                ->delete();
 
             return response()->json([
                 'status'  => true,
                 'message' => 'Order placed successfully.',
-                'data'    => new OrderResource($order->load('items.product.images', 'billingInformation','customer')),
+                'data'    => new OrderResource($order->load('items.product.images', 'billingInformation', 'customer')),
             ]);
+
         } catch (ValidationException $e) {
             return response()->json([
                 'status'  => false,
                 'message' => 'Validation failed.',
                 'errors'  => $e->errors(),
             ], 422);
+
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
@@ -244,6 +432,9 @@ class OrderController extends Controller
         }
     }
 
+    /**
+     * Update an existing order
+     */
     public function update(Request $request, $id)
     {
         try {
@@ -252,7 +443,7 @@ class OrderController extends Controller
                 ->where('store_id', current_store_id())
                 ->firstOrFail();
 
-            // Updatable fields on orders table only
+            // Step 1: Update order fields
             $orderFields = [
                 'shipping_cost',
                 'total_amount',
@@ -275,7 +466,7 @@ class OrderController extends Controller
                 }
             }
 
-            // Updatable fields that are now in billing_information
+            // Step 2: Update billing information
             $billing = $order->billingInformation;
             if ($billing) {
                 $billingMap = [
@@ -313,11 +504,13 @@ class OrderController extends Controller
                 'message' => 'Order updated successfully.',
                 'data'    => new OrderResource($order->fresh()->load('items.product.images', 'billingInformation','customer')),
             ]);
+
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status'  => false,
                 'message' => 'Order not found or unauthorized.',
             ], 404);
+
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
@@ -1379,7 +1572,7 @@ class OrderController extends Controller
             'first_name'      => $data['first_name'],
             'last_name'       => $data['last_name'],
             'company_name'    => $data['company_name'] ?? null,
-            // 'email'           => $data['email'],
+            'email'           => $data['email'] ?? null,
             'phone'           => $data['phone'] ?? null,
             'address_line_1'  => $data['address_line_1'],
             'address_line_2'  => $data['address_line_2'] ?? null,
