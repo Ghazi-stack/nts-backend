@@ -31,12 +31,74 @@ use App\Jobs\ProcessProductImport;
 
 class ProductController extends Controller
 {
+    // public function index(Request $request)
+    // {
+    //     try {
+    //         $query = Product::with(['brand', 'categories', 'images','seo','content'])
+    //             ->where('store_id', current_store_id());
+
+    //         if ($request->has('isFeatured')) {
+    //             $query->where('is_featured', $request->boolean('isFeatured'));
+    //         }
+
+    //         if ($request->has('isVisible')) {
+    //             $query->where('visible_on_storefront', $request->boolean('isVisible'));
+    //         }
+
+    //         if ($request->has('outOfStock') && $request->boolean('outOfStock')) {
+    //             $query->where('current_stock', '<=', 0);
+    //         }
+
+    //         if ($request->has('inventoryLow')) {
+    //             $query->whereColumn('current_stock', '<=', 'low_stock');
+    //         }
+
+    //         if ($request->has('search')) {
+    //             $q = $request->search;
+    //             $query->where(function ($sub) use ($q) {
+    //                 $sub->where('name', 'like', "%$q%")
+    //                     ->orWhere('sku', 'like', "%$q%");
+    //             });
+    //         }
+
+    //         if ($request->has('sortBy')) {
+    //             $query->orderBy($request->sortBy, $request->get('sortOrder', 'asc'));
+    //         } else {
+    //             $query->orderBy('id', 'desc');
+    //         }
+
+    //         $page = (int) $request->input('page', 1);
+    //         $pageSize = (int) $request->input('pageSize', 50);
+    //         $products = $query->paginate($pageSize, ['*'], 'page', $page);
+
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Product list fetched.',
+    //             'data' => ProductResource::collection($products),
+    //             'pagination' => [
+    //                 'total' => $products->total(),
+    //                 'page' => $products->currentPage(),
+    //                 'pageSize' => $products->perPage(),
+    //                 'lastPage' => $products->lastPage()
+    //             ]
+    //         ]);
+    //     } catch (Exception $e) {
+    //         return response()->json(['error' => $e->getMessage()], 500);
+    //     }
+    // }
+
     public function index(Request $request)
     {
+        
+        ini_set('memory_limit', '8G');          
+        ini_set('max_execution_time', 300);    
+
         try {
-            $query = Product::with(['brand', 'categories', 'images','seo','content'])
+            // Base query with full eager loading
+            $query = Product::with(['brand', 'categories', 'images', 'seo', 'content'])
                 ->where('store_id', current_store_id());
 
+            // Filters
             if ($request->has('isFeatured')) {
                 $query->where('is_featured', $request->boolean('isFeatured'));
             }
@@ -61,16 +123,21 @@ class ProductController extends Controller
                 });
             }
 
+            // Sorting
             if ($request->has('sortBy')) {
                 $query->orderBy($request->sortBy, $request->get('sortOrder', 'asc'));
             } else {
                 $query->orderBy('id', 'desc');
             }
 
+            // Pagination
             $page = (int) $request->input('page', 1);
-            $pageSize = (int) $request->input('pageSize', 50);
+            $pageSize = (int) $request->input('pageSize', 20);
+            $pageSize = min($pageSize, 50); // Max 50 to control memory & execution time
+
             $products = $query->paginate($pageSize, ['*'], 'page', $page);
 
+            // Return JSON response
             return response()->json([
                 'status' => true,
                 'message' => 'Product list fetched.',
@@ -82,10 +149,12 @@ class ProductController extends Controller
                     'lastPage' => $products->lastPage()
                 ]
             ]);
-        } catch (Exception $e) {
+
+        } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
 
 
     public function show($id)
