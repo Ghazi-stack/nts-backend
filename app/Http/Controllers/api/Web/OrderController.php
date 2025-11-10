@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Http\Resources\OrderResource;
+use App\Http\Resources\ProductResource;
 use App\Http\Resources\CustomerResource;
 use App\Http\Resources\ShipmentResource;
 use App\Http\Resources\OrderNoteResource;
@@ -1111,7 +1112,16 @@ class OrderController extends Controller
                     "expirationYear" => $validated['paymentMethod']['expirationYear'] ?? null,
                     "emailInvoice" => $validated['paymentMethod']['emailInvoice'] ?? null
                 ],
-                "products" => $destination['products'],
+                 // ✅ Full product details
+                "products" => collect($destination['products'])->map(function($item) use ($storeId) {
+                    $product = Product::where('store_id', $storeId)->find($item['productId']);
+                    return $product 
+                        ? (new ProductResource($product))->additional([
+                            'quantity' => $item['quantity'],
+                            'price' => $product->price,
+                        ])
+                        : null;
+                })->filter()->values(),
                 "shippingDestinations" => [
                     [
                         "address" => $destination['address'],
@@ -1298,7 +1308,16 @@ public function updateFromDashboard(Request $request, $orderId)
                 "receiveOffers" => $customer->receive_review_emails,
                 "billingInformation" => $billing->toArray(),
                 "paymentMethod" => $validated['paymentMethod'] ?? [],
-                "products" => $validated['products'],
+                "products" => collect($validated['products'])->map(function($item) use ($storeId) {
+                                $product = Product::where('store_id', $storeId)->find($item['productId']);
+                                return $product
+                                    ? (new ProductResource($product))->additional([
+                                        'quantity' => $item['quantity'],
+                                        'price' => $product->price,
+                                    ])
+                                    : null;
+                            })->filter()->values(),
+
                 "shippingDestinations" => $shippingDestinations,
                 "shippingMethod" => $validated['shippingMethod'] ?? []
             ]
