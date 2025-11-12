@@ -2,227 +2,224 @@
 
 namespace App\Imports;
 
+use Carbon\Carbon;
+use App\Models\Brand;
 use App\Models\Product;
+use App\Models\Category;
+use App\Models\ProductSeo;
+use Maatwebsite\Excel\Row;
+use Illuminate\Support\Str;
+use App\Models\ProductExtra;
+use App\Models\ProductImage;
 use App\Models\ProductContent;
 use App\Models\ProductIdentifier;
-use App\Models\ProductImage;
-use App\Models\ProductSeo;
-use App\Models\Brand;
-use App\Models\Category;
-use Illuminate\Support\Str;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
-use Maatwebsite\Excel\Concerns\ToArray;
+use Illuminate\Support\Facades\Cache;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use Maatwebsite\Excel\Concerns\OnEachRow;
+use Maatwebsite\Excel\Concerns\WithChunkReading;
 
-class ProductImport implements ToArray
+class ProductImport implements OnEachRow, WithChunkReading
 {
     protected $storeId;
-    protected $existingCategories;
-    protected $existingBrands;
     protected $columnMap;
+    protected $dynamicHeaders = [];
+    protected $existingBrands;
+    protected $existingCategories;
+    // Progress tracking
+    protected $progressKey;
+    protected $totalRows;
+    protected $currentRow = 0;
 
-    public function __construct($storeId, $columnMap = [])
+    public function __construct($storeId, $columnMap = [],$filePath = null,$progressKey = null)
     {
+        $this->progressKey = $progressKey;
         $this->storeId = $storeId;
         $this->columnMap = $columnMap;
+
+        $this->preloadBrands();
+        $this->preloadCategories();
+
+        if ($filePath && file_exists($filePath)) {
+            $this->totalRows = $this->getExcelRowCount($filePath);
+        } else {
+            $this->totalRows = 1000; // fallback
+        }
     }
 
-    public function array(array $rows)
+    public function onRow(Row $row)
     {
-        if (empty($rows) || !isset($rows[0])) {
-            Log::warning("❌ Import aborted: No rows found in the Excel file.");
+        $this->currentRow++; // increment row count
+
+        // Update cache every chunk
+        if ($this->progressKey && $this->currentRow % $this->chunkSize() === 0) {
+            Cache::put($this->progressKey, [
+                'current' => $this->currentRow,
+                'total' => $this->totalRows,
+                'status' => 'processing'
+            ], 3600); // 1 hour expiration
+        }
+        $rowIndex = $row->getIndex();
+        $data = $row->toArray();
+
+        // Save headers
+        if ($rowIndex === 1) {
+            $this->dynamicHeaders = array_map('trim', $data);
             return;
         }
 
-        $header = array_map('trim', $rows[0]);
-        unset($rows[0]);
-
-        $this->preloadCategories();
-        $this->preloadBrands();
+        // Map row data
+        $mappedData = [];
+        foreach ($this->dynamicHeaders as $i => $header) {
+            $mappedData[$header] = $data[$i] ?? null;
+        }
 
         $now = Carbon::now();
 
-        $chunks = array_chunk($rows, 1000, true);
+        try {
+            $sku = $this->getMappedValue('Product Code/SKU', $mappedData) ?? $mappedData['Product Code/SKU'] ?? null;
+            $productName = $this->getMappedValue('Product Name', $mappedData) ?? $mappedData['Product Name'] ?? null;
 
-        foreach ($chunks as $chunkIndex => $chunk) {
-            Log::info("🔹 Processing chunk " . ($chunkIndex + 1) . " with " . count($chunk) . " rows.");
+            if (!$sku || !$productName) {
+                Log::warning("❌ Row $rowIndex skipped: Missing SKU or Product Name.");
+                return; // skip row
+            }
 
-            foreach ($chunk as $index => $row) {
-                $rowNumber = ($chunkIndex * 1000) + $index + 2;
+            // Brand
+            $brandName = $this->getMappedValue('Brand Name', $mappedData) ?? 'Unknown Brand';
+            $brandKey = strtolower($brandName);
+            $brand = $this->existingBrands->get($brandKey);
+            if (!$brand) {
+                $brand = Brand::create([
+                    'store_id' => $this->storeId,
+                    'name' => $brandName,
+                    'slug' => Str::slug($brandName),
+                ]);
+                $this->existingBrands->put($brandKey, $brand);
+            }
 
-                try {
-                    if (count($row) !== count($header)) {
-                        Log::warning("❌ Row $rowNumber skipped: Header and row column count mismatch.");
-                        continue;
-                    }
+            // Category
+            $categoryPath = $this->getMappedValue('Category', $mappedData) ?? $mappedData['Category'] ?? 'Uncategorized';
+            $category = $this->findOrCreateCategoryPath($categoryPath);
 
-                    $data = array_combine($header, $row);
-                    if (!$data) {
-                        Log::warning("❌ Row $rowNumber skipped: Invalid row structure.");
-                        continue;
-                    }
+            // Main product
+            $product = Product::firstOrNew(['store_id' => $this->storeId, 'sku' => $sku]);
+            $product->fill([
+                'name' => $productName,
+                'slug' => $product->slug ?? Str::slug($productName) . '-' . Str::uuid(),
+                'item_type' => $this->getMappedValue('Item Type', $mappedData),
+                'product_type' => $this->getMappedValue('Product Type', $mappedData),
+                'price' => (float) ($this->getMappedValue('Price', $mappedData) ?? 0),
+                'brand_id' => $brand->id,
+                'category_id' => $category->id,
+                'condition' => $this->getMappedValue('Product Condition', $mappedData) ?? 'New',
+                'dimensions' => json_encode([
+                    'weight' => (float) ($this->getMappedValue('Product Weight', $mappedData) ?? 0),
+                    'width' => (float) ($this->getMappedValue('Product Width', $mappedData) ?? 0),
+                    'height' => (float) ($this->getMappedValue('Product Height', $mappedData) ?? 0),
+                    'depth' => (float) ($this->getMappedValue('Product Depth', $mappedData) ?? 0),
+                ]),
+                'track_inventory' => $this->toBool($this->getMappedValue('Track Inventory', $mappedData) ?? 'No'),
+                'current_stock' => (int) ($this->getMappedValue('Current Stock Level', $mappedData) ?? 0),
+                'low_stock' => (int) ($this->getMappedValue('Low Stock Level', $mappedData) ?? 0),
+                'visible_on_storefront' => $this->toBool($this->getMappedValue('Product Visible?', $mappedData) ?? 'Yes'),
+                'allow_purchase' => $this->toBool($this->getMappedValue('Allow Purchases?', $mappedData) ?? 'Yes'),
+                'free_shipping' => $this->toBool($this->getMappedValue('Free Shipping', $mappedData) ?? 'No'),
+                'cost_price' => (float) ($this->getMappedValue('Cost Price', $mappedData) ?? 0),
+                'sale_price' => (float) ($this->getMappedValue('Sale Price', $mappedData) ?? 0),
+                'fixed_shipping_cost' => (float) ($this->getMappedValue('Fixed Shipping Cost', $mappedData) ?? 0),
+                'custom_fields' => json_encode($this->parseCustomFields($this->getMappedValue('Product Custom Fields', $mappedData))),
+                'show_condition' => $this->toBool($this->getMappedValue('Show Product Condition?', $mappedData) ?? 'Yes'),
+                'sort_order' => (int) ($this->getMappedValue('Sort Order', $mappedData) ?? 0),
+                'search_keywords' => $this->getMappedValue('Search Keywords', $mappedData) ?? '',
+                'stop_processing_rules' => $this->toBool($this->getMappedValue('Stop Processing Rules', $mappedData) ?? 'No'),
+                'tax_class' => $this->getMappedValue('Product Tax Class', $mappedData),
+                'tax_provider_code' => $this->getMappedValue('Tax Provider Tax Code', $mappedData),
+                'updated_at' => $now,
+                'created_at' => $product->created_at ?? $now,
+            ]);
+            $product->save();
 
-                    // -----------------------------
-                    // ✅ Mandatory Fields
-                    // -----------------------------
-                    $sku = $this->getMappedValue('Product Code/SKU', $data) ?? $data['Product Code/SKU'] ?? null;
-                    $productName = $this->getMappedValue('Product Name', $data) ?? $data['Product Name'] ?? null;
+            // Extra fields
+            ProductExtra::updateOrCreate(
+                ['product_id' => $product->id, 'store_id' => $this->storeId],
+                [
+                    'retail_price' => (float) ($this->getMappedValue('Retail Price', $mappedData) ?? 0),
+                    'distributor_name' => $this->getMappedValue('Distributor Name', $mappedData),
+                    'distributor_sku' => $this->getMappedValue('Distributor SKU', $mappedData),
+                    'event_date_required' => $this->toBool($this->getMappedValue('Event Date Required?', $mappedData)),
+                    'gps_gender' => $this->getMappedValue('GPS Gender', $mappedData),
+                    'gps_age_group' => $this->getMappedValue('GPS Age Group', $mappedData),
+                    'gps_enabled' => $this->toBool($this->getMappedValue('GPS Enabled', $mappedData)),
+                    'myob_asset_acct' => $this->getMappedValue('MYOB Asset Acct', $mappedData),
+                    'myob_income_acct' => $this->getMappedValue('MYOB Income Acct', $mappedData),
+                    'myob_expense_acct' => $this->getMappedValue('MYOB Expense Acct', $mappedData),
+                ]
+            );
 
-                    if (empty($sku) || empty($productName)) {
-                        Log::warning("❌ Row $rowNumber skipped: Missing SKU or Product Name.");
-                        continue;
-                    }
+            // Categories relation
+            $product->categories()->syncWithoutDetaching([$category->id]);
 
-                    // -----------------------------
-                    // Brand
-                    // -----------------------------
-                    $brandName = $this->getMappedValue('Brand Name', $data) ?? $data['Brand Name'] ?? 'Unknown Brand';
-                    $brandKey = strtolower($brandName);
-                    $brand = $this->existingBrands->get($brandKey);
-                    if (!$brand) {
-                        $brand = Brand::create([
-                            'store_id' => $this->storeId,
-                            'name' => $brandName,
-                            'slug' => Str::slug($brandName),
-                        ]);
-                        $this->existingBrands->put($brandKey, $brand);
-                        Log::info("✅ Row $rowNumber: Brand '$brandName' created.");
-                    }
+            // ProductContent
+            ProductContent::updateOrCreate(
+                ['store_id' => $this->storeId, 'product_id' => $product->id],
+                [
+                    'description' => $this->getMappedValue('Product Description', $mappedData) ?? '',
+                    'warranty' => $this->getMappedValue('Product Warranty', $mappedData) ?? '',
+                    'availability_text' => $this->getMappedValue('Product Availability', $mappedData) ?? '',
+                    'template_layout' => 'default',
+                ]
+            );
 
-                    // -----------------------------
-                    // Category
-                    // -----------------------------
-                    $categoryPath = $this->getMappedValue('GPS Category', $data) ?? $data['GPS Category'] ?? 'Uncategorized';
-                    $category = $this->findOrCreateCategoryPath($categoryPath);
+            // Product Identifier
+            ProductIdentifier::updateOrCreate(
+                ['store_id' => $this->storeId, 'product_id' => $product->id],
+                [
+                    'mpn' => $this->getMappedValue('GPS Manufacturer Part Number', $mappedData) ?? '',
+                    'upc' => $this->getMappedValue('Product UPC/EAN', $mappedData) ?? '',
+                    'gtin' => $this->getMappedValue('GPS Global Trade Item Number', $mappedData) ?? '',
+                    'bpn' => $this->getMappedValue('Bin Picking Number', $mappedData) ?? '',
+                ]
+            );
 
-                    // -----------------------------
-                    // Check existing product
-                    // -----------------------------
-                    $existingProduct = Product::where('store_id', $this->storeId)
-                        ->where('sku', $sku)
-                        ->first();
+            // SEO
+            ProductSeo::updateOrCreate(
+                ['store_id' => $this->storeId, 'product_id' => $product->id],
+                [
+                    'page_title' => $this->getMappedValue('Page Title', $mappedData) ?? $productName,
+                    'meta_description' => $this->getMappedValue('Meta Description', $mappedData) ?? '',
+                    'meta_keywords' => $this->getMappedValue('Meta Keywords', $mappedData) ?? '',
+                ]
+            );
 
-                    // -----------------------------
-                    // Product Data
-                    // -----------------------------
-                    $productData = [
-                        'sku' => $sku,
-                        'store_id' => $this->storeId,
-                        'item_type' => $this->getMappedValue('Item Type', $data) ?? $data['Item Type'] ?? null,
-                        'product_type' => $this->getMappedValue('Product Type', $data) ?? $data['Product Type'] ?? null,
-                        'name' => $productName,
-                        'slug' => $existingProduct ? $existingProduct->slug : Str::slug($productName) . '-' . Str::uuid(),
-                        'price' => (float) ($this->getMappedValue('Retail Price', $data) ?? $data['Retail Price'] ?? 0),
-                        'brand_id' => $brand->id,
-                        'category_id' => $category->id,
-                        'condition' => $this->getMappedValue('Product Condition', $data) ?? $data['Product Condition'] ?? 'New',
-                        'dimensions' => [
-                            'weight' => (float) ($this->getMappedValue('Product Weight', $data) ?? $data['Product Weight'] ?? 0),
-                            'width' => (float) ($this->getMappedValue('Product Width', $data) ?? $data['Product Width'] ?? 0),
-                            'height' => (float) ($this->getMappedValue('Product Height', $data) ?? $data['Product Height'] ?? 0),
-                            'depth' => (float) ($this->getMappedValue('Product Depth', $data) ?? $data['Product Depth'] ?? 0),
-                        ],
-                        'track_inventory' => $this->toBool($this->getMappedValue('Track Inventory', $data) ?? $data['Track Inventory'] ?? 'No'),
-                        'current_stock' => (int) ($this->getMappedValue('Current Stock Level', $data) ?? $data['Current Stock Level'] ?? 0),
-                        'low_stock' => (int) ($this->getMappedValue('Low Stock Level', $data) ?? $data['Low Stock Level'] ?? 0),
-                        'visible_on_storefront' => $this->toBool($this->getMappedValue('Product Visible?', $data) ?? $data['Product Visible?'] ?? 'Yes'),
-                        'free_shipping' => $this->toBool($this->getMappedValue('Free Shipping', $data) ?? $data['Free Shipping'] ?? 'No'),
-                        'allow_purchase' => $this->toBool($this->getMappedValue('Allow Purchases?', $data) ?? $data['Allow Purchases?'] ?? 'Yes'),
-                        'option_set' => $this->getMappedValue('Option Set', $data) ?? $data['Option Set'] ?? null,
-                        'option_set_align' => $this->getMappedValue('Option Set Align', $data) ?? $data['Option Set Align'] ?? null,
-                        'cost_price' => (float) ($this->getMappedValue('Cost Price', $data) ?? $data['Cost Price'] ?? 0),
-                        'sale_price' => (float) ($this->getMappedValue('Sale Price', $data) ?? $data['Sale Price'] ?? 0),
-                        'fixed_shipping_cost' => (float) ($this->getMappedValue('Fixed Shipping Cost', $data) ?? $data['Fixed Shipping Cost'] ?? 0),
-                        'custom_fields' => $this->parseCustomFields($this->getMappedValue('Product Custom Fields', $data) ?? $data['Product Custom Fields'] ?? ''),
-                        'is_featured' => false,
-                        'show_condition' => $this->toBool($this->getMappedValue('Show Product Condition?', $data) ?? $data['Show Product Condition?'] ?? 'Yes'),
-                        'sort_order' => (int) ($this->getMappedValue('Sort Order', $data) ?? $data['Sort Order'] ?? 0),
-                        'search_keywords' => $this->getMappedValue('Search Keywords', $data) ?? $data['Search Keywords'] ?? '',
-                        'stop_processing_rules' => $this->toBool($this->getMappedValue('Stop Processing Rules', $data) ?? $data['Stop Processing Rules'] ?? 'No'),
-                        'tax_class' => $this->getMappedValue('Product Tax Class', $data) ?? $data['Product Tax Class'] ?? null,
-                        'tax_provider_code' => $this->getMappedValue('Tax Provider Tax Code', $data) ?? $data['Tax Provider Tax Code'] ?? null,
-                        'updated_at' => $now,
-                        'created_at' => $existingProduct ? $existingProduct->created_at : $now,
-                    ];
-
-                    // -----------------------------
-                    // Create or Update Product
-                    // -----------------------------
-                    if ($existingProduct) {
-                        $existingProduct->update($productData);
-                        $product = $existingProduct;
-                        Log::info("🔄 Row $rowNumber: Product '{$product->name}' updated.");
-                    } else {
-                        $product = Product::create($productData);
-                        Log::info("✅ Row $rowNumber: Product '{$product->name}' created.");
-                    }
-
-                    $product->categories()->syncWithoutDetaching([$category->id]);
-
-                    // -----------------------------
-                    // Product Content
-                    // -----------------------------
-                    ProductContent::updateOrCreate(
-                        ['store_id' => $this->storeId, 'product_id' => $product->id],
-                        [
-                            'description' => $this->getMappedValue('Product Description', $data) ?? $data['Product Description'] ?? '',
-                            'warranty' => $this->getMappedValue('Product Warranty', $data) ?? $data['Product Warranty'] ?? '',
-                            'availability_text' => $this->getMappedValue('Product Availability', $data) ?? $data['Product Availability'] ?? '',
-                            'template_layout' => 'default',
-                        ]
+            // Images
+            foreach ($mappedData as $key => $value) {
+                if (stripos($key, 'Product Image File') !== false && !empty(trim($value))) {
+                    $imagePath = trim($value);
+                    ProductImage::updateOrCreate(
+                        ['store_id' => $this->storeId, 'product_id' => $product->id, 'path' => $imagePath],
+                        ['alt_text' => $productName, 'is_primary' => true]
                     );
-
-                    // -----------------------------
-                    // Product Identifiers
-                    // -----------------------------
-                    ProductIdentifier::updateOrCreate(
-                        ['store_id' => $this->storeId, 'product_id' => $product->id],
-                        [
-                            'mpn' => $this->getMappedValue('GPS Manufacturer Part Number', $data) ?? $data['GPS Manufacturer Part Number'] ?? '',
-                            'upc' => $this->getMappedValue('Product UPC/EAN', $data) ?? $data['Product UPC/EAN'] ?? '',
-                            'gtin' => $this->getMappedValue('GPS Global Trade Item Number', $data) ?? $data['GPS Global Trade Item Number'] ?? '',
-                            'bpn' => $this->getMappedValue('Bin Picking Number', $data) ?? $data['Bin Picking Number'] ?? '',
-                        ]
-                    );
-
-                    // -----------------------------
-                    // SEO
-                    // -----------------------------
-                    ProductSeo::updateOrCreate(
-                        ['store_id' => $this->storeId, 'product_id' => $product->id],
-                        [
-                            'page_title' => $this->getMappedValue('Page Title', $data) ?? $data['Page Title'] ?? $productName,
-                            'product_url' => ltrim($this->getMappedValue('Product Url', $data) ?? $data['Product Url'] ?? '', '/'),
-                            'meta_description' => $this->getMappedValue('Meta Description', $data) ?? $data['Meta Description'] ?? '',
-                            'meta_keywords' => $this->getMappedValue('Meta Keywords', $data) ?? $data['Meta Keywords'] ?? '',
-                            'redirect_old_url' => $this->toBool($this->getMappedValue('Redirect Old URL?', $data) ?? $data['Redirect Old URL?'] ?? 'No'),
-                        ]
-                    );
-
-                    // -----------------------------
-                    // Product Images
-                    // -----------------------------
-                    foreach ($data as $key => $value) {
-                        if (stripos($key, 'Product Image File') !== false && !empty(trim($value))) {
-                            $imagePath = trim($value);
-                            $isUrl = filter_var($imagePath, FILTER_VALIDATE_URL);
-                            $finalPath = $isUrl ? $imagePath : 'product_images/' . ltrim($imagePath, '/');
-
-                            ProductImage::updateOrCreate(
-                                ['store_id' => $this->storeId, 'product_id' => $product->id, 'path' => $finalPath],
-                                [
-                                    'alt_text' => $productName,
-                                    'is_primary' => true,
-                                ]
-                            );
-                        }
-                    }
-
-                } catch (\Throwable $e) {
-                    Log::error("❌ Row $rowNumber: Error during import: " . $e->getMessage());
-                    Log::error($e->getTraceAsString());
                 }
             }
+
+        } catch (\Throwable $e) {
+            Log::error("❌ Row $rowIndex: " . $e->getMessage());
+        }
+    }
+
+    public function chunkSize(): int
+    {
+        return 1000;
+    }
+    public function __destruct()
+    {
+        if ($this->progressKey) {
+            Cache::put($this->progressKey, [
+                'current' => $this->totalRows,
+                'total' => $this->totalRows,
+                'status' => 'finished'
+            ]);
         }
     }
 
@@ -231,11 +228,11 @@ class ProductImport implements ToArray
     // -----------------------------
     private function getMappedValue($label, $data)
     {
-        if (!isset($this->columnMap[$label]) || $this->columnMap[$label] === 'Ignore') {
+        if (!isset($this->columnMap[$label]) || $this->columnMap[$label] === 'Ignore' || $label === 'Product ID') {
             return null;
         }
         $mapped = $this->columnMap[$label];
-        return isset($data[$mapped]) ? trim($data[$mapped]) : null;
+        return $data[$mapped] ?? null;
     }
 
     private function preloadCategories()
@@ -261,9 +258,7 @@ class ProductImport implements ToArray
 
             $slug = Str::slug($segment);
 
-            $category = $this->existingCategories->first(function ($cat) use ($slug, $parentId) {
-                return $cat->slug === $slug && $cat->parent_id == $parentId;
-            });
+            $category = $this->existingCategories->first(fn($cat) => $cat->slug === $slug && $cat->parent_id == $parentId);
 
             if (!$category) {
                 $category = Category::create([
@@ -273,7 +268,6 @@ class ProductImport implements ToArray
                     'parent_id' => $parentId,
                 ]);
                 $this->existingCategories->push($category);
-                Log::info("✅ Category '$segment' created.");
             }
 
             $parentId = $category->id;
@@ -286,25 +280,31 @@ class ProductImport implements ToArray
     {
         if (!$fieldString) return [];
 
-        $decoded = json_decode($fieldString, true);
-        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-            return collect($decoded)->mapWithKeys(fn($value, $key) => [trim(str_replace('"','',$key)) => trim(str_replace('"','',$value))])->toArray();
-        }
-
         $fields = [];
-        $pairs = explode(';', $fieldString);
-        foreach ($pairs as $pair) {
+        foreach (explode(';', $fieldString) as $pair) {
             if (strpos($pair, '=') !== false) {
                 [$key, $value] = explode('=', trim($pair));
                 $fields[trim($key)] = trim($value);
             }
         }
-
         return $fields;
     }
 
     private function toBool($val)
     {
-        return in_array(strtolower(trim((string) $val)), ['yes', 'y', 'true', '1']);
+        return in_array(strtolower(trim((string)$val)), ['yes','y','true','1']);
+    }
+
+    public function getExcelRowCount($filePath)
+    {
+        try {
+            $spreadsheet = IOFactory::load($filePath);
+            $sheet = $spreadsheet->getActiveSheet();
+            $highestRow = $sheet->getHighestRow();
+            return max(1, $highestRow - 1); // subtract header
+        } catch (\Throwable $e) {
+            Log::warning("Unable to count Excel rows: " . $e->getMessage());
+            return 1000;
+        }
     }
 }

@@ -17,17 +17,18 @@ use App\Exports\ProductExport;
 use App\Imports\ProductImport;
 use App\Models\ProductContent;
 use App\Models\ProductIdentifier;
+use App\Jobs\ProcessProductImport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Facades\Cache;
 use App\Http\Resources\ProductResource;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\Jobs\ProcessProductImport;
 
 class ProductController extends Controller
 {
@@ -1527,87 +1528,139 @@ class ProductController extends Controller
     //     }
     // }
 
-   public function importCSV(Request $request)
+//    public function importCSV(Request $request)
+// {
+//     try {
+//         $request->validate([
+//             'file' => 'required|file|mimes:csv,txt,xlsx,xls',
+//             'ignore_columns' => 'nullable|array',
+//         ]);
+
+//         $storeId = current_store_id();
+//         if (!$storeId) {
+//             return response()->json(['error' => 'Store not selected.'], 400);
+//         }
+
+//         $file = $request->file('file');
+//         $originalFileName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+//         $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
+//         session()->put("import_file_name_{$storeId}", $originalFileName);
+
+//         $filePath = storage_path("app/{$path}");
+//         $csvHeaders = [];
+
+//         if (($handle = fopen($filePath, 'r')) !== false) {
+//             $csvHeaders = fgetcsv($handle);
+//             fclose($handle);
+//         }
+
+//         if (!$csvHeaders) {
+//             return response()->json(['status' => false, 'error' => 'CSV file is empty or invalid.'], 400);
+//         }
+
+//         // Allowed columns for import
+//         $allowedColumns = [
+//             'Item Type', 'Distributor Name', 'Distributor SKU', 'Product Name', 'Product Type',
+//             'Product Code/SKU', 'Bin Picking Number', 'Brand Name', 'Option Set Align',
+//             'Product Description', 'Price', 'Cost Price', 'Retail Price', 'Sale Price',
+//             'Fixed Shipping Cost', 'Free Shipping', 'Product Warranty', 'Product Weight',
+//             'Product Width', 'Product Height', 'Product Depth', 'Allow Purchases?', 'Product Visible?',
+//             'Product Availability', 'Track Inventory', 'Current Stock Level', 'Low Stock Level',
+//             'Category', 'Product Image ID - 1', 'Product Image File - 1', 'Product Image Description - 1',
+//             'Product Image Is Thumbnail - 1', 'Product Image Sort - 1', 'Search Keywords', 'Page Title',
+//             'Meta Keywords', 'Meta Description', 'Product Condition', 'Product Tax Class', 'Product UPC/EAN',
+//             'Product Url', 'GPS Global Trade Item Number', 'GPS Manufacturer Part Number', 'GPS Category',
+//             'GPS Enabled', 'Show Product Condition?'
+//         ];
+
+//         // Build column mapping with ignore logic
+//         $columnMapping = [];
+//         foreach ($csvHeaders as $header) {
+//             $header = mb_convert_encoding($header, 'UTF-8', 'UTF-8');
+//             $columnMapping[$header] = in_array($header, $allowedColumns) ? $header : 'Ignore';
+//         }
+
+//         // Override with user-selected ignore columns if any
+//         if ($request->has('ignore_columns') && is_array($request->ignore_columns)) {
+//             foreach ($request->ignore_columns as $ignoreHeader) {
+//                 $ignoreHeader = mb_convert_encoding($ignoreHeader, 'UTF-8', 'UTF-8');
+//                 if (array_key_exists($ignoreHeader, $columnMapping)) {
+//                     $columnMapping[$ignoreHeader] = 'Ignore';
+//                 }
+//             }
+//         }
+
+//         // Ensure UTF-8 for keys and values
+//         $columnMapping = collect($columnMapping)->mapWithKeys(function ($value, $key) {
+//             return [mb_convert_encoding($key, 'UTF-8', 'UTF-8') => mb_convert_encoding($value, 'UTF-8', 'UTF-8')];
+//         })->toArray();
+
+//         // Dispatch background job
+//         ProcessProductImport::dispatch($filePath, $storeId, $columnMapping)->onQueue('imports');
+
+//         return response()->json([
+//             'status' => true,
+//             'message' => 'Import started. Processing in background.'
+//         ]);
+
+//     } catch (\Exception $e) {
+//         return response()->json([
+//             'status' => false,
+//             'error' => $e->getMessage()
+//         ], 500);
+//     }
+// }
+
+    public function importCSV(Request $request)
 {
+    $request->validate([
+        'file' => 'required|file|mimes:xlsx,xls,csv',
+    ]);
+
+    $file = $request->file('file');
+
+    $storeId = current_store_id();
+    if (!$storeId) {
+        return response()->json(['error' => 'Store not selected.'], 400);
+    }
+
+    // Save file permanently to storage/imports
+    $storedFilePath = $file->store('imports'); // returns e.g., 'imports/file.xlsx'
+
+    $columnMap = $request->input('column_map', []);
+      // Generate unique progress key
+    $progressKey = 'import_progress_' . Str::uuid();
+
+    // Initialize progress
+    Cache::put($progressKey, [
+        'current' => 0,
+        'total' => 0,
+        'status' => 'queued', // queued, processing, finished
+    ], 3600); // expires in 1 hour
     try {
-        $request->validate([
-            'file' => 'required|file|mimes:csv,txt,xlsx,xls',
-            'ignore_columns' => 'nullable|array',
-        ]);
-
-        $storeId = current_store_id();
-        if (!$storeId) {
-            return response()->json(['error' => 'Store not selected.'], 400);
-        }
-
-        $file = $request->file('file');
-        $originalFileName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
-        $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
-        session()->put("import_file_name_{$storeId}", $originalFileName);
-
-        $filePath = storage_path("app/{$path}");
-        $csvHeaders = [];
-
-        if (($handle = fopen($filePath, 'r')) !== false) {
-            $csvHeaders = fgetcsv($handle);
-            fclose($handle);
-        }
-
-        if (!$csvHeaders) {
-            return response()->json(['status' => false, 'error' => 'CSV file is empty or invalid.'], 400);
-        }
-
-        // Allowed columns for import
-        $allowedColumns = [
-            'Item Type', 'Distributor Name', 'Distributor SKU', 'Product Name', 'Product Type',
-            'Product Code/SKU', 'Bin Picking Number', 'Brand Name', 'Option Set Align',
-            'Product Description', 'Price', 'Cost Price', 'Retail Price', 'Sale Price',
-            'Fixed Shipping Cost', 'Free Shipping', 'Product Warranty', 'Product Weight',
-            'Product Width', 'Product Height', 'Product Depth', 'Allow Purchases?', 'Product Visible?',
-            'Product Availability', 'Track Inventory', 'Current Stock Level', 'Low Stock Level',
-            'Category', 'Product Image ID - 1', 'Product Image File - 1', 'Product Image Description - 1',
-            'Product Image Is Thumbnail - 1', 'Product Image Sort - 1', 'Search Keywords', 'Page Title',
-            'Meta Keywords', 'Meta Description', 'Product Condition', 'Product Tax Class', 'Product UPC/EAN',
-            'Product Url', 'GPS Global Trade Item Number', 'GPS Manufacturer Part Number', 'GPS Category',
-            'GPS Enabled', 'Show Product Condition?'
-        ];
-
-        // Build column mapping with ignore logic
-        $columnMapping = [];
-        foreach ($csvHeaders as $header) {
-            $header = mb_convert_encoding($header, 'UTF-8', 'UTF-8');
-            $columnMapping[$header] = in_array($header, $allowedColumns) ? $header : 'Ignore';
-        }
-
-        // Override with user-selected ignore columns if any
-        if ($request->has('ignore_columns') && is_array($request->ignore_columns)) {
-            foreach ($request->ignore_columns as $ignoreHeader) {
-                $ignoreHeader = mb_convert_encoding($ignoreHeader, 'UTF-8', 'UTF-8');
-                if (array_key_exists($ignoreHeader, $columnMapping)) {
-                    $columnMapping[$ignoreHeader] = 'Ignore';
-                }
-            }
-        }
-
-        // Ensure UTF-8 for keys and values
-        $columnMapping = collect($columnMapping)->mapWithKeys(function ($value, $key) {
-            return [mb_convert_encoding($key, 'UTF-8', 'UTF-8') => mb_convert_encoding($value, 'UTF-8', 'UTF-8')];
-        })->toArray();
-
-        // Dispatch background job
-        ProcessProductImport::dispatch($filePath, $storeId, $columnMapping)->onQueue('imports');
+        // Dispatch the job with permanent file path
+        ProcessProductImport::dispatch(storage_path('app/' . $storedFilePath), $storeId, $columnMap, $progressKey);
 
         return response()->json([
-            'status' => true,
-            'message' => 'Import started. Processing in background.'
+            'success' => 'Products import queued successfully.',
+            'progress_key' => $progressKey
         ]);
-
     } catch (\Exception $e) {
+        \Log::error("❌ Product Import Dispatch Error: " . $e->getMessage());
         return response()->json([
-            'status' => false,
-            'error' => $e->getMessage()
+            'error' => 'Import failed: ' . $e->getMessage()
         ], 500);
     }
+}
+public function importProgress($progressKey)
+{
+    $progress = Cache::get($progressKey, [
+        'current' => 0,
+        'total' => 0,
+        'status' => 'unknown',
+    ]);
+
+    return response()->json($progress);
 }
 
 

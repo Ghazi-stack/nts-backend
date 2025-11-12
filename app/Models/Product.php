@@ -9,6 +9,7 @@ use App\Models\Review;
 use App\Models\Category;
 use App\Models\Condition;
 use App\Models\ProductSeo;
+use App\Models\ProductExtra;
 use App\Models\ProductImage;
 use App\Models\ProductSearch;
 use App\Models\ProductContent;
@@ -99,5 +100,9 @@ class Product extends Model
     {
         return $this->hasMany(Review::class)
                     ->where('approved', 1); // only approved reviews
+    }
+    public function extra()
+    {
+        return $this->hasOne(ProductExtra::class, 'product_id');
     }
 }
