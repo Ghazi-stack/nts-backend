@@ -26,12 +26,11 @@ class ProductImport implements OnEachRow, WithChunkReading
     protected $dynamicHeaders = [];
     protected $existingBrands;
     protected $existingCategories;
-    // Progress tracking
     protected $progressKey;
     protected $totalRows;
     protected $currentRow = 0;
 
-    public function __construct($storeId, $columnMap = [],$filePath = null,$progressKey = null)
+    public function __construct($storeId, $columnMap = [], $filePath = null, $progressKey = null)
     {
         $this->progressKey = $progressKey;
         $this->storeId = $storeId;
@@ -43,26 +42,25 @@ class ProductImport implements OnEachRow, WithChunkReading
         if ($filePath && file_exists($filePath)) {
             $this->totalRows = $this->getExcelRowCount($filePath);
         } else {
-            $this->totalRows = 1000; // fallback
+            $this->totalRows = 1000;
         }
     }
 
     public function onRow(Row $row)
     {
-        $this->currentRow++; // increment row count
+        $this->currentRow++;
 
-        // Update cache every chunk
         if ($this->progressKey && $this->currentRow % $this->chunkSize() === 0) {
             Cache::put($this->progressKey, [
                 'current' => $this->currentRow,
                 'total' => $this->totalRows,
                 'status' => 'processing'
-            ], 3600); // 1 hour expiration
+            ], 3600);
         }
+
         $rowIndex = $row->getIndex();
         $data = $row->toArray();
 
-        // Save headers
         if ($rowIndex === 1) {
             $this->dynamicHeaders = array_map('trim', $data);
             return;
@@ -82,7 +80,7 @@ class ProductImport implements OnEachRow, WithChunkReading
 
             if (!$sku || !$productName) {
                 Log::warning("❌ Row $rowIndex skipped: Missing SKU or Product Name.");
-                return; // skip row
+                return;
             }
 
             // Brand
@@ -103,7 +101,10 @@ class ProductImport implements OnEachRow, WithChunkReading
             $category = $this->findOrCreateCategoryPath($categoryPath);
 
             // Main product
-            $product = Product::firstOrNew(['store_id' => $this->storeId, 'sku' => $sku]);
+            $product = Product::firstOrNew([
+                'store_id' => $this->storeId,
+                'sku' => $sku,
+            ]);
             $product->fill([
                 'name' => $productName,
                 'slug' => $product->slug ?? Str::slug($productName) . '-' . Str::uuid(),
@@ -113,15 +114,23 @@ class ProductImport implements OnEachRow, WithChunkReading
                 'brand_id' => $brand->id,
                 'category_id' => $category->id,
                 'condition' => $this->getMappedValue('Product Condition', $mappedData) ?? 'New',
-                'dimensions' => json_encode([
-                    'weight' => (float) ($this->getMappedValue('Product Weight', $mappedData) ?? 0),
-                    'width' => (float) ($this->getMappedValue('Product Width', $mappedData) ?? 0),
-                    'height' => (float) ($this->getMappedValue('Product Height', $mappedData) ?? 0),
-                    'depth' => (float) ($this->getMappedValue('Product Depth', $mappedData) ?? 0),
-                ]),
+               'dimensions' => json_encode([
+                        'weight' => isset($mappedData['Product Weight']) && is_numeric($mappedData['Product Weight'])
+                            ? (float) $mappedData['Product Weight']
+                            : 0,
+                        'width' => isset($mappedData['Product Width']) && is_numeric($mappedData['Product Width'])
+                            ? (float) $mappedData['Product Width']
+                            : 0,
+                        'height' => isset($mappedData['Product Height']) && is_numeric($mappedData['Product Height'])
+                            ? (float) $mappedData['Product Height']
+                            : 0,
+                        'depth' => isset($mappedData['Product Depth']) && is_numeric($mappedData['Product Depth'])
+                            ? (float) $mappedData['Product Depth']
+                            : 0,
+                    ]),
                 'track_inventory' => $this->toBool($this->getMappedValue('Track Inventory', $mappedData) ?? 'No'),
-                'current_stock' => (int) ($this->getMappedValue('Current Stock Level', $mappedData) ?? 0),
-                'low_stock' => (int) ($this->getMappedValue('Low Stock Level', $mappedData) ?? 0),
+                'current_stock' => (int) ($mappedData['Current Stock Level'] ?? 0),
+                'low_stock' => (int) ($mappedData['Low Stock Level'] ?? 0),
                 'visible_on_storefront' => $this->toBool($this->getMappedValue('Product Visible?', $mappedData) ?? 'Yes'),
                 'allow_purchase' => $this->toBool($this->getMappedValue('Allow Purchases?', $mappedData) ?? 'Yes'),
                 'free_shipping' => $this->toBool($this->getMappedValue('Free Shipping', $mappedData) ?? 'No'),
@@ -192,16 +201,35 @@ class ProductImport implements OnEachRow, WithChunkReading
                 ]
             );
 
-            // Images
-            foreach ($mappedData as $key => $value) {
-                if (stripos($key, 'Product Image File') !== false && !empty(trim($value))) {
-                    $imagePath = trim($value);
-                    ProductImage::updateOrCreate(
-                        ['store_id' => $this->storeId, 'product_id' => $product->id, 'path' => $imagePath],
-                        ['alt_text' => $productName, 'is_primary' => true]
-                    );
+          // Images
+        $primarySet = false;
+
+        foreach ($mappedData as $key => $value) {
+            if (stripos($key, 'Product Image File') !== false && !empty(trim($value))) {
+                $imagePath = trim($value);
+            
+                // Get corresponding description column
+                $descKey = str_replace('File', 'Description', $key);
+                $description = $mappedData[$descKey] ?? null;
+            
+                ProductImage::updateOrCreate(
+                    [
+                        'store_id' => $this->storeId,
+                        'product_id' => $product->id,
+                        'path' => $imagePath
+                    ],
+                    [
+                        'alt_text' => $productName,
+                        'is_primary' => !$primarySet ? 1 : 0,
+                        'description' => $description
+                    ]
+                );
+            
+                if (!$primarySet) {
+                    $primarySet = true; // mark first image as primary
                 }
             }
+        }
 
         } catch (\Throwable $e) {
             Log::error("❌ Row $rowIndex: " . $e->getMessage());
@@ -212,6 +240,7 @@ class ProductImport implements OnEachRow, WithChunkReading
     {
         return 1000;
     }
+
     public function __destruct()
     {
         if ($this->progressKey) {
@@ -301,7 +330,7 @@ class ProductImport implements OnEachRow, WithChunkReading
             $spreadsheet = IOFactory::load($filePath);
             $sheet = $spreadsheet->getActiveSheet();
             $highestRow = $sheet->getHighestRow();
-            return max(1, $highestRow - 1); // subtract header
+            return max(1, $highestRow - 1);
         } catch (\Throwable $e) {
             Log::warning("Unable to count Excel rows: " . $e->getMessage());
             return 1000;
