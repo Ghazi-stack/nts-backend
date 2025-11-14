@@ -62,7 +62,8 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::delete('/delete-draft/{id}', 'deleteDraftOrder'); // DELETE a draft order
         Route::get('/get-return-order','listReturnRequestsForAdmin');
         Route::get('/get-notes/{orderId}', 'getOrderNotes');
-        Route::post('/add-orders', 'storeFromDashboard');
+        Route::post('/existing-customer', 'storeFromDashboard');
+        Route::post('/new-customer', 'storeNewCustomerOrder');
         Route::post('/search-advanced', 'advancedOrderSearch');
         Route::put('/update-order/{id}', 'updateFromDashboard');
         Route::get('/invoice/{id}', 'downloadInvoice');
