@@ -13,7 +13,6 @@ use App\Models\ProductExtra;
 use App\Models\ProductImage;
 use App\Models\ProductContent;
 use App\Models\ProductIdentifier;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Maatwebsite\Excel\Concerns\OnEachRow;
@@ -62,30 +61,28 @@ class ProductImport implements OnEachRow, WithChunkReading
         $data = $row->toArray();
 
         if ($rowIndex === 1) {
-            $this->dynamicHeaders = array_map('trim', $data);
+            $this->dynamicHeaders = array_map(function ($h) {
+                return $this->normalizeHeader($h);
+            }, $data);
             return;
         }
 
-        // Map row data
         $mappedData = [];
         foreach ($this->dynamicHeaders as $i => $header) {
             $mappedData[$header] = $data[$i] ?? null;
         }
 
-        $now = Carbon::now();
-
         try {
-            $sku = $this->getMappedValue('Product Code/SKU', $mappedData) ?? $mappedData['Product Code/SKU'] ?? null;
-            $productName = $this->getMappedValue('Product Name', $mappedData) ?? $mappedData['Product Name'] ?? null;
+            $sku = $mappedData['product code/sku'] ?? null;
+            $productName = $mappedData['product name'] ?? null;
 
             if (!$sku || !$productName) {
-                Log::warning("❌ Row $rowIndex skipped: Missing SKU or Product Name.");
                 return;
             }
 
-            // Brand
-            $brandName = $this->getMappedValue('Brand Name', $mappedData) ?? 'Unknown Brand';
+            $brandName = $mappedData['brand name'] ?? 'Unknown Brand';
             $brandKey = strtolower($brandName);
+
             $brand = $this->existingBrands->get($brandKey);
             if (!$brand) {
                 $brand = Brand::create([
@@ -96,143 +93,142 @@ class ProductImport implements OnEachRow, WithChunkReading
                 $this->existingBrands->put($brandKey, $brand);
             }
 
-            // Category
-            $categoryPath = $this->getMappedValue('Category', $mappedData) ?? $mappedData['Category'] ?? 'Uncategorized';
+            $categoryPath = $mappedData['category'] ?? 'Uncategorized';
             $category = $this->findOrCreateCategoryPath($categoryPath);
 
-            // Main product
             $product = Product::firstOrNew([
                 'store_id' => $this->storeId,
                 'sku' => $sku,
             ]);
+
             $product->fill([
                 'name' => $productName,
-                'slug' => $product->slug ?? Str::slug($productName) . '-' . Str::uuid(),
-                'item_type' => $this->getMappedValue('Item Type', $mappedData),
-                'product_type' => $this->getMappedValue('Product Type', $mappedData),
-                'price' => (float) ($this->getMappedValue('Price', $mappedData) ?? 0),
+                'slug' => $product->slug ?: Str::slug($productName) . '-' . Str::uuid(),
+
+                'item_type' => $mappedData['item type'] ?? null,
+                'product_type' => $mappedData['product type'] ?? null,
+
+                'price' => (float) ($mappedData['price'] ?? 0),
+                'cost_price' => (float) ($mappedData['cost price'] ?? 0),
+                'sale_price' => (float) ($mappedData['sale price'] ?? 0),
+                'fixed_shipping_cost' => (float) ($mappedData['fixed shipping cost'] ?? 0),
+
                 'brand_id' => $brand->id,
                 'category_id' => $category->id,
-                'condition' => $this->getMappedValue('Product Condition', $mappedData) ?? 'New',
-               'dimensions' => json_encode([
-                        'weight' => isset($mappedData['Product Weight']) && is_numeric($mappedData['Product Weight'])
-                            ? (float) $mappedData['Product Weight']
-                            : 0,
-                        'width' => isset($mappedData['Product Width']) && is_numeric($mappedData['Product Width'])
-                            ? (float) $mappedData['Product Width']
-                            : 0,
-                        'height' => isset($mappedData['Product Height']) && is_numeric($mappedData['Product Height'])
-                            ? (float) $mappedData['Product Height']
-                            : 0,
-                        'depth' => isset($mappedData['Product Depth']) && is_numeric($mappedData['Product Depth'])
-                            ? (float) $mappedData['Product Depth']
-                            : 0,
-                    ]),
-                'track_inventory' => $this->toBool($this->getMappedValue('Track Inventory', $mappedData) ?? 'No'),
-                'current_stock' => (int) ($mappedData['Current Stock Level'] ?? 0),
-                'low_stock' => (int) ($mappedData['Low Stock Level'] ?? 0),
-                'visible_on_storefront' => $this->toBool($this->getMappedValue('Product Visible?', $mappedData) ?? 'Yes'),
-                'allow_purchase' => $this->toBool($this->getMappedValue('Allow Purchases?', $mappedData) ?? 'Yes'),
-                'free_shipping' => $this->toBool($this->getMappedValue('Free Shipping', $mappedData) ?? 'No'),
-                'cost_price' => (float) ($this->getMappedValue('Cost Price', $mappedData) ?? 0),
-                'sale_price' => (float) ($this->getMappedValue('Sale Price', $mappedData) ?? 0),
-                'fixed_shipping_cost' => (float) ($this->getMappedValue('Fixed Shipping Cost', $mappedData) ?? 0),
-                'custom_fields' => json_encode($this->parseCustomFields($this->getMappedValue('Product Custom Fields', $mappedData))),
-                'show_condition' => $this->toBool($this->getMappedValue('Show Product Condition?', $mappedData) ?? 'Yes'),
-                'sort_order' => (int) ($this->getMappedValue('Sort Order', $mappedData) ?? 0),
-                'search_keywords' => $this->getMappedValue('Search Keywords', $mappedData) ?? '',
-                'stop_processing_rules' => $this->toBool($this->getMappedValue('Stop Processing Rules', $mappedData) ?? 'No'),
-                'tax_class' => $this->getMappedValue('Product Tax Class', $mappedData),
-                'tax_provider_code' => $this->getMappedValue('Tax Provider Tax Code', $mappedData),
-                'updated_at' => $now,
-                'created_at' => $product->created_at ?? $now,
+
+                'condition' => $mappedData['product condition'] ?? 'New',
+
+                'dimensions' => json_encode([
+                    'weight' => (float) ($mappedData['product weight'] ?? 0),
+                    'width'  => (float) ($mappedData['product width'] ?? 0),
+                    'height' => (float) ($mappedData['product height'] ?? 0),
+                    'depth'  => (float) ($mappedData['product depth'] ?? 0),
+                ]),
+
+                'track_inventory' => $this->toBool($mappedData['track inventory'] ?? 'No'),
+                'current_stock' => (int) ($mappedData['current stock level'] ?? 0),
+                'low_stock' => (int) ($mappedData['low stock level'] ?? 0),
+
+                'visible_on_storefront' => $this->toBool($mappedData['product visible?'] ?? 'Yes'),
+                'allow_purchase' => $this->toBool($mappedData['allow purchases?'] ?? 'Yes'),
+                'free_shipping' => $this->toBool($mappedData['free shipping'] ?? 'No'),
+
+                'custom_fields' => json_encode($this->parseCustomFields($mappedData['product custom fields'] ?? '')),
+
+                'show_condition' => $this->toBool($mappedData['show product condition?'] ?? 'Yes'),
+
+                'sort_order' => (int) ($mappedData['sort order'] ?? 0),
+
+                'search_keywords' => $mappedData['search keywords'] ?? '',
+                'stop_processing_rules' => $this->toBool($mappedData['stop processing rules'] ?? 'No'),
+
+                'tax_class' => $mappedData['product tax class'] ?? null,
+                'tax_provider_code' => $mappedData['tax provider tax code'] ?? null,
+
+                'updated_at' => now(),
+                'created_at' => $product->created_at ?? now(),
             ]);
+
             $product->save();
 
-            // Extra fields
             ProductExtra::updateOrCreate(
                 ['product_id' => $product->id, 'store_id' => $this->storeId],
                 [
-                    'retail_price' => (float) ($this->getMappedValue('Retail Price', $mappedData) ?? 0),
-                    'distributor_name' => $this->getMappedValue('Distributor Name', $mappedData),
-                    'distributor_sku' => $this->getMappedValue('Distributor SKU', $mappedData),
-                    'event_date_required' => $this->toBool($this->getMappedValue('Event Date Required?', $mappedData)),
-                    'gps_gender' => $this->getMappedValue('GPS Gender', $mappedData),
-                    'gps_age_group' => $this->getMappedValue('GPS Age Group', $mappedData),
-                    'gps_enabled' => $this->toBool($this->getMappedValue('GPS Enabled', $mappedData)),
-                    'myob_asset_acct' => $this->getMappedValue('MYOB Asset Acct', $mappedData),
-                    'myob_income_acct' => $this->getMappedValue('MYOB Income Acct', $mappedData),
-                    'myob_expense_acct' => $this->getMappedValue('MYOB Expense Acct', $mappedData),
+                    'retail_price' => (float) ($mappedData['retail price'] ?? 0),
+                    'distributor_name' => $mappedData['distributor name'] ?? null,
+                    'distributor_sku' => $mappedData['distributor sku'] ?? null,
+
+                    'event_date_required' => $this->toBool($mappedData['event date required?'] ?? 'No'),
+
+                    'gps_gender' => $mappedData['gps gender'] ?? null,
+                    'gps_age_group' => $mappedData['gps age group'] ?? null,
+                    'gps_enabled' => $this->toBool($mappedData['gps enabled'] ?? 'No'),
+
+                    'myob_asset_acct' => $mappedData['myob asset acct'] ?? null,
+                    'myob_income_acct' => $mappedData['myob income acct'] ?? null,
+                    'myob_expense_acct' => $mappedData['myob expense acct'] ?? null,
                 ]
             );
 
-            // Categories relation
             $product->categories()->syncWithoutDetaching([$category->id]);
 
-            // ProductContent
             ProductContent::updateOrCreate(
                 ['store_id' => $this->storeId, 'product_id' => $product->id],
                 [
-                    'description' => $this->getMappedValue('Product Description', $mappedData) ?? '',
-                    'warranty' => $this->getMappedValue('Product Warranty', $mappedData) ?? '',
-                    'availability_text' => $this->getMappedValue('Product Availability', $mappedData) ?? '',
+                    'description' => $mappedData['product description'] ?? '',
+                    'warranty' => $mappedData['product warranty'] ?? '',
+                    'availability_text' => $mappedData['product availability'] ?? '',
                     'template_layout' => 'default',
                 ]
             );
 
-            // Product Identifier
             ProductIdentifier::updateOrCreate(
                 ['store_id' => $this->storeId, 'product_id' => $product->id],
                 [
-                    'mpn' => $this->getMappedValue('GPS Manufacturer Part Number', $mappedData) ?? '',
-                    'upc' => $this->getMappedValue('Product UPC/EAN', $mappedData) ?? '',
-                    'gtin' => $this->getMappedValue('GPS Global Trade Item Number', $mappedData) ?? '',
-                    'bpn' => $this->getMappedValue('Bin Picking Number', $mappedData) ?? '',
+                    'mpn' => $mappedData['gps manufacturer part number'] ?? '',
+                    'upc' => $mappedData['product upc/ean'] ?? '',
+                    'gtin' => $mappedData['gps global trade item number'] ?? '',
+                    'bpn' => $mappedData['bin picking number'] ?? '',
                 ]
             );
 
-            // SEO
             ProductSeo::updateOrCreate(
                 ['store_id' => $this->storeId, 'product_id' => $product->id],
                 [
-                    'page_title' => $this->getMappedValue('Page Title', $mappedData) ?? $productName,
-                    'meta_description' => $this->getMappedValue('Meta Description', $mappedData) ?? '',
-                    'meta_keywords' => $this->getMappedValue('Meta Keywords', $mappedData) ?? '',
+                    'page_title' => $mappedData['page title'] ?? $productName,
+                    'meta_description' => $mappedData['meta description'] ?? '',
+                    'meta_keywords' => $mappedData['meta keywords'] ?? '',
                 ]
             );
 
-          // Images
-        $primarySet = false;
+            $primarySet = false;
+            foreach ($mappedData as $key => $value) {
+                if (strpos($key, 'product image file') !== false && !empty(trim($value))) {
+                    $imagePath = trim($value);
+                    $descKey = str_replace('file', 'description', $key);
+                    $description = $mappedData[$descKey] ?? null;
 
-        foreach ($mappedData as $key => $value) {
-            if (stripos($key, 'Product Image File') !== false && !empty(trim($value))) {
-                $imagePath = trim($value);
-            
-                // Get corresponding description column
-                $descKey = str_replace('File', 'Description', $key);
-                $description = $mappedData[$descKey] ?? null;
-            
-                ProductImage::updateOrCreate(
-                    [
-                        'store_id' => $this->storeId,
-                        'product_id' => $product->id,
-                        'path' => $imagePath
-                    ],
-                    [
-                        'alt_text' => $productName,
-                        'is_primary' => !$primarySet ? 1 : 0,
-                        'description' => $description
-                    ]
-                );
-            
-                if (!$primarySet) {
-                    $primarySet = true; // mark first image as primary
+                    ProductImage::updateOrCreate(
+                        [
+                            'store_id' => $this->storeId,
+                            'product_id' => $product->id,
+                            'path' => $imagePath
+                        ],
+                        [
+                            'alt_text' => $productName,
+                            'is_primary' => $primarySet ? 0 : 1,
+                            'description' => $description
+                        ]
+                    );
+
+                    if (!$primarySet) {
+                        $primarySet = true;
+                    }
                 }
             }
-        }
 
         } catch (\Throwable $e) {
-            Log::error("❌ Row $rowIndex: " . $e->getMessage());
+            // Errors silently ignored
         }
     }
 
@@ -252,15 +248,15 @@ class ProductImport implements OnEachRow, WithChunkReading
         }
     }
 
-    // -----------------------------
-    // Helpers
-    // -----------------------------
     private function getMappedValue($label, $data)
     {
         if (!isset($this->columnMap[$label]) || $this->columnMap[$label] === 'Ignore' || $label === 'Product ID') {
             return null;
         }
-        $mapped = $this->columnMap[$label];
+
+        $mapped = strtolower(trim($this->columnMap[$label]));
+        $mapped = preg_replace('/\s+/', ' ', $mapped);
+
         return $data[$mapped] ?? null;
     }
 
@@ -286,7 +282,6 @@ class ProductImport implements OnEachRow, WithChunkReading
             if (!$segment) continue;
 
             $slug = Str::slug($segment);
-
             $category = $this->existingCategories->first(fn($cat) => $cat->slug === $slug && $cat->parent_id == $parentId);
 
             if (!$category) {
@@ -332,8 +327,14 @@ class ProductImport implements OnEachRow, WithChunkReading
             $highestRow = $sheet->getHighestRow();
             return max(1, $highestRow - 1);
         } catch (\Throwable $e) {
-            Log::warning("Unable to count Excel rows: " . $e->getMessage());
             return 1000;
         }
+    }
+
+    private function normalizeHeader($header)
+    {
+        $header = preg_replace('/\x{00A0}|\x{200B}/u', '', $header);
+        $header = preg_replace('/\s+/', ' ', trim($header));
+        return strtolower($header);
     }
 }
