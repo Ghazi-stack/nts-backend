@@ -184,13 +184,13 @@ class ProductController extends Controller
         }
     }
 
-    public function showProduct($slug, Request $request)
+    public function showProduct($sku, Request $request)
     {
         try {
             $storeId = current_store_id();
         
             // Logging for debugging
-            Log::info('🔍 Slug requested: ' . $slug);
+            Log::info('🔍 Sku requested: ' . $sku);
             Log::info('🏬 Store ID: ' . $storeId);
         
             // Main query
@@ -203,13 +203,13 @@ class ProductController extends Controller
                 'seo',
                 'reviews.user'
             ])
-            ->where('slug', $slug)
+            ->where('sku', $sku)
             ->where('store_id', $storeId)
             ->first();
             
             // Fallback using LIKE if exact match fails
             if (!$product) {
-                Log::warning("⚠️ Exact slug match failed, trying LIKE fallback...");
+                Log::warning("⚠️ Exact sku match failed, trying LIKE fallback...");
                 $product = Product::with([
                     'brand',
                     'categories.parent.parent.parent.parent',
@@ -219,7 +219,7 @@ class ProductController extends Controller
                     'seo',
                     'reviews.user'
                 ])
-                ->where('slug', 'like', "%$slug%")
+                ->where('sku', 'like', "%$sku%")
                 ->where('store_id', $storeId)
                 ->first();
             }
@@ -229,7 +229,7 @@ class ProductController extends Controller
                 return response()->json([
                     'status' => false,
                     'error' => 'Product not found.',
-                    'slug' => $slug,
+                    'sku' => $sku,
                     'store_id' => $storeId
                 ], 404);
             }
