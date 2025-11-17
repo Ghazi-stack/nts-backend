@@ -20,6 +20,7 @@ class StripePaymentController extends Controller
      */
     public function pay(Request $request)
     {
+        // \Log::info('Stripe Secret:', ['stripe_secret' => env('STRIPE_SECRET')]);
         $request->validate([
             'payment_method_id' => 'required|string',
             'products'         => 'required|array|min:1',
@@ -30,7 +31,6 @@ class StripePaymentController extends Controller
         $user = auth('sanctum')->user();
         $cartItems = $request->products;
 
-        // 1️⃣ Calculate total amount server-side
         $totalAmount = 0;
         foreach ($cartItems as $item) {
             $product = Product::find($item['product_id']);
@@ -41,7 +41,7 @@ class StripePaymentController extends Controller
         // 2️⃣ Generate order number
         $orderNumber = 'ORD-' . strtoupper(Str::random(8));
 
-        Stripe::setApiKey(env('STRIPE_SECRET'));
+        Stripe::setApiKey('sk_test_51Q84ITDXm8Pt3arONFu7h0WRrTdN5GUpTIeWXWc6KkIGo6LbrgFpIhAs8U0x7zDJj9igFanjYQqK1nDkqhvToAhw00sAOUIOWQ');
 
         try {
             DB::beginTransaction();
@@ -52,6 +52,7 @@ class StripePaymentController extends Controller
                 'currency' => $currency,
                 'payment_method' => $request->payment_method_id,
                 'confirmation_method' => 'manual',
+                'payment_method_types' => ['card'], // Only allow cards
                 'confirm' => true,
                 'metadata' => [
                     'user_id' => $user?->id,
@@ -70,6 +71,7 @@ class StripePaymentController extends Controller
                     'payment_intent_client_secret' => $intent->client_secret
                 ]);
             }
+            // dd($intent);
 
             // 5️⃣ Payment succeeded → create order
             $order = Order::create([
