@@ -2,80 +2,126 @@
 
 namespace App\Http\Controllers\api\Web;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use Stripe\Stripe;
-use Stripe\PaymentIntent;
 use Stripe\Webhook;
+use Stripe\PaymentIntent;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\Product;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use App\Http\Controllers\Controller;
 
 class StripePaymentController extends Controller
 {
     /**
-     * 🧱 1️⃣ Create a PaymentIntent
-     * Frontend will call this when user proceeds to pay
+     * 💳 Pay and create order only after payment
      */
-    public function createPaymentIntent(Request $request)
+    public function pay(Request $request)
     {
+        $request->validate([
+            'payment_method_id' => 'required|string',
+            'products'         => 'required|array|min:1',
+            'products.*.product_id' => 'required|integer|exists:products,id',
+            'products.*.quantity'   => 'required|integer|min:1',
+        ]);
+
+        $user = auth('sanctum')->user();
+        $cartItems = $request->products;
+
+        // 1️⃣ Calculate total amount server-side
+        $totalAmount = 0;
+        foreach ($cartItems as $item) {
+            $product = Product::find($item['product_id']);
+            $totalAmount += $product->price * $item['quantity'];
+        }
+        $currency = 'usd';
+
+        // 2️⃣ Generate order number
+        $orderNumber = 'ORD-' . strtoupper(Str::random(8));
+
+        Stripe::setApiKey(env('STRIPE_SECRET'));
+
         try {
-            $request->validate([
-                'orderId' => 'required|exists:orders,id',
-            ]);
+            DB::beginTransaction();
 
-            $order = Order::findOrFail($request->orderId);
-
-            Stripe::setApiKey(env('STRIPE_SECRET'));
-
-            // Create PaymentIntent in Stripe
+         
             $intent = PaymentIntent::create([
-                'amount' => intval($order->total_amount * 100), // cents
-                'currency' => 'usd',
+                'amount' => intval($totalAmount * 100), // cents
+                'currency' => $currency,
+                'payment_method' => $request->payment_method_id,
+                'confirmation_method' => 'manual',
+                'confirm' => true,
                 'metadata' => [
-                    'order_id' => $order->id,
+                    'user_id' => $user?->id,
+                    'order_number' => $orderNumber,
+                    'products' => json_encode($cartItems),
                 ],
+            ], [
+                'idempotency_key' => uniqid('payment_', true)
             ]);
 
-            // Store PaymentIntent ID in local DB
+            // 4️⃣ Handle 3D Secure / extra authentication
+            if (in_array($intent->status, ['requires_action', 'requires_source_action'])) {
+                DB::commit();
+                return response()->json([
+                    'status' => 'requires_action',
+                    'payment_intent_client_secret' => $intent->client_secret
+                ]);
+            }
+
+            // 5️⃣ Payment succeeded → create order
+            $order = Order::create([
+                'user_id' => $user?->id,
+                'order_number' => $orderNumber,
+                'status' => 'paid',
+                'total_amount' => $totalAmount,
+            ]);
+
+            // 6️⃣ Create order items
+            foreach ($cartItems as $item) {
+                $product = Product::find($item['product_id']);
+                $order->items()->create([
+                    'product_id' => $product->id,
+                    'quantity' => $item['quantity'],
+                    'price' => $product->price,
+                ]);
+            }
+
+            // 7️⃣ Store payment record
             Payment::create([
                 'order_id' => $order->id,
                 'stripe_session_id' => $intent->id,
-                'amount' => $order->total_amount,
-                'payment_status' => 'pending',
+                'amount' => $totalAmount,
+                'payment_status' => 'completed',
             ]);
 
+            DB::commit();
+
             return response()->json([
-                'clientSecret' => $intent->client_secret,
+                'status' => 'success',
+                'order_id' => $order->id,
+                'payment_status' => $intent->status
             ]);
+
+        } catch (\Stripe\Exception\CardException $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getError()->message
+            ], 402);
         } catch (\Exception $e) {
-            \Log::error('Stripe PaymentIntent error:', ['error' => $e->getMessage()]);
-            return response()->json(['error' => $e->getMessage()], 500);
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 500);
         }
     }
 
     /**
-     * 🧾 2️⃣ Check Payment Status (optional)
-     * Frontend can call this after payment attempt
-     */
-    public function checkPaymentStatus($orderId)
-    {
-        try {
-            $order = Order::findOrFail($orderId);
-            Stripe::setApiKey(env('STRIPE_SECRET'));
-
-            $intent = PaymentIntent::retrieve($order->stripe_payment_intent);
-
-            return response()->json([
-                'status' => $intent->status,
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    }
-
-    /**
-     * 📩 3️⃣ Stripe Webhook
-     * Stripe will call this automatically after successful payment
+     * 📩 Stripe Webhook to update order/payment status
      */
     public function handleWebhook(Request $request)
     {
@@ -94,17 +140,18 @@ class StripePaymentController extends Controller
             return response()->json(['error' => $e->getMessage()], 400);
         }
 
-        // Handle successful payment
         if ($event->type === 'payment_intent.succeeded') {
             $intent = $event->data->object;
-            $orderId = $intent->metadata->order_id ?? null;
 
-            if ($orderId) {
-                $order = Order::find($orderId);
+            // Find payment record by Stripe PaymentIntent ID
+            $payment = Payment::where('stripe_session_id', $intent->id)->first();
+            if ($payment) {
+                $payment->update(['payment_status' => 'completed']);
+
+                // Update order status
+                $order = $payment->order;
                 if ($order) {
                     $order->update(['status' => 'paid']);
-                   Payment::where('stripe_session_id', $intent->id)
-                            ->update(['payment_status' => 'completed']);
                 }
             }
         }
