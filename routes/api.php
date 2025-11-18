@@ -8,7 +8,7 @@ use App\Http\Controllers\api\Admin\{
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
-    WishlistController, StripePaymentController, StripeWebhookController,OrderItemController,ShipmentController
+    WishlistController, StripePaymentController, StripeWebhookController,OrderItemController,ShipmentController,ContactRequestController,BulkInquiryController
 };
 use App\Http\Controllers\api\AuthController;
 // ===============================
@@ -316,6 +316,15 @@ Route::prefix('web')->group(function () {
     Route::prefix('logos')->controller(LogoController::class)->group(function(){
         Route::get('/get-logos','index');          // Paginated list
         Route::get('/get-logo/{id}','showById');   // Get single logo by ID
+    });
+    Route::prefix('contact-requests')->controller(ContactRequestController::class)->group(function(){
+        Route::post('/submit', 'store');          // Submit contact request
+    });
+    Route::prefix('contact-requests')->controller(ContactRequestController::class)->group(function(){
+        Route::post('/submit', 'store');          // Submit contact request
+    });
+    Route::prefix('bulk-inquiries')->controller(BulkInquiryController::class)->group(function(){
+        Route::post('/submit', 'store');          // Submit bulk inquiry
     });
 
     // 💳 Stripe
