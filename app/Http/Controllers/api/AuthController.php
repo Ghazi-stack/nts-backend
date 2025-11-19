@@ -480,6 +480,61 @@ class AuthController extends Controller
         }
     }
 
+    public function updatePassword(Request $request)
+{
+    try {
+        // ✅ Validate inputs
+        $validator = Validator::make($request->all(), [
+            'currentPassword' => 'required|string',
+            'newPassword'     => 'required|string',
+            'confirmPassword' => 'required|string|same:newPassword',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Validation errors',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $user = $request->user();
+
+        // ✅ Check current password
+        if (!Hash::check($request->currentPassword, $user->password)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Current password is incorrect.',
+            ], 401);
+        }
+
+        // ✅ Prevent reusing the same password
+        if (Hash::check($request->newPassword, $user->password)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'New password cannot be the same as the current password.',
+            ], 400);
+        }
+
+        // ✅ Update password
+        $user->password = Hash::make($request->newPassword);
+        $user->save();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Password updated successfully.',
+        ], 200);
+
+    } catch (\Exception $e) {
+        \Log::error('Password update failed: ' . $e->getMessage());
+
+        return response()->json([
+            'status' => false,
+            'message' => 'Something went wrong while updating the password.',
+        ], 500);
+    }
+}
+
 
 }
 

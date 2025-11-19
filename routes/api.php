@@ -43,7 +43,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::prefix('profile')->controller(AuthController::class)->group(function () {
         Route::post('/update-email', 'updateEmail'); 
         Route::put('/update-name', 'updateName'); 
-        
+        Route::post('/update-password', 'updatePassword'); 
     });
     // Main Search
     Route::get('/global-search', [GlobalSearchController::class, 'search']);
