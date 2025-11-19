@@ -1662,6 +1662,21 @@ public function importProgress($progressKey)
 
     return response()->json($progress);
 }
+public function cancelImport(Request $request)
+{
+    $progressKey = $request->input('progress_key');
+
+    if (!$progressKey) {
+        return response()->json(['error' => 'Progress key is required.'], 400);
+    }
+
+    // Set cancel flag in cache
+    Cache::put($progressKey . '_cancel', true, 3600);
+
+    return response()->json([
+        'status' => 'cancel_requested'
+    ]);
+}
 
 
     /**

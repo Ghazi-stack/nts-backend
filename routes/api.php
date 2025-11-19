@@ -161,6 +161,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/search-product', 'searchProduct');
         Route::post('/advanced-search', 'searchAdvanced');
         Route::post('/import-csv', 'importCSV');
+        Route::post('/cancel-import', 'cancelImport');
         Route::get('/import-progress/{progressKey}', 'importProgress');
         Route::get('/export-csv', 'exportCSV');
         Route::delete('/delete-product/categories/{id}', 'destroyProductCategories');

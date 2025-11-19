@@ -13,6 +13,7 @@ use App\Models\ProductExtra;
 use App\Models\ProductImage;
 use App\Models\ProductContent;
 use App\Models\ProductIdentifier;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Maatwebsite\Excel\Concerns\OnEachRow;
@@ -48,6 +49,17 @@ class ProductImport implements OnEachRow, WithChunkReading
     public function onRow(Row $row)
     {
         $this->currentRow++;
+
+        if ($this->progressKey && Cache::get($this->progressKey.'_cancel')) {
+            Cache::put($this->progressKey, [
+                'current' => $this->currentRow,
+                'total' => $this->totalRows,
+                'status' => 'cancelled',
+            ], 3600);
+             Log::info("Product import cancelled by user. Progress key: {$this->progressKey}, stopped at row: {$this->currentRow}");
+
+             throw new \Exception('Import cancelled by user.');
+        }
 
         if ($this->progressKey && $this->currentRow % $this->chunkSize() === 0) {
             Cache::put($this->progressKey, [
