@@ -29,6 +29,7 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
     Route::post('/forgot-password', 'forgotPassword');
     Route::post('/reset-password', 'resetPassword');
     Route::middleware('auth:sanctum')->post('/logout', 'logout');
+
 });
 
 // ===============================
@@ -37,6 +38,13 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
 
 
 Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
+
+    // Profile
+    Route::prefix('profile')->controller(AuthController::class)->group(function () {
+        Route::post('/update-email', 'updateEmail'); 
+        Route::put('/update-name', 'updateName'); 
+        
+    });
     // Main Search
     Route::get('/global-search', [GlobalSearchController::class, 'search']);
     // 🏢 Store Management

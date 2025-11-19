@@ -41,8 +41,7 @@ class BulkInquiryController extends Controller
                 'sku' => $validated['sku'],
             ]);
 
-            // Send email to fixed admin
-            $adminEmail = 'testing@shiwantek.com'; // hardcoded for now
+            $adminEmail = config('mail.from.address'); 
             Mail::to($adminEmail)->send(new BulkInquiryMail($bulkInquiry));
 
             return response()->json([

@@ -41,7 +41,7 @@ class ContactRequestController extends Controller
                 'required_qty' => $validated['requiredQty'],
             ]);
              
-            $adminEmail = 'testing@shiwantek.com';
+            $adminEmail = config('mail.from.address'); // Using .env MAIL_FROM_ADDRESS
             Mail::to($adminEmail)->send(new ContactRequestMail($contactRequest));
             return response()->json([
                 'status' => true,

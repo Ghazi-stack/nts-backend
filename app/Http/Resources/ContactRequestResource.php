@@ -16,7 +16,8 @@ class ContactRequestResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'storeId' => $this->store_id,
+            // 'storeId' => $this->store_id,
+            'storeName' => $this->store ? $this->store->name : null, // store name instead of ID
             'company' => $this->company,
             'email' => $this->email,
             'fullName' => $this->full_name,

@@ -382,5 +382,104 @@ class AuthController extends Controller
         }
     }
 
+    public function updateName(Request $request)
+    {
+        try {
+            // ✅ Validate input
+            $validator = Validator::make($request->all(), [
+                'firstName' => 'nullable|string|max:100',
+                'lastName'  => 'nullable|string|max:100',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Validation errors',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // ✅ Get authenticated user
+            $user = $request->user();
+
+            // ✅ Update concatenated name
+            $user->name = trim($request->firstName . ' ' . $request->lastName);
+            $user->save();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Name updated successfully',
+                'user' => new UserResource($user),
+            ], 200);
+
+        } catch (\Exception $e) {
+            \Log::error('Update name failed: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong while updating the name',
+            ], 500);
+        }
+    }
+
+    public function updateEmail(Request $request)
+    {
+        try {
+            // ✅ Validate inputs
+            $validator = Validator::make($request->all(), [
+                'newEmail' => 'nullable|email|unique:users,email',
+                'password' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Validation errors',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $user = $request->user(); // currently logged-in user
+
+            // ✅ Check password
+            if (!Hash::check($request->password, $user->password)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Incorrect password.',
+                ], 401);
+            }
+
+            DB::beginTransaction();
+
+            // ✅ Update email in users table
+            $user->email = $request->newEmail;
+            $user->save();
+
+            // ✅ Update email in customers table if linked
+            if ($user->customer) {
+                $user->customer->email = $request->newEmail;
+                $user->customer->save();
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Email updated successfully.',
+                'user' => new UserResource($user),
+            ], 200);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Email update failed: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong while updating email.',
+            ], 500);
+        }
+    }
+
+
 }
 
