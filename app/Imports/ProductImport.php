@@ -246,7 +246,7 @@ class ProductImport implements OnEachRow, WithChunkReading
 
     public function chunkSize(): int
     {
-        return 1000;
+        return 200;
     }
 
     public function __destruct()
