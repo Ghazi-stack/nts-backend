@@ -1611,72 +1611,56 @@ class ProductController extends Controller
 //     }
 // }
 
-    public function importCSV(Request $request)
-{
-    $request->validate([
-        'file' => 'required|file|mimes:xlsx,xls,csv',
-    ]);
+public function importCSV(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls,csv',
+        ]);
 
-    $file = $request->file('file');
+        $file = $request->file('file');
 
-    $storeId = current_store_id();
-    if (!$storeId) {
-        return response()->json(['error' => 'Store not selected.'], 400);
-    }
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json(['error' => 'Store not selected'], 400);
+        }
 
-    // Save file permanently to storage/imports
-    $storedFilePath = $file->store('imports'); // returns e.g., 'imports/file.xlsx'
+        $storedFilePath = $file->store('imports');
 
-    $columnMap = $request->input('column_map', []);
-      // Generate unique progress key
-    $progressKey = 'import_progress_' . Str::uuid();
+        // unique progress key
+        $progressKey = 'import_' . Str::uuid();
 
-    // Initialize progress
-    Cache::put($progressKey, [
-        'current' => 0,
-        'total' => 0,
-        'status' => 'queued', // queued, processing, finished
-    ], 3600); // expires in 1 hour
-    try {
-        // Dispatch the job with permanent file path
-        ProcessProductImport::dispatch(storage_path('app/' . $storedFilePath), $storeId, $columnMap, $progressKey);
+        // initialize progress
+        Cache::put($progressKey, [
+            'current' => 0,
+            'status' => 'queued'
+        ], 7200);
+
+        Cache::put($progressKey . "_cancel", false, 7200);
+        Cache::put($progressKey . "_count", 0, 7200);
+
+        Excel::queueImport(
+            new ProductImport($storeId, $progressKey),
+            $storedFilePath
+        );
 
         return response()->json([
-            'success' => 'Products import queued successfully.',
+            'success' => true,
             'progress_key' => $progressKey
         ]);
-    } catch (\Exception $e) {
-        \Log::error("❌ Product Import Dispatch Error: " . $e->getMessage());
-        return response()->json([
-            'error' => 'Import failed: ' . $e->getMessage()
-        ], 500);
-    }
-}
-public function importProgress($progressKey)
-{
-    $progress = Cache::get($progressKey, [
-        'current' => 0,
-        'total' => 0,
-        'status' => 'unknown',
-    ]);
-
-    return response()->json($progress);
-}
-public function cancelImport(Request $request)
-{
-    $progressKey = $request->input('progress_key');
-
-    if (!$progressKey) {
-        return response()->json(['error' => 'Progress key is required.'], 400);
     }
 
-    // Set cancel flag in cache
-    Cache::put($progressKey . '_cancel', true, 3600);
+    public function importProgress($progressKey)
+    {
+        return response()->json(Cache::get($progressKey));
+    }
 
-    return response()->json([
-        'status' => 'cancel_requested'
-    ]);
-}
+    public function cancelImport(Request $request)
+    {
+        $key = $request->progress_key;
+        Cache::put($key . "_cancel", true);
+
+        return response()->json(['status' => 'cancel requested']);
+    }
 
 
     /**
