@@ -91,8 +91,6 @@ class ProductController extends Controller
     public function index(Request $request)
     {
         
-        ini_set('memory_limit', '8G');          
-        ini_set('max_execution_time', 300);    
 
         try {
             // Base query with full eager loading
@@ -134,7 +132,6 @@ class ProductController extends Controller
             // Pagination
             $page = (int) $request->input('page', 1);
             $pageSize = (int) $request->input('pageSize', 20);
-            $pageSize = min($pageSize, 50); // Max 50 to control memory & execution time
 
             $products = $query->paginate($pageSize, ['*'], 'page', $page);
 
