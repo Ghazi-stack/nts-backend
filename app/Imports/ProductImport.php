@@ -1,7 +1,7 @@
 <?php
- 
+
 namespace App\Imports;
- 
+
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Product;
@@ -18,222 +18,229 @@ use Maatwebsite\Excel\Concerns\OnEachRow;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Illuminate\Contracts\Queue\ShouldQueue;
- 
+
 class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, ShouldQueue
 {
     protected $storeId;
     protected $progressKey;
- 
-    // Small lightweight caches
+    protected $filePath; 
+    protected $ignoredFields = [];
+
     protected static $brandCache = [];
     protected static $categoryCache = [];
- 
-    public function __construct($storeId, $progressKey)
+
+    public function __construct($storeId, $progressKey, $filePath, $ignoredFields = [])
     {
         $this->storeId = $storeId;
         $this->progressKey = $progressKey;
+        $this->filePath = $filePath;
+        $this->ignoredFields = array_map('strtolower', $ignoredFields); // dynamic ignored fields
+        $this->calculateTotalRows();
     }
- 
+
     public function chunkSize(): int
     {
-        return 500; // very safe for localhost / production
+        return 500;
     }
- 
+
     public function onRow(Row $row)
     {
         $rowIndex = $row->getIndex();
- 
+
         try {
-            // Read & normalize row
             $raw = $row->toArray();
             $data = array_change_key_case(array_map('trim', $raw), CASE_LOWER);
- 
-            // Log the raw + normalized row (after $data exists)
-            Log::info("Row data", [
-                'row' => $rowIndex,
-                'raw' => $raw,
-                'normalized' => $data
-            ]);
- 
+
+            // Log first row keys for debugging
+            if ($rowIndex === 2) {
+                $keys = array_keys($data);
+                $normalizedKeys = array_map([$this, 'normalizeKey'], $keys);
+                Log::info("Normalized header keys", ['raw' => $keys, 'normalized' => $normalizedKeys]);
+            }
+
             // Cancel check
             if (Cache::get($this->progressKey . "_cancel")) {
+                Log::warning("Import cancelled at row #{$rowIndex}");
                 Cache::put($this->progressKey, [
                     'current' => Cache::get($this->progressKey . "_count"),
                     'status'  => 'cancelled'
                 ]);
-                throw new \Exception("Import cancelled");
+                return;
             }
- 
-            // --- Flexible field detection: try several possible header names ---
+
+            // --- Detect fields ---
             $sku = $this->getField($data, [
                 'product code/sku', 'product code / sku', 'product code sku',
-                'product code', 'sku', 'product_code', 'productcode', 'distributor sku' , 'distributor_sku'
+                'product code', 'sku', 'product_code', 'productcode',
+                'distributor sku', 'distributor_sku'
             ]);
- 
+
             $productName = $this->getField($data, [
                 'product name', 'name', 'product_name', 'productname'
             ]);
- 
-            if (!$productName) {
+
+            if (!$sku || !$productName) {
                 Log::warning("Row skipped — missing SKU or Name", [
                     'row' => $rowIndex,
                     'sku' => $sku,
                     'name' => $productName,
                 ]);
-                // Still increment progress count so UI doesn't hang if you want:
+
+               // Progress
                 Cache::increment($this->progressKey . "_count");
+
+                $current = Cache::get($this->progressKey . "_count");
+                $total   = Cache::get($this->progressKey . "_total");
+
+                $status = ($current >= $total) ? 'completed' : 'processing';
+
                 Cache::put($this->progressKey, [
-                    'current' => Cache::get($this->progressKey . "_count"),
-                    'status'  => 'processing'
+                    'current' => $current,
+                    'total'   => $total,
+                    'status'  => $status
                 ]);
                 return;
             }
- 
-            // Brand detection
+
+            // Brand
             $brandName = $this->getField($data, ['brand name', 'brand', 'manufacturer']) ?? 'Unknown Brand';
             $brandKey = strtolower($brandName);
- 
             if (!isset(self::$brandCache[$brandKey])) {
                 $brand = Brand::firstOrCreate(
-                    [
-                        'store_id' => $this->storeId,
-                        'name' => $brandName
-                    ],
-                    [
-                        'slug' => Str::slug($brandName),
-                    ]
+                    ['store_id' => $this->storeId, 'name' => $brandName],
+                    ['slug' => Str::slug($brandName)]
                 );
- 
                 self::$brandCache[$brandKey] = $brand->id;
             }
             $brandId = self::$brandCache[$brandKey];
- 
-            // Category detection: try multiple headers (gps category, gps category, category)
-            $categoryRaw = $this->getField($data, [
-                'category', 'gps category', 'gps category', 'gps_category', 'gps category'
-            ], 'Uncategorized');
- 
+
+            // Category
+            $categoryRaw = $this->getField($data, ['category', 'gps category', 'gps_category'], 'Uncategorized');
             $categoryId = $this->resolveCategory($categoryRaw);
- 
-            // Build product fields with flexible header names
-            $price = (float)($this->getField($data, ['price', 'unit price', 'product price']) ?? 0);
-            $salePrice = (float)($this->getField($data, ['sale price', 'special price', 'discount price']) ?? 0);
-            $costPrice = (float)($this->getField($data, ['cost price', 'cost']) ?? 0);
-            $fixedShipping = (float)($this->getField($data, ['fixed shipping cost', 'fixed shipping']) ?? 0);
- 
-            // Dimensions detection (try weight, product weight, etc.)
+
+            // Prices and dimensions
+            $price        = (float)($this->getField($data, ['price', 'unit price', 'product price']) ?? 0);
+            $salePrice    = (float)($this->getField($data, ['sale price', 'special price', 'discount price']) ?? 0);
+            $costPrice    = (float)($this->getField($data, ['cost price', 'cost']) ?? 0);
+            $fixedShipping= (float)($this->getField($data, ['fixed shipping cost', 'fixed shipping']) ?? 0);
+
             $weight = (float)($this->getField($data, ['weight', 'product weight', 'product_weight']) ?? 0);
             $width  = (float)($this->getField($data, ['width', 'product width', 'product_width']) ?? 0);
             $height = (float)($this->getField($data, ['height', 'product height', 'product_height']) ?? 0);
             $depth  = (float)($this->getField($data, ['depth', 'product depth', 'product_depth']) ?? 0);
- 
+
             // Create / update product
             $product = Product::updateOrCreate(
-                [
-                    'store_id' => $this->storeId,
-                    'sku' => $sku,
-                ],
+                ['store_id' => $this->storeId, 'sku' => $sku],
                 [
                     'name' => $productName,
                     'slug' => Str::slug($productName) . '-' . Str::random(6),
                     'brand_id' => $brandId,
                     'category_id' => $categoryId,
- 
                     'price' => $price,
                     'sale_price' => $salePrice,
                     'cost_price' => $costPrice,
                     'fixed_shipping_cost' => $fixedShipping,
- 
-                    'dimensions' => json_encode([
-                        'weight' => $weight,
-                        'width'  => $width,
-                        'height' => $height,
-                        'depth'  => $depth,
-                    ]),
- 
-                    'allow_purchase' => $this->toBool($this->getField($data, ['allow purchases?', 'allow purchase', 'allow_purchase']) ?? 'Yes'),
-                    'track_inventory' => $this->toBool($this->getField($data, ['track inventory', 'track_inventory']) ?? 'No'),
-                    'current_stock' => (int)($this->getField($data, ['current stock level', 'stock', 'quantity']) ?? 0),
-                    'low_stock' => (int)($this->getField($data, ['low stock level', 'low stock']) ?? 0),
+                    'dimensions' => json_encode(['weight'=>$weight,'width'=>$width,'height'=>$height,'depth'=>$depth]),
+                    'allow_purchase' => $this->toBool($this->getField($data,['allow purchases?','allow purchase','allow_purchase']) ?? 'Yes'),
+                    'track_inventory'=> $this->toBool($this->getField($data,['track inventory','track_inventory']) ?? 'No'),
+                    'current_stock'=> (int)($this->getField($data,['current stock level','stock','quantity']) ?? 0),
+                    'low_stock'=> (int)($this->getField($data,['low stock level','low stock']) ?? 0),
                 ]
             );
- 
-            Log::info("Product imported", [
-                'row' => $rowIndex,
-                'sku' => $sku,
-                'name' => $productName,
-                'brand_id' => $brandId,
-                'category_id' => $categoryId,
-                'product_id' => $product->id,
-            ]);
- 
+
             $product->categories()->syncWithoutDetaching([$categoryId]);
- 
-            // extras/content/identifiers/seo (use getField for flexible keys)
+
+            // Extras
             ProductExtra::updateOrCreate(
-                ['product_id' => $product->id, 'store_id' => $this->storeId],
+                ['product_id'=>$product->id,'store_id'=>$this->storeId],
                 [
-                    'retail_price' => (float)($this->getField($data, ['retail price', 'retail_price']) ?? 0),
-                    'distributor_name' => $this->getField($data, ['distributor name', 'distributor_name']) ?? '',
-                    'distributor_sku' => $this->getField($data, ['distributor sku', 'distributor_sku']) ?? '',
+                    'retail_price' => (float)($this->getField($data,['retail price','retail_price']) ?? 0),
+                    'distributor_name'=> $this->getField($data,['distributor name','distributor_name']) ?? '',
+                    'distributor_sku'=> $this->getField($data,['distributor sku','distributor_sku']) ?? '',
+                    'event_date_required' => $this->toBool($this->getField($data,['event date required?']) ?? 'No'),
                 ]
             );
- 
+
+            // Content
             ProductContent::updateOrCreate(
-                ['product_id' => $product->id, 'store_id' => $this->storeId],
+                ['product_id'=>$product->id,'store_id'=>$this->storeId],
                 [
-                    'description' => $this->getField($data, ['product description', 'description']) ?? '',
-                    'warranty' => $this->getField($data, ['product warranty', 'warranty']) ?? '',
+                    'description' => $this->getField($data,['product description','description']) ?? '',
+                    'warranty'    => $this->getField($data,['product warranty','warranty']) ?? '',
+                    'availability_text' => $this->getField($data,['product availability','availability']) ?? '',
+                    'template_layout' => 'default',
                 ]
             );
- 
+
+            // Identifier
             ProductIdentifier::updateOrCreate(
-                ['product_id' => $product->id, 'store_id' => $this->storeId],
+                ['product_id'=>$product->id,'store_id'=>$this->storeId],
                 [
-                    'mpn' => $this->getField($data, ['gps manufacturer part number', 'gps manufacturer part number', 'mpn']) ?? '',
-                    'upc' => $this->getField($data, ['product upc/ean', 'product upc ean', 'upc']) ?? '',
+                    'mpn' => $this->getField($data,['gps manufacturer part number','mpn']) ?? '',
+                    'upc' => $this->getField($data,['product upc/ean','upc']) ?? '',
+                    'gtin'=> $this->getField($data,['gps global trade item number','gtin']) ?? '',
+                    'bpn' => $this->getField($data,['bin picking number','bpn']) ?? '',
                 ]
             );
- 
+
+            // SEO
             ProductSeo::updateOrCreate(
-                ['product_id' => $product->id, 'store_id' => $this->storeId],
+                ['product_id'=>$product->id,'store_id'=>$this->storeId],
                 [
-                    'page_title' => $this->getField($data, ['page title', 'meta title']) ?? $productName,
-                    'meta_description' => $this->getField($data, ['meta description', 'meta_description']) ?? '',
+                    'page_title'=> $this->getField($data,['page title','meta title']) ?? $productName,
+                    'meta_description'=> $this->getField($data,['meta description','meta_description']) ?? '',
+                    'meta_keywords'=> $this->getField($data,['meta keywords','meta_keywords']) ?? '',
                 ]
             );
- 
-            // Images (try multiple likely header patterns)
+
+            // Images
+            $primarySet = false;
             foreach ($data as $key => $val) {
-                if ($val && (str_contains($key, 'product image file') || str_contains($key, 'image') || str_contains($key, 'product image'))) {
+                if ($val && (str_contains($key,'product image file') || str_contains($key,'image'))) {
                     ProductImage::updateOrCreate(
+                        ['product_id'=>$product->id,'path'=>trim($val)],
                         [
-                            'product_id' => $product->id,
-                            'path' => trim($val),
-                        ],
-                        [
-                            'alt_text' => $productName,
-                            'is_primary' => 0,
+                            'alt_text'=>$productName,
+                            'description'=>$this->getField($data,[str_replace('file','description',$key)]) ?? null,
+                            'is_primary'=> $primarySet ? 0 : 1,
                         ]
                     );
+                    $primarySet = true;
                 }
             }
- 
-            // Progress update
-            Cache::increment($this->progressKey . "_count");
+
+              $primarySet = false;
+            foreach ($data as $key => $val) {
+                if ($val && (str_contains($key,'product image file') || str_contains($key,'image'))) {
+                    ProductImage::updateOrCreate(
+                        ['product_id'=>$product->id,'path'=>trim($val)],
+                        [
+                            'alt_text'=>$productName,
+                            'description'=>$this->getField($data,[str_replace('file','description',$key)]) ?? null,
+                            'is_primary'=> $primarySet ? 0 : 1,
+                        ]
+                    );
+                    $primarySet = true;
+                }
+            }
+
+            $current = Cache::increment($this->progressKey . "_count");
+            $total = Cache::get($this->progressKey . "_total", 0);
+                    
+            $status = ($current >= $total) ? 'completed' : 'processing';
+                    
             Cache::put($this->progressKey, [
-                'current' => Cache::get($this->progressKey . "_count"),
-                'status'  => 'processing'
+                'current' => $current,
+                'total'   => $total,
+                'status'  => $status
             ]);
+
         } catch (\Throwable $e) {
-            // Log and continue
-            Log::error("Import row error", [
-                'row' => $rowIndex,
+            Log::error("Import row error #{$rowIndex}", [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
+                'trace' => $e->getTraceAsString()
             ]);
- 
-            // Optionally increment count so progress moves even on error
             Cache::increment($this->progressKey . "_count");
             Cache::put($this->progressKey, [
                 'current' => Cache::get($this->progressKey . "_count"),
@@ -241,87 +248,76 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             ]);
         }
     }
- 
-    /**
-     * Try a list of possible header keys and return the first non-empty value.
-     * $data must already be lowercased and trimmed keys.
-     */
+
+
     private function getField(array $data, array $possibleKeys, $default = null)
     {
         foreach ($possibleKeys as $k) {
             $kNorm = $this->normalizeKey($k);
+
+            // Skip if field is ignored
+            if (in_array($kNorm, $this->ignoredFields)) {
+                return null;
+            }
+
             if (array_key_exists($kNorm, $data) && $data[$kNorm] !== null && $data[$kNorm] !== '') {
                 return $data[$kNorm];
             }
-        }
-        // also try raw keys as provided (in case user already lowercased)
-        foreach ($possibleKeys as $k) {
-            if (array_key_exists($k, $data) && $data[$k] !== null && $data[$k] !== '') {
-                return $data[$k];
+
+            $kRaw = str_replace([' ', '/', '-'], '_', strtolower(trim($k)));
+            if (array_key_exists($kRaw, $data) && $data[$kRaw] !== null && $data[$kRaw] !== '') {
+                return $data[$kRaw];
             }
         }
         return $default;
     }
- 
-    /**
-     * Normalize a header/key to the same format we used when normalizing row keys.
-     * - lowercase
-     * - trim
-     * - replace multiple spaces with single
-     * - replace backslashes with spaces, remove extra chars that may appear in headers
-     */
+
     private function normalizeKey(string $key): string
     {
-        $k = mb_strtolower(trim($key));
-        // replace non-alphanumeric with single space except slash (we want to consider slashes too)
-        $k = preg_replace('/[\/\\\\]+/', '/', $k); // normalize slashes
-        $k = preg_replace('/[^\p{L}\p{N}\/]+/u', ' ', $k);
-        $k = preg_replace('/\s+/', ' ', $k);
-        // also map ' / ' to '/'
-        $k = str_replace(' / ', '/', $k);
-        return $k;
+        $k = trim($key);
+        $k = preg_replace('/[\x00-\x1F\x7F\xA0\x{200B}-\x{200D}\x{FEFF}]/u','',$k);
+        $k = str_replace(['\\','/'], '/', $k);
+        $k = str_replace('_',' ',$k);
+        $k = preg_replace('/\s+/',' ',$k);
+        return mb_strtolower($k);
     }
- 
- 
-   
- 
-    /*
-    |--------------------------------------------------------------------------
-    | Resolve multi-level category path
-    |--------------------------------------------------------------------------
-    */
+
     private function resolveCategory($path)
     {
         $segments = array_map('trim', explode('/', $path));
         $parent = null;
- 
+
         foreach ($segments as $segment) {
             $slug = Str::slug($segment);
             $key = ($parent ?: 0) . '_' . $slug;
- 
+
             if (!isset(self::$categoryCache[$key])) {
                 $category = Category::firstOrCreate(
-                    [
-                        'store_id' => $this->storeId,
-                        'slug' => $slug,
-                        'parent_id' => $parent
-                    ],
-                    [
-                        'name' => $segment,
-                    ]
+                    ['store_id'=>$this->storeId,'slug'=>$slug,'parent_id'=>$parent],
+                    ['name'=>$segment]
                 );
- 
                 self::$categoryCache[$key] = $category->id;
             }
- 
+
             $parent = self::$categoryCache[$key];
         }
- 
+
         return $parent;
     }
- 
+
     private function toBool($val)
     {
-        return in_array(strtolower(trim($val)), ['yes', 'y', '1', 'true']);
+        return in_array(strtolower(trim((string)$val)), ['yes','y','1','true']);
+    }
+
+    protected function calculateTotalRows()
+    {
+        $zip = new \ZipArchive;
+        if ($zip->open($this->filePath) === true) {
+            $xml = $zip->getFromName('xl/worksheets/sheet1.xml');
+            preg_match_all('/<row r="(\d+)"/', $xml, $matches);
+            $totalRows = count($matches[1]) - 1; // subtract header row
+            Cache::put($this->progressKey . "_total", $totalRows, 7200);
+        }
     }
 }

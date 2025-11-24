@@ -1339,325 +1339,90 @@ class ProductController extends Controller
 
 
 
-    // public function importCSV(Request $request)
-    // {
-    //     try {
-    //         // ✅ Validate file
-    //         $request->validate([
-    //             'file' => 'required|file|mimes:csv,txt,xlsx,xls'
-    //         ]);
-        
-    //         // ✅ Get current store
-    //         $storeId = current_store_id();
-    //         if (!$storeId) {
-    //             return response()->json(['error' => 'Store not selected.'], 400);
-    //         }
-        
-    //         // ✅ Save uploaded file
-    //         $file = $request->file('file');
-    //         $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
-        
-    //         // ✅ Production-safe column mapping
-    //         $columnMapping = [
-    //             // Required fields
-    //             'Product Name' => 'Product Name',
-    //             'Product Code/SKU' => 'Product Code/SKU',
-    //             'Brand Name' => 'Brand Name',
-    //             'Distributor Name' => 'Distributor Name',
-    //             'GPS Category' => 'GPS Category',
-            
-    //             // Pricing
-    //             'Retail Price' => 'Ignore',
-    //             'Cost Price' => 'Ignore',
-    //             'Sale Price' => 'Ignore',
-    //             'Price' => 'Ignore',
-    //             'Fixed Shipping Cost' => 'Ignore',
-            
-    //             // Inventory
-    //             'Track Inventory' => 'Track Inventory',
-    //             'Current Stock Level' => 'Current Stock Level',
-    //             'Low Stock Level' => 'Ignore',
-    //             'Allow Purchases?' => 'Allow Purchases?',
-    //             'Product Visible?' => 'Product Visible?',
-            
-    //             // Meta fields
-    //             'Product Type' => 'Ignore',
-    //             'Item Type' => 'Ignore',
-    //             'Product Description' => 'Ignore',
-    //             'Product Warranty' => 'Ignore',
-    //             'Product Availability' => 'Ignore',
-    //             'Option Set' => 'Ignore',
-    //             'Option Set Align' => 'Ignore',
-            
-    //             // Dimensions
-    //             'Product Weight' => 'Ignore',
-    //             'Product Width' => 'Ignore',
-    //             'Product Height' => 'Ignore',
-    //             'Product Depth' => 'Ignore',
-            
-    //             // SEO
-    //             'Page Title' => 'Ignore',
-    //             'Product Url' => 'Ignore',
-    //             'Meta Description' => 'Ignore',
-    //             'Meta Keywords' => 'Ignore',
-    //             'Redirect Old URL?' => 'Ignore',
-            
-    //             // Identifiers
-    //             'GPS Manufacturer Part Number' => 'GPS Manufacturer Part Number',
-    //             'GPS Global Trade Item Number' => 'Ignore',
-    //             'Bin Picking Number' => 'Ignore',
-            
-    //             // Advanced
-    //             'Product Condition' => 'Ignore',
-    //             'Show Product Condition?' => 'Ignore',
-    //             'Sort Order' => 'Ignore',
-    //             'Search Keywords' => 'Ignore',
-    //             'Stop Processing Rules' => 'Ignore',
-    //             'Product Tax Class' => 'Ignore',
-    //             'Tax Provider Tax Code' => 'Ignore',
-    //             'Product Custom Fields' => 'Ignore',
-    //         ];
-        
-    //         // ✅ Run import with mapping
-    //         Excel::import(new ProductImport($storeId, $columnMapping), storage_path("app/{$path}"));
-        
-    //         return response()->json([
-    //             'status' => true,
-    //             'message' => 'Import completed successfully.'
-    //         ]);
-        
-    //     } catch (\Exception $e) {
-    //         return response()->json([
-    //             'status' => false,
-    //             'error' => $e->getMessage()
-    //         ], 500);
-    //     }
-    // }
-    // public function importCSV(Request $request)
-    // {
-    //     try {
-    //         $request->validate([
-    //             'file' => 'required|file|mimes:csv,txt,xlsx,xls'
-    //         ]);
-        
-    //         $storeId = current_store_id();
-    //         if (!$storeId) {
-    //             return response()->json(['error' => 'Store not selected.'], 400);
-    //         }
-        
-    //         $file = $request->file('file');
-    //         $originalFileName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
-    //         $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
-    //         session()->put("import_file_name_{$storeId}", $originalFileName);
-        
-    //         // ✅ Updated column mapping based on your CSV structure
-    //         $columnMapping = [
-    //             'Product Name' => 'Product Name',
-    //             'Product Code/SKU' => 'Product Code/SKU',
-    //             'Brand Name' => 'Brand Name',
-    //             'GPS Category' => 'Category', // 👈 THIS FIXES THE CATEGORY ISSUE
-            
-    //             // Optional pricing fields
-    //             'Retail Price' => 'Retail Price',
-    //             'Cost Price' => 'Cost Price',
-    //             'Sale Price' => 'Sale Price',
-    //             'Fixed Shipping Cost' => 'Fixed Shipping Cost',
-    //             'Free Shipping' => 'Free Shipping',
-            
-    //             // Inventory
-    //             'Track Inventory' => 'Track Inventory',
-    //             'Current Stock Level' => 'Current Stock Level',
-    //             'Low Stock Level' => 'Low Stock Level',
-    //             'Allow Purchases?' => 'Allow Purchases?',
-    //             'Product Visible?' => 'Product Visible?',
-            
-    //             // Product info
-    //             'Item Type' => 'Item Type',
-    //             'Product Type' => 'Product Type',
-    //             'Product Description' => 'Product Description',
-    //             'Product Warranty' => 'Product Warranty',
-    //             'Product Availability' => 'Product Availability',
-    //             'Option Set' => 'Option Set',
-    //             'Option Set Align' => 'Option Set Align',
-            
-    //             // Dimensions
-    //             'Product Weight' => 'Product Weight',
-    //             'Product Width' => 'Product Width',
-    //             'Product Height' => 'Product Height',
-    //             'Product Depth' => 'Product Depth',
-            
-    //             // SEO
-    //             'Page Title' => 'Page Title',
-    //             'Product Url' => 'Product URL',
-    //             'Meta Description' => 'Meta Description',
-    //             'Meta Keywords' => 'Meta Keywords',
-    //             'Redirect Old URL?' => 'Redirect Old URL?', // You can leave this as 'Ignore' if not used
-            
-    //             // Identifiers
-    //             'GPS Manufacturer Part Number' => 'Manufacturer Part Number',
-    //             'GPS Global Trade Item Number' => 'Global Trade Item Number',
-    //             'Product UPC/EAN' => 'Product UPC/EAN',
-    //             'Bin Picking Number' => 'Bin Picking Number',
-            
-    //             // Advanced
-    //             'Product Condition' => 'Product Condition',
-    //             'Show Product Condition?' => 'Show Product Condition?',
-    //             'Sort Order' => 'Sort Order',
-    //             'Search Keywords' => 'Search Keywords',
-    //             'Stop Processing Rules' => 'Stop Processing Rules',
-    //             'Product Tax Class' => 'Product Tax Class',
-    //             'Tax Provider Tax Code' => 'Tax Provider Tax Code',
-    //             'Product Custom Fields' => 'Product Custom Fields',
-    //         ];
-        
-    //         Excel::import(new \App\Imports\ProductImport($storeId, $columnMapping), storage_path("app/{$path}"));
-        
-    //         return response()->json([
-    //             'status' => true,
-    //             'message' => 'Import completed successfully.'
-    //         ]);
-        
-    //     } catch (\Exception $e) {
-    //         return response()->json([
-    //             'status' => false,
-    //             'error' => $e->getMessage()
-    //         ], 500);
-    //     }
-    // }
+        public function importCSV(Request $request)
+{
+    $request->validate([
+        'file' => 'required|file|mimes:xlsx,xls,csv',
+        'ignored_fields' => 'nullable|array', // optional array from frontend
+        'ignored_fields.*' => 'string',
+    ]);
 
-//    public function importCSV(Request $request)
-// {
-//     try {
-//         $request->validate([
-//             'file' => 'required|file|mimes:csv,txt,xlsx,xls',
-//             'ignore_columns' => 'nullable|array',
-//         ]);
+    $file = $request->file('file');
+    $ignoredFields = $request->input('ignored_fields', []); // dynamically from frontend
 
-//         $storeId = current_store_id();
-//         if (!$storeId) {
-//             return response()->json(['error' => 'Store not selected.'], 400);
-//         }
-
-//         $file = $request->file('file');
-//         $originalFileName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
-//         $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
-//         session()->put("import_file_name_{$storeId}", $originalFileName);
-
-//         $filePath = storage_path("app/{$path}");
-//         $csvHeaders = [];
-
-//         if (($handle = fopen($filePath, 'r')) !== false) {
-//             $csvHeaders = fgetcsv($handle);
-//             fclose($handle);
-//         }
-
-//         if (!$csvHeaders) {
-//             return response()->json(['status' => false, 'error' => 'CSV file is empty or invalid.'], 400);
-//         }
-
-//         // Allowed columns for import
-//         $allowedColumns = [
-//             'Item Type', 'Distributor Name', 'Distributor SKU', 'Product Name', 'Product Type',
-//             'Product Code/SKU', 'Bin Picking Number', 'Brand Name', 'Option Set Align',
-//             'Product Description', 'Price', 'Cost Price', 'Retail Price', 'Sale Price',
-//             'Fixed Shipping Cost', 'Free Shipping', 'Product Warranty', 'Product Weight',
-//             'Product Width', 'Product Height', 'Product Depth', 'Allow Purchases?', 'Product Visible?',
-//             'Product Availability', 'Track Inventory', 'Current Stock Level', 'Low Stock Level',
-//             'Category', 'Product Image ID - 1', 'Product Image File - 1', 'Product Image Description - 1',
-//             'Product Image Is Thumbnail - 1', 'Product Image Sort - 1', 'Search Keywords', 'Page Title',
-//             'Meta Keywords', 'Meta Description', 'Product Condition', 'Product Tax Class', 'Product UPC/EAN',
-//             'Product Url', 'GPS Global Trade Item Number', 'GPS Manufacturer Part Number', 'GPS Category',
-//             'GPS Enabled', 'Show Product Condition?'
-//         ];
-
-//         // Build column mapping with ignore logic
-//         $columnMapping = [];
-//         foreach ($csvHeaders as $header) {
-//             $header = mb_convert_encoding($header, 'UTF-8', 'UTF-8');
-//             $columnMapping[$header] = in_array($header, $allowedColumns) ? $header : 'Ignore';
-//         }
-
-//         // Override with user-selected ignore columns if any
-//         if ($request->has('ignore_columns') && is_array($request->ignore_columns)) {
-//             foreach ($request->ignore_columns as $ignoreHeader) {
-//                 $ignoreHeader = mb_convert_encoding($ignoreHeader, 'UTF-8', 'UTF-8');
-//                 if (array_key_exists($ignoreHeader, $columnMapping)) {
-//                     $columnMapping[$ignoreHeader] = 'Ignore';
-//                 }
-//             }
-//         }
-
-//         // Ensure UTF-8 for keys and values
-//         $columnMapping = collect($columnMapping)->mapWithKeys(function ($value, $key) {
-//             return [mb_convert_encoding($key, 'UTF-8', 'UTF-8') => mb_convert_encoding($value, 'UTF-8', 'UTF-8')];
-//         })->toArray();
-
-//         // Dispatch background job
-//         ProcessProductImport::dispatch($filePath, $storeId, $columnMapping)->onQueue('imports');
-
-//         return response()->json([
-//             'status' => true,
-//             'message' => 'Import started. Processing in background.'
-//         ]);
-
-//     } catch (\Exception $e) {
-//         return response()->json([
-//             'status' => false,
-//             'error' => $e->getMessage()
-//         ], 500);
-//     }
-// }
-
-public function importCSV(Request $request)
-    {
-        $request->validate([
-            'file' => 'required|file|mimes:xlsx,xls,csv',
-        ]);
-
-        $file = $request->file('file');
-
-        $storeId = current_store_id();
-        if (!$storeId) {
-            return response()->json(['error' => 'Store not selected'], 400);
-        }
-
-        $storedFilePath = $file->store('imports');
-
-        // unique progress key
-        $progressKey = 'import_' . Str::uuid();
-
-        // initialize progress
-        Cache::put($progressKey, [
-            'current' => 0,
-            'status' => 'queued'
-        ], 7200);
-
-        Cache::put($progressKey . "_cancel", false, 7200);
-        Cache::put($progressKey . "_count", 0, 7200);
-
-        Excel::queueImport(
-            new ProductImport($storeId, $progressKey),
-            $storedFilePath
-        );
-
-        return response()->json([
-            'success' => true,
-            'progress_key' => $progressKey
-        ]);
+    $storeId = current_store_id(); // your helper to get current store
+    if (!$storeId) {
+        return response()->json(['error' => 'Store not selected.'], 400);
     }
 
+    // Save the uploaded file permanently
+    $storedFilePath = $file->store('imports'); // e.g., imports/file.xlsx
+
+    // Unique progress key
+    $progressKey = 'import_progress_' . Str::uuid();
+
+    // Initialize progress tracking
+    Cache::put($progressKey, [
+        'current' => 0,
+        'status'  => 'queued',
+    ], 7200); // 2 hours
+
+    Cache::put($progressKey . "_cancel", false, 7200);
+    Cache::put($progressKey . "_count", 0, 7200);
+
+    // Queue the import and pass ignored fields
+    Excel::queueImport(
+        new ProductImport(
+            $storeId,
+            $progressKey,
+            storage_path('app/' . $storedFilePath),
+            $ignoredFields // <- dynamic ignored fields
+        ),
+        $storedFilePath
+    );
+
+    return response()->json([
+        'success' => true,
+        'progress_key' => $progressKey
+    ]);
+}
+
+
+    /**
+     * Get the current import progress
+     */
     public function importProgress($progressKey)
     {
-        return response()->json(Cache::get($progressKey));
+        $progress = Cache::get($progressKey, [
+            'current' => 0,
+            'status' => 'unknown',
+        ]);
+
+        // Add total from cache (calculated in background)
+        $progress['total'] = Cache::get($progressKey . "_total", 0);
+
+        return response()->json($progress);
     }
 
+    /**
+     * Cancel an ongoing import
+     */
     public function cancelImport(Request $request)
     {
-        $key = $request->progress_key;
-        Cache::put($key . "_cancel", true);
+        $progressKey = $request->input('progress_key');
 
-        return response()->json(['status' => 'cancel requested']);
+        if (!$progressKey) {
+            return response()->json(['error' => 'Progress key is required.'], 400);
+        }
+
+        // Set cancel flag
+        Cache::put($progressKey . "_cancel", true, 7200);
+
+        return response()->json([
+            'status' => 'cancel_requested'
+        ]);
     }
+    
 
 
     /**
