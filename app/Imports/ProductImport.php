@@ -310,14 +310,56 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
         return in_array(strtolower(trim((string)$val)), ['yes','y','1','true']);
     }
 
+    // protected function calculateTotalRows()
+    // {
+    //     $zip = new \ZipArchive;
+    //     if ($zip->open($this->filePath) === true) {
+    //         $xml = $zip->getFromName('xl/worksheets/sheet1.xml');
+    //         preg_match_all('/<row r="(\d+)"/', $xml, $matches);
+    //         $totalRows = count($matches[1]) - 1; // subtract header row
+    //         Cache::put($this->progressKey . "_total", $totalRows, 7200);
+    //     }
+    // }
+
     protected function calculateTotalRows()
     {
-        $zip = new \ZipArchive;
-        if ($zip->open($this->filePath) === true) {
-            $xml = $zip->getFromName('xl/worksheets/sheet1.xml');
-            preg_match_all('/<row r="(\d+)"/', $xml, $matches);
-            $totalRows = count($matches[1]) - 1; // subtract header row
+        $fileExtension = pathinfo($this->filePath, PATHINFO_EXTENSION);
+    
+        // If CSV, just count lines
+        if (strtolower($fileExtension) === 'csv') {
+            $totalRows = 0;
+            if (($handle = fopen($this->filePath, 'r')) !== false) {
+                while (fgetcsv($handle) !== false) {
+                    $totalRows++;
+                }
+                fclose($handle);
+            }
+            // Subtract header row
+            $totalRows = max(0, $totalRows - 1);
             Cache::put($this->progressKey . "_total", $totalRows, 7200);
+            return;
+        }
+    
+        // If XLSX, use PhpSpreadsheet in read-only mode (streaming)
+        try {
+            $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
+            $reader->setReadDataOnly(true);
+            $spreadsheet = $reader->load($this->filePath);
+            $sheet = $spreadsheet->getActiveSheet();
+            $highestRow = $sheet->getHighestDataRow(); // only counts rows with data
+        
+            // Subtract header
+            $totalRows = max(0, $highestRow - 1);
+            Cache::put($this->progressKey . "_total", $totalRows, 7200);
+        
+            // Free memory
+            $spreadsheet->disconnectWorksheets();
+            unset($spreadsheet);
+        
+        } catch (\Throwable $e) {
+            Log::error("Failed to calculate total rows: " . $e->getMessage());
+            Cache::put($this->progressKey . "_total", 0, 7200);
         }
     }
+
 }
