@@ -1080,18 +1080,55 @@ class ProductController extends Controller
         }
     }
 
+    // public function popularProducts(Request $request)
+    // {
+    //     $storeId = current_store_id();
+    //     if (!$storeId) {
+    //         return response()->json(['status' => false, 'message' => 'Store not selected.'], 400);
+    //     }
+
+    //     $limit = (int) $request->input('limit', 10);
+
+    //     $popularProducts = Product::where('store_id', $storeId)
+    //         ->whereHas('searchStats') 
+    //        ->with([
+    //             'categories',
+    //             'brand',
+    //             'images',
+    //             'reviews.user',
+    //             'content',
+    //             'identifiers',
+    //             'seo'
+    //         ])
+    //         ->withCount(['searchStats as search_count' => function($q) use ($storeId){
+    //             $q->where('store_id', $storeId);
+    //         }])
+    //         ->orderByDesc('search_count')
+    //         ->take($limit)
+    //         ->get();
+
+    //     return response()->json([
+    //         'status' => true,
+    //         'message' => 'Popular products retrieved.',
+    //         'data' => ProductResource::collection($popularProducts)
+    //     ]);
+    // }
+
+
     public function popularProducts(Request $request)
     {
         $storeId = current_store_id();
         if (!$storeId) {
-            return response()->json(['status' => false, 'message' => 'Store not selected.'], 400);
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected.'
+            ], 400);
         }
-
+    
         $limit = (int) $request->input('limit', 10);
-
-        $popularProducts = Product::where('store_id', $storeId)
-            ->whereHas('searchStats') 
-           ->with([
+    
+        $products = Product::where('store_id', $storeId)
+            ->with([
                 'categories',
                 'brand',
                 'images',
@@ -1100,19 +1137,21 @@ class ProductController extends Controller
                 'identifiers',
                 'seo'
             ])
-            ->withCount(['searchStats as search_count' => function($q) use ($storeId){
+            ->withCount(['searchStats as search_count' => function ($q) use ($storeId) {
                 $q->where('store_id', $storeId);
             }])
-            ->orderByDesc('search_count')
+            ->orderByDesc('search_count')   // Popular products first
+            ->orderByDesc('created_at')     // If search_count same, newest first
             ->take($limit)
             ->get();
-
+        
         return response()->json([
             'status' => true,
-            'message' => 'Popular products retrieved.',
-            'data' => ProductResource::collection($popularProducts)
+            'message' => 'Popular and recent products retrieved.',
+            'data' => ProductResource::collection($products)
         ]);
     }
+
    
 
 
