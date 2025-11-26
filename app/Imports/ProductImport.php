@@ -39,7 +39,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
     public function chunkSize(): int
     {
-        return 1000;
+        return 250;
     }
 
     public function onRow(Row $row)
@@ -190,21 +190,84 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             );
 
             // Images
-            $primarySet = false;
-            foreach ($data as $key => $val) {
-                if ($val && (str_contains($key,'product image file') || str_contains($key,'image'))) {
-                    ProductImage::updateOrCreate(
-                        ['product_id'=>$product->id,'path'=>trim($val)],
-                        [
-                            'store_id'   => $this->storeId,
-                            'alt_text'=>$productName,
-                            'description'=>$this->getField($data,[str_replace('file','description',$key)]) ?? null,
-                            'is_primary'=> $primarySet ? 0 : 1,
-                        ]
-                    );
-                    $primarySet = true;
+            // $primarySet = false;
+            // foreach ($data as $key => $val) {
+            //     if ($val && (str_contains($key,'product image file') || str_contains($key,'image'))) {
+            //         ProductImage::updateOrCreate(
+            //             ['product_id'=>$product->id,'path'=>trim($val)],
+            //             [
+            //                 'store_id'   => $this->storeId,
+            //                 'alt_text'=>$productName,
+            //                 'description'=>$this->getField($data,[str_replace('file','description',$key)]) ?? null,
+            //                 'is_primary'=> $primarySet ? 0 : 1,
+            //             ]
+            //         );
+            //         $primarySet = true;
+            //     }
+            // }
+
+            // Images
+        $primarySet = false;
+        foreach ($data as $key => $val) {
+
+            if ($val && (str_contains($key,'product image file') || str_contains($key,'image'))) {
+
+                $imageValue = trim($val);
+                $savedPath = null;
+
+                // (A) If image is a valid URL → download
+                if (filter_var($imageValue, FILTER_VALIDATE_URL)) {
+
+                    try {
+                        $imageContent = file_get_contents($imageValue);
+
+                        $extension = pathinfo(parse_url($imageValue, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+                        $fileName = time() . '_' . uniqid() . '.' . $extension;
+
+                        $pathFull = public_path('product_images/' . $fileName);
+                        file_put_contents($pathFull, $imageContent);
+
+                        $savedPath = '/product_images/' . $fileName;
+
+                    } catch (\Throwable $e) {
+                        continue;
+                    }
                 }
-            }
+
+                // (B) If only filename provided → check local folders
+                else {
+
+                    $localPath1 = public_path('product_images/' . $imageValue);
+
+                    if (file_exists($localPath1)) {
+
+                        // Copy into new filename to avoid duplicate overwrite
+                        $extension = pathinfo($imageValue, PATHINFO_EXTENSION) ?: 'jpg';
+                        $fileName = time() . '_' . uniqid() . '.' . $extension;
+
+                        copy($localPath1, public_path('product_images/' . $fileName));
+
+                        $savedPath = '/product_images/' . $fileName;
+                    } else {
+                        continue; // Image not found locally
+                    }
+                }
+
+            // Save DB entry
+            ProductImage::updateOrCreate(
+                ['product_id' => $product->id, 'path' => $savedPath],
+                [
+                    'store_id'    => $this->storeId,
+                    'alt_text'    => $productName,
+                    'description' => $this->getField($data,[str_replace('file','description',$key)]) ?? null,
+                    'is_primary'  => $primarySet ? 0 : 1,
+                ]
+            );
+
+            $primarySet = true;
+        }
+    }   
+
 
             // Progress
             $current = Cache::increment($this->progressKey . "_count");
