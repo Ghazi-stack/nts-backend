@@ -209,8 +209,9 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             // Images
         $primarySet = false;
         foreach ($data as $key => $val) {
+            $keyNormalized = strtolower(trim($key));
 
-            if ($val && (str_contains($key,'product image file') || str_contains($key,'image'))) {
+            if ($val && ($keyNormalized === 'product image file - 1')) {
 
                 $imageValue = trim($val);
                 $savedPath = null;
