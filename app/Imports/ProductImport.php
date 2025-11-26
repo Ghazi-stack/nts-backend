@@ -144,8 +144,18 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'dimensions' => json_encode(['weight'=>$weight,'width'=>$width,'height'=>$height,'depth'=>$depth]),
                     'allow_purchase' => $this->toBool($this->getField($data,['allow purchases?','allow purchase','allow_purchase']) ?? 'Yes'),
                     'track_inventory'=> $this->toBool($this->getField($data,['track inventory','track_inventory']) ?? 'No'),
-                    'current_stock'=> (int)($this->getField($data,['current stock','stock','quantity']) ?? 0),
+                    'current_stock'=> (int)($this->getField($data,['current stock level','stock','quantity']) ?? 0),
                     'low_stock'=> (int)($this->getField($data,['low stock level','low stock']) ?? 0),
+                     // === NEW FIELDS TO ADD ===
+                    'item_type' => $this->getField($data,['item type','item_type']) ?? null,
+                    'product_type' => $this->getField($data,['product type','product_type']) ?? null,
+                    'option_set' => $this->getField($data,['option set','option_set']) ?? null,
+                    'option_set_align' => $this->getField($data,['option set align','option_set_align']) ?? null,
+                    'visible_on_storefront' => $this->toBool($this->getField($data,['product visible?','visible']) ?? 'Yes'),
+                    'free_shipping' => $this->toBool($this->getField($data,['free shipping','free_shipping']) ?? 'No'),
+                    'search_keywords' => $this->getField($data,['search keywords','keywords']) ?? null,
+                    'product_type' => $this->getField($data,['product type','product_type']) ?? null,
+                    'item_type' => $this->getField($data,['item type','item_type']) ?? null,
                 ]
             );
 
@@ -159,7 +169,14 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'distributor_name'=> $this->getField($data,['distributor name','distributor_name']) ?? '',
                     'distributor_sku'=> $this->getField($data,['distributor sku','distributor_sku']) ?? '',
                     'event_date_required' => $this->toBool($this->getField($data,['event date required?']) ?? 'No'),
+                    'gps_gender'         => $this->getField($data,['gps gender','gps_gender']) ?? '',
+                    'gps_age_group'      => $this->getField($data,['gps age group','gps_age_group']) ?? '',
+                    'gps_enabled'        => $this->toBool($this->getField($data,['gps enabled','gps_enabled']) ?? 'No'),
+                    'myob_asset_acct'    => $this->getField($data,['myob asset acct','myob_asset_acct']) ?? '',
+                    'myob_income_acct'   => $this->getField($data,['myob income acct','myob_income_acct']) ?? '',
+                    'myob_expense_acct'  => $this->getField($data,['myob expense acct','myob_expense_acct']) ?? '',
                 ]
+                
             );
 
             // Content
@@ -201,6 +218,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     ProductImage::updateOrCreate(
                         ['product_id'=>$product->id,'path'=>trim($val)],
                         [
+                            'store_id'   => $this->storeId,
                             'alt_text'=>$productName,
                             'description'=>$this->getField($data,[str_replace('file','description',$key)]) ?? null,
                             'is_primary'=> $primarySet ? 0 : 1,
