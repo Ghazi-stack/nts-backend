@@ -39,7 +39,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
     public function chunkSize(): int
     {
-        return 250;
+        return 1000;
     }
 
     public function onRow(Row $row)
