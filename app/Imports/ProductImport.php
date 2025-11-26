@@ -398,11 +398,21 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 'product image file – 1' // unicode dash
             ];
 
-            foreach ($data as $key => $val) {
+                foreach ($data as $key => $val) {
 
                 if (!$val) continue;
 
-                $keyNorm = strtolower(trim(preg_replace('/\s+/', ' ', $key)));
+                // Normalize
+                $keyNorm = strtolower(trim($key));
+                $keyNorm = preg_replace('/\s+/u', ' ', $keyNorm); // normalize ALL unicode spaces
+
+                // Match ONLY "Product Image File - 1" — with unlimited spacing/dash variations
+                if (!preg_match('/^product\s*image\s*file\s*[-–]\s*1$/u', $keyNorm)) {
+                    continue;
+                }
+
+                // --- your image import continues ----
+
 
                 if (!in_array($keyNorm, $allowedKeys)) continue;
 
