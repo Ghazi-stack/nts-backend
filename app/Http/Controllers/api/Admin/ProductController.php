@@ -1377,7 +1377,55 @@ class ProductController extends Controller
     }
 
 
-  public function importCSV(Request $request)
+//   public function importCSV(Request $request)
+// {
+//     $request->validate([
+//         'file' => 'required|file|mimes:xlsx,xls,csv',
+//         'ignored_fields' => 'nullable|array', // optional array from frontend
+//         'ignored_fields.*' => 'string',
+//     ]);
+
+//     $file = $request->file('file');
+//     $ignoredFields = $request->input('ignored_fields', []); // dynamically from frontend
+
+//     $storeId = current_store_id(); // your helper to get current store
+//     if (!$storeId) {
+//         return response()->json(['error' => 'Store not selected.'], 400);
+//     }
+
+//     // Save the uploaded file permanently
+//     $storedFilePath = $file->store('imports'); // e.g., imports/file.xlsx
+
+//     // Unique progress key
+//     $progressKey = 'import_progress_' . Str::uuid();
+
+//     // Initialize progress tracking
+//     Cache::put($progressKey, [
+//         'current' => 0,
+//         'status'  => 'queued',
+//     ], 7200); // 2 hours
+
+//     Cache::put($progressKey . "_cancel", false, 7200);
+//     Cache::put($progressKey . "_count", 0, 7200);
+
+//     // Queue the import and pass ignored fields
+//     Excel::queueImport(
+//         new ProductImport(
+//             $storeId,
+//             $progressKey,
+//             storage_path('app/' . $storedFilePath),
+//             $ignoredFields // <- dynamic ignored fields
+//         ),
+//         $storedFilePath
+//     );
+
+//     return response()->json([
+//         'success' => true,
+//         'progress_key' => $progressKey
+//     ]);
+// }
+
+public function importCSV(Request $request)
 {
     $request->validate([
         'file' => 'required|file|mimes:xlsx,xls,csv',
@@ -1386,7 +1434,7 @@ class ProductController extends Controller
     ]);
 
     $file = $request->file('file');
-    $ignoredFields = $request->input('ignored_fields', []); // dynamically from frontend
+    $ignoredFields = $request->input('ignored_fields', []);
 
     $storeId = current_store_id(); // your helper to get current store
     if (!$storeId) {
@@ -1395,6 +1443,7 @@ class ProductController extends Controller
 
     // Save the uploaded file permanently
     $storedFilePath = $file->store('imports'); // e.g., imports/file.xlsx
+    $fullPath = storage_path('app/' . $storedFilePath);
 
     // Unique progress key
     $progressKey = 'import_progress_' . Str::uuid();
@@ -1408,13 +1457,43 @@ class ProductController extends Controller
     Cache::put($progressKey . "_cancel", false, 7200);
     Cache::put($progressKey . "_count", 0, 7200);
 
+    // --- Calculate total rows once (before queuing) ---
+    $totalRows = 0;
+    $extension = strtolower($file->getClientOriginalExtension());
+
+    if ($extension === 'xlsx') {
+        if (class_exists(\ZipArchive::class)) {
+            $zip = new \ZipArchive;
+            if ($zip->open($fullPath) === true) {
+                $xml = $zip->getFromName('xl/worksheets/sheet1.xml');
+                if ($xml !== false) {
+                    preg_match_all('/<row r="(\d+)"/', $xml, $matches);
+                    $totalRows = count($matches[1]) - 1; // subtract header row
+                }
+            }
+        }
+    } elseif ($extension === 'csv' || $extension === 'xls') {
+        // For CSV/XLS, use a lightweight approach
+        $fileHandle = fopen($fullPath, 'r');
+        if ($fileHandle) {
+            $totalRows = 0;
+            while (($line = fgetcsv($fileHandle)) !== false) {
+                $totalRows++;
+            }
+            $totalRows = max(0, $totalRows - 1); // subtract header
+            fclose($fileHandle);
+        }
+    }
+
+    Cache::put($progressKey . "_total", $totalRows, 7200);
+
     // Queue the import and pass ignored fields
     Excel::queueImport(
         new ProductImport(
             $storeId,
             $progressKey,
-            storage_path('app/' . $storedFilePath),
-            $ignoredFields // <- dynamic ignored fields
+            $fullPath,
+            $ignoredFields
         ),
         $storedFilePath
     );
@@ -1424,7 +1503,6 @@ class ProductController extends Controller
         'progress_key' => $progressKey
     ]);
 }
-
 
     /**
      * Get the current import progress

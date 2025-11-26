@@ -12,7 +12,6 @@ use App\Models\ProductIdentifier;
 use App\Models\ProductSeo;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Row;
 use Maatwebsite\Excel\Concerns\OnEachRow;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
@@ -34,8 +33,8 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
         $this->storeId = $storeId;
         $this->progressKey = $progressKey;
         $this->filePath = $filePath;
-        $this->ignoredFields = array_map('strtolower', $ignoredFields); // dynamic ignored fields
-        $this->calculateTotalRows();
+        $this->ignoredFields = array_map('strtolower', $ignoredFields);
+        // Removed calculateTotalRows() from constructor
     }
 
     public function chunkSize(): int
@@ -51,16 +50,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             $raw = $row->toArray();
             $data = array_change_key_case(array_map('trim', $raw), CASE_LOWER);
 
-            // Log first row keys for debugging
-            if ($rowIndex === 2) {
-                $keys = array_keys($data);
-                $normalizedKeys = array_map([$this, 'normalizeKey'], $keys);
-                Log::info("Normalized header keys", ['raw' => $keys, 'normalized' => $normalizedKeys]);
-            }
-
-            // Cancel check
             if (Cache::get($this->progressKey . "_cancel")) {
-                Log::warning("Import cancelled at row #{$rowIndex}");
                 Cache::put($this->progressKey, [
                     'current' => Cache::get($this->progressKey . "_count"),
                     'status'  => 'cancelled'
@@ -68,7 +58,6 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 return;
             }
 
-            // --- Detect fields ---
             $sku = $this->getField($data, [
                 'product code/sku', 'product code / sku', 'product code sku',
                 'product code', 'sku', 'product_code', 'productcode',
@@ -80,13 +69,6 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             ]);
 
             if (!$sku || !$productName) {
-                Log::warning("Row skipped — missing SKU or Name", [
-                    'row' => $rowIndex,
-                    'sku' => $sku,
-                    'name' => $productName,
-                ]);
-
-               // Progress
                 Cache::increment($this->progressKey . "_count");
 
                 $current = Cache::get($this->progressKey . "_count");
@@ -146,7 +128,6 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'track_inventory'=> $this->toBool($this->getField($data,['track inventory','track_inventory']) ?? 'No'),
                     'current_stock'=> (int)($this->getField($data,['current stock level','stock','quantity']) ?? 0),
                     'low_stock'=> (int)($this->getField($data,['low stock level','low stock']) ?? 0),
-                     // === NEW FIELDS TO ADD ===
                     'item_type' => $this->getField($data,['item type','item_type']) ?? null,
                     'product_type' => $this->getField($data,['product type','product_type']) ?? null,
                     'option_set' => $this->getField($data,['option set','option_set']) ?? null,
@@ -154,8 +135,6 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'visible_on_storefront' => $this->toBool($this->getField($data,['product visible?','visible']) ?? 'Yes'),
                     'free_shipping' => $this->toBool($this->getField($data,['free shipping','free_shipping']) ?? 'No'),
                     'search_keywords' => $this->getField($data,['search keywords','keywords']) ?? null,
-                    'product_type' => $this->getField($data,['product type','product_type']) ?? null,
-                    'item_type' => $this->getField($data,['item type','item_type']) ?? null,
                 ]
             );
 
@@ -176,7 +155,6 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'myob_income_acct'   => $this->getField($data,['myob income acct','myob_income_acct']) ?? '',
                     'myob_expense_acct'  => $this->getField($data,['myob expense acct','myob_expense_acct']) ?? '',
                 ]
-                
             );
 
             // Content
@@ -227,6 +205,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     $primarySet = true;
                 }
             }
+
             // Progress
             $current = Cache::increment($this->progressKey . "_count");
             $total = Cache::get($this->progressKey . "_total", 0);
@@ -240,10 +219,6 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             ]);
 
         } catch (\Throwable $e) {
-            Log::error("Import row error #{$rowIndex}", [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
             Cache::increment($this->progressKey . "_count");
             Cache::put($this->progressKey, [
                 'current' => Cache::get($this->progressKey . "_count"),
@@ -252,13 +227,11 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
         }
     }
 
-
     private function getField(array $data, array $possibleKeys, $default = null)
     {
         foreach ($possibleKeys as $k) {
             $kNorm = $this->normalizeKey($k);
 
-            // Skip if field is ignored
             if (in_array($kNorm, $this->ignoredFields)) {
                 return null;
             }
@@ -312,15 +285,4 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
     {
         return in_array(strtolower(trim((string)$val)), ['yes','y','1','true']);
     }
-
-    protected function calculateTotalRows()
-    {
-        $zip = new \ZipArchive;
-        if ($zip->open($this->filePath) === true) {
-            $xml = $zip->getFromName('xl/worksheets/sheet1.xml');
-            preg_match_all('/<row r="(\d+)"/', $xml, $matches);
-            $totalRows = count($matches[1]) - 1; // subtract header row
-            Cache::put($this->progressKey . "_total", $totalRows, 7200);
-        }
-    }
-} 
+}
