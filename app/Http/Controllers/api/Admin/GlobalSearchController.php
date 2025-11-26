@@ -13,22 +13,19 @@ use App\Http\Resources\CustomerResource;
 
 class GlobalSearchController extends Controller
 {
-     public function search(Request $request)
+    public function search(Request $request)
     {
         $storeId = current_store_id();
         if (!$storeId) {
             return response()->json(['error' => 'Store not selected or token invalid.'], 400);
         }
-
+    
         $request->validate([
             'query' => 'required|string|min:2',
         ]);
-
-        $query = $request->input('query'); // ✅ correct
-
-        // Limit per section
-        $limit = 5;
-
+    
+        $query = $request->input('query');
+    
         // 🔍 Search Products
         $products = Product::where('store_id', $storeId)
             ->where(function ($q) use ($query) {
@@ -36,40 +33,41 @@ class GlobalSearchController extends Controller
                   ->orWhere('sku', 'like', "%{$query}%")
                   ->orWhere('slug', 'like', "%{$query}%");
             })
-            ->with(['brand', 'categories'])
-            ->take($limit)
+            ->with(['brand', 'categories']) // Optional: only if relations exist
             ->get();
-
-        // 🔍 Search Orders
-        $orders = Order::where('store_id', $storeId)
-            ->where(function ($q) use ($query) {
-                $q->where('email', 'like', "%{$query}%")
-                  ->orWhere('phone', 'like', "%{$query}%")
-                  ->orWhere('name', 'like', "%{$query}%")
-                  ->orWhere('status', 'like', "%{$query}%")
-                  ->orWhere('address', 'like', "%{$query}%");
-            })
-            ->take($limit)
-            ->get();
-
+        
         // 🔍 Search Customers
         $customers = Customer::where('store_id', $storeId)
             ->where(function ($q) use ($query) {
-                $q->where('name', 'like', "%{$query}%")
+                $q->where('first_name', 'like', "%{$query}%")
+                  ->orWhere('last_name', 'like', "%{$query}%")
                   ->orWhere('email', 'like', "%{$query}%")
                   ->orWhere('phone', 'like', "%{$query}%");
             })
-            ->take($limit)
             ->get();
-
+        
+        // 🔍 Search Orders — join with customers to search by customer info too
+        $orders = Order::select('orders.*')
+            ->join('customers', 'orders.customer_id', '=', 'customers.id')
+            ->where('orders.store_id', $storeId)
+            ->where(function ($q) use ($query) {
+                $q->where('customers.first_name', 'like', "%{$query}%")
+                  ->orWhere('customers.last_name', 'like', "%{$query}%")
+                  ->orWhere('customers.phone', 'like', "%{$query}%")
+                  ->orWhere('orders.order_number', 'like', "%{$query}%")
+                  ->orWhere('orders.status', 'like', "%{$query}%");
+            })
+            ->get();
+        
         return response()->json([
             'status' => true,
             'message' => 'Global search results.',
             'data' => [
-                'products' => ProductResource::collection($products),
-                'orders'   => OrderResource::collection($orders),
-                'customers'=> CustomerResource::collection($customers),
+                'products'  => ProductResource::collection($products),
+                'orders'    => OrderResource::collection($orders),
+                'customers' => CustomerResource::collection($customers),
             ]
         ]);
     }
+
 }

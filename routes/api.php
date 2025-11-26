@@ -4,11 +4,11 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\api\Admin\{
     BannerController, BrandController, CategoryController,
     ProductController, ProductFilterController, HomeController,
-    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,PromotionController,OrderTrackingImportController
+    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,PromotionController,OrderTrackingImportController,WebPageController,BlogPostController,CarouselController,LogoController
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
-    WishlistController, StripePaymentController, StripeWebhookController,OrderItemController,ShipmentController
+    WishlistController, StripePaymentController, StripeWebhookController,OrderItemController,ShipmentController,ContactRequestController,BulkInquiryController
 };
 use App\Http\Controllers\api\AuthController;
 // ===============================
@@ -29,6 +29,7 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
     Route::post('/forgot-password', 'forgotPassword');
     Route::post('/reset-password', 'resetPassword');
     Route::middleware('auth:sanctum')->post('/logout', 'logout');
+
 });
 
 // ===============================
@@ -37,6 +38,13 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
 
 
 Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
+
+    // Profile
+    Route::prefix('profile')->controller(AuthController::class)->group(function () {
+        Route::post('/update-email', 'updateEmail'); 
+        Route::put('/update-name', 'updateName'); 
+        Route::post('/update-password', 'updatePassword'); 
+    });
     // Main Search
     Route::get('/global-search', [GlobalSearchController::class, 'search']);
     // 🏢 Store Management
@@ -62,15 +70,25 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::delete('/delete-draft/{id}', 'deleteDraftOrder'); // DELETE a draft order
         Route::get('/get-return-order','listReturnRequestsForAdmin');
         Route::get('/get-notes/{orderId}', 'getOrderNotes');
-        Route::post('/add-orders', 'storeFromDashboard');
+        Route::post('/existing-customer', 'storeFromDashboard');
+        Route::post('/new-customer', 'storeNewCustomerOrder');
         Route::post('/search-advanced', 'advancedOrderSearch');
-        Route::put('/update-order/{id}', 'update');
+        Route::put('/update-order/{id}', 'updateFromDashboard');
         Route::get('/invoice/{id}', 'downloadInvoice');
         Route::post('/resend-invoice/{id}', 'resendInvoice');
         Route::post('/refund/{id}', 'refund');
         Route::get('/timeline/{id}', 'getOrderTimeline');
         Route::get('/send-payment-invoice/{id}', 'sendPaymentInvoice');
 
+    });
+
+    // Web Pages
+    Route::prefix('webpages')->controller(WebPageController::class)->group(function(){
+        Route::get('/web-pages','index');
+        Route::get('/single-page/{id}','show');
+        Route::post('/create-page','store');
+        Route::put('update/{id}','update');
+        Route::delete('/delete/{ids}','destroy');
     });
 
     Route::prefix('orders-tracking')->controller(OrderTrackingImportController::class)->group(function () {
@@ -143,8 +161,12 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/search-product', 'searchProduct');
         Route::post('/advanced-search', 'searchAdvanced');
         Route::post('/import-csv', 'importCSV');
+        Route::post('/cancel-import', 'cancelImport');
+        Route::get('/import-progress/{progressKey}', 'importProgress');
         Route::get('/export-csv', 'exportCSV');
         Route::delete('/delete-product/categories/{id}', 'destroyProductCategories');
+        Route::get('/featured-products', 'featuredProducts');
+
     });
 
     // EMAIL Marketing
@@ -184,7 +206,38 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/update-banner/{id}', 'updateBanner');
         Route::delete('/delete-banner/{id}', 'destroyBanner');
     });
+
+    // 📝 Blog Posts
+    Route::prefix('blogs')->controller(BlogPostController::class)->group(function () {
+        Route::get('/get-blog', [BlogPostController::class, 'index']);
+        Route::get('/get-blogSingle/{id}', [BlogPostController::class, 'show']);
+        Route::post('/add-blog', [BlogPostController::class, 'store']);
+        Route::post('/update-blog/{id}', [BlogPostController::class, 'update']); // or PUT
+        Route::delete('/delete-blog/{ids}', [BlogPostController::class, 'destroy']);
+        Route::get('/draft-blogs', [BlogPostController::class, 'drafts']);
+    });
+
+
+    Route::prefix('carousels')->controller(CarouselController::class)->group(function () {
+        Route::get('/get-crousel', 'index');
+        Route::get('/get-single/{id}', 'show');             // Get all carousels
+        Route::post('/add-crousel', 'store');
+        Route::post('/update-carousel/{id}', 'update');         //    // Update carousel
+        Route::delete('/delete-carousel/{id}', 'destroy'); // Delete carousel       // Add new carousel
+    // You can add update/delete routes if needed
+    });
+
+    Route::prefix('logos')->controller(LogoController::class)->group(function(){
+        Route::get('/get-logos','index');          // Paginated list
+        Route::get('/get-logo/{id}','showById');   // Get single logo by ID
+        Route::post('/add-logo','store');            // Create new logo
+        Route::post('/update-logo/{id}','update');      // Update existing logo
+        Route::delete('/delete-logo/{ids}','destroy');  // Delete one or multiple logos
+    });
 });
+
+
+
 
 
 // ===============================
@@ -193,15 +246,22 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
 
 // 🔓 Public Routes (accessible without login)
+
 Route::prefix('web')->group(function () {
     Route::prefix('shipments')->controller(ShipmentController::class)->group(function () {
         Route::get('/', 'index');      // View only their orders' shipments
     });
 
+    Route::prefix('blogs')->controller(BlogPostController::class)->group(function () {
+        Route::get('/blog-posts', [BlogPostController::class, 'index']);
+        Route::get('/blog-posts/{id}', [BlogPostController::class, 'show']);
+    });
+
     Route::prefix('categories')->controller(CategoryController::class)->group(function () {
-        Route::get('/categories', 'index');
+        Route::get('/get-categories', 'index');
         Route::get('/categories/{id}', 'show');
         Route::get('/categories/slug/{slug}','showBySlug');
+        Route::get('/category-filter', 'filter');
         
     });    // Public banner
     Route::prefix('banners')->controller(BrandController::class)->group(function () {
@@ -212,12 +272,17 @@ Route::prefix('web')->group(function () {
         Route::get('/brands/{id}','showBrands');
     });
     // 🏷️ Public Brands
-    
+    Route::prefix('webpages')->controller(WebPageController::class)->group(function(){
+        Route::get('/web-pages','index');
+        Route::get('/single-page/{id}','show');
+    });
 
     Route::prefix('products')->controller(ProductController::class)->group(function () {
         Route::get('/products', 'index');
-        Route::get('/product/{slug}','showProduct');
+        Route::get('/get-product/{slug}','showProduct');
         Route::get('/search-product','searchProduct');
+        Route::get('/featured-products', 'featuredProducts');
+        Route::get('/popular-products', 'popularProducts');
     });
     // 🛒 Cart
     Route::prefix('cart')->controller(CartController::class)->group(function () {
@@ -252,7 +317,28 @@ Route::prefix('web')->group(function () {
         Route::middleware('auth:sanctum')->post('/add', 'store'); // 🔐 secure
     });
 
+    Route::prefix('carousels')->controller(CarouselController::class)->group(function () {
+        Route::get('/get-crousel', 'index');
+        Route::get('/get-single/{id}', 'show');   
+    });
+
+    Route::prefix('logos')->controller(LogoController::class)->group(function(){
+        Route::get('/get-logos','index');          // Paginated list
+        Route::get('/get-logo/{id}','showById');   // Get single logo by ID
+    });
+    Route::prefix('contact-requests')->controller(ContactRequestController::class)->group(function(){
+        Route::post('/submit', 'store');          // Submit contact request
+    });
+    Route::prefix('contact-requests')->controller(ContactRequestController::class)->group(function(){
+        Route::post('/submit', 'store');          // Submit contact request
+    });
+    Route::prefix('bulk-inquiries')->controller(BulkInquiryController::class)->group(function(){
+        Route::post('/submit', 'store');          // Submit bulk inquiry
+    });
+
     // 💳 Stripe
-    Route::post('/stripe/create-session', [StripePaymentController::class, 'createCheckoutSession']);
-    Route::post('/stripe/webhook', [StripeWebhookController::class, 'handle']);
+    Route::post('/stripe/pay', [StripePaymentController::class, 'pay']);
+
+    // 3️⃣ Webhook for Stripe event notifications
+    Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
 });

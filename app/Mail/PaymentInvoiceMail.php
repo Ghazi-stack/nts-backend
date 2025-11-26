@@ -9,13 +9,16 @@ class PaymentInvoiceMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public $payment;
+    // public $payment;
+    public $order;
     public $pdf;
+    public $logoBase64;
 
-    public function __construct($payment, $pdf)
+    public function __construct($order, $pdf, $logoBase64)
     {
-        $this->payment = $payment;
+        $this->order = $order;
         $this->pdf = $pdf;
+        $this->logoBase64 = $logoBase64;
     }
 
     public function build()
@@ -23,9 +26,10 @@ class PaymentInvoiceMail extends Mailable
         return $this->subject('Your Payment Invoice from Newtown Spares')
                     ->view('emails.payment_invoice')
                     ->with([
-                        'payment' => $this->payment,
+                        'order'       => $this->order,
+                        'logoBase64'  => $this->logoBase64, // 👈 Add this
                     ])
-                    ->attachData($this->pdf->output(), 'invoice-' . $this->payment->order_number . '.pdf', [
+                    ->attachData($this->pdf->output(), 'invoice-' . $this->order->order_number . '.pdf', [
                         'mime' => 'application/pdf',
                     ]);
     }

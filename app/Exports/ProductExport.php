@@ -18,7 +18,7 @@ class ProductExport implements FromCollection, WithHeadings, WithMapping
 
     public function collection()
     {
-        return Product::with(['brand', 'categories', 'content', 'identifiers', 'seo', 'images'])
+        return Product::with(['brand', 'categories.parent', 'content', 'identifiers', 'seo', 'images'])
             ->where('store_id', $this->storeId)
             ->get();
     }
@@ -28,49 +28,50 @@ class ProductExport implements FromCollection, WithHeadings, WithMapping
         $primaryImage = $product->images->firstWhere('is_primary', true);
 
         return [
-            $product->item_type,
-            $product->name,
-            $product->product_type,
-            $product->sku,
-            optional($product->brand)->name,
-            optional($product->category)->name, // May still be null
-            $product->price,
-            $product->cost_price,
-            $product->sale_price,
-            $product->fixed_shipping_cost,
+            $product->item_type ?? '',
+            '',
+            $product->name ?? '',
+            $product->sku ?? '',
+            optional($product->brand)->name ?? '',
+            $this->getCategoryPath($product) ?? '',
+            $product->price ?? '',
+            $product->cost_price ?? '',
+            $product->sale_price ?? '',
+            $product->fixed_shipping_cost ?? '',
             $this->boolOut($product->free_shipping),
             $this->boolOut($product->allow_purchase),
-            $product->condition,
-            $this->boolOut($product->show_condition),
-            $this->boolOut($product->track_inventory),
-            $product->current_stock,
-            $product->low_stock,
-            $product->option_set,
-            $product->option_set_align,
-            optional($product->content)->description,
-            optional($product->content)->warranty,
-            optional($product->content)->availability_text,
-            optional($product->seo)->page_title,
-            optional($product->seo)->product_url,
-            optional($product->seo)->meta_description,
-            optional($product->seo)->meta_keywords,
-            $this->boolOut(optional($product->seo)->redirect_old_url),
+            $product->item_type ?? '',
+            $product->product_type ?? '',
+            optional($product->content)->description ?? '',
+            optional($product->content)->warranty ?? '',
+            optional($product->content)->availability_text ?? '',
+            $product->option_set ?? '',
+            $product->option_set_align ?? '',
             $product->dimensions['weight'] ?? '',
             $product->dimensions['width'] ?? '',
             $product->dimensions['height'] ?? '',
             $product->dimensions['depth'] ?? '',
-            optional($product->identifiers)->mpn,
-            optional($product->identifiers)->upc,
-            optional($product->identifiers)->gtin,
-            optional($product->identifiers)->bpn,
+            optional($product->seo)->page_title ?? '',
+            optional($product->seo)->product_url ?? '',
+            optional($product->seo)->meta_description ?? '',
+            optional($product->seo)->meta_keywords ?? '',
+            $this->boolOut(optional($product->seo)->redirect_old_url),
+            optional($product->identifiers)->mpn ?? '',
+            optional($product->identifiers)->gtin ?? '',
+            optional($product->identifiers)->upc ?? '',
+            optional($product->identifiers)->bpn ?? '',
+            $product->condition ?? '',
+            $this->boolOut($product->show_condition),
+            $this->boolOut($product->track_inventory),
+            $product->current_stock ?? '',
+            $product->low_stock ?? '',
             $this->formatCustomFields($product->custom_fields),
             $primaryImage->path ?? '',
-            $primaryImage->alt_text ?? '',
             $this->boolOut($product->visible_on_storefront),
-            $product->sort_order,
-            $product->search_keywords,
-            $product->tax_class,
-            $product->tax_provider_code,
+            $product->sort_order ?? '',
+            $product->search_keywords ?? '',
+            $product->tax_class ?? '',
+            $product->tax_provider_code ?? '',
             $this->boolOut($product->stop_processing_rules),
         ];
     }
@@ -79,43 +80,44 @@ class ProductExport implements FromCollection, WithHeadings, WithMapping
     {
         return [
             'Item Type',
+            'Product ID',
             'Product Name',
-            'Product Type',
             'Product Code/SKU',
             'Brand Name',
-            'Category',
+            'Category', // GPS Category
             'Retail Price',
             'Cost Price',
             'Sale Price',
             'Fixed Shipping Cost',
             'Free Shipping',
             'Allow Purchases?',
-            'Product Condition',
-            'Show Product Condition?',
-            'Track Inventory',
-            'Current Stock Level',
-            'Low Stock Level',
-            'Option Set',
-            'Option Set Align',
+            'Item Type',
+            'Product Type',
             'Product Description',
             'Product Warranty',
             'Product Availability',
+            'Option Set',
+            'Option Set Align',
+            'Product Weight',
+            'Product Width',
+            'Product Height',
+            'Product Depth',
             'Page Title',
             'Product URL',
             'Meta Description',
             'Meta Keywords',
             'Redirect Old URL?',
-            'Product Weight',
-            'Product Width',
-            'Product Height',
-            'Product Depth',
-            'Manufacturer Part Number',
+            'GPS Manufacturer Part Number',
+            'GPS Global Trade Item Number',
             'Product UPC/EAN',
-            'Global Trade Item Number',
             'Bin Picking Number',
+            'Product Condition',
+            'Show Product Condition?',
+            'Track Inventory',
+            'Current Stock Level',
+            'Low Stock Level',
             'Product Custom Fields',
             'Product Image File - 1',
-            'Product Image Description - 1',
             'Product Visible?',
             'Sort Order',
             'Search Keywords',
@@ -131,7 +133,7 @@ class ProductExport implements FromCollection, WithHeadings, WithMapping
 
         return collect($fields)->map(function ($val, $key) {
             if (is_array($val)) {
-                $val = json_encode($val); // convert nested arrays
+                $val = json_encode($val);
             }
             return "{$key}={$val}";
         })->implode('; ');
@@ -140,5 +142,19 @@ class ProductExport implements FromCollection, WithHeadings, WithMapping
     private function boolOut($val)
     {
         return $val ? 'Yes' : 'No';
+    }
+
+    private function getCategoryPath($product)
+    {
+        $category = $product->categories->first();
+        if (!$category) return '';
+
+        $names = [];
+        while ($category) {
+            array_unshift($names, $category->name);
+            $category = $category->parent;
+        }
+
+        return implode('/', $names); // e.g., Electronics/Laptops
     }
 }

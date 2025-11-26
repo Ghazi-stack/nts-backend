@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Web;
+namespace App\Http\Controllers\api\Web;
 
 use App\Models\Order;
 use App\Models\Shipment;
@@ -80,14 +80,16 @@ class ShipmentController extends Controller
             'dateShipped' => 'required|date',
             'trackingNumber' => 'nullable|string|max:255',
         ]);
-
+    
         $storeId = current_store_id();
-        $order = Order::where('store_id', $storeId)->findOrFail($validated['orderId']);
-
+        $order = Order::with('customer') // ⬅️ make sure customer is eager-loaded
+            ->where('store_id', $storeId)
+            ->findOrFail($validated['orderId']);
+    
         $existing = Shipment::where('store_id', $storeId)
             ->where('order_id', $order->id)
             ->first();
-
+    
         if ($existing) {
             return response()->json([
                 'status' => false,
@@ -95,29 +97,32 @@ class ShipmentController extends Controller
                 'data' => new ShipmentResource($existing)
             ], 409); // Conflict
         }
-
+    
         $shipment = Shipment::create([
-            'order_id' => $order->id,
-            'store_id' => $storeId,
-            'shipped_to' => $validated['shippedTo'] ?? $order->name,
-            'date_shipped' => $validated['dateShipped'],
+            'order_id'        => $order->id,
+            'store_id'        => $storeId,
+            'shipped_to'      => $validated['shippedTo'] 
+                                ?? trim(optional($order->customer)->first_name . ' ' . optional($order->customer)->last_name)
+                                ?? 'Unknown',
+            'date_shipped'    => $validated['dateShipped'],
             'tracking_number' => $validated['trackingNumber'] ?? $this->generateTrackingNumber(),
         ]);
-
+    
         $order->tracking_number = $shipment->tracking_number;
         $order->save();
-
+    
         event(new ShipmentCreated($shipment));
-         sleep(1);
-
-        // ✅ Check email result from cache
+        sleep(1);
+    
         $emailStatus = Cache::pull('shipment_email_status_' . $shipment->id);
+    
         return response()->json([
             'status' => true,
             'message' => 'Shipment created successfully.',
             'data' => new ShipmentResource($shipment)
         ], 201);
     }
+
 
     /**
      * Update shipment details.

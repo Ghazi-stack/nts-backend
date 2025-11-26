@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Http\Resources\BillingInformationResource;
 
 class CustomerResource extends JsonResource
 {
@@ -22,6 +23,7 @@ class CustomerResource extends JsonResource
             'companyName'           => $this->company_name,
             'email'                  => $this->email,
             'customerGroup'         => $this->customer_group,
+            'billingInformation' => BillingInformationResource::collection($this->whenLoaded('billingInformations')),
             'phone'                  => $this->phone,
             'address'                => $this->address,
             'storeCredit'           => $this->store_credit,

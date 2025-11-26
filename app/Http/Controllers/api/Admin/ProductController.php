@@ -17,11 +17,14 @@ use App\Exports\ProductExport;
 use App\Imports\ProductImport;
 use App\Models\ProductContent;
 use App\Models\ProductIdentifier;
+use App\Jobs\ProcessProductImport;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Facades\Cache;
 use App\Http\Resources\ProductResource;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -29,12 +32,72 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class ProductController extends Controller
 {
+    // public function index(Request $request)
+    // {
+    //     try {
+    //         $query = Product::with(['brand', 'categories', 'images','seo','content'])
+    //             ->where('store_id', current_store_id());
+
+    //         if ($request->has('isFeatured')) {
+    //             $query->where('is_featured', $request->boolean('isFeatured'));
+    //         }
+
+    //         if ($request->has('isVisible')) {
+    //             $query->where('visible_on_storefront', $request->boolean('isVisible'));
+    //         }
+
+    //         if ($request->has('outOfStock') && $request->boolean('outOfStock')) {
+    //             $query->where('current_stock', '<=', 0);
+    //         }
+
+    //         if ($request->has('inventoryLow')) {
+    //             $query->whereColumn('current_stock', '<=', 'low_stock');
+    //         }
+
+    //         if ($request->has('search')) {
+    //             $q = $request->search;
+    //             $query->where(function ($sub) use ($q) {
+    //                 $sub->where('name', 'like', "%$q%")
+    //                     ->orWhere('sku', 'like', "%$q%");
+    //             });
+    //         }
+
+    //         if ($request->has('sortBy')) {
+    //             $query->orderBy($request->sortBy, $request->get('sortOrder', 'asc'));
+    //         } else {
+    //             $query->orderBy('id', 'desc');
+    //         }
+
+    //         $page = (int) $request->input('page', 1);
+    //         $pageSize = (int) $request->input('pageSize', 50);
+    //         $products = $query->paginate($pageSize, ['*'], 'page', $page);
+
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Product list fetched.',
+    //             'data' => ProductResource::collection($products),
+    //             'pagination' => [
+    //                 'total' => $products->total(),
+    //                 'page' => $products->currentPage(),
+    //                 'pageSize' => $products->perPage(),
+    //                 'lastPage' => $products->lastPage()
+    //             ]
+    //         ]);
+    //     } catch (Exception $e) {
+    //         return response()->json(['error' => $e->getMessage()], 500);
+    //     }
+    // }
+
     public function index(Request $request)
     {
+        
+
         try {
-            $query = Product::with(['brand', 'categories', 'images','seo','content'])
+            // Base query with full eager loading
+            $query = Product::with(['brand', 'categories', 'images', 'seo', 'content'])
                 ->where('store_id', current_store_id());
 
+            // Filters
             if ($request->has('isFeatured')) {
                 $query->where('is_featured', $request->boolean('isFeatured'));
             }
@@ -59,16 +122,20 @@ class ProductController extends Controller
                 });
             }
 
+            // Sorting
             if ($request->has('sortBy')) {
                 $query->orderBy($request->sortBy, $request->get('sortOrder', 'asc'));
             } else {
                 $query->orderBy('id', 'desc');
             }
 
+            // Pagination
             $page = (int) $request->input('page', 1);
-            $pageSize = (int) $request->input('pageSize', 50);
+            $pageSize = (int) $request->input('pageSize', 20);
+
             $products = $query->paginate($pageSize, ['*'], 'page', $page);
 
+            // Return JSON response
             return response()->json([
                 'status' => true,
                 'message' => 'Product list fetched.',
@@ -80,10 +147,12 @@ class ProductController extends Controller
                     'lastPage' => $products->lastPage()
                 ]
             ]);
-        } catch (Exception $e) {
+
+        } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
 
 
     public function show($id)
@@ -112,29 +181,71 @@ class ProductController extends Controller
         }
     }
 
-    public function showProduct($slug)
+    public function showProduct($sku, Request $request)
     {
         try {
+            $storeId = current_store_id();
+        
+            // Logging for debugging
+            Log::info('🔍 Sku requested: ' . $sku);
+            Log::info('🏬 Store ID: ' . $storeId);
+        
+            // Main query
             $product = Product::with([
                 'brand',
-                'categories.parent.parent.parent.parent', // support 5-level
+                'categories.parent.parent.parent.parent',
                 'images',
                 'content',
                 'identifiers',
-                'seo'
-            ])->where('slug', $slug)->firstOrFail();
-
-            $product->increment('views');
-
+                'seo',
+                'reviews.user'
+            ])
+            ->where('sku', $sku)
+            ->where('store_id', $storeId)
+            ->first();
+            
+            // Fallback using LIKE if exact match fails
+            if (!$product) {
+                Log::warning("⚠️ Exact sku match failed, trying LIKE fallback...");
+                $product = Product::with([
+                    'brand',
+                    'categories.parent.parent.parent.parent',
+                    'images',
+                    'content',
+                    'identifiers',
+                    'seo',
+                    'reviews.user'
+                ])
+                ->where('sku', 'like', "%$sku%")
+                ->where('store_id', $storeId)
+                ->first();
+            }
+        
+            // Still not found? Return 404
+            if (!$product) {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Product not found.',
+                    'sku' => $sku,
+                    'store_id' => $storeId
+                ], 404);
+            }
+        
+            // Return product
             return response()->json([
                 'status' => true,
                 'message' => 'Product Retrieved',
                 'data' => new ProductResource($product)
             ]);
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Product not found.'], 404);
+        
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Failed to retrieve product.'], 500);
+            Log::error('❌ Exception in showProduct(): ' . $e->getMessage());
+        
+            return response()->json([
+                'status' => false,
+                'error' => 'Failed to retrieve product.',
+                'debug' => $e->getMessage()
+            ], 500);
         }
     }
 
@@ -154,6 +265,7 @@ class ProductController extends Controller
                 'categoryIds.*' => 'exists:categories,id',
                 'condition' => 'nullable|string',
                 'price' => 'nullable',
+                'quantity' => 'nullable',
                 'msrp' => 'nullable',
                 'costPrice' => 'nullable',
                 'salePrice' => 'nullable',
@@ -191,7 +303,7 @@ class ProductController extends Controller
                 'fixedShippingCost' => 'nullable|numeric',
                 'productType' => 'nullable|string',
                 'optionSet' => 'nullable|string',
-                'optionSetAlign' => 'nullable|string|in:horizontal,vertical',
+                'optionSetAlign' => 'nullable|string',
                 'allowPurchase' => 'nullable|boolean',
                 'stopProcessingRules' => 'nullable|boolean',
                 'taxClass' => 'nullable|string',
@@ -204,6 +316,7 @@ class ProductController extends Controller
                 'slug' => Str::slug($validated['name']) . '-' . uniqid(),
                 'sku' => $validated['sku'],
                 'price' => $validated['price'],
+                'quantity' => $validated['quantity'] ?? null,
                 'msrp' => $validated['msrp'] ?? null,
                 'cost_price' => $validated['costPrice'] ?? null,
                 'sale_price' => $validated['salePrice'] ?? null,
@@ -304,7 +417,7 @@ class ProductController extends Controller
                     'store_id' => $storeId,
                     'product_id' => $product->id,
                     'path' => $path,
-                    'is_primary' => $img['is_primary'] ?? ($index === 0),
+                    'is_primary' => filter_var($img['is_primary'] ?? ($index === 0), FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
                     'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
                     'description' => $img['description'] ?? null,
                 ]);
@@ -377,6 +490,7 @@ class ProductController extends Controller
                 'categoryIds.*' => 'exists:categories,id',
                 'condition' => 'nullable|string',
                 'price' => 'nullable',
+                'quantity' => 'nullable',
                 'msrp' => 'nullable',
                 'costPrice' => 'nullable',
                 'salePrice' => 'nullable',
@@ -414,7 +528,7 @@ class ProductController extends Controller
                 'fixedShippingCost' => 'nullable|numeric',
                 'productType' => 'nullable|string',
                 'optionSet' => 'nullable|string',
-                'optionSetAlign' => 'nullable|string|in:horizontal,vertical',
+                'optionSetAlign' => 'nullable|string',
                 'allowPurchase' => 'nullable|boolean',
                 'stopProcessingRules' => 'nullable|boolean',
                 'taxClass' => 'nullable|string',
@@ -426,6 +540,7 @@ class ProductController extends Controller
                 'slug' => Str::slug($validated['name'] ?? $product->name) . '-' . uniqid(),
                 'sku' => $validated['sku'] ?? $product->sku,
                 'price' => $validated['price'] ?? $product->price ?? 0,
+                'quantity' => $validated['quantity'] ?? $product->quantity ?? null,
                 'msrp' => $validated['msrp'] ?? null,
                 'cost_price' => $validated['costPrice'] ?? null,
                 'sale_price' => $validated['salePrice'] ?? null,
@@ -677,6 +792,7 @@ class ProductController extends Controller
                     'brand_id' => $fields['brandId'] ?? $product->brand_id,
                     'condition' => $fields['condition'] ?? $product->condition,
                     'price' => $fields['price'] ?? $product->price,
+                    'quantity' => $fields['quantity'] ?? $product->quantity,
                     'msrp' => $fields['msrp'] ?? $product->msrp,
                     'cost_price' => $fields['costPrice'] ?? $product->cost_price,
                     'sale_price' => $fields['salePrice'] ?? $product->sale_price,
@@ -879,7 +995,18 @@ class ProductController extends Controller
                 ", [$queryStr, "$queryStr%", "%$queryStr%"])
                 ->orderBy('name', 'asc')
                 ->paginate($pageSize, ['*'], 'page', $page);
-
+                foreach ($products as $product) {
+            \DB::table('product_searches')->updateOrInsert(
+                [
+                    'product_id' => $product->id,
+                    'store_id'   => $storeId
+                ],
+                [
+                    'search_count' => \DB::raw('search_count + 1'),
+                    'updated_at'   => now()
+                ]
+            );
+        }
             return response()->json([
                 'status'  => true,
                 'message' => 'Products retrieved successfully.',
@@ -930,7 +1057,15 @@ class ProductController extends Controller
 
             $products = Product::where('store_id', $storeId)
                 ->where('is_featured', true)
-                ->with(['categories', 'brand'])
+                 ->with([
+                'categories',
+                'brand',
+                'images',
+                'reviews.user',
+                'content',
+                'identifiers',
+                'seo'
+            ])
                 ->latest()
                 ->take(10)
                 ->get();
@@ -945,29 +1080,79 @@ class ProductController extends Controller
         }
     }
 
-    public function popularProducts()
+    // public function popularProducts(Request $request)
+    // {
+    //     $storeId = current_store_id();
+    //     if (!$storeId) {
+    //         return response()->json(['status' => false, 'message' => 'Store not selected.'], 400);
+    //     }
+
+    //     $limit = (int) $request->input('limit', 10);
+
+    //     $popularProducts = Product::where('store_id', $storeId)
+    //         ->whereHas('searchStats') 
+    //        ->with([
+    //             'categories',
+    //             'brand',
+    //             'images',
+    //             'reviews.user',
+    //             'content',
+    //             'identifiers',
+    //             'seo'
+    //         ])
+    //         ->withCount(['searchStats as search_count' => function($q) use ($storeId){
+    //             $q->where('store_id', $storeId);
+    //         }])
+    //         ->orderByDesc('search_count')
+    //         ->take($limit)
+    //         ->get();
+
+    //     return response()->json([
+    //         'status' => true,
+    //         'message' => 'Popular products retrieved.',
+    //         'data' => ProductResource::collection($popularProducts)
+    //     ]);
+    // }
+
+
+    public function popularProducts(Request $request)
     {
-        try {
-            $storeId = current_store_id();
-            if (!$storeId) {
-                return response()->json(['error' => 'Store not selected.'], 400);
-            }
-        
-            $products = Product::where('store_id', $storeId)
-                ->with(['categories', 'brand'])
-                ->orderByDesc('views')
-                ->take(10)
-                ->get();
-        
+        $storeId = current_store_id();
+        if (!$storeId) {
             return response()->json([
-                'status' => true,
-                'message' => 'Popular products retrieved successfully.',
-                'data' => ProductResource::collection($products)
-            ]);
-        } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to load popular products.'], 500);
+                'status' => false,
+                'message' => 'Store not selected.'
+            ], 400);
         }
+    
+        $limit = (int) $request->input('limit', 10);
+    
+        $products = Product::where('store_id', $storeId)
+            ->with([
+                'categories',
+                'brand',
+                'images',
+                'reviews.user',
+                'content',
+                'identifiers',
+                'seo'
+            ])
+            ->withCount(['searchStats as search_count' => function ($q) use ($storeId) {
+                $q->where('store_id', $storeId);
+            }])
+            ->orderByDesc('search_count')   // Popular products first
+            ->orderByDesc('created_at')     // If search_count same, newest first
+            ->take($limit)
+            ->get();
+        
+        return response()->json([
+            'status' => true,
+            'message' => 'Popular and recent products retrieved.',
+            'data' => ProductResource::collection($products)
+        ]);
     }
+
+   
 
 
 
@@ -1192,43 +1377,182 @@ class ProductController extends Controller
     }
 
 
+//   public function importCSV(Request $request)
+// {
+//     $request->validate([
+//         'file' => 'required|file|mimes:xlsx,xls,csv',
+//         'ignored_fields' => 'nullable|array', // optional array from frontend
+//         'ignored_fields.*' => 'string',
+//     ]);
 
-    public function importCSV(Request $request)
-    {
-        try {
-            $request->validate([
-                'file' => 'required|file|mimes:csv,txt,xlsx,xls'
-            ]);
-        
-            $storeId = current_store_id();
-            if (!$storeId) {
-                return response()->json(['error' => 'Store not selected.'], 400);
+//     $file = $request->file('file');
+//     $ignoredFields = $request->input('ignored_fields', []); // dynamically from frontend
+
+//     $storeId = current_store_id(); // your helper to get current store
+//     if (!$storeId) {
+//         return response()->json(['error' => 'Store not selected.'], 400);
+//     }
+
+//     // Save the uploaded file permanently
+//     $storedFilePath = $file->store('imports'); // e.g., imports/file.xlsx
+
+//     // Unique progress key
+//     $progressKey = 'import_progress_' . Str::uuid();
+
+//     // Initialize progress tracking
+//     Cache::put($progressKey, [
+//         'current' => 0,
+//         'status'  => 'queued',
+//     ], 7200); // 2 hours
+
+//     Cache::put($progressKey . "_cancel", false, 7200);
+//     Cache::put($progressKey . "_count", 0, 7200);
+
+//     // Queue the import and pass ignored fields
+//     Excel::queueImport(
+//         new ProductImport(
+//             $storeId,
+//             $progressKey,
+//             storage_path('app/' . $storedFilePath),
+//             $ignoredFields // <- dynamic ignored fields
+//         ),
+//         $storedFilePath
+//     );
+
+//     return response()->json([
+//         'success' => true,
+//         'progress_key' => $progressKey
+//     ]);
+// }
+
+public function importCSV(Request $request)
+{
+    $request->validate([
+        'file' => 'required|file|mimes:xlsx,xls,csv',
+        'ignored_fields' => 'nullable|array', // optional array from frontend
+        'ignored_fields.*' => 'string',
+    ]);
+
+    $file = $request->file('file');
+    $ignoredFields = $request->input('ignored_fields', []);
+
+    $storeId = current_store_id(); // your helper to get current store
+    if (!$storeId) {
+        return response()->json(['error' => 'Store not selected.'], 400);
+    }
+
+    // Save the uploaded file permanently
+    $storedFilePath = $file->store('imports'); // e.g., imports/file.xlsx
+    $fullPath = storage_path('app/' . $storedFilePath);
+
+    // Unique progress key
+    $progressKey = 'import_progress_' . Str::uuid();
+
+    // Initialize progress tracking
+    Cache::put($progressKey, [
+        'current' => 0,
+        'status'  => 'queued',
+    ], 7200); // 2 hours
+
+    Cache::put($progressKey . "_cancel", false, 7200);
+    Cache::put($progressKey . "_count", 0, 7200);
+
+    // --- Calculate total rows once (before queuing) ---
+    $totalRows = 0;
+    $extension = strtolower($file->getClientOriginalExtension());
+
+    if ($extension === 'xlsx') {
+        if (class_exists(\ZipArchive::class)) {
+            $zip = new \ZipArchive;
+            if ($zip->open($fullPath) === true) {
+                $xml = $zip->getFromName('xl/worksheets/sheet1.xml');
+                if ($xml !== false) {
+                    preg_match_all('/<row r="(\d+)"/', $xml, $matches);
+                    $totalRows = count($matches[1]) - 1; // subtract header row
+                }
             }
-        
-            $file = $request->file('file');
-            $path = $file->storeAs('imports', time() . '_' . $file->getClientOriginalName());
-        
-            Excel::import(new ProductImport($storeId), storage_path("app/{$path}"));
-        
-            return response()->json([
-                'status' => true,
-                'message' => 'Import completed.'
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    } elseif ($extension === 'csv' || $extension === 'xls') {
+        // For CSV/XLS, use a lightweight approach
+        $fileHandle = fopen($fullPath, 'r');
+        if ($fileHandle) {
+            $totalRows = 0;
+            while (($line = fgetcsv($fileHandle)) !== false) {
+                $totalRows++;
+            }
+            $totalRows = max(0, $totalRows - 1); // subtract header
+            fclose($fileHandle);
         }
     }
 
+    Cache::put($progressKey . "_total", $totalRows, 7200);
+
+    // Queue the import and pass ignored fields
+    Excel::queueImport(
+        new ProductImport(
+            $storeId,
+            $progressKey,
+            $fullPath,
+            $ignoredFields
+        ),
+        $storedFilePath
+    );
+
+    return response()->json([
+        'success' => true,
+        'progress_key' => $progressKey
+    ]);
+}
+
+    /**
+     * Get the current import progress
+     */
+    public function importProgress($progressKey)
+    {
+        $progress = Cache::get($progressKey, [
+            'current' => 0,
+            'status' => 'unknown',
+        ]);
+
+        // Add total from cache (calculated in background)
+        $progress['total'] = Cache::get($progressKey . "_total", 0);
+
+        return response()->json($progress);
+    }
+
+    /**
+     * Cancel an ongoing import
+     */
+    public function cancelImport(Request $request)
+    {
+        $progressKey = $request->input('progress_key');
+
+        if (!$progressKey) {
+            return response()->json(['error' => 'Progress key is required.'], 400);
+        }
+
+        // Set cancel flag
+        Cache::put($progressKey . "_cancel", true, 7200);
+
+        return response()->json([
+            'status' => 'cancel_requested'
+        ]);
+    }
+    
+
+    
 
 
+    /**
+     * Parse custom fields for ProductImport
+     */
     private function parseCustomFields($fieldString)
     {
-       if (!$fieldString) return [];
+        if (!$fieldString) return [];
 
-        // Step 1: Try decoding directly (if already JSON but escaped)
+        // Try JSON first
         $decoded = json_decode($fieldString, true);
         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-            // Clean keys & values from escaped quotes
             return collect($decoded)->mapWithKeys(function ($value, $key) {
                 return [
                     trim(str_replace('"', '', $key)) => trim(str_replace('"', '', $value))
@@ -1236,19 +1560,17 @@ class ProductController extends Controller
             })->toArray();
         }
 
-        // Step 2: Fallback if it's in semicolon format (key=value;key2=value2)
+        // Fallback to key=value;key2=value2 format
         $fields = [];
         $pairs = explode(';', $fieldString);
         foreach ($pairs as $pair) {
             if (strpos($pair, '=') !== false) {
-                [$key, $value] = explode('=', trim($pair));
+                [$key, $value] = explode('=', trim($pair), 2);
                 $fields[trim($key)] = trim($value);
             }
         }
         return $fields;
     }
-
-
     public function exportCSV()
     {
         $storeId = current_store_id();
@@ -1259,9 +1581,13 @@ class ProductController extends Controller
             ], 400);
         }
 
-        $fileName = 'products_export_' . now()->format('Ymd_His') . '.xlsx';
+        // 🧠 Get original import file name from session (default fallback)
+        $originalFileName = session()->get("import_file_name_{$storeId}", 'products_export');
+
+        $fileName = $originalFileName . '_export_' . now()->format('Ymd_His') . '.xlsx';
+
         return Excel::download(new ProductExport($storeId), $fileName);
-    }   
+    }
 
     public function destroyProductCategories(Request $request, $id)
 {

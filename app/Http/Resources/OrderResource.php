@@ -3,8 +3,11 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
+use App\Http\Resources\ProductResource;
 use App\Http\Resources\OrderItemResource;
+use App\Http\Resources\OrderNoteResource;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Http\Resources\BillingInformationResource;
 
 class OrderResource extends JsonResource
 {
@@ -18,33 +21,41 @@ class OrderResource extends JsonResource
         return [
             'id'             => $this->id,
             'orderNumber'    => $this->order_number,
-            // 'storeId'        => $this->store_id,
-            // 'name'           => $this->name,
-            // 'email'          => $this->email,
-            // 'phone'          => $this->phone,
             'status'         => $this->status,
-            // 'address'        => $this->address,
-            'paymentMethod'  => $this->payment_method,
-            'shippingMethod' => $this->shipping_method,
-            'shippingCost'   => $this->shipping_cost,
-            'comments'       => $this->comments,
-            'staffNotes'     => $this->staff_notes,
-            'isDraft'        => (bool) $this->is_draft,
-            'totalAmount'    => $this->total_amount,
+            'shippingCost'       => $this->shipping_cost,
+            'comments'           => $this->comments,
+            'staffNotes'         => $this->staff_notes,
+            'isDraft'            => (bool) $this->is_draft,
+            'totalAmount'        => $this->total_amount,
 
-            // Tracking fields (used by the import feature)
-            'trackingNumber' => $this->tracking_number,
-            'carrierCode'    => $this->tracking_carrier_code,
-            'carrierName'    => $this->tracking_carrier_name,
-            'shippedAt'      => $this->shipped_at?->toDateTimeString(),
+            'trackingNumber'     => $this->tracking_number,
+            'carrierCode'        => $this->tracking_carrier_code,
+            'carrierName'        => $this->tracking_carrier_name,
+            'shippedAt'          => $this->shipped_at?->toDateTimeString(),
 
-            'products'          => OrderItemResource::collection($this->whenLoaded('items')),
-            'customer'       => new CustomerResource($this->whenLoaded('customer')),
-
-            // Timestamps as strings
-            'createdAt'      => $this->created_at?->toDateTimeString(),
-            'updatedAt'      => $this->updated_at?->toDateTimeString(),
-           
+            'billingInformation' => $this->billingInformation
+                ? new BillingInformationResource($this->billingInformation)
+                : null,
+            'notes' => $this->whenLoaded('notes', function () {
+                    return $this->notes->pluck('note');
+                }),
+            // ✅ Only product details here
+            // 'products' => ProductResource::collection(
+            //     $this->whenLoaded('items', fn() => $this->items->pluck('product'))
+            // ),
+            'products' => $this->whenLoaded('items', function () {
+                    return $this->items->map(function ($item) {
+                        return (new ProductResource($item->product))->additional([
+                            'quantity' => $item->quantity,
+                            'price' => $item->price,
+                        ]);
+                    });
+                }),
+            // 'items'    => OrderItemResource::collection($this->whenLoaded('items')),
+            'customer' => new CustomerResource($this->whenLoaded('customer')),
+            'shippingDestinations' => ShippingDestinationResource::collection($this->whenLoaded('shippingDestinations')),
+            'createdAt' => $this->created_at?->toDateTimeString(),
+            'updatedAt' => $this->updated_at?->toDateTimeString(),
         ];
     }
 }

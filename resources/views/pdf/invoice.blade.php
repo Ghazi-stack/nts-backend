@@ -10,87 +10,51 @@
             color: #333;
             margin: 40px;
             background-color: #fff;
-            position: relative;
-            z-index: 0;
-        }
-
-        body::before {
-            content: "";
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            width: 100%;
-            height: 100%;
-            /* background-image: url('{{ is_string($logoBase64) ? $logoBase64 : '' }}'); */
-            background-repeat: no-repeat;
-            background-position: center;
-            background-size: 80%;
-            opacity: 0.08;
-            transform: translate(-50%, -50%);
-            z-index: -1;
         }
 
         .header {
             text-align: center;
-            padding: 20px 0;
             margin-bottom: 30px;
-            border-bottom: 2px solid #e0e0e0;
         }
 
         .title {
-            font-size: 26px;
+            font-size: 24px;
             font-weight: bold;
-            /* color: #FF5722; */
             margin-top: 10px;
-            letter-spacing: 1px;
         }
 
         .info-table {
             width: 100%;
             border: 1px solid #ddd;
-            border-radius: 6px;
-            padding: 15px;
-            background-color: #fff;
+            border-collapse: collapse;
             margin-bottom: 30px;
         }
 
         .info-table td {
             padding: 8px 10px;
-            vertical-align: top;
-        }
-
-        .info-table td strong {
-            color: #444;
-            display: inline-block;
-            width: 130px;
-        }
-
-        h3 {
-            font-size: 18px;
-            margin-bottom: 10px;
-            color: #444;
-            border-bottom: 1px solid #e0e0e0;
-            padding-bottom: 5px;
+            border: 1px solid #ddd;
         }
 
         .product-table {
             width: 100%;
             border-collapse: collapse;
-            background-color: #fff;
-            border: 1px solid #ddd;
         }
 
-        .product-table th {
-            background-color: #f9f9f9;
-            color: #444;
-            font-weight: 600;
-            padding: 12px 10px;
-            border: 1px solid #ddd;
-        }
-
-        .product-table td {
+        .product-table th, .product-table td {
             padding: 10px;
             border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        .product-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .product-info img {
+            height: 40px;
+            width: auto;
         }
 
         .text-right {
@@ -98,104 +62,140 @@
         }
 
         .total {
-            margin-top: 15px;
             text-align: right;
             font-weight: bold;
             font-size: 16px;
-            color: #222;
+            margin-top: 20px;
         }
 
         .footer {
             font-size: 11px;
             color: #999;
             text-align: center;
-            margin-top: 50px;
-        }
-
-        @media print {
-            body {
-                background-color: #fff;
-                margin: 0;
-            }
-
-            body::before {
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-            }
+            margin-top: 40px;
         }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <img src="{{ is_string($logoBase64) ? $logoBase64 : '' }}" alt="NTS Logo" height="60">
-        <div class="title">Payment Invoice</div>
-    </div>
+<div class="header">
+    <img src="{{ $logoBase64 }}" alt="Logo" height="60">
+    <div class="title">Payment Invoice</div>
+</div>
 
-    <table class="info-table">
-        <tr>
-            <td><strong>Order Number:</strong> 
-                {{ is_scalar($order->order_number ?? $order->id) ? ($order->order_number ?? $order->id) : 'N/A' }}
-            </td>
-            <td><strong>Date:</strong> 
-                {{ $order->created_at instanceof \Illuminate\Support\Carbon ? $order->created_at->format('d M Y') : 'N/A' }}
-            </td>
-        </tr>
-        <tr>
-            <td><strong>Status:</strong> {{ is_string($order->status) ? ucfirst($order->status) : 'N/A' }}</td>
-            <td><strong>Payment Method:</strong> {{ is_string($order->payment_method) ? ucfirst($order->payment_method) : 'N/A' }}</td>
-        </tr>
-        <tr>
-            <td><strong>Customer:</strong> {{ is_string($order->name) ? $order->name : 'N/A' }}</td>
-            <td><strong>Phone:</strong> {{ is_string($order->phone) ? $order->phone : 'N/A' }}</td>
-        </tr>
-        <tr>
-            <td><strong>Email:</strong> {{ is_string($order->email) ? $order->email : 'N/A' }}</td>
-            <td><strong>Billing Address:</strong> {{ is_string($order->address) ? $order->address : 'N/A' }}</td>
-        </tr>
-    </table>
+<table class="info-table">
+    <tr>
+        <td><strong>Order Number:</strong> {{ $order->order_number }}</td>
+        <td><strong>Date:</strong> {{ optional($order->created_at)->format('d M Y') }}</td>
+    </tr>
+    <tr>
+        <td><strong>Status:</strong> {{ ucfirst($order->status ?? 'Pending') }}</td>
+        @php
+            $rawPayment = $order->billingInformation->payment_method ?? 'N/A';
 
-    <h3>Purchased Products</h3>
+            $paymentLabels = [
+                'credit_card' => 'Credit Card',
+                'stripe_card' => 'Credit Card (Stripe)',
+                'paypal_express' => 'PayPal Express',
+                'cash_on_delivery' => 'Cash on Delivery',
+                'bank_transfer' => 'Bank Transfer',
+                'cod' => 'Cash on Delivery',
+                'stripe' => 'Stripe',
+            ];
 
-    <table class="product-table">
-        <thead>
+            $paymentMethod = $paymentLabels[$rawPayment] ?? ucwords(str_replace('_', ' ', $rawPayment));
+    @endphp
+
+<td><strong>Payment Method:</strong> {{ $paymentMethod }}</td>
+    </tr>
+    <tr>
+        <td><strong>Customer:</strong> {{ $order->billingInformation->first_name }} {{ $order->billingInformation->last_name }}</td>
+        <td><strong>Phone:</strong> {{ $order->billingInformation->phone }}</td>
+    </tr>
+    <tr>
+        <td><strong>Email:</strong> {{ $order->billingInformation->email }}</td>
+        <td><strong>Billing Address:</strong>
+            {{ $order->billingInformation->address_line_1 }},
+            {{ $order->billingInformation->city }},
+            {{ $order->billingInformation->state }},
+            {{ $order->billingInformation->country }}
+        </td>
+    </tr>
+</table>
+
+<h3>Purchased Products</h3>
+
+<table class="product-table">
+    <thead>
+        <tr>
+            <th>Serial No</th>
+            <th>Product</th>
+            <th>Qty</th>
+            <th>Unit Price</th>
+            <th class="text-right">Total</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach ($order->items as $index => $item)
+            @php
+                $imageData = null;
+                $mimeType = 'image/jpeg';
+
+                $image = $item->product->images->first()->path ?? null;
+
+                if ($image) {
+                    if (filter_var($image, FILTER_VALIDATE_URL)) {
+                        try {
+                            $imgContent = file_get_contents($image);
+                            if ($imgContent !== false) {
+                                $mimeType = (new finfo(FILEINFO_MIME_TYPE))->buffer($imgContent) ?: 'image/jpeg';
+                                $imageData = base64_encode($imgContent);
+                            }
+                        } catch (\Exception $e) {
+                            // fail silently
+                        }
+                    } else {
+                        $imagePath = public_path($image);
+                        if (file_exists($imagePath)) {
+                            $imgContent = file_get_contents($imagePath);
+                            $mimeType = mime_content_type($imagePath);
+                            $imageData = base64_encode($imgContent);
+                        }
+                    }
+                }
+
+                // fallback
+                if (!$imageData && file_exists(public_path('no-image.png'))) {
+                    $imgContent = file_get_contents(public_path('no-image.png'));
+                    $mimeType = 'image/png';
+                    $imageData = base64_encode($imgContent);
+                }
+            @endphp
             <tr>
-                <th>#</th>
-                <th>Product</th>
-                <th>Qty</th>
-                <th>Unit Price</th>
-                <th class="text-right">Total</th>
+                <td>{{ $index + 1 }}</td>
+                <td>
+                    <div class="product-info">
+                        @if ($imageData)
+                            <img src="data:{{ $mimeType }};base64,{{ $imageData }}" alt="Product Image">
+                        @endif
+                        <span>{{ $item->product->name ?? 'N/A' }}</span>
+                    </div>
+                </td>
+                <td>{{ $item->quantity }}</td>
+                <td>${{ number_format($item->price, 2) }}</td>
+                <td class="text-right">${{ number_format($item->price * $item->quantity, 2) }}</td>
             </tr>
-        </thead>
-        <tbody>
-            @foreach ($order->items as $index => $item)
-                <tr>
-                    <td>{{ $index + 1 }}</td>
-                    <td>
-                        {{
-                            is_object($item->product) && isset($item->product->name)
-                                ? $item->product->name
-                                : (is_array($item->product) && isset($item->product['name'])
-                                    ? $item->product['name']
-                                    : 'N/A')
-                        }}
-                    </td>
-                    <td>{{ is_numeric($item->quantity) ? $item->quantity : '0' }}</td>
-                    <td>${{ number_format($item->price ?? 0, 2) }}</td>
-                    <td class="text-right">${{ number_format(($item->price ?? 0) * ($item->quantity ?? 0), 2) }}</td>
-                </tr>
-            @endforeach
-        </tbody>
-    </table>
+        @endforeach
+    </tbody>
+</table>
 
-    <div class="total">
-        Total Paid: ${{ number_format($order->total_amount ?? 0, 2) }}
-    </div>
+<div class="total">
+    Total Paid: ${{ number_format($order->total_amount ?? 0, 2) }}
+</div>
 
-    <div class="footer">
-        This is a system-generated invoice. No signature required.
-    </div>
+<div class="footer">
+    This is a system-generated invoice. No signature required.
+</div>
 
 </body>
 </html>
- 

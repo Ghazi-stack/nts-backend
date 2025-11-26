@@ -367,20 +367,20 @@ class CustomerController extends Controller
         }
     }
 
-    public function importCSV(Request $request)
+     public function importCSV(Request $request)
     {
         try {
             $request->validate([
                 'file' => 'required|file|mimes:xlsx,xls,csv,txt'
             ]);
-
+        
             $storeId = current_store_id();
             if (!$storeId) {
                 return response()->json(['error' => 'Store not selected.'], 400);
             }
-
+        
             Excel::import(new CustomerImport($storeId), $request->file('file'));
-
+        
             return response()->json([
                 'status' => true,
                 'message' => 'Customers imported successfully.'
@@ -390,7 +390,7 @@ class CustomerController extends Controller
                 'error' => 'Validation failed.',
                 'failures' => $e->failures()
             ], 422);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
