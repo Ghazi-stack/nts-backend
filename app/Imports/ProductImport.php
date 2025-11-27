@@ -479,7 +479,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
         } catch (\Throwable $e) {
 
-            $this->updateProgress();
+            // $this->updateProgress();
         }
     }
 
