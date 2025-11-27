@@ -219,72 +219,86 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             );
 
             // --- Images (primary from "product image file - 1") ---------------
-            $primarySet = false;
+            // ----------------------------------------
+            // IMAGE IMPORT (Product Image File - 1)
+            // ----------------------------------------
 
-            $imageKey = 'product image file - 1';
+            $imageKeyOptions = [
+                'product image file - 1',
+                'product image file 1',
+                'product_image_file_1',
+                'product image file-1',
+                'product_image_file - 1',
+            ];
 
-            $savedPath = null;
+            // Normalize all candidate keys
+            $normalizedTargets = array_map(function ($h) {
+                return $this->normalizeKey($h);
+            }, $imageKeyOptions);
 
-            foreach ($data as $key => $val) {
+            foreach ($data as $rawKey => $val) {
 
-            if (!$val) continue;
+                if (!$val) continue;
 
-            $keyNorm = $this->normalizeKey($key);
+                // Normalize the incoming CSV header
+                $keyNorm = $this->normalizeKey($rawKey);
 
-            if ($keyNorm !== $imageKey) {
-                continue;
-            }
-
-            $imageValue = trim($val);
-
-            // (A) If it's a URL → download it
-            if (filter_var($imageValue, FILTER_VALIDATE_URL)) {
-                try {
-                    $imageContent = file_get_contents($imageValue);
-
-                    $extension = pathinfo(parse_url($imageValue, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
-                    $fileName = time() . '_' . uniqid() . '.' . $extension;
-
-                    $pathFull = public_path('product_images/' . $fileName);
-                    file_put_contents($pathFull, $imageContent);
-
-                    $savedPath = '/product_images/' . $fileName;
-
-                } catch (\Throwable $e) {
+                // Process ONLY if it matches expected image headers
+                if (!in_array($keyNorm, $normalizedTargets)) {
                     continue;
                 }
-            }
 
-            // (B) If it's a filename → check in public/product_images/
-            else {
-                $localPath = public_path('product_images/' . $imageValue);
+                $imageValue = trim($val);
+                $savedPath = null;
 
-                if (file_exists($localPath)) {
+                // (A) URL image
+                if (filter_var($imageValue, FILTER_VALIDATE_URL)) {
+                    try {
+                        $imageContent = @file_get_contents($imageValue);
 
-                    $extension = pathinfo($imageValue, PATHINFO_EXTENSION) ?: 'jpg';
-                    $fileName = time() . '_' . uniqid() . '.' . $extension;
+                        if ($imageContent !== false) {
+                            $extension = pathinfo(parse_url($imageValue, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+                            $fileName = time() . '_' . uniqid() . '.' . $extension;
 
-                    copy($localPath, public_path('product_images/' . $fileName));
+                            $pathFull = public_path('product_images/' . $fileName);
+                            file_put_contents($pathFull, $imageContent);
 
-                    $savedPath = '/product_images/' . $fileName;
+                            $savedPath = '/product_images/' . $fileName;
+                        }
+                    } catch (\Throwable $e) {
+                        continue;
+                    }
+                }
+
+                // (B) Local filename
+                else {
+                    $localPath = public_path('product_images/' . $imageValue);
+
+                    if (file_exists($localPath)) {
+                        $extension = pathinfo($imageValue, PATHINFO_EXTENSION) ?: 'jpg';
+                        $fileName = time() . '_' . uniqid() . '.' . $extension;
+
+                        copy($localPath, public_path('product_images/' . $fileName));
+
+                        $savedPath = '/product_images/' . $fileName;
+                    }
+                }
+
+                // (C) Save to DB
+                if ($savedPath) {
+                    ProductImage::updateOrCreate(
+                        [
+                            'product_id' => $product->id,
+                            'path'       => $savedPath,
+                        ],
+                        [
+                            'store_id'   => $this->storeId,
+                            'alt_text'   => $productName,
+                            'is_primary' => 1,
+                        ]
+                    );
                 }
             }
-
-            // Save image if we have one
-            if ($savedPath) {
-                ProductImage::updateOrCreate(
-                    [
-                        'product_id' => $product->id,
-                        'path'       => $savedPath,
-                    ],
-                    [
-                        'store_id'   => $this->storeId,
-                        'alt_text'   => $productName,
-                        'is_primary' => 1,
-                    ]
-                );
-            }
-        }
 
             // --- Progress update for successful row ---------------------------
             $this->updateProgress();
