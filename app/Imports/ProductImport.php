@@ -50,6 +50,21 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
         try {
             $raw  = $row->toArray();
             $data = array_change_key_case(array_map('trim', $raw), CASE_LOWER);
+            // ----------------------------
+            // DEBUG: Log all raw + normalized headers
+            // ----------------------------
+            $normalizedHeaders = [];
+
+            foreach ($raw as $key => $value) {
+                $normalizedHeaders[] = [
+                    'raw_header'        => $key,
+                    'normalized_header' => $this->normalizeKey($key),
+                    'value'             => $value,
+                ];
+            }
+
+            \Log::info("IMPORT HEADER DEBUG (Row {$rowIndex})", $normalizedHeaders);
+
 
             // Cancel check
             if (Cache::get($this->progressKey . "_cancel")) {
