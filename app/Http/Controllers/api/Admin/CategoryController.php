@@ -387,93 +387,194 @@ class CategoryController extends Controller
         ]);
     }
 
-    public function filter(Request $request)
-    {
-        try {
-            $storeId = current_store_id();
+    // public function filter(Request $request)
+    // {
+    //     try {
+    //         $storeId = current_store_id();
         
-            if (!$storeId) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Missing store-id in headers.',
-                ], 400);
-            }
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Missing store-id in headers.',
+    //             ], 400);
+    //         }
         
-            $query = Product::query()
-                ->where('store_id', $storeId)
-                ->with(['brand', 'categories', 'images', 'content', 'seo']);
+    //         $query = Product::query()
+    //             ->where('store_id', $storeId)
+    //             ->with(['brand', 'categories', 'images', 'content', 'seo']);
         
-            // ✅ Filters
-            // if ($request->filled('categoryId')) {
-            //     $query->where('category_id', $request->categoryId);
-            // }
+    //         // ✅ Filters
+    //         // if ($request->filled('categoryId')) {
+    //         //     $query->where('category_id', $request->categoryId);
+    //         // }
 
-            if ($request->filled('categoryIds')) {
-                $categoryIds = explode(',', $request->categoryIds); // support multiple IDs
-                $query->whereHas('categories', function ($q) use ($categoryIds) {
-                    $q->whereIn('categories.id', $categoryIds);
-                });
-            }
+    //         if ($request->filled('categoryIds')) {
+    //             $categoryIds = explode(',', $request->categoryIds); // support multiple IDs
+    //             $query->whereHas('categories', function ($q) use ($categoryIds) {
+    //                 $q->whereIn('categories.id', $categoryIds);
+    //             });
+    //         }
         
-            if ($request->filled('brandId')) {
-                $query->where('brand_id', $request->brandId);
-            }
+    //         if ($request->filled('brandId')) {
+    //             $query->where('brand_id', $request->brandId);
+    //         }
         
-            if ($request->filled('minPrice')) {
-                $query->where('price', '>=', $request->minPrice);
-            }
+    //         if ($request->filled('minPrice')) {
+    //             $query->where('price', '>=', $request->minPrice);
+    //         }
         
-            if ($request->filled('maxPrice')) {
-                $query->where('price', '<=', $request->maxPrice);
-            }
+    //         if ($request->filled('maxPrice')) {
+    //             $query->where('price', '<=', $request->maxPrice);
+    //         }
         
-            // ✅ Sorting
-            if ($request->filled('sortBy')) {
-                switch ($request->sortBy) {
-                    case 'priceLowToHigh':
-                        $query->orderBy('price', 'asc');
-                        break;
-                    case 'priceHighToLow':
-                        $query->orderBy('price', 'desc');
-                        break;
-                    case 'latest':
-                        $query->orderBy('created_at', 'desc');
-                        break;
-                    case 'bestSelling':
-                        $query->where('sold_count','>',0)
-                            ->orderBy('sold_count','desc');
-                        break;
-                    default:
-                        $query->orderBy('id', 'desc');
-                }
-            } else {
-                $query->orderBy('id', 'desc');
-            }
+    //         // ✅ Sorting
+    //         if ($request->filled('sortBy')) {
+    //             switch ($request->sortBy) {
+    //                 case 'priceLowToHigh':
+    //                     $query->orderBy('price', 'asc');
+    //                     break;
+    //                 case 'priceHighToLow':
+    //                     $query->orderBy('price', 'desc');
+    //                     break;
+    //                 case 'latest':
+    //                     $query->orderBy('created_at', 'desc');
+    //                     break;
+    //                 case 'bestSelling':
+    //                     $query->where('sold_count','>',0)
+    //                         ->orderBy('sold_count','desc');
+    //                     break;
+    //                 default:
+    //                     $query->orderBy('id', 'desc');
+    //             }
+    //         } else {
+    //             $query->orderBy('id', 'desc');
+    //         }
         
-            // ✅ Pagination
-            $page = (int) $request->input('page', 1);
-            $pageSize = (int) $request->input('pageSize', 12);
-            $products = $query->paginate($pageSize, ['*'], 'page', $page);
+    //         // ✅ Pagination
+    //         $page = (int) $request->input('page', 1);
+    //         $pageSize = (int) $request->input('pageSize', 12);
+    //         $products = $query->paginate($pageSize, ['*'], 'page', $page);
         
-            // ✅ Clean response with ProductResource + Pagination Meta
-            return response()->json([
-                'status' => true,
-                'message' => 'Filtered products retrieved successfully',
-                'data' => ProductResource::collection($products),
-                'pagination' => [
-                    'total' => $products->total(),
-                    'page' => $products->currentPage(),
-                    'pageSize' => $products->perPage(),
-                    'lastPage' => $products->lastPage()
-                ]
-            ]);
-        } catch (Exception $e) {
+    //         // ✅ Clean response with ProductResource + Pagination Meta
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Filtered products retrieved successfully',
+    //             'data' => ProductResource::collection($products),
+    //             'pagination' => [
+    //                 'total' => $products->total(),
+    //                 'page' => $products->currentPage(),
+    //                 'pageSize' => $products->perPage(),
+    //                 'lastPage' => $products->lastPage()
+    //             ]
+    //         ]);
+    //     } catch (Exception $e) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Something went wrong.',
+    //             'error' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
+    public function filter(Request $request)
+{
+    try {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
             return response()->json([
                 'status' => false,
-                'message' => 'Something went wrong.',
-                'error' => $e->getMessage()
-            ], 500);
+                'message' => 'Missing store-id in headers.',
+            ], 400);
         }
+
+        $query = Product::query()
+            ->where('store_id', $storeId)
+            ->with(['brand', 'categories', 'images', 'content', 'seo']);
+
+        // ✅ CATEGORY FILTER
+        if ($request->filled('categoryIds')) {
+            $categoryIds = explode(',', $request->categoryIds);
+
+            $allCategoryIds = [];
+            foreach ($categoryIds as $catId) {
+                $allCategoryIds[] = (int)$catId; // include main/parent category
+
+                // Fetch children recursively
+                $category = Category::with('childrenRecursive')->find($catId);
+                if ($category) {
+                    $allCategoryIds = array_merge($allCategoryIds, $this->getAllChildCategoryIds($category));
+                }
+            }
+
+            $query->whereHas('categories', function ($q) use ($allCategoryIds) {
+                $q->whereIn('categories.id', $allCategoryIds);
+            });
+        }
+
+        // ✅ BRAND FILTER
+        if ($request->filled('brandId')) {
+            $query->where('brand_id', $request->brandId);
+        }
+
+        // ✅ PRICE FILTERS
+        if ($request->filled('minPrice')) {
+            $query->where('price', '>=', $request->minPrice);
+        }
+        if ($request->filled('maxPrice')) {
+            $query->where('price', '<=', $request->maxPrice);
+        }
+
+        // ✅ SORTING
+        if ($request->filled('sortBy')) {
+            switch ($request->sortBy) {
+                case 'priceLowToHigh': $query->orderBy('price','asc'); break;
+                case 'priceHighToLow': $query->orderBy('price','desc'); break;
+                case 'latest': $query->orderBy('created_at','desc'); break;
+                case 'bestSelling':
+                    $query->where('sold_count','>',0)->orderBy('sold_count','desc');
+                    break;
+                default: $query->orderBy('id','desc');
+            }
+        } else {
+            $query->orderBy('id','desc');
+        }
+
+        // ✅ PAGINATION
+        $page = (int) $request->input('page', 1);
+        $pageSize = (int) $request->input('pageSize', 12);
+        $products = $query->paginate($pageSize, ['*'], 'page', $page);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Filtered products retrieved successfully',
+            'data' => ProductResource::collection($products),
+            'pagination' => [
+                'total' => $products->total(),
+                'page' => $products->currentPage(),
+                'pageSize' => $products->perPage(),
+                'lastPage' => $products->lastPage()
+            ]
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Something went wrong.',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
+
+// Recursive helper function
+private function getAllChildCategoryIds($category)
+{
+    $ids = [];
+    foreach ($category->childrenRecursive as $child) {
+        $ids[] = $child->id;
+        $ids = array_merge($ids, $this->getAllChildCategoryIds($child));
+    }
+    return $ids;
+}
     
 }

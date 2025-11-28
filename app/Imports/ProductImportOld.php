@@ -267,8 +267,37 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
             $primarySet = true;
         }
-    }   
+    }
 
+            Cache::increment($this->progressKey . "_count");
+
+            $current = Cache::get($this->progressKey . "_count");
+            $total   = Cache::get($this->progressKey . "_total");
+
+            $status = ($current >= $total) ? 'completed' : 'processing';
+
+            Cache::put($this->progressKey, [
+                'current' => $current,
+                'total'   => $total,
+                'status'  => $status
+            ]);
+
+        } catch (\Throwable $e) {
+            Cache::increment($this->progressKey . "_count");
+
+            $current = Cache::get($this->progressKey . "_count");
+            $total   = Cache::get($this->progressKey . "_total");
+
+            $status = ($current >= $total) ? 'completed' : 'processing';
+
+            Cache::put($this->progressKey, [
+                'current' => $current,
+                'total'   => $total,
+                'status'  => $status,
+                'error'   => 'Error on row ' . $rowIndex . ': ' . $e->getMessage()
+            ]);
+        }
+    }
     private function getField(array $data, array $possibleKeys, $default = null)
     {
         foreach ($possibleKeys as $k) {
