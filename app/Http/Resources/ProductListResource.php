@@ -22,13 +22,7 @@ class ProductListResource extends JsonResource
             ),
 
             // Only primary image
-            'image' => $this->whenLoaded('images', function () {
-                $img = $this->images->first();
-                return $img ? [
-                    'path'     => $img?->path ? asset($img->path) : null,
-                    'altText'  => $img?->alt_text ?? null,
-                ] : null;
-            }),
+            'image' => ProductImageResource::collection($this->whenLoaded('images')),
 
             // Stock & visibility
             'currentStock' => $this->current_stock,
