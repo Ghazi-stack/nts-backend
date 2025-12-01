@@ -97,7 +97,7 @@ class ProductController extends Controller
             $query = Product::with([
                 'brand:id,name',
                 'categories:id',
-                'images:id,product_id,image_url,alt_text'
+                'images:id,product_id,path,is_primary'
             ])
             ->select([
                 'id', 'name', 'slug', 'sku', 'price', 'msrp', 'brand_id',
