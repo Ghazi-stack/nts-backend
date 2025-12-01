@@ -17,7 +17,15 @@ class PopularProductResource extends JsonResource
             'brand'      => new BrandResource($this->whenLoaded('brand')),
 
             // Only primary image
-            'image' => ProductImageResource::collection($this->whenLoaded('images')),
+            'image' => $this->whenLoaded('images', function () {
+                $img = $this->images->first();
+
+                return $img ? [
+                    'path'     => $img->path ? asset($img->path) : null,
+                    'altText'  => $img->alt_text,
+                ] : null;
+            }),
+
         ];
     }
 }
