@@ -25,8 +25,8 @@ class ProductListResource extends JsonResource
             'image' => $this->whenLoaded('images', function () {
                 $img = $this->images->first();
                 return $img ? [
-                    'path'     => $img->image_url ?? null,
-                    'altText'  => $img->alt_text ?? null,
+                    'path'     => $img?->path ? asset($img->path) : null,
+                    'altText'  => $img?->alt_text ?? null,
                 ] : null;
             }),
 
