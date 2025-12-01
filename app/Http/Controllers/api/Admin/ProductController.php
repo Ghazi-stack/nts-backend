@@ -27,6 +27,7 @@ use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Cache;
 use App\Http\Resources\ProductResource;
 use App\Http\Resources\ProductListResource;
+use App\Http\Resources\PopularProductResource;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -1196,7 +1197,7 @@ class ProductController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Popular and recent products retrieved.',
-            'data' => ProductListResource::collection($products)
+            'data' => PopularProductResource::collection($products)
         ]);
     }
 
