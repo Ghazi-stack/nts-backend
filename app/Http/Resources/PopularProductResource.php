@@ -22,6 +22,7 @@ class PopularProductResource extends JsonResource
 
                 return $img ? [
                     'path'     => $img->path ? asset($img->path) : null,
+                    'isPrimary' => $this->is_primary,
                     'altText'  => $img->alt_text,
                 ] : null;
             }),
