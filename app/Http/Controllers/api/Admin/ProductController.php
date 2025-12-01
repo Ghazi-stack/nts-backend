@@ -1124,6 +1124,43 @@ class ProductController extends Controller
     // }
 
 
+    // public function popularProducts(Request $request)
+    // {
+    //     $storeId = current_store_id();
+    //     if (!$storeId) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Store not selected.'
+    //         ], 400);
+    //     }
+    
+    //     $limit = (int) $request->input('limit', 10);
+    
+    //     $products = Product::where('store_id', $storeId)
+    //         ->with([
+    //             'categories',
+    //             'brand',
+    //             'images',
+    //             'reviews.user',
+    //             'content',
+    //             'identifiers',
+    //             'seo'
+    //         ])
+    //         ->withCount(['searchStats as search_count' => function ($q) use ($storeId) {
+    //             $q->where('store_id', $storeId);
+    //         }])
+    //         ->orderByDesc('search_count')   // Popular products first
+    //         ->orderByDesc('created_at')     // If search_count same, newest first
+    //         ->take($limit)
+    //         ->get();
+        
+    //     return response()->json([
+    //         'status' => true,
+    //         'message' => 'Popular and recent products retrieved.',
+    //         'data' => ProductListResource::collection($products)
+    //     ]);
+    // }
+
     public function popularProducts(Request $request)
     {
         $storeId = current_store_id();
@@ -1136,28 +1173,30 @@ class ProductController extends Controller
     
         $limit = (int) $request->input('limit', 10);
     
-        $products = Product::where('store_id', $storeId)
-            ->with([
-                'categories',
-                'brand',
-                'images',
-                'reviews.user',
-                'content',
-                'identifiers',
-                'seo'
-            ])
+        // STEP 1: Get top product IDs only (FAST)
+        $productIds = Product::where('store_id', $storeId)
             ->withCount(['searchStats as search_count' => function ($q) use ($storeId) {
                 $q->where('store_id', $storeId);
             }])
-            ->orderByDesc('search_count')   // Popular products first
-            ->orderByDesc('created_at')     // If search_count same, newest first
-            ->take($limit)
+            ->orderByDesc('search_count')
+            ->orderByDesc('created_at')
+            ->limit($limit)
+            ->pluck('id');
+
+        // STEP 2: Load only required fields + relationships
+        $products = Product::whereIn('id', $productIds)
+            ->with([
+                'brand:id,name',
+                'categories:id,name',
+                'images:id,product_id,path,is_primary,alt_text'
+            ])
             ->get();
+
         
         return response()->json([
             'status' => true,
             'message' => 'Popular and recent products retrieved.',
-            'data' => ProductResource::collection($products)
+            'data' => ProductListResource::collection($products)
         ]);
     }
 
