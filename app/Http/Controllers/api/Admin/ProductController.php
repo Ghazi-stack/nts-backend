@@ -94,8 +94,16 @@ class ProductController extends Controller
 
         try {
             // Base query with full eager loading
-            $query = Product::with(['brand', 'categories', 'images', 'seo', 'content'])
-                ->where('store_id', current_store_id());
+            $query = Product::with([
+                'brand:id,name',
+                'categories:id',
+                'images:id,product_id,image_url,alt_text'
+            ])
+            ->select([
+                'id', 'name', 'slug', 'sku', 'price', 'msrp', 'brand_id',
+                'current_stock', 'is_featured', 'visible_on_storefront', 'store_id'
+            ])
+            ->where('store_id', current_store_id());
 
             // Filters
             if ($request->has('isFeatured')) {
@@ -139,7 +147,7 @@ class ProductController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Product list fetched.',
-                'data' => ProductResource::collection($products),
+                'data' => ProductListResource::collection($products),
                 'pagination' => [
                     'total' => $products->total(),
                     'page' => $products->currentPage(),
