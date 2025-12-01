@@ -1189,7 +1189,7 @@ class ProductController extends Controller
             ->with([
                 'brand:id,name',
                 'categories:id,name',
-                'images:id,product_id,path,isPrimary,alt_text'
+                'images:id,product_id,path,is_primary,alt_text'
             ])
             ->get();
 
