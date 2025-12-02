@@ -18,7 +18,10 @@ class ProductListResource extends JsonResource
 
             // Only minimal data from categories
             'categoryIds' => $this->whenLoaded('categories', fn () =>
-                $this->categories->pluck('id')
+                $this->categories->map(fn ($cat) => [
+                'id'   => $cat->id,
+                'name' => $cat->name
+            ])
             ),
 
             // Only primary image

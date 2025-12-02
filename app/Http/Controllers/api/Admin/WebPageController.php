@@ -116,8 +116,8 @@ class WebPageController extends Controller
                 'displayAsHomePage' => 'boolean',
                 'restrictToCustomersOnly' => 'boolean',
                 'showInNavigation' => 'boolean',
-                'sortOrder' => 'nullable|string|max:10',
-                'parentPage' => 'nullable|string|max:255',
+                'sortOrder' => 'nullable',
+                'parentPage' => 'nullable',
             ]);
 
             // Convert camelCase to snake_case for DB
@@ -184,8 +184,8 @@ class WebPageController extends Controller
                 'displayAsHomePage' => 'boolean',
                 'restrictToCustomersOnly' => 'boolean',
                 'showInNavigation' => 'boolean',
-                'sortOrder' => 'nullable|string|max:10',
-                'parentPage' => 'nullable|string|max:255',
+                'sortOrder' => 'nullable',
+                'parentPage' => 'nullable',
             ]);
 
             $data = [
