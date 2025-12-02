@@ -193,7 +193,7 @@ class BlogPostController extends Controller
                 'thumbnail' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp',
                 'post_url' => 'nullable|string|max:255|unique:blog_posts,post_url,' . $id,
                 'meta_description' => 'nullable',
-                'is_draft' => 'nullable|boolean', // ✅ added
+                'is_draft' => 'nullable|boolean',
             ]);
         
             // ✅ Handle new thumbnail upload
