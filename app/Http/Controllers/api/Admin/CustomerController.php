@@ -181,6 +181,80 @@ class CustomerController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+    public function updateAccount(Request $request)
+{
+    try {
+        $user = auth()->user(); // logged-in user
+        if (!$user) {
+            return response()->json([
+                'status' => false,
+                'message' => 'User not authenticated.'
+            ], 401);
+        }
+
+        $customer = $user->customer; // associated customer
+        if (!$customer) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Customer record not found.'
+            ], 404);
+        }
+
+        // Validation
+        $validated = $request->validate([
+            'firstName'        => 'nullable|string|max:255',
+            'lastName'         => 'nullable|string|max:255',
+            'email'            => [
+                'nullable',
+                'email',
+                Rule::unique('users')->ignore($user->id),
+            ],
+            'phone'            => 'nullable|string|max:20',
+            'companyName'      => 'nullable|string|max:255',
+            'currentPassword'  => 'nullable|required_with:password|string|min:7',
+            'password'         => 'nullable|string|min:7|confirmed',
+        ]);
+
+        // Password check
+        if (!empty($validated['password'])) {
+            if (!Hash::check($validated['currentPassword'], $user->password)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Current password is incorrect.'
+                ], 403);
+            }
+            $user->password = Hash::make($validated['password']);
+        }
+
+        // Update user email
+        if (!empty($validated['email'])) {
+            $user->email = $validated['email'];
+        }
+
+        // Update customer fields
+        $customer->first_name   = $validated['firstName'] ?? $customer->first_name;
+        $customer->last_name    = $validated['lastName'] ?? $customer->last_name;
+        $customer->company_name = $validated['companyName'] ?? $customer->company_name;
+        $customer->phone        = $validated['phone'] ?? $customer->phone;
+        $customer->save();
+
+        // Sync name to User table
+        $user->name = trim($customer->first_name . ' ' . $customer->last_name);
+        $user->save();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Account updated successfully.',
+            'customer' => new CustomerResource($customer),
+        ], 200);
+
+    } catch (ValidationException $e) {
+        return response()->json(['errors' => $e->errors()], 422);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+}
+
 
     public function update(Request $request, $id)
     {
