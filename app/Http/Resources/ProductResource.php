@@ -218,12 +218,12 @@ class ProductResource extends JsonResource
         "minPurchaseQuantity" => $this->min_purchase_quantity,
         "maxPurchaseQuantity" => $this->max_purchase_quantity,
         "relatedProductsEnabled" => $this->related_products_enabled,
-        "hasMerchantReturnPolicy" => [
-            "@type" => "MerchantReturnPolicy",
-            "url" => "https://nts-ecommerce.vercel.app/returnPolicy",
-            "returnPolicyCategory" => "https://schema.org/MerchantReturnFiniteReturnWindow",
-            "merchantReturnDays" => 30
-        ]
+        // "hasMerchantReturnPolicy" => [
+        //     "@type" => "MerchantReturnPolicy",
+        //     "url" => "https://nts-ecommerce.vercel.app/returnPolicy",
+        //     "returnPolicyCategory" => "https://schema.org/MerchantReturnFiniteReturnWindow",
+        //     "merchantReturnDays" => 30
+        // ]
     ];
 }
 
