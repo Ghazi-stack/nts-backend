@@ -53,17 +53,17 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             // ----------------------------
             // DEBUG: Log all raw + normalized headers
             // ----------------------------
-            $normalizedHeaders = [];
+            // $normalizedHeaders = [];
 
-            foreach ($raw as $key => $value) {
-                $normalizedHeaders[] = [
-                    'raw_header'        => $key,
-                    'normalized_header' => $this->normalizeKey($key),
-                    'value'             => $value,
-                ];
-            }
+            // foreach ($raw as $key => $value) {
+            //     $normalizedHeaders[] = [
+            //         'raw_header'        => $key,
+            //         'normalized_header' => $this->normalizeKey($key),
+            //         'value'             => $value,
+            //     ];
+            // }
 
-            \Log::info("IMPORT HEADER DEBUG (Row {$rowIndex})", $normalizedHeaders);
+            // \Log::info("IMPORT HEADER DEBUG (Row {$rowIndex})", $normalizedHeaders);
 
 
             // Cancel check
@@ -131,7 +131,8 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             $width  = (float)($this->getField($data, ['width', 'product width', 'product_width']) ?? 0);
             $height = (float)($this->getField($data, ['height', 'product height', 'product_height']) ?? 0);
             $depth  = (float)($this->getField($data, ['depth', 'product depth', 'product_depth']) ?? 0);
-
+            $retailPrice = (float)($this->getField($data, ['retail price', 'retail_price']) ?? 0);
+            $msrp = ($retailPrice > $price) ? $retailPrice : $price; // ensure MSRP is at least the base price
             // --- Product ------------------------------------------------------
             $product = Product::updateOrCreate(
                 [
@@ -147,6 +148,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'sale_price'           => $salePrice,
                     'cost_price'           => $costPrice,
                     'fixed_shipping_cost'  => $fixedShipping,
+                    'msrp'                 => $msrp,  
                     'dimensions'           => json_encode([
                         'weight' => $weight,
                         'width'  => $width,
@@ -215,6 +217,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'page_title'       => $this->getField($data, ['page title', 'meta title']) ?? $productName,
                     'meta_description' => $this->getField($data, ['meta description', 'meta_description']) ?? '',
                     'meta_keywords'    => $this->getField($data, ['meta keywords', 'meta_keywords']) ?? '',
+                    'product_url'      => Str::slug(
+                                            $this->getField($data, ['product url', 'product_url'])
+                                            ?: $sku   // fallback to SKU
+                                        ),
                 ]
             );
 
