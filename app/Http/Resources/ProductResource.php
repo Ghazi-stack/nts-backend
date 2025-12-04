@@ -11,18 +11,25 @@ class ProductResource extends JsonResource
     public function toArray(Request $request): array
     {
         $price = $this->price ?? 0;
-        $msrp = $this->msrp ?? 0;
-        $cost = $this->cost_price ?? 0;
+        $retailPrice = $this->extra->retail_price ?? 0;
 
-        $savings = ($msrp > $price) ? $msrp - $price : 0;
-        $savingPercent = ($msrp > 0 && $savings > 0)
-            ? round(($savings / $msrp) * 100, 2)
+        // Calculate saving (MSRP)
+        $msrp = ($retailPrice > $price) ? round($retailPrice - $price, 2) : 0;
+
+        // Percentage saving
+        $savingPercent = ($retailPrice > 0 && $msrp > 0)
+            ? round(($msrp / $retailPrice) * 100, 2)
             : 0;
 
-        $profit = ($price > $cost) ? $price - $cost : 0;
-        $profitMargin = ($cost > 0 && $profit > 0)
-            ? round(($profit / $cost) * 100, 2)
-            : 0;
+             $dimensions = [];
+        if (is_array($this->dimensions)) {
+            $dimensions = $this->dimensions;
+        } elseif ($this->dimensions) {
+            $decoded = json_decode($this->dimensions, true);
+            if (is_array($decoded)) {
+                $dimensions = $decoded;
+            }
+        }
 
         return [
             'id' => $this->id,
@@ -30,10 +37,11 @@ class ProductResource extends JsonResource
             'slug' => $this->slug,
             'sku' => $this->sku,
             'price' => $price,
+            'retailPrice' => $retailPrice,
             'msrp' => $msrp,
             'bestSelling' => $this->sold_count,
-            'costPrice' => $cost,
-            'salePrice' => $this->sale_price,
+            // 'costPrice' => $cost_price,
+            // 'salePrice' => $this->sale_price,
             'fixedShippingCost' => $this->fixed_shipping_cost,
             'productType' => $this->product_type,
             'optionSet' => $this->option_set,
@@ -47,10 +55,10 @@ class ProductResource extends JsonResource
             'brand' => new BrandResource($this->whenLoaded('brand')),
             'categories' => CategoryResource::collection($this->whenLoaded('categories')),
             'dimensions' => [
-                'weight' => $this->dimensions['weight'] ?? null,
-                'width' => $this->dimensions['width'] ?? null,
-                'height' => $this->dimensions['height'] ?? null,
-                'depth' => $this->dimensions['depth'] ?? null,
+                'weight' => $dimensions['weight'] ?? 0,
+                'width'  => $dimensions['width'] ?? 0,
+                'height' => $dimensions['height'] ?? 0,
+                'depth'  => $dimensions['depth'] ?? 0,
             ],
             'quantity' => $this->additional['quantity'] ?? $this->quantity,
             'trackInventory' => $this->track_inventory,
@@ -83,10 +91,10 @@ class ProductResource extends JsonResource
                 $primaryCategory = $this->categories->first();
                 return $primaryCategory ? $this->buildCategoryHierarchy($primaryCategory) : null;
             }),
-            'savingAmount' => $savings,
-            'savingPercent' => $savingPercent,
-            'profit' => $profit,
-            'profitMargin' => $profitMargin,
+            // 'savingAmount' => $savings,
+            // 'savingPercent' => $savingPercent,
+            // 'profit' => $profit,
+            // 'profitMargin' => $profitMargin,
             'purchasabilityStatus' => $this->purchasability_status,
             'minPurchaseQuantity' => $this->min_purchase_quantity,
             'maxPurchaseQuantity' => $this->max_purchase_quantity,
@@ -154,7 +162,7 @@ class ProductResource extends JsonResource
 
         "description" => $this->content->description ?? '',
         "image" => $primaryImage,
-        "additionalImage" => $images,
+        // "additionalImage" => $images,
         "aggregateRating" => [
             "@type" => "AggregateRating",
             "ratingValue" => $averageRating,
@@ -215,9 +223,9 @@ class ProductResource extends JsonResource
                 ]
             ]]
         ],
-        "minPurchaseQuantity" => $this->min_purchase_quantity,
-        "maxPurchaseQuantity" => $this->max_purchase_quantity,
-        "relatedProductsEnabled" => $this->related_products_enabled,
+        // "minPurchaseQuantity" => $this->min_purchase_quantity,
+        // "maxPurchaseQuantity" => $this->max_purchase_quantity,
+        // "relatedProductsEnabled" => $this->related_products_enabled,
         // "hasMerchantReturnPolicy" => [
         //     "@type" => "MerchantReturnPolicy",
         //     "url" => "https://nts-ecommerce.vercel.app/returnPolicy",
