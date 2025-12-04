@@ -13,8 +13,10 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Hash;
 use Maatwebsite\Excel\Facades\Excel;
+use App\Http\Resources\OrderResource;
 use App\Http\Resources\CustomerResource;
 use Illuminate\Validation\ValidationException;
+use App\Models\Order;
 
 class CustomerController extends Controller
 {
@@ -255,6 +257,42 @@ class CustomerController extends Controller
     }
 }
 
+public function myOrders(Request $request)
+{
+        try {
+            $user = auth()->user(); // Logged-in user
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not authenticated.'
+                ], 401);
+            }
+        
+            $customer = $user->customer; // Associated customer
+            if (!$customer) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Customer record not found.'
+                ], 404);
+            }
+        
+            // Fetch orders of logged-in customer
+            $orders = Order::where('customer_id', $customer->id)
+                            ->orderBy('created_at', 'desc')
+                            ->get();
+        
+            return response()->json([
+                'status' => true,
+                'orders' => OrderResource::collection($orders),
+            ], 200);
+        
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
     public function update(Request $request, $id)
     {

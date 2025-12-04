@@ -119,6 +119,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
       Route::prefix('customers')->group(function () {
         Route::post('/account-settings', [CustomerController::class, 'updateAccount']);
+        Route::get('/my-orders', [CustomerController::class, 'myOrders']);
         Route::get('/get-customers', [CustomerController::class, 'index']);
         Route::get('/get-customer/{id}', [CustomerController::class, 'show']);
         Route::post('/add-customer', [CustomerController::class, 'store']);
