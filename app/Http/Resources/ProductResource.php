@@ -160,7 +160,7 @@ class ProductResource extends JsonResource
             "url" => url("/web/brands/brand/" . Str::slug($this->brand->name ?? ''))
         ],
 
-        "description" => $this->content->description ?? '',
+       'description' => strip_tags(optional($this->content)->description),'',
         "image" => $primaryImage,
         // "additionalImage" => $images,
         "aggregateRating" => [
