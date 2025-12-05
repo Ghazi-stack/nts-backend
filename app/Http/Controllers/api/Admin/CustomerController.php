@@ -4,10 +4,12 @@ namespace App\Http\Controllers\api\Admin;
 
 use Exception;
 use App\Models\User;
+use App\Models\Order;
 use App\Models\Customer;
 use Illuminate\Http\Request;
 use App\Exports\CustomerExport;
 use App\Imports\CustomerImport;
+use App\Models\CustomerAddress;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -16,7 +18,6 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Http\Resources\OrderResource;
 use App\Http\Resources\CustomerResource;
 use Illuminate\Validation\ValidationException;
-use App\Models\Order;
 
 class CustomerController extends Controller
 {
@@ -32,7 +33,10 @@ class CustomerController extends Controller
                 ], 400);
             }
 
-            $query = Customer::where('store_id', $storeId);
+            // $query = Customer::where('store_id', $storeId);
+            
+            $query = Customer::with(['addresses', 'billingInformations'])
+                         ->where('store_id', $storeId);
 
             // 🔍 Search by keyword
             if ($request->filled('search')) {
@@ -82,7 +86,9 @@ class CustomerController extends Controller
                 ], 400);
             }
 
-            $customer = Customer::where('store_id', $storeId)->findOrFail($id);
+            $customer = Customer::with(['addresses', 'billingInformations'])
+                            ->where('store_id', $storeId)
+                            ->findOrFail($id);
             return response()->json([
                 'status' => true,
                 'message' => 'Customer retrieved.',
@@ -93,6 +99,96 @@ class CustomerController extends Controller
         }
     }
 
+    // public function store(Request $request)
+    // {
+    //     try {
+    //         $storeId = current_store_id();
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Store not selected or token invalid.'
+    //             ], 400);
+    //         }
+
+    //         $validated = $request->validate([
+    //             'firstName'            => 'nullable|string|max:255',
+    //             'lastName'             => 'nullable|string|max:255',
+    //             'email'                => [
+    //                 'nullable',
+    //                 'email',
+    //                 Rule::unique('customers')->where(function ($query) use ($storeId) {
+    //                     return $query->where('store_id', $storeId);
+    //                 }),
+    //             ],
+    //             'phone'                 => 'nullable|string|max:20',
+    //             'address'               => 'nullable|string',
+    //             'companyName'           => 'nullable|string|max:255',
+    //             'customerGroup'         => 'nullable|string|max:255',
+    //             'storeCredit'           => 'nullable|numeric',
+    //             'country'               => 'nullable|string|max:100',
+    //             'state'                 => 'nullable|string|max:100',
+    //             'taxExemptCode'         => 'nullable|string|max:50',
+    //             'receiveReviewEmails'   => 'nullable|boolean',
+    //             'forcePasswordReset'    => 'nullable|boolean',
+    //             'password'              => 'nullable|string|min:7|confirmed',
+    //         ]);
+
+    //         $validated['store_id'] = $storeId;
+
+    //         // ✅ Rename to match DB columns
+    //         $validated['first_name'] = $validated['firstName'] ?? null;
+    //         $validated['last_name'] = $validated['lastName'] ?? null;
+    //         $validated['company_name'] = $validated['companyName'] ?? null;
+    //         $validated['customer_group'] = $validated['customerGroup'] ?? null;
+    //         $validated['store_credit'] = $validated['storeCredit'] ?? null;
+    //         $validated['tax_exempt_code'] = $validated['taxExemptCode'] ?? null;
+
+    //         // ✅ Remove camelCase keys
+    //         unset(
+    //             $validated['firstName'],
+    //             $validated['lastName'],
+    //             $validated['companyName'],
+    //             $validated['customerGroup'],
+    //             $validated['storeCredit'],
+    //             $validated['taxExemptCode']
+    //         );
+
+    //         // ✅ Don't set name in $validated (no such column in customers)
+    //         // $validated['name'] = ...  ← REMOVE this line
+
+    //         // ✅ Handle password only for User
+    //         if (!empty($validated['password'])) {
+    //             $rawPassword = $validated['password']; // keep original for user table
+    //             unset($validated['password']); // Don't save password to customer
+    //         }
+
+    //         $customer = Customer::create($validated);
+
+    //         // 🔑 Create corresponding User (for authentication)
+    //             if (!empty($validated['email']) && !empty($rawPassword ?? null)) {
+    //             $fullName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
+
+    //             User::create([
+    //                 'name'        => $fullName,
+    //                 'email'       => $customer->email,
+    //                 'password'    => Hash::make($rawPassword),
+    //                 'customer_id' => $customer->id,
+    //                 'store_id'    => $storeId
+    //             ]);
+    //         }
+
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Customer created.',
+    //             'customer' => new CustomerResource($customer)
+    //         ], 201);
+
+    //     } catch (ValidationException $e) {
+    //         return response()->json(['errors' => $e->errors()], 422);
+    //     } catch (\Exception $e) {
+    //         return response()->json(['error' => $e->getMessage()], 500);
+    //     }
+    // }
     public function store(Request $request)
     {
         try {
@@ -110,12 +206,9 @@ class CustomerController extends Controller
                 'email'                => [
                     'nullable',
                     'email',
-                    Rule::unique('customers')->where(function ($query) use ($storeId) {
-                        return $query->where('store_id', $storeId);
-                    }),
+                    Rule::unique('customers')->where(fn($q) => $q->where('store_id', $storeId)),
                 ],
                 'phone'                 => 'nullable|string|max:20',
-                'address'               => 'nullable|string',
                 'companyName'           => 'nullable|string|max:255',
                 'customerGroup'         => 'nullable|string|max:255',
                 'storeCredit'           => 'nullable|numeric',
@@ -124,46 +217,59 @@ class CustomerController extends Controller
                 'taxExemptCode'         => 'nullable|string|max:50',
                 'receiveReviewEmails'   => 'nullable|boolean',
                 'forcePasswordReset'    => 'nullable|boolean',
-                'password'              => 'nullable|string|min:7|confirmed',
+                'password'              => 'nullable|string|confirmed',
+                'addresses'             => 'nullable|array',
+                'addresses.*.addressLine1' => 'required|string|max:255',
+                'addresses.*.addressLine2' => 'nullable|string|max:255',
+                'addresses.*.city'         => 'nullable|string|max:100',
+                'addresses.*.state'        => 'nullable|string|max:100',
+                'addresses.*.zip'          => 'nullable|string|max:20',
+                'addresses.*.country'      => 'nullable|string|max:100',
             ]);
 
             $validated['store_id'] = $storeId;
 
-            // ✅ Rename to match DB columns
-            $validated['first_name'] = $validated['firstName'] ?? null;
-            $validated['last_name'] = $validated['lastName'] ?? null;
-            $validated['company_name'] = $validated['companyName'] ?? null;
-            $validated['customer_group'] = $validated['customerGroup'] ?? null;
-            $validated['store_credit'] = $validated['storeCredit'] ?? null;
-            $validated['tax_exempt_code'] = $validated['taxExemptCode'] ?? null;
+            // Rename camelCase to DB columns
+            $map = [
+                'firstName' => 'first_name',
+                'lastName' => 'last_name',
+                'companyName' => 'company_name',
+                'customerGroup' => 'customer_group',
+                'storeCredit' => 'store_credit',
+                'taxExemptCode' => 'tax_exempt_code',
+            ];
 
-            // ✅ Remove camelCase keys
-            unset(
-                $validated['firstName'],
-                $validated['lastName'],
-                $validated['companyName'],
-                $validated['customerGroup'],
-                $validated['storeCredit'],
-                $validated['taxExemptCode']
-            );
-
-            // ✅ Don't set name in $validated (no such column in customers)
-            // $validated['name'] = ...  ← REMOVE this line
-
-            // ✅ Handle password only for User
-            if (!empty($validated['password'])) {
-                $rawPassword = $validated['password']; // keep original for user table
-                unset($validated['password']); // Don't save password to customer
+            foreach ($map as $k => $v) {
+                if (isset($validated[$k])) {
+                    $validated[$v] = $validated[$k];
+                    unset($validated[$k]);
+                }
             }
+
+            $rawPassword = $validated['password'] ?? null;
+            unset($validated['password']);
+
+            $addresses = $validated['addresses'] ?? [];
+            unset($validated['addresses']);
 
             $customer = Customer::create($validated);
 
-            // 🔑 Create corresponding User (for authentication)
-                if (!empty($validated['email']) && !empty($rawPassword ?? null)) {
-                $fullName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
+            // Create multiple addresses
+            foreach ($addresses as $addr) {
+                $customer->addresses()->create([
+                    'address_line_1' => $addr['addressLine1'] ?? null,
+                    'address_line_2' => $addr['addressLine2'] ?? null,
+                    'city'           => $addr['city'] ?? null,
+                    'state'          => $addr['state'] ?? null,
+                    'zip'            => $addr['zip'] ?? null,
+                    'country'        => $addr['country'] ?? null,
+                ]);
+            }
 
+            // Create User if email and password provided
+            if (!empty($customer->email) && $rawPassword) {
                 User::create([
-                    'name'        => $fullName,
+                    'name'        => trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
                     'email'       => $customer->email,
                     'password'    => Hash::make($rawPassword),
                     'customer_id' => $customer->id,
@@ -171,10 +277,12 @@ class CustomerController extends Controller
                 ]);
             }
 
+            $customer = Customer::with('addresses')->find($customer->id);
+
             return response()->json([
                 'status' => true,
-                'message' => 'Customer created.',
-                'customer' => new CustomerResource($customer)
+                'message' => 'Customer created successfully',
+                'data' => new CustomerResource($customer)
             ], 201);
 
         } catch (ValidationException $e) {
@@ -183,82 +291,203 @@ class CustomerController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
-    public function updateAccount(Request $request)
-{
-    try {
-        $user = auth()->user(); // logged-in user
-        if (!$user) {
-            return response()->json([
-                'status' => false,
-                'message' => 'User not authenticated.'
-            ], 401);
-        }
 
-        $customer = $user->customer; // associated customer
-        if (!$customer) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Customer record not found.'
-            ], 404);
-        }
 
-        // Validation
-        $validated = $request->validate([
-            'firstName'        => 'nullable|string|max:255',
-            'lastName'         => 'nullable|string|max:255',
-            'email'            => [
-                'nullable',
-                'email',
-                Rule::unique('users')->ignore($user->id),
-            ],
-            'phone'            => 'nullable|string|max:20',
-            'companyName'      => 'nullable|string|max:255',
-            'currentPassword'  => 'nullable|required_with:password|string|min:7',
-            'password'         => 'nullable|string|min:7|confirmed',
-        ]);
-
-        // Password check
-        if (!empty($validated['password'])) {
-            if (!Hash::check($validated['currentPassword'], $user->password)) {
+     public function update(Request $request, $id)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
                 return response()->json([
                     'status' => false,
-                    'message' => 'Current password is incorrect.'
-                ], 403);
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
             }
-            $user->password = Hash::make($validated['password']);
+
+            $customer = Customer::with('addresses')->where('store_id', $storeId)->findOrFail($id);
+
+            $validated = $request->validate([
+                'firstName'            => 'sometimes|string|max:255',
+                'lastName'             => 'sometimes|string|max:255',
+                'email'                => [
+                    'sometimes',
+                    'email',
+                    Rule::unique('customers')->ignore($id)->where(fn($q) => $q->where('store_id', $storeId)),
+                ],
+                'phone'                 => 'nullable|string|max:20',
+                'companyName'           => 'nullable|string|max:255',
+                'customerGroup'         => 'nullable|string|max:255',
+                'storeCredit'           => 'nullable|numeric',
+                'country'               => 'nullable|string|max:100',
+                'state'                 => 'nullable|string|max:100',
+                'taxExemptCode'         => 'nullable|string|max:50',
+                'receiveReviewEmails'   => 'nullable|boolean',
+                'forcePasswordReset'    => 'nullable|boolean',
+                'password'              => 'nullable|string|confirmed',
+                'addresses'             => 'nullable|array',
+                'addresses.*.id'        => 'nullable|exists:customer_addresses,id',
+                'addresses.*.addressLine1' => 'required|string|max:255',
+                'addresses.*.addressLine2' => 'nullable|string|max:255',
+                'addresses.*.city'         => 'nullable|string|max:100',
+                'addresses.*.state'        => 'nullable|string|max:100',
+                'addresses.*.zip'          => 'nullable|string|max:20',
+                'addresses.*.country'      => 'nullable|string|max:100',
+            ]);
+
+            $map = [
+                'firstName' => 'first_name',
+                'lastName' => 'last_name',
+                'companyName' => 'company_name',
+                'customerGroup' => 'customer_group',
+                'storeCredit' => 'store_credit',
+                'taxExemptCode' => 'tax_exempt_code',
+            ];
+
+            foreach ($map as $k => $v) {
+                if (isset($validated[$k])) {
+                    $validated[$v] = $validated[$k];
+                    unset($validated[$k]);
+                }
+            }
+
+            $rawPassword = $validated['password'] ?? null;
+            unset($validated['password']);
+
+            $addresses = $validated['addresses'] ?? [];
+            unset($validated['addresses']);
+
+            $customer->update($validated);
+
+            // Update existing addresses or create new ones
+            foreach ($addresses as $addr) {
+                if (!empty($addr['id'])) {
+                    $addressModel = $customer->addresses()->find($addr['id']);
+                    if ($addressModel) {
+                        $addressModel->update([
+                            'address_line_1' => $addr['addressLine1'] ?? null,
+                            'address_line_2' => $addr['addressLine2'] ?? null,
+                            'city'           => $addr['city'] ?? null,
+                            'state'          => $addr['state'] ?? null,
+                            'zip'            => $addr['zip'] ?? null,
+                            'country'        => $addr['country'] ?? null,
+                        ]);
+                    }
+                } else {
+                    $customer->addresses()->create([
+                        'address_line_1' => $addr['addressLine1'] ?? null,
+                        'address_line_2' => $addr['addressLine2'] ?? null,
+                        'city'           => $addr['city'] ?? null,
+                        'state'          => $addr['state'] ?? null,
+                        'zip'            => $addr['zip'] ?? null,
+                        'country'        => $addr['country'] ?? null,
+                    ]);
+                }
+            }
+
+            // Update user if exists
+            $user = $customer->user;
+            if ($user) {
+                $userUpdate = ['name' => trim($customer->first_name . ' ' . $customer->last_name)];
+                if (isset($validated['email'])) {
+                    $userUpdate['email'] = $validated['email'];
+                }
+                if ($rawPassword) {
+                    $userUpdate['password'] = Hash::make($rawPassword);
+                }
+                $user->update($userUpdate);
+            }
+
+            $customer = Customer::with('addresses')->find($customer->id);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Customer updated successfully',
+                'data' => new CustomerResource($customer)
+            ]);
+
+        } catch (ValidationException $e) {
+            return response()->json(['errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
         }
-
-        // Update user email
-        if (!empty($validated['email'])) {
-            $user->email = $validated['email'];
-        }
-
-        // Update customer fields
-        $customer->first_name   = $validated['firstName'] ?? $customer->first_name;
-        $customer->last_name    = $validated['lastName'] ?? $customer->last_name;
-        $customer->company_name = $validated['companyName'] ?? $customer->company_name;
-        $customer->phone        = $validated['phone'] ?? $customer->phone;
-        $customer->save();
-
-        // Sync name to User table
-        $user->name = trim($customer->first_name . ' ' . $customer->last_name);
-        $user->save();
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Account updated successfully.',
-            'customer' => new CustomerResource($customer),
-        ], 200);
-
-    } catch (ValidationException $e) {
-        return response()->json(['errors' => $e->errors()], 422);
-    } catch (\Exception $e) {
-        return response()->json(['error' => $e->getMessage()], 500);
     }
-}
 
-public function myOrders(Request $request)
-{
+    public function updateAccount(Request $request)
+    {
+        try {
+            $user = auth()->user(); // logged-in user
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not authenticated.'
+                ], 401);
+            }
+
+            $customer = $user->customer; // associated customer
+            if (!$customer) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Customer record not found.'
+                ], 404);
+            }
+
+            // Validation
+            $validated = $request->validate([
+                'firstName'        => 'nullable|string|max:255',
+                'lastName'         => 'nullable|string|max:255',
+                'email'            => [
+                    'nullable',
+                    'email',
+                    Rule::unique('users')->ignore($user->id),
+                ],
+                'phone'            => 'nullable|string|max:20',
+                'companyName'      => 'nullable|string|max:255',
+                'currentPassword'  => 'nullable|required_with:password|string|min:7',
+                'password'         => 'nullable|string|confirmed',
+            ]);
+
+            // Password check
+            if (!empty($validated['password'])) {
+                if (!Hash::check($validated['currentPassword'], $user->password)) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Current password is incorrect.'
+                    ], 403);
+                }
+                $user->password = Hash::make($validated['password']);
+            }
+
+            // Update user email
+            if (!empty($validated['email'])) {
+                $user->email = $validated['email'];
+            }
+
+            // Update customer fields
+            $customer->first_name   = $validated['firstName'] ?? $customer->first_name;
+            $customer->last_name    = $validated['lastName'] ?? $customer->last_name;
+            $customer->company_name = $validated['companyName'] ?? $customer->company_name;
+            $customer->phone        = $validated['phone'] ?? $customer->phone;
+            $customer->save();
+
+            // Sync name to User table
+            $user->name = trim($customer->first_name . ' ' . $customer->last_name);
+            $user->save();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Account updated successfully.',
+                'customer' => new CustomerResource($customer),
+            ], 200);
+
+        } catch (ValidationException $e) {
+            return response()->json(['errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function myOrders(Request $request)
+    {
         try {
             $user = auth()->user(); // Logged-in user
             if (!$user) {
@@ -291,122 +520,6 @@ public function myOrders(Request $request)
                 'status' => false,
                 'error' => $e->getMessage()
             ], 500);
-        }
-    }
-
-    public function update(Request $request, $id)
-    {
-        try {
-            $storeId = current_store_id();
-            if (!$storeId) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Store not selected or token invalid.'
-                ], 400);
-            }
-
-            $customer = Customer::where('store_id', $storeId)->findOrFail($id);
-
-            $validated = $request->validate([
-                'firstName'            => 'sometimes|string|max:255',
-                'lastName'             => 'sometimes|string|max:255',
-                'email'                => [
-                    'sometimes',
-                    'email',
-                    Rule::unique('customers')->ignore($id)->where(function ($query) use ($storeId) {
-                        return $query->where('store_id', $storeId);
-                    }),
-                ],
-                'phone'                 => 'nullable|string|max:20',
-                'address'               => 'nullable|string',
-                'companyName'           => 'nullable|string|max:255',
-                'customerGroup'         => 'nullable|string|max:255',
-                'storeCredit'           => 'nullable|numeric',
-                'country'               => 'nullable|string|max:100',
-                'state'                 => 'nullable|string|max:100',
-                'taxExemptCode'         => 'nullable|string|max:50',
-                'receiveReviewEmails'   => 'nullable|boolean',
-                'forcePasswordReset'    => 'nullable|boolean',
-                'password'              => 'nullable|string|min:7',
-            ]);
-
-            // ✅ Rename camelCase to snake_case
-            if (isset($validated['firstName'])) {
-                $validated['first_name'] = $validated['firstName'];
-                unset($validated['firstName']);
-            }
-
-            if (isset($validated['lastName'])) {
-                $validated['last_name'] = $validated['lastName'];
-                unset($validated['lastName']);
-            }
-
-            if (isset($validated['companyName'])) {
-                $validated['company_name'] = $validated['companyName'];
-                unset($validated['companyName']);
-            }
-
-            if (isset($validated['customerGroup'])) {
-                $validated['customer_group'] = $validated['customerGroup'];
-                unset($validated['customerGroup']);
-            }
-
-            if (isset($validated['storeCredit'])) {
-                $validated['store_credit'] = $validated['storeCredit'];
-                unset($validated['storeCredit']);
-            }
-
-            if (isset($validated['taxExemptCode'])) {
-                $validated['tax_exempt_code'] = $validated['taxExemptCode'];
-                unset($validated['taxExemptCode']);
-            }
-
-            $rawPassword = null;
-
-            // ✅ Only hash password for user (not customer)
-            if (!empty($validated['password'])) {
-                $rawPassword = $validated['password'];
-                unset($validated['password']);
-            }
-
-            $customer->update($validated);
-
-            // 🔄 Update user if exists
-            $user = $customer->user;
-
-            if ($user) {
-                $userUpdate = [];
-
-                // ✅ Create full name for user.name
-                $fullName = trim(
-                    ($validated['first_name'] ?? $customer->first_name) . ' ' .
-                    ($validated['last_name'] ?? $customer->last_name)
-                );
-                $userUpdate['name'] = $fullName;
-
-                if (isset($validated['email'])) {
-                    $userUpdate['email'] = $validated['email'];
-                }
-
-                if ($rawPassword) {
-                    $userUpdate['password'] = Hash::make($rawPassword);
-                }
-
-                if (!empty($userUpdate)) {
-                    $user->update($userUpdate);
-                }
-            }
-
-            return response()->json([
-                'status' => true,
-                'message' => 'Customer updated.',
-                'data' => new CustomerResource($customer)
-            ]);
-
-        } catch (ValidationException $e) {
-            return response()->json(['errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
@@ -674,4 +787,34 @@ public function myOrders(Request $request)
         }
     }
 
+   public function deleteMyAddress(Request $request, $addressId)
+    {
+        try {
+            $user = auth()->user();
+            if (!$user || !$user->customer) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not authenticated or customer not found.'
+                ], 401);
+            }
+
+            $customer = $user->customer;
+
+            // Find the address that belongs to this customer
+            $address = $customer->addresses()->findOrFail($addressId);
+
+            $address->delete();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Address deleted successfully.',
+                'deletedId' => $addressId
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

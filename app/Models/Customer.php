@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\User;
 use App\Models\Store;
+use App\Models\CustomerAddress;
 use App\Models\BillingInformation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -42,6 +43,10 @@ class Customer extends Model
     public function billingInformations()
     {
         return $this->hasMany(BillingInformation::class);
+    }
+    public function addresses()
+    {
+        return $this->hasMany(CustomerAddress::class);
     }
 
 }

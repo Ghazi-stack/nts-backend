@@ -125,6 +125,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/add-customer', [CustomerController::class, 'store']);
         Route::put('/update-customer/{id}', [CustomerController::class, 'update']);
         Route::delete('/delete-customer/{id?}', [CustomerController::class, 'destroy']);
+        Route::delete('/delete-my-address/{addressId}', [CustomerController::class, 'deleteMyAddress']);
         Route::post('/import', [CustomerController::class, 'importCSV']);
         Route::get('/export', [CustomerController::class, 'exportCSV']);
         Route::post('/customer-search', [CustomerController::class, 'advancedSearch']);
