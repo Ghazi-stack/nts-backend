@@ -16,6 +16,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Hash;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Http\Resources\OrderResource;
+use App\Http\Resources\MyOrderResource;
 use App\Http\Resources\CustomerResource;
 use Illuminate\Validation\ValidationException;
 
@@ -537,15 +538,14 @@ class CustomerController extends Controller
             }
 
             // Fetch orders based on user_id
-            $orders = Order::with(['items.product'])
-                           ->where('user_id', $user->id)
-                           ->orderBy('created_at', 'desc')
-                           ->get();
-
+           $orders = Order::with(['items.product.images'])
+                       ->where('user_id', $user->id)
+                       ->orderBy('created_at', 'desc')
+                       ->get();
             // Return orders using a resource
             return response()->json([
                 'status' => true,
-                'orders' => OrderResource::collection($orders)
+                'orders' => MyOrderResource::collection($orders)
             ], 200);
 
         } catch (\Exception $e) {
