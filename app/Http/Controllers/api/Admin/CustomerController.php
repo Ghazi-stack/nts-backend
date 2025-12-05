@@ -850,4 +850,41 @@ class CustomerController extends Controller
             ], 500);
         }
     }
+    public function getMyAddresses(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            if (!$user || !$user->customer) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not authenticated or customer not found.'
+                ], 401);
+            }
+        
+            $customer = $user->customer;
+        
+            $addresses = $customer->addresses()->get()->map(function($address) use ($customer) {
+                return [
+                    'addressId'      => $address->id,
+                    'addressLine1'   => $address->address_line_1,
+                    'addressLine2'   => $address->address_line_2,
+                    'city'           => $address->city,
+                    'state'          => $address->state,
+                    'zip'            => $address->zip,
+                    'customerName'   => $customer->first_name . ' ' . $customer->last_name,
+                ];
+            });
+        
+            return response()->json([
+                'status' => true,
+                'addresses' => $addresses
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }

@@ -15,6 +15,7 @@ class MyOrderResource extends JsonResource
             'status' => $this->status,
             'total_amount' => $this->total_amount,
             'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
             'products' => $this->items->map(function($item) {
                 return [
                     'id' => $item->product->id,
