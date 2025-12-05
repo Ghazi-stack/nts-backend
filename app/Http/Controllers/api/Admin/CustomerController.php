@@ -486,35 +486,68 @@ class CustomerController extends Controller
         }
     }
 
+    // public function myOrders(Request $request)
+    // {
+    //     try {
+    //         $user = auth()->user(); // Logged-in user
+    //         if (!$user) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'User not authenticated.'
+    //             ], 401);
+    //         }
+        
+    //         $customer = $user->customer; // Associated customer
+    //         if (!$customer) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Customer record not found.'
+    //             ], 404);
+    //         }
+        
+    //         // Fetch orders of logged-in customer
+    //         $orders = Order::where('customer_id', $customer->id)
+    //                         ->orderBy('created_at', 'desc')
+    //                         ->get();
+        
+    //         return response()->json([
+    //             'status' => true,
+    //             'orders' => OrderResource::collection($orders),
+    //         ], 200);
+        
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'error' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
+   
     public function myOrders(Request $request)
     {
         try {
-            $user = auth()->user(); // Logged-in user
+            // Logged-in user
+            $user = auth()->user();
             if (!$user) {
                 return response()->json([
                     'status' => false,
                     'message' => 'User not authenticated.'
                 ], 401);
             }
-        
-            $customer = $user->customer; // Associated customer
-            if (!$customer) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Customer record not found.'
-                ], 404);
-            }
-        
-            // Fetch orders of logged-in customer
-            $orders = Order::where('customer_id', $customer->id)
-                            ->orderBy('created_at', 'desc')
-                            ->get();
-        
+
+            // Fetch orders based on user_id
+            $orders = Order::with(['items.product'])
+                           ->where('user_id', $user->id)
+                           ->orderBy('created_at', 'desc')
+                           ->get();
+
+            // Return orders using a resource
             return response()->json([
                 'status' => true,
-                'orders' => OrderResource::collection($orders),
+                'orders' => OrderResource::collection($orders)
             ], 200);
-        
+
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,

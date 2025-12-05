@@ -635,6 +635,10 @@ public function filter(Request $request)
             $query->orderBy('id','desc');
         }
 
+         // ✅ LIMIT TOTAL PRODUCTS
+        $maxProducts = 10000;
+        $query->limit($maxProducts);
+
         // ✅ PAGINATION
         $page = (int) $request->input('page', 1);
         $pageSize = (int) $request->input('pageSize', 12);
