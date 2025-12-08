@@ -98,7 +98,7 @@ class ProductController extends Controller
             // Base query with full eager loading
             $query = Product::with([
                 'brand:id,name',
-                'categories:id,name',
+                'categories',
                 'images:id,product_id,path,is_primary'
             ])
             ->select([

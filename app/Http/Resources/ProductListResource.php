@@ -23,6 +23,7 @@ class ProductListResource extends JsonResource
                 'name' => $cat->name
             ])
             ),
+            'categories' => CategoryResource::collection($this->whenLoaded('categories')),
 
             // Only primary image
             'image' => ProductImageResource::collection($this->whenLoaded('images')),
