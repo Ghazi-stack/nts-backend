@@ -124,7 +124,7 @@ class BlogPostController extends Controller
                 'thumbnail' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048', // frontend sends "thumbnail"
                 'post_url' => 'nullable|string|max:255|unique:blog_posts,post_url',
                 'meta_description' => 'nullable|string|max:1000',
-                'is_draft' => 'nullable|boolean', // ✅ added
+                'is_draft' => 'nullable', // ✅ added
             ]);
 
             // ✅ Upload thumbnail if exists
@@ -145,7 +145,7 @@ class BlogPostController extends Controller
                 'thumbnail_image' => $thumbnailName,
                 'post_url' => $validated['post_url'] ?? null,
                 'meta_description' => $validated['meta_description'] ?? null,
-                'is_draft' => $validated['is_draft'] ?? false,
+                'is_draft' => filter_var($validated['is_draft'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
                 
             ]);
 
@@ -193,7 +193,7 @@ class BlogPostController extends Controller
                 'thumbnail' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp',
                 'post_url' => 'nullable|string|max:255|unique:blog_posts,post_url,' . $id,
                 'meta_description' => 'nullable',
-                'is_draft' => 'nullable|boolean',
+                'is_draft' => 'nullable',
             ]);
         
             // ✅ Handle new thumbnail upload
@@ -217,7 +217,9 @@ class BlogPostController extends Controller
                 'thumbnail_image' => $validated['thumbnail_image'] ?? $post->thumbnail_image,
                 'post_url' => $validated['post_url'] ?? $post->post_url,
                 'meta_description' => $validated['meta_description'] ?? $post->meta_description,
-                'is_draft' => $validated['is_draft'] ?? $post->is_draft,
+                'is_draft' => isset($validated['is_draft'])
+                ? (filter_var($validated['is_draft'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0)
+                : $post->is_draft,
             ]);
         
             return response()->json([
