@@ -310,7 +310,7 @@ public function showByOrderId(Request $request)
                 "emailInvoice" => $order->billingInformation->email_invoice ?? null
             ],
             "products" => $order->items->map(function($item) {
-                return (new ProductResource($item->product))->additional([
+                return (new ProductListResource($item->product))->additional([
                     'quantity' => $item->quantity,
                     'price' => $item->price,
                 ]);
