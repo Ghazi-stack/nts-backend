@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Mail;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Http\Resources\OrderResource;
 use App\Http\Resources\ProductResource;
+use App\Http\Resources\ProductListResource;
 use App\Http\Resources\CustomerResource;
 use App\Http\Resources\ShipmentResource;
 use App\Http\Resources\OrderNoteResource;
