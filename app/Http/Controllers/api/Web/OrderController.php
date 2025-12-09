@@ -233,8 +233,8 @@ public function showByOrderId(Request $request)
             ->where('order_number', $orderId)
             ->where('store_id', current_store_id());
 
-        $orderQuery->when($user, fn($q) => $q->where('user_id', $user->id))
-           ->when(!$user, fn($q) => $q->where('session_id', $sessionId));
+        // $orderQuery->when($user, fn($q) => $q->where('user_id', $user->id))
+        //    ->when(!$user, fn($q) => $q->where('session_id', $sessionId));
 
         $order = $orderQuery->firstOrFail();
         $customer = $order->customer;
