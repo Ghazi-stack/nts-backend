@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Customer;
+use App\Models\Payment;
 use App\Models\OrderItem;
 use App\Models\OrderNote;
 use Illuminate\Support\Str;
