@@ -598,6 +598,7 @@ public function showByOrderId(Request $request)
                 'products'       => 'required|array|min:1',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
+                'paymentIntentId'   => 'required',
             ]);
 
             $user = auth('sanctum')->user();
@@ -660,7 +661,7 @@ public function showByOrderId(Request $request)
 
             Payment::create([
                 'order_id' => $order->id,
-                'stripe_session_id' => $request->payment_intent_id, // frontend will send this
+                'stripe_session_id' => $request->paymentIntentId, // frontend will send this
                 'amount' => $totalAmount,
                 'payment_status' => 'completed',
             ]);
