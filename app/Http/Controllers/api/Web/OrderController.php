@@ -222,6 +222,126 @@ class OrderController extends Controller
     }
 }
 
+public function showByOrderId(Request $request)
+{
+    try {
+        $user = auth('sanctum')->user();
+        $sessionId = $request->header('X-Session-ID') ?? session()->getId();
+        $orderId = $request->input('orderId');
+
+        $orderQuery = Order::with(['items.product.images', 'customer', 'billingInformation'])
+            ->where('order_number', $orderId)
+            ->where('store_id', current_store_id());
+
+        $orderQuery->when($user, fn($q) => $q->where('user_id', $user->id))
+           ->when(!$user, fn($q) => $q->where('session_id', $sessionId));
+
+        $order = $orderQuery->firstOrFail();
+        $customer = $order->customer;
+
+        // Group order items by destination (if you have multiple destinations, else single)
+        $shippingDestinations = $order->items
+            ->groupBy(fn($item) => $item->destination_id ?? 0) // fallback to 0 if no destination
+            ->map(function($items, $key) use ($order, $customer) {
+                $billing = $order->billingInformation; // adjust if you store per-destination billing
+                return [
+                    "address" => [
+                        "firstName" => $billing->first_name ?? null,
+                        "lastName" => $billing->last_name ?? null,
+                        "phone" => $billing->phone ?? null,
+                        "companyName" => $billing->company_name ?? null,
+                        "addressLine1" => $billing->address_line_1 ?? null,
+                        "addressLine2" => $billing->address_line_2 ?? null,
+                        "city" => $billing->city ?? null,
+                        "state" => $billing->state ?? null,
+                        "zip" => $billing->zip ?? null,
+                        "country" => $billing->country ?? null,
+                        "email" => $billing->email ?? $customer->email ?? null
+                    ],
+                    "products" => $items->map(fn($item) => [
+                        'productId' => $item->product_id,
+                        'quantity' => $item->quantity,
+                        'price' => $item->price
+                    ])->values()
+                ];
+            })->values();
+
+        // Build order response
+        $orderResponse = [
+            "id" => $order->id,
+            "orderNumber" => $order->order_number,
+            "status" => ucfirst($order->status),
+            "shippingCost" => $order->shipping_cost,
+            "comments" => $order->comments,
+            "staffNotes" => $order->staff_notes,
+            "isDraft" => $order->is_draft,
+            "totalAmount" => $order->total_amount,
+            "trackingNumber" => $order->tracking_number,
+            "carrierCode" => $order->shipping_provider,
+            "carrierName" => $order->shipping_provider,
+            "shippedAt" => $order->shipped_at,
+            "customerId" => $customer->id,
+            "customerGroup" => $customer->customer_group,
+            "receiveOffers" => $customer->receive_review_emails,
+            "customer" => new CustomerResource($customer),
+            "billingInformation" => [
+                "firstName" => $order->billingInformation->first_name ?? null,
+                "lastName" => $order->billingInformation->last_name ?? null,
+                "phone" => $order->billingInformation->phone ?? null,
+                "companyName" => $order->billingInformation->company_name ?? null,
+                "addressLine1" => $order->billingInformation->address_line_1 ?? null,
+                "addressLine2" => $order->billingInformation->address_line_2 ?? null,
+                "city" => $order->billingInformation->city ?? null,
+                "state" => $order->billingInformation->state ?? null,
+                "zip" => $order->billingInformation->zip ?? null,
+                "country" => $order->billingInformation->country ?? null,
+                "email" => $order->billingInformation->email ?? $customer->email ?? null,
+                "paymentMethod" => $order->billingInformation->payment_method ?? null,
+                "shippingMethod" => $order->billingInformation->shipping_method ?? null
+            ],
+            "paymentMethod" => [
+                "method" => $order->billingInformation->payment_method ?? null,
+                "cardType" => $order->billingInformation->card_type ?? null,
+                "cardholderName" => $order->billingInformation->cardholder_name ?? null,
+                "creditCardNo" => $order->billingInformation->credit_card_no ?? null,
+                "ccv2Value" => $order->billingInformation->ccv2_value ?? null,
+                "expirationMonth" => $order->billingInformation->expiration_month ?? null,
+                "expirationYear" => $order->billingInformation->expiration_year ?? null,
+                "emailInvoice" => $order->billingInformation->email_invoice ?? null
+            ],
+            "products" => $order->items->map(function($item) {
+                return (new ProductResource($item->product))->additional([
+                    'quantity' => $item->quantity,
+                    'price' => $item->price,
+                ]);
+            }),
+            "shippingDestinations" => $shippingDestinations,
+            "shippingMethod" => [
+                "provider" => $order->shipping_provider,
+                "cost" => $order->shipping_cost,
+                "method" => $order->shipping_method
+            ]
+        ];
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Order detail retrieved successfully',
+            'order' => [$orderResponse]
+        ]);
+
+    } catch (ModelNotFoundException $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Order not found or access denied',
+        ], 200);
+    } catch (Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Failed to retrieve order detail',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+}
 
     // public function show(Request $request, $id)
     // {

@@ -311,6 +311,7 @@ Route::prefix('web')->group(function () {
         Route::get('/my-orders', 'index');
         Route::get('/show/{id}', 'show');
         Route::post('/return-order','submitReturnRequest');
+        Route::post('/order-details', 'showByOrderId');
     });
     Route::prefix('order-items')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () { 
         Route::get('/order-items/{orderId}', 'webIndex'); 
