@@ -74,36 +74,37 @@ class StripePaymentController extends Controller
             // dd($intent);
 
             // 5️⃣ Payment succeeded → create order
-            $order = Order::create([
-                'user_id' => $user?->id,
-                'order_number' => $orderNumber,
-                'status' => 'paid',
-                'total_amount' => $totalAmount,
-            ]);
+            // $order = Order::create([
+            //     'user_id' => $user?->id,
+            //     'order_number' => $orderNumber,
+            //     'status' => 'paid',
+            //     'total_amount' => $totalAmount,
+            // ]);
 
-            // 6️⃣ Create order items
-            foreach ($cartItems as $item) {
-                $product = Product::find($item['product_id']);
-                $order->items()->create([
-                    'product_id' => $product->id,
-                    'quantity' => $item['quantity'],
-                    'price' => $product->price,
-                ]);
-            }
+            // // 6️⃣ Create order items
+            // foreach ($cartItems as $item) {
+            //     $product = Product::find($item['product_id']);
+            //     $order->items()->create([
+            //         'product_id' => $product->id,
+            //         'quantity' => $item['quantity'],
+            //         'price' => $product->price,
+            //     ]);
+            // }
 
-            // 7️⃣ Store payment record
-            Payment::create([
-                'order_id' => $order->id,
-                'stripe_session_id' => $intent->id,
-                'amount' => $totalAmount,
-                'payment_status' => 'completed',
-            ]);
+            // // 7️⃣ Store payment record
+            // Payment::create([
+            //     'order_id' => $order->id,
+            //     'stripe_session_id' => $intent->id,
+            //     'amount' => $totalAmount,
+            //     'payment_status' => 'completed',
+            // ]);
 
             DB::commit();
 
             return response()->json([
                 'status' => 'success',
-                'order_id' => $order->id,
+                'amount' => $totalAmount,
+                'payment_intent_id' => $intent->id,
                 'payment_status' => $intent->status
             ]);
 

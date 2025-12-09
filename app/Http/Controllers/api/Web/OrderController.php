@@ -657,6 +657,14 @@ public function showByOrderId(Request $request)
                 ]);
             }
 
+            Payment::create([
+                'order_id' => $order->id,
+                'stripe_session_id' => $request->payment_intent_id, // frontend will send this
+                'amount' => $totalAmount,
+                'payment_status' => 'completed',
+            ]);
+
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Order placed successfully.',
