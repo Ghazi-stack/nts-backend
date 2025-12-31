@@ -4,7 +4,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\api\Admin\{
     BannerController, BrandController, CategoryController,
     ProductController, ProductFilterController, HomeController,
-    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,PromotionController,OrderTrackingImportController,WebPageController,BlogPostController,CarouselController,LogoController
+    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,
+    PromotionController,OrderTrackingImportController,WebPageController,BlogPostController,CarouselController,LogoController,ScriptController
 };
 use App\Http\Controllers\api\Web\{
     CartController, OrderController, ReviewController,
@@ -237,6 +238,15 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/add-logo','store');            // Create new logo
         Route::post('/update-logo/{id}','update');      // Update existing logo
         Route::delete('/delete-logo/{ids}','destroy');  // Delete one or multiple logos
+    });
+
+    // scripts api endpoint
+    Route::prefix('scripts')->controller(ScriptController::class)->group(function(){
+        Route::get('/get-script','index');          // Paginated list
+        Route::get('/get-script/{id}','show');   // Get single logo by ID
+        Route::post('/add-script','store');            // Create new logo
+        Route::put('/update-script/{id}','update');      // Update existing logo
+        Route::delete('/delete-script/{ids}','destroy');  // Delete one or multiple logos
     });
 });
 
