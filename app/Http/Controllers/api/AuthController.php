@@ -14,108 +14,126 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use App\Http\Resources\StoreResource;
 use App\Http\Resources\CustomerResource;
+use App\Models\Store;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\ValidationException;
+use Exception;
 
 class AuthController extends Controller
 {
+
+
     public function register(Request $request)
     {
         try {
             $validator = Validator::make($request->all(), [
-                'firstName'            => 'nullable|string|max:100',
-                'lastName'             => 'nullable|string|max:100',
-                'email'                => 'nullable|email|unique:users,email',
-                'phoneNumber' => 'nullable|string|max:20|unique:customers,phone',
-                'password'             => 'nullable|string|min:6|confirmed',
-                'companyName'          => 'nullable|string|max:255',
-                'addressLine1'         => 'nullable|string|max:255',
-                'addressLine2'         => 'nullable|string|max:255',
-                'suburb'               => 'nullable|string|max:255',
-                'country'              => 'nullable|string|max:100',
-                'state'                => 'nullable|string|max:100',
-                'zip'                  => 'nullable|string|max:20',
-                'storeName'            => 'nullable|string|max:255',
-                'businessSize'         => 'nullable|string|max:100',
-                'region'               => 'nullable|string|max:100',
-                'userRole'             => 'nullable|in:1,2'
+                'firstName'     => 'nullable|string|max:100',
+                'lastName'      => 'nullable|string|max:100',
+                'email'         => 'nullable|email|unique:users,email',
+                'phoneNumber'   => 'nullable|string|max:20|unique:customers,phone',
+                'password'      => 'nullable|string|min:6|confirmed',
+                'companyName'   => 'nullable|string|max:255',
+                'addressLine1'  => 'nullable|string|max:255',
+                'addressLine2'  => 'nullable|string|max:255',
+                'suburb'        => 'nullable|string|max:255',
+                'country'       => 'nullable|string|max:100',
+                'state'         => 'nullable|string|max:100',
+                'zip'           => 'nullable|string|max:20',
+                'storeName'     => 'nullable|string|max:255',
+                'businessSize'  => 'nullable|string|max:100',
+                'region'        => 'nullable|string|max:100',
+                'userRole'      => 'required|in:1,2'
             ]);
 
             if ($validator->fails()) {
                 return response()->json([
                     'status' => false,
-                    'message' => 'Validation errors',
                     'errors' => $validator->errors()
                 ], 422);
             }
 
             DB::beginTransaction();
 
-            // ✅ Step 1: Create User
+            $storeId = null;
+            $customerId = null;
+
+            if ($request->userRole == 2) {
+
+                // 🔎 Store name se store find karo
+                $store = Store::where('name', $request->storeName)->first();
+
+                if (!$store) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Store not found'
+                    ], 404);
+                }
+
+                $storeId = $store->id;
+
+                // ✅ Customer create
+                $customer = Customer::create([
+                    'store_id'       => $storeId,
+                    'first_name'     => $request->firstName,
+                    'last_name'      => $request->lastName,
+                    'email'          => $request->email,
+                    'phone'          => $request->phoneNumber,
+                    'company_name'   => $request->companyName,
+                    'address'        => $request->addressLine1,
+                    'address_line_2' => $request->addressLine2,
+                    'city'           => $request->suburb,
+                    'country'        => $request->country,
+                    'state'          => $request->state,
+                    'zip'            => $request->zip,
+                    'store_credit'   => 0,
+                    'receive_review_emails' => false,
+                    'force_password_reset'  => false,
+                ]);
+
+                $customerId = $customer->id;
+            }
+
             $user = User::create([
-                'name'         => $request->firstName . ' ' . $request->lastName,
-                'email'        => $request->email,
-                'password'     => bcrypt($request->password),
-                'userRole'     => $request->input('userRole', 2), // default: customer
-                'store_name'   => $request->storeName,
-                'business_size'=> $request->businessSize,
-                'region'       => $request->region,
-                'store_id'     => current_store_id(), // Assuming a function to get current store
+                'name'          => trim($request->firstName . ' ' . $request->lastName),
+                'email'         => $request->email,
+                'password'      => bcrypt($request->password),
+                'userRole'      => $request->userRole,
+                'store_name'    => $request->storeName,
+                'business_size' => $request->businessSize,
+                'region'        => $request->region,
+                'store_id'      => $storeId,    
+                'customer_id'   => $customerId, 
             ]);
-
-            $storeId = current_store_id(); 
-
-            $customer = Customer::create([
-                'store_id'        => $storeId,
-                'first_name'      => $request->firstName,
-                'last_name'       => $request->lastName,
-                'email'           => $request->email,
-                'phone'           => $request->phoneNumber,
-                'company_name'    => $request->companyName,
-                'address'         => $request->addressLine1,
-                'address_line_2'  => $request->addressLine2,
-                'city'            => $request->suburb,
-                'country'         => $request->country,
-                'state'           => $request->state,
-                'zip'             => $request->zip,
-                'store_credit'    => 0,
-                'receive_review_emails' => false,
-                'force_password_reset'  => false,
-            ]);
-
-            // ✅ Step 3: Link user and customer
-            $user->customer_id = $customer->id;
-            $user->save();
 
             DB::commit();
 
-            // ✅ Step 4: Send registration email
+            // 📧 Email send
             try {
                 Mail::to($user->email)->send(new UserRegistrationMail($user));
-            } catch (Exception $mailException) {
-                \Log::error('Mail sending failed: ' . $mailException->getMessage());
+            } catch (\Exception $e) {
+                Log::error('Mail error: ' . $e->getMessage());
             }
 
             return response()->json([
                 'status' => true,
-                'message' => 'User and Customer registered successfully',
+                'message' => 'Registration successful',
                 'user' => new UserResource($user),
-                'customer' => new CustomerResource($customer)
+                'customer' => isset($customer) ? new CustomerResource($customer) : null
             ], 201);
-
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Registration failed: ' . $e->getMessage());
+            Log::error('Register Error: ' . $e->getMessage());
 
             return response()->json([
                 'status' => false,
-                'message' => 'Something went wrong during registration. Please try again.',
+                'message' => 'Something went wrong',
                 'error' => $e->getMessage()
             ], 500);
         }
     }
+
 
     // public function login(Request $request)
     // {
@@ -173,6 +191,7 @@ class AuthController extends Controller
     // }
 
 
+
     public function login(Request $request)
     {
         try {
@@ -191,8 +210,8 @@ class AuthController extends Controller
 
             // Admin Login
             $admin = User::where('email', $email)
-                         ->where('userRole', 1)
-                         ->first();
+                ->where('userRole', 1)
+                ->first();
 
             if ($admin) {
                 if (!Hash::check($password, $admin->password)) {
@@ -233,9 +252,9 @@ class AuthController extends Controller
             }
 
             $customer = User::where('email', $email)
-                            ->where('store_id', $storeId)
-                            ->where('userRole', 2)
-                            ->first();
+                ->where('store_id', $storeId)
+                ->where('userRole', 2)
+                ->first();
 
             if (!$customer || !Hash::check($password, $customer->password)) {
                 return response()->json([
@@ -262,7 +281,6 @@ class AuthController extends Controller
                 'expireAt' => $expireAt->toDateTimeString(),
                 'customer' => new CustomerResource($customer->customer),
             ]);
-
         } catch (\Exception $e) {
             \Log::error('Login failed: ' . $e->getMessage());
 
@@ -297,7 +315,7 @@ class AuthController extends Controller
 
             return response()->json([
                 'status' => $status === Password::RESET_LINK_SENT,
-                'message' =>'Reset link sent to your email.',
+                'message' => 'Reset link sent to your email.',
             ]);
         } catch (Exception $e) {
             Log::error('Forgot password failed: ' . $e->getMessage());
@@ -346,7 +364,6 @@ class AuthController extends Controller
                 'status' => $status === Password::PASSWORD_RESET,
                 'message' => __($status),
             ], $status === Password::PASSWORD_RESET ? 200 : 400);
-
         } catch (Exception $e) {
             Log::error('Reset password failed: ' . $e->getMessage());
 
@@ -361,20 +378,20 @@ class AuthController extends Controller
     {
         try {
             $user = $request->user();
-        
+
             // 🗑️ Delete all cart items for this user
             Cart::where('user_id', $user->id)->delete();
-        
+
             // 🔐 Revoke the current token
             $user->currentAccessToken()->delete();
-        
+
             return response()->json([
                 'status' => true,
                 'message' => 'Logout successful and cart cleared',
             ]);
         } catch (Exception $e) {
             Log::error('Logout failed: ' . $e->getMessage());
-        
+
             return response()->json([
                 'status' => false,
                 'message' => 'Something went wrong during logout. Please try again.',
@@ -411,7 +428,6 @@ class AuthController extends Controller
                 'message' => 'Name updated successfully',
                 'user' => new UserResource($user),
             ], 200);
-
         } catch (\Exception $e) {
             \Log::error('Update name failed: ' . $e->getMessage());
 
@@ -468,7 +484,6 @@ class AuthController extends Controller
                 'message' => 'Email updated successfully.',
                 'user' => new UserResource($user),
             ], 200);
-
         } catch (\Exception $e) {
             DB::rollBack();
             \Log::error('Email update failed: ' . $e->getMessage());
@@ -481,60 +496,56 @@ class AuthController extends Controller
     }
 
     public function updatePassword(Request $request)
-{
-    try {
-        // ✅ Validate inputs
-        $validator = Validator::make($request->all(), [
-            'currentPassword' => 'required|string',
-            'newPassword'     => 'required|string',
-            'confirmPassword' => 'required|string|same:newPassword',
-        ]);
+    {
+        try {
+            // ✅ Validate inputs
+            $validator = Validator::make($request->all(), [
+                'currentPassword' => 'required|string',
+                'newPassword'     => 'required|string',
+                'confirmPassword' => 'required|string|same:newPassword',
+            ]);
 
-        if ($validator->fails()) {
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Validation errors',
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+
+            $user = $request->user();
+
+            // ✅ Check current password
+            if (!Hash::check($request->currentPassword, $user->password)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Current password is incorrect.',
+                ], 401);
+            }
+
+            // ✅ Prevent reusing the same password
+            if (Hash::check($request->newPassword, $user->password)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'New password cannot be the same as the current password.',
+                ], 400);
+            }
+
+            // ✅ Update password
+            $user->password = Hash::make($request->newPassword);
+            $user->save();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Password updated successfully.',
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Password update failed: ' . $e->getMessage());
+
             return response()->json([
                 'status' => false,
-                'message' => 'Validation errors',
-                'errors' => $validator->errors(),
-            ], 422);
+                'message' => 'Something went wrong while updating the password.',
+            ], 500);
         }
-
-        $user = $request->user();
-
-        // ✅ Check current password
-        if (!Hash::check($request->currentPassword, $user->password)) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Current password is incorrect.',
-            ], 401);
-        }
-
-        // ✅ Prevent reusing the same password
-        if (Hash::check($request->newPassword, $user->password)) {
-            return response()->json([
-                'status' => false,
-                'message' => 'New password cannot be the same as the current password.',
-            ], 400);
-        }
-
-        // ✅ Update password
-        $user->password = Hash::make($request->newPassword);
-        $user->save();
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Password updated successfully.',
-        ], 200);
-
-    } catch (\Exception $e) {
-        \Log::error('Password update failed: ' . $e->getMessage());
-
-        return response()->json([
-            'status' => false,
-            'message' => 'Something went wrong while updating the password.',
-        ], 500);
     }
 }
-
-
-}
-

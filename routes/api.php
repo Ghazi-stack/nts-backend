@@ -1,14 +1,39 @@
 <?php
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\api\Admin\{
-    BannerController, BrandController, CategoryController,
-    ProductController, ProductFilterController, HomeController,
-    StoreController, CustomerController,GlobalSearchController,TransactionalEmailController,EmailMarketingController,PromotionController,OrderTrackingImportController,WebPageController,BlogPostController,CarouselController,LogoController
+    BannerController,
+    BrandController,
+    CategoryController,
+    ProductController,
+    ProductFilterController,
+    HomeController,
+    StoreController,
+    CustomerController,
+    GlobalSearchController,
+    TransactionalEmailController,
+    EmailMarketingController,
+    PromotionController,
+    OrderTrackingImportController,
+    WebPageController,
+    BlogPostController,
+    CarouselController,
+    LogoController,
+    ScriptController,
+    CouponCodeController
 };
 use App\Http\Controllers\api\Web\{
-    CartController, OrderController, ReviewController,
-    WishlistController, StripePaymentController, StripeWebhookController,OrderItemController,ShipmentController,ContactRequestController,BulkInquiryController
+    CartController,
+    OrderController,
+    ReviewController,
+    WishlistController,
+    StripePaymentController,
+    StripeWebhookController,
+    OrderItemController,
+    ShipmentController,
+    ContactRequestController,
+    BulkInquiryController
 };
 use App\Http\Controllers\api\AuthController;
 // ===============================
@@ -29,7 +54,6 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
     Route::post('/forgot-password', 'forgotPassword');
     Route::post('/reset-password', 'resetPassword');
     Route::middleware('auth:sanctum')->post('/logout', 'logout');
-
 });
 
 // ===============================
@@ -41,9 +65,9 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
     // Profile
     Route::prefix('profile')->controller(AuthController::class)->group(function () {
-        Route::post('/update-email', 'updateEmail'); 
-        Route::put('/update-name', 'updateName'); 
-        Route::post('/update-password', 'updatePassword'); 
+        Route::post('/update-email', 'updateEmail');
+        Route::put('/update-name', 'updateName');
+        Route::post('/update-password', 'updatePassword');
     });
     // Main Search
     Route::get('/global-search', [GlobalSearchController::class, 'search']);
@@ -52,7 +76,6 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::prefix('stores')->controller(StoreController::class)->group(function () {
         Route::get('/list-stores', 'index');
         Route::post('/select-store', 'selectStore');
-        
     });
     // 📊 Dashboard
     Route::get('/store-performance', [HomeController::class, 'storePerformance']);
@@ -64,11 +87,11 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/list-orders', 'index'); // ✅ Get orders with filters, pagination
         Route::get('/show-order/{id}', 'show'); // ✅ View order details
         Route::patch('/update-status/{id}', 'updateOrderStatus'); // ✅ Update order status
-        Route::get('/export-orders', 'exportToExcel'); 
+        Route::get('/export-orders', 'exportToExcel');
         Route::get('/list-drafts', 'listDraftOrders');        // GET all draft orders
         Route::post('/create-draft', 'createDraftOrder');     // POST create new draft
         Route::delete('/delete-draft/{id}', 'deleteDraftOrder'); // DELETE a draft order
-        Route::get('/get-return-order','listReturnRequestsForAdmin');
+        Route::get('/get-return-order', 'listReturnRequestsForAdmin');
         Route::get('/get-notes/{orderId}', 'getOrderNotes');
         Route::post('/existing-customer', 'storeFromDashboard');
         Route::post('/new-customer', 'storeNewCustomerOrder');
@@ -79,16 +102,15 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/refund/{id}', 'refund');
         Route::get('/timeline/{id}', 'getOrderTimeline');
         Route::get('/send-payment-invoice/{id}', 'sendPaymentInvoice');
-
     });
 
     // Web Pages
-    Route::prefix('webpages')->controller(WebPageController::class)->group(function(){
-        Route::get('/web-pages','index');
-        Route::get('/single-page/{id}','show');
-        Route::post('/create-page','store');
-        Route::put('update/{id}','update');
-        Route::delete('/delete/{ids}','destroy');
+    Route::prefix('webpages')->controller(WebPageController::class)->group(function () {
+        Route::get('/web-pages', 'index');
+        Route::get('/single-page/{id}', 'show');
+        Route::post('/create-page', 'store');
+        Route::put('update/{id}', 'update');
+        Route::delete('/delete/{ids}', 'destroy');
     });
 
     Route::prefix('orders-tracking')->controller(OrderTrackingImportController::class)->group(function () {
@@ -111,13 +133,13 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/add-shipment', 'store');             // Create shipment (optional tracking number)
         Route::put('/update-shipment/{id}', 'update');         // Update shipped_to, date, or tracking
         Route::delete('/destroy-shipment', 'destroy');     // Delete shipment
-        Route::get('/packing-slip/{id}','printPackingSlip');
-        Route::post('/advanced-search','advancedSearch');
+        Route::get('/packing-slip/{id}', 'printPackingSlip');
+        Route::post('/advanced-search', 'advancedSearch');
     });
 
     // Customers
 
-      Route::prefix('customers')->group(function () {
+    Route::prefix('customers')->group(function () {
         Route::post('/account-settings', [CustomerController::class, 'updateAccount']);
         Route::get('/my-orders', [CustomerController::class, 'myOrders']);
         Route::get('/my-addresses', [CustomerController::class, 'getMyAddresses']);
@@ -141,7 +163,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::put('/update-bulk-category', 'updateBulkCategory');
         Route::delete('/delete-categories', 'destroyCategory'); // ✅ fixed: accepts body { ids: [] }
         Route::delete('/delete-subcategories/{id}', 'destroyOnlySubcategories');
-        Route::post('/update-categorySingle/{id}','updateCategoryExtras');
+        Route::post('/update-categorySingle/{id}', 'updateCategoryExtras');
     });
 
     // 🏷️ Brands
@@ -160,7 +182,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/show-product/{slug}', 'showProduct');
         Route::post('/add-product', 'addProduct');
         Route::put('/update-product', 'updateProduct');
-        Route::post('/update-single-product/{id}','updateSingleProduct');
+        Route::post('/update-single-product/{id}', 'updateSingleProduct');
         Route::delete('/delete-product/{id?}', 'destroyProduct');
         Route::get('/search-product', 'searchProduct');
         Route::post('/advanced-search', 'searchAdvanced');
@@ -170,20 +192,19 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/export-csv', 'exportCSV');
         Route::delete('/delete-product/categories/{id}', 'destroyProductCategories');
         Route::get('/featured-products', 'featuredProducts');
-
     });
 
     // EMAIL Marketing
-    Route::prefix('email-marketings')->controller(EmailMarketingController::class)->group(function(){
+    Route::prefix('email-marketings')->controller(EmailMarketingController::class)->group(function () {
         Route::get('/get-email-marketing', 'show');
         Route::put('/email-marketing', 'update');
     });
 
     // ✉️ Transactional Emails (store-wise)
     Route::prefix('transactional-emails')->controller(TransactionalEmailController::class)->group(function () {
-        Route::get('/get','index');        // list with pagination & search
-        Route::get('/get-single/{key}','show');         // get single template by key
-        Route::post('/create-key/{key}','upsert');       // create/update template
+        Route::get('/get', 'index');        // list with pagination & search
+        Route::get('/get-single/{key}', 'show');         // get single template by key
+        Route::post('/create-key/{key}', 'upsert');       // create/update template
         Route::patch('/toggle/{key}', 'toggle');       // enable/disable
         Route::post('/preview/{key}', 'preview');      // render preview (subject/html/text)
         Route::post('/send-test/{key}', 'sendTest');   // send test email
@@ -228,15 +249,34 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/add-crousel', 'store');
         Route::post('/update-carousel/{id}', 'update');         //    // Update carousel
         Route::delete('/delete-carousel/{id}', 'destroy'); // Delete carousel       // Add new carousel
-    // You can add update/delete routes if needed
+        // You can add update/delete routes if needed
     });
 
-    Route::prefix('logos')->controller(LogoController::class)->group(function(){
-        Route::get('/get-logos','index');          // Paginated list
-        Route::get('/get-logo/{id}','showById');   // Get single logo by ID
-        Route::post('/add-logo','store');            // Create new logo
-        Route::post('/update-logo/{id}','update');      // Update existing logo
-        Route::delete('/delete-logo/{ids}','destroy');  // Delete one or multiple logos
+    Route::prefix('logos')->controller(LogoController::class)->group(function () {
+        Route::get('/get-logos', 'index');          // Paginated list
+        Route::get('/get-logo/{id}', 'showById');   // Get single logo by ID
+        Route::post('/add-logo', 'store');            // Create new logo
+        Route::post('/update-logo/{id}', 'update');      // Update existing logo
+        Route::delete('/delete-logo/{ids}', 'destroy');  // Delete one or multiple logos
+    });
+
+    // scripts api endpoint
+    Route::prefix('scripts')->controller(ScriptController::class)->group(function () {
+        Route::get('/get-script', 'index');          // Paginated list
+        Route::get('/get-script/{id}', 'show');   // Get single logo by ID
+        Route::post('/add-script', 'store');            // Create new logo
+        Route::put('/update-script/{id}', 'update');      // Update existing logo
+        Route::delete('/delete-script/{ids}', 'destroy');  // Delete one or multiple logos
+    });
+
+    // scripts api coupons
+    Route::prefix('coupons')->controller(CouponCodeController::class)->group(function () {
+        Route::get('/get-couponcode', 'index');                 // Get all coupons
+        Route::get('/get-couponcode/{id}', 'show');             // Get coupon by ID
+        Route::post('/add-couponcode', 'store');                // Add new coupon
+        Route::put('/update-couponcode/{id}', 'update');        // Update coupon
+        Route::delete('/delete-couponcode/{id}', 'destroy');    // Delete coupon
+
     });
 });
 
@@ -264,27 +304,26 @@ Route::prefix('web')->group(function () {
     Route::prefix('categories')->controller(CategoryController::class)->group(function () {
         Route::get('/get-categories', 'index');
         Route::get('/categories/{id}', 'show');
-        Route::get('/categories/slug/{slug}','showBySlug');
+        Route::get('/categories/slug/{slug}', 'showBySlug');
         Route::get('/category-filter', 'filter');
-        
     });    // Public banner
     Route::prefix('banners')->controller(BrandController::class)->group(function () {
-        Route::get('/list-banners','index');
+        Route::get('/list-banners', 'index');
     });
-    Route::prefix('brands')->controller(BrandController::class)->group(function () {       
-        Route::get('/brands','index');
-        Route::get('/brands/{id}','showBrands');
+    Route::prefix('brands')->controller(BrandController::class)->group(function () {
+        Route::get('/brands', 'index');
+        Route::get('/brands/{id}', 'showBrands');
     });
     // 🏷️ Public Brands
-    Route::prefix('webpages')->controller(WebPageController::class)->group(function(){
-        Route::get('/web-pages','index');
-        Route::get('/single-page/{id}','show');
+    Route::prefix('webpages')->controller(WebPageController::class)->group(function () {
+        Route::get('/web-pages', 'index');
+        Route::get('/single-page/{id}', 'show');
     });
 
     Route::prefix('products')->controller(ProductController::class)->group(function () {
         Route::get('/products', 'index');
-        Route::get('/get-product/{slug}','showProduct');
-        Route::get('/search-product','searchProduct');
+        Route::get('/get-product/{slug}', 'showProduct');
+        Route::get('/search-product', 'searchProduct');
         Route::get('/featured-products', 'featuredProducts');
         Route::get('/popular-products', 'popularProducts');
     });
@@ -310,12 +349,12 @@ Route::prefix('web')->group(function () {
     Route::prefix('orders')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {
         Route::get('/my-orders', 'index');
         Route::get('/show/{id}', 'show');
-        Route::post('/return-order','submitReturnRequest');
+        Route::post('/return-order', 'submitReturnRequest');
         Route::post('/order-details', 'showByOrderId');
     });
-    Route::prefix('order-items')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () { 
-        Route::get('/order-items/{orderId}', 'webIndex'); 
-    }); 
+    Route::prefix('order-items')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {
+        Route::get('/order-items/{orderId}', 'webIndex');
+    });
     // ⭐ Reviews
     Route::prefix('reviews')->controller(ReviewController::class)->group(function () {
         Route::get('/product/{productId}', 'index'); // ✅ public
@@ -324,20 +363,20 @@ Route::prefix('web')->group(function () {
 
     Route::prefix('carousels')->controller(CarouselController::class)->group(function () {
         Route::get('/get-crousel', 'index');
-        Route::get('/get-single/{id}', 'show');   
+        Route::get('/get-single/{id}', 'show');
     });
 
-    Route::prefix('logos')->controller(LogoController::class)->group(function(){
-        Route::get('/get-logos','index');          // Paginated list
-        Route::get('/get-logo/{id}','showById');   // Get single logo by ID
+    Route::prefix('logos')->controller(LogoController::class)->group(function () {
+        Route::get('/get-logos', 'index');          // Paginated list
+        Route::get('/get-logo/{id}', 'showById');   // Get single logo by ID
     });
-    Route::prefix('contact-requests')->controller(ContactRequestController::class)->group(function(){
+    Route::prefix('contact-requests')->controller(ContactRequestController::class)->group(function () {
         Route::post('/submit', 'store');          // Submit contact request
     });
-    Route::prefix('contact-requests')->controller(ContactRequestController::class)->group(function(){
+    Route::prefix('contact-requests')->controller(ContactRequestController::class)->group(function () {
         Route::post('/submit', 'store');          // Submit contact request
     });
-    Route::prefix('bulk-inquiries')->controller(BulkInquiryController::class)->group(function(){
+    Route::prefix('bulk-inquiries')->controller(BulkInquiryController::class)->group(function () {
         Route::post('/submit', 'store');          // Submit bulk inquiry
     });
 
