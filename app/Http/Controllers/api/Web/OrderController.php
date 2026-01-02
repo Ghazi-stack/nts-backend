@@ -1424,6 +1424,7 @@ public function storeFromDashboard(Request $request)
     try {
         $validated = $request->validate([
             'customerId' => 'required|exists:customers,id',
+            'isDraft' => 'nullable',
             'customerGroup' => 'nullable|string|max:255',
             'receiveOffers' => 'nullable|boolean',
             'comments'      => 'nullable|string|max:1000',
@@ -1526,7 +1527,7 @@ public function storeFromDashboard(Request $request)
                 'billing_information_id' => $billing->id,
                 'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
                 'status'                 => 'pending',
-                'is_draft'               => false,
+                'is_draft'               => $validated['isDraft'],
                 'channel'                => 'admin-panel',
                 'shipping_cost'          => (float)($validated['shippingMethod']['cost'] ?? 0),
                 'shipping_provider'      => $validated['shippingMethod']['provider'] ?? null,
