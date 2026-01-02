@@ -269,7 +269,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::delete('/delete-script/{ids}', 'destroy');  // Delete one or multiple logos
     });
 
-    // scripts api coupons
+    // CouponCode api endpoint
     Route::prefix('coupons')->controller(CouponCodeController::class)->group(function () {
         Route::get('/get-couponcode', 'index');                 // Get all coupons
         Route::get('/get-couponcode/{id}', 'show');             // Get coupon by ID

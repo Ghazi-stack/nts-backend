@@ -24,7 +24,6 @@ use Exception;
 class AuthController extends Controller
 {
 
-
     public function register(Request $request)
     {
         try {
@@ -44,92 +43,109 @@ class AuthController extends Controller
                 'storeName'     => 'nullable|string|max:255',
                 'businessSize'  => 'nullable|string|max:100',
                 'region'        => 'nullable|string|max:100',
-                'userRole'      => 'required|in:1,2'
+                'userRole'      => 'required|in:1,2',
             ]);
 
             if ($validator->fails()) {
                 return response()->json([
                     'status' => false,
+                    'message' => 'Validation errors',
                     'errors' => $validator->errors()
                 ], 422);
             }
 
             DB::beginTransaction();
 
-            $storeId = null;
-            $customerId = null;
+            if ($request->userRole == 1) {
 
-            if ($request->userRole == 2) {
-
-                // 🔎 Store name se store find karo
-                $store = Store::where('name', $request->storeName)->first();
-
-                if (!$store) {
-                    return response()->json([
-                        'status' => false,
-                        'message' => 'Store not found'
-                    ], 404);
-                }
-
-                $storeId = $store->id;
-
-                // ✅ Customer create
-                $customer = Customer::create([
-                    'store_id'       => $storeId,
-                    'first_name'     => $request->firstName,
-                    'last_name'      => $request->lastName,
-                    'email'          => $request->email,
-                    'phone'          => $request->phoneNumber,
-                    'company_name'   => $request->companyName,
-                    'address'        => $request->addressLine1,
-                    'address_line_2' => $request->addressLine2,
-                    'city'           => $request->suburb,
-                    'country'        => $request->country,
-                    'state'          => $request->state,
-                    'zip'            => $request->zip,
-                    'store_credit'   => 0,
-                    'receive_review_emails' => false,
-                    'force_password_reset'  => false,
+                // ✅ Create Store
+                $store = Store::create([
+                    'name' => $request->storeName,
                 ]);
 
-                $customerId = $customer->id;
+                // ✅ Create User only
+                $user = User::create([
+                    'name'       => $request->firstName . ' ' . $request->lastName,
+                    'email'      => $request->email,
+                    'password'   => bcrypt($request->password),
+                    'userRole'   => 1,
+                    'store_name'    => $request->storeName,
+                    'business_size' => $request->businessSize,
+                    'region'        => $request->region,
+                    'store_id'   => $store->id,
+                    'customer_id' => null,
+                ]);
+
+                DB::commit();
+
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Store owner registered successfully',
+                    'user' => new UserResource($user),
+                    'store' => $store,
+                ], 201);
             }
 
+            $storeId = current_store_id();
+
+            // ✅ Create User
             $user = User::create([
-                'name'          => trim($request->firstName . ' ' . $request->lastName),
+                'name'          => $request->firstName . ' ' . $request->lastName,
                 'email'         => $request->email,
                 'password'      => bcrypt($request->password),
-                'userRole'      => $request->userRole,
+                'userRole'      => 2,
                 'store_name'    => $request->storeName,
                 'business_size' => $request->businessSize,
                 'region'        => $request->region,
-                'store_id'      => $storeId,    
-                'customer_id'   => $customerId, 
+                'store_id'      => $storeId,
             ]);
+
+            // ✅ Create Customer
+            $customer = Customer::create([
+                'store_id'        => $storeId,
+                'first_name'      => $request->firstName,
+                'last_name'       => $request->lastName,
+                'email'           => $request->email,
+                'phone'           => $request->phoneNumber,
+                'company_name'    => $request->companyName,
+                'address'         => $request->addressLine1,
+                'address_line_2'  => $request->addressLine2,
+                'city'            => $request->suburb,
+                'country'         => $request->country,
+                'state'           => $request->state,
+                'zip'             => $request->zip,
+                'store_credit'    => 0,
+                'receive_review_emails' => false,
+                'force_password_reset'  => false,
+            ]);
+
+            // ✅ Link User & Customer
+            $user->customer_id = $customer->id;
+            $user->save();
 
             DB::commit();
 
-            // 📧 Email send
+            // ✅ Send Email
             try {
                 Mail::to($user->email)->send(new UserRegistrationMail($user));
-            } catch (\Exception $e) {
-                Log::error('Mail error: ' . $e->getMessage());
+            } catch (\Exception $mailException) {
+                Log::error('Mail sending failed: ' . $mailException->getMessage());
             }
 
             return response()->json([
                 'status' => true,
-                'message' => 'Registration successful',
+                'message' => 'Customer registered successfully',
                 'user' => new UserResource($user),
-                'customer' => isset($customer) ? new CustomerResource($customer) : null
+                'customer' => new CustomerResource($customer),
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Register Error: ' . $e->getMessage());
+            Log::error('Registration failed: ' . $e->getMessage());
 
             return response()->json([
                 'status' => false,
-                'message' => 'Something went wrong',
-                'error' => $e->getMessage()
+                'message' => 'Something went wrong during registration.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
