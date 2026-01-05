@@ -1466,7 +1466,7 @@ class OrderController extends Controller
 
             Log::info('✅ VALIDATION PASSED', $validated);
         } catch (ValidationException $e) {
-           Log::error('❌ VALIDATION FAILED', $e->errors());
+            Log::error('❌ VALIDATION FAILED', $e->errors());
             return response()->json([
                 'status' => false,
                 'errors' => $e->errors()
@@ -1480,12 +1480,12 @@ class OrderController extends Controller
             $customer = Customer::where('store_id', $storeId)
                 ->findOrFail($validated['customerId']);
 
-           // Log::info('👤 CUSTOMER FOUND', $customer->toArray());
+            // Log::info('👤 CUSTOMER FOUND', $customer->toArray());
 
- 
+
             if (!empty($validated['shippingDestinations'])) {
                 $shippingDestinations = $validated['shippingDestinations'];
-               // Log::info('🚚 Using provided shippingDestinations');
+                // Log::info('🚚 Using provided shippingDestinations');
             } else {
                 //Log::info('🚚 shippingDestinations EMPTY → generating from products');
 
@@ -1527,7 +1527,7 @@ class OrderController extends Controller
                     'shipping_method' => $validated['shippingMethod']['method'] ?? null,
                 ], $user, $customer);
 
-             //   Log::info('💳 BILLING SAVED', $billing->toArray());
+                //   Log::info('💳 BILLING SAVED', $billing->toArray());
 
                 /* ---------- ORDER CREATE ---------- */
                 $order = Order::create([
@@ -1536,7 +1536,7 @@ class OrderController extends Controller
                     'user_id' => $user->id,
                     'billing_information_id' => $billing->id,
                     'order_number' => 'ORD-' . strtoupper(Str::random(8)),
-                    'status' => 'pending',
+                    'status' => 'Awaiting Payment',
                     'is_draft' => $validated['isDraft'] ?? false,
                     'channel' => 'admin-panel',
                     'shipping_cost' => (float)($validated['shippingMethod']['cost'] ?? 0),
@@ -1547,7 +1547,7 @@ class OrderController extends Controller
                     'total_amount' => 0,
                 ]);
 
-               // Log::info('🧾 ORDER CREATED', $order->toArray());
+                // Log::info('🧾 ORDER CREATED', $order->toArray());
 
                 /* ---------- PRODUCTS ---------- */
                 $total = 0;
@@ -1592,7 +1592,7 @@ class OrderController extends Controller
 
             DB::commit();
 
-           // Log::info('✅ ORDER PROCESS COMPLETED');
+            // Log::info('✅ ORDER PROCESS COMPLETED');
 
             return response()->json([
                 'status' => true,
@@ -1870,15 +1870,18 @@ class OrderController extends Controller
                 'receive_review_emails' => $request->receiveOffers ?? true,
             ]);
 
-            // 2️⃣ Prepare shipping destinations (default to billing info if not provided)
-            $shippingDestinations = $validated['shippingDestinations'] ?? collect($validated['products'])->map(function ($product) use ($validated) {
-                return [
-                    'address' => $validated['billingInformation'],
-                    'products' => [$product],
-                    'staffNotes' => ''
-                ];
-            })->toArray();
+            /* 🔧 FIXED SHIPPING DESTINATIONS */
+            $shippingDestinations = $validated['shippingDestinations'] ?? [];
 
+            if (empty($shippingDestinations)) {
+                $shippingDestinations = collect($validated['products'])->map(function ($product) use ($validated) {
+                    return [
+                        'address' => $validated['billingInformation'],
+                        'products' => [$product],
+                        'staffNotes' => ''
+                    ];
+                })->toArray();
+            }
             $orders = [];
 
             foreach ($shippingDestinations as $destination) {
@@ -1951,6 +1954,7 @@ class OrderController extends Controller
 
             // 6️⃣ Build response matching original payload format
             $ordersResponse = [];
+
             foreach ($orders as $entry) {
                 $order = $entry['order'];
                 $destination = $entry['destination'];
@@ -1959,64 +1963,6 @@ class OrderController extends Controller
                     'id' => $order->id,
                     'orderNumber' => $order->order_number,
                     'status' => ucfirst($order->status),
-                    'shippingCost' => $order->shipping_cost,
-                    'comments' => $order->comments,
-                    'staffNotes' => $order->staff_notes,
-                    'isDraft' => $order->is_draft,
-                    'totalAmount' => $order->total_amount,
-                    'trackingNumber' => $order->tracking_number,
-                    'carrierCode' => $order->shipping_provider,
-                    'carrierName' => $order->shipping_provider,
-                    'shippedAt' => $order->shipped_at,
-                    'customerId' => $customer->id,
-                    'customerGroup' => $customer->customer_group,
-                    'receiveOffers' => $customer->receive_review_emails,
-                    'customer' => new CustomerResource($customer),
-                    'billingInformation' => [
-                        'firstName' => $destination['address']['firstName'] ?? null,
-                        'lastName' => $destination['address']['lastName'] ?? null,
-                        'phone' => $destination['address']['phone'] ?? null,
-                        'companyName' => $destination['address']['companyName'] ?? null,
-                        'addressLine1' => $destination['address']['addressLine1'] ?? null,
-                        'addressLine2' => $destination['address']['addressLine2'] ?? null,
-                        'city' => $destination['address']['city'] ?? null,
-                        'state' => $destination['address']['state'] ?? null,
-                        'zip' => $destination['address']['zip'] ?? null,
-                        'country' => $destination['address']['country'] ?? null,
-                        'email' => $destination['address']['email'] ?? $customer->email,
-                        'paymentMethod' => $order->billingInformation->payment_method ?? null,
-                        'shippingMethod' => $order->billingInformation->shipping_method ?? null,
-                    ],
-                    'paymentMethod' => [
-                        'method' => $validated['paymentMethod']['method'] ?? null,
-                        'cardType' => $validated['paymentMethod']['cardType'] ?? null,
-                        'cardholderName' => $validated['paymentMethod']['cardholderName'] ?? null,
-                        'creditCardNo' => $validated['paymentMethod']['creditCardNo'] ?? null,
-                        'ccv2Value' => $validated['paymentMethod']['ccv2Value'] ?? null,
-                        'expirationMonth' => $validated['paymentMethod']['expirationMonth'] ?? null,
-                        'expirationYear' => $validated['paymentMethod']['expirationYear'] ?? null,
-                        'emailInvoice' => $validated['paymentMethod']['emailInvoice'] ?? null,
-                    ],
-                    'products' => collect($destination['products'])->map(function ($item) use ($storeId) {
-                        $product = Product::where('store_id', $storeId)->find($item['productId']);
-                        return $product
-                            ? (new ProductResource($product))->additional([
-                                'quantity' => $item['quantity'],
-                                'price' => $product->price,
-                            ])
-                            : null;
-                    })->filter()->values(),
-                    'shippingDestinations' => [
-                        [
-                            'address' => $destination['address'],
-                            'products' => $destination['products'],
-                        ]
-                    ],
-                    'shippingMethod' => [
-                        'provider' => $order->shipping_provider,
-                        'cost' => $order->shipping_cost,
-                        'method' => $order->shipping_method,
-                    ],
                 ];
             }
 
