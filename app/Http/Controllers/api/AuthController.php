@@ -211,43 +211,46 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         try {
-            // ✅ Validate request inputs (camelCase)
             $request->validate([
                 'email' => 'required|email',
                 'password' => 'required',
-                // 'storeId' => 'nullable|exists:stores,id', // Only required for customer
             ]);
 
             $email = $request->email;
             $password = $request->password;
 
-            // ✅ Get storeId from either headers or request body
+            // storeId header ya body se
             $storeId = $request->header('storeId', $request->input('storeId'));
 
-            // Admin Login
+            /*
+        |--------------------------------------------------------------------------
+        | ADMIN LOGIN (userRole = 1)
+        |--------------------------------------------------------------------------
+        */
             $admin = User::where('email', $email)
                 ->where('userRole', 1)
                 ->first();
 
             if ($admin) {
+
                 if (!Hash::check($password, $admin->password)) {
                     return response()->json([
                         'status' => false,
-                        'message' => 'Invalid email or password.'
+                        'message' => 'Invalid email or password.',
                     ], 401);
                 }
+
+                $stores = Store::where('user_id', $admin->id)->get();
 
                 $tokenResult = $admin->createToken('adminToken');
                 $plainTextToken = $tokenResult->plainTextToken;
 
-                $expireAt = now()->addHours(12);
+                $expireAt = now()->addHours(24);
                 $accessToken = PersonalAccessToken::findToken($plainTextToken);
                 if ($accessToken) {
                     $accessToken->expires_at = $expireAt;
                     $accessToken->save();
                 }
-
-                $stores = StoreResource::collection($admin->stores()->get());
 
                 return response()->json([
                     'status' => true,
@@ -255,35 +258,47 @@ class AuthController extends Controller
                     'token' => $plainTextToken,
                     'expireAt' => $expireAt->toDateTimeString(),
                     'user' => new UserResource($admin),
-                    'stores' => $stores,
+                    'stores' => StoreResource::collection($stores),
                 ]);
             }
 
-            // Customer Login
+            /*
+        |--------------------------------------------------------------------------
+        | CUSTOMER LOGIN (userRole = 2)
+        |--------------------------------------------------------------------------
+        */
             if (!$storeId) {
                 return response()->json([
                     'status' => false,
-                    'message' => 'Store ID is required to login as customer.',
+                    'message' => 'Store ID is required for customer login.',
                 ], 422);
             }
 
+            // Store validate
+            $store = Store::where('id', $storeId)->first();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid store.',
+                ], 404);
+            }
+
             $customer = User::where('email', $email)
-                ->where('store_id', $storeId)
                 ->where('userRole', 2)
+                ->where('store_id', $storeId)
                 ->first();
 
             if (!$customer || !Hash::check($password, $customer->password)) {
                 return response()->json([
                     'status' => false,
                     'message' => 'Invalid email, password, or store.',
-                    'user' => null
                 ], 401);
             }
 
             $tokenResult = $customer->createToken('customerToken');
             $plainTextToken = $tokenResult->plainTextToken;
 
-            $expireAt = now()->addHours(12);
+            $expireAt = now()->addHours(24);
             $accessToken = PersonalAccessToken::findToken($plainTextToken);
             if ($accessToken) {
                 $accessToken->expires_at = $expireAt;
@@ -295,10 +310,11 @@ class AuthController extends Controller
                 'message' => 'Customer logged in successfully.',
                 'token' => $plainTextToken,
                 'expireAt' => $expireAt->toDateTimeString(),
+                'store' => new StoreResource($store),
                 'customer' => new CustomerResource($customer->customer),
             ]);
         } catch (\Exception $e) {
-            \Log::error('Login failed: ' . $e->getMessage());
+            Log::error('Login failed: ' . $e->getMessage());
 
             return response()->json([
                 'status' => false,
