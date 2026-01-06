@@ -1415,12 +1415,6 @@ class OrderController extends Controller
     {
         $storeId = current_store_id();
 
-        // Log::info('📥 storeFromDashboard REQUEST START', [
-        //     'headers' => $request->headers->all(),
-        //     'body' => $request->all(),
-        //     'store_id' => $storeId
-        // ]);
-
         try {
             $validated = $request->validate([
                 'customerId' => 'required|exists:customers,id',
@@ -1463,10 +1457,7 @@ class OrderController extends Controller
                 'shippingMethod.method' => 'nullable|string',
                 'shippingMethod.cost' => 'nullable|string',
             ]);
-
-            Log::info('✅ VALIDATION PASSED', $validated);
         } catch (ValidationException $e) {
-            Log::error('❌ VALIDATION FAILED', $e->errors());
             return response()->json([
                 'status' => false,
                 'errors' => $e->errors()
@@ -1477,37 +1468,33 @@ class OrderController extends Controller
             DB::beginTransaction();
 
             $user = auth('sanctum')->user();
+
             $customer = Customer::where('store_id', $storeId)
                 ->findOrFail($validated['customerId']);
 
-            // Log::info('👤 CUSTOMER FOUND', $customer->toArray());
-
-
+            /*
+        |--------------------------------------------------------------------------
+        | ✅ FIX HERE (IMPORTANT)
+        |--------------------------------------------------------------------------
+        | Agar shippingDestinations empty ho
+        | to SINGLE destination banao jisme ALL products hon
+        */
             if (!empty($validated['shippingDestinations'])) {
                 $shippingDestinations = $validated['shippingDestinations'];
-                // Log::info('🚚 Using provided shippingDestinations');
             } else {
-                //Log::info('🚚 shippingDestinations EMPTY → generating from products');
-
-                $shippingDestinations = collect($validated['products'])->map(function ($product, $index) use ($validated) {
-                    return [
+                $shippingDestinations = [
+                    [
                         'address' => $validated['billingInformation'],
-                        'products' => [$product],
-                    ];
-                })->toArray();
+                        'products' => $validated['products'], // ✅ ALL PRODUCTS
+                    ]
+                ];
             }
-
-            //Log::info('🚚 FINAL SHIPPING DESTINATIONS', $shippingDestinations);
 
             $ordersResponse = [];
 
             foreach ($shippingDestinations as $destination) {
 
-                //Log::info('📍 PROCESSING DESTINATION', $destination);
-
-                /* ---------- BILLING SAVE ---------- */
-                //Log::info('💳 BILLING DATA INPUT', $destination['address']);
-
+                /* ---------- BILLING SAVE (ONLY ONCE) ---------- */
                 $billing = $this->saveBillingInformation([
                     'store_id' => $storeId,
                     'customer_id' => $customer->id,
@@ -1527,9 +1514,7 @@ class OrderController extends Controller
                     'shipping_method' => $validated['shippingMethod']['method'] ?? null,
                 ], $user, $customer);
 
-                //   Log::info('💳 BILLING SAVED', $billing->toArray());
-
-                /* ---------- ORDER CREATE ---------- */
+                /* ---------- ORDER CREATE (ONLY ONCE) ---------- */
                 $order = Order::create([
                     'store_id' => $storeId,
                     'customer_id' => $customer->id,
@@ -1547,12 +1532,11 @@ class OrderController extends Controller
                     'total_amount' => 0,
                 ]);
 
-                // Log::info('🧾 ORDER CREATED', $order->toArray());
-
-                /* ---------- PRODUCTS ---------- */
+                /* ---------- ORDER ITEMS (MULTIPLE) ---------- */
                 $total = 0;
 
                 foreach ($destination['products'] as $item) {
+
                     $product = Product::where('store_id', $storeId)
                         ->findOrFail($item['productId']);
 
@@ -1567,21 +1551,10 @@ class OrderController extends Controller
                         'store_id' => $storeId,
                     ]);
 
-                    Log::info('📦 PRODUCT ADDED', [
-                        'product_id' => $product->id,
-                        'qty' => $item['quantity'],
-                        'total' => $lineTotal
-                    ]);
-
                     $total += $lineTotal;
                 }
 
                 $order->update(['total_amount' => $total]);
-
-                Log::info('💰 ORDER TOTAL UPDATED', [
-                    'order_id' => $order->id,
-                    'total' => $total
-                ]);
 
                 $ordersResponse[] = [
                     'orderNumber' => $order->order_number,
@@ -1592,8 +1565,6 @@ class OrderController extends Controller
 
             DB::commit();
 
-            // Log::info('✅ ORDER PROCESS COMPLETED');
-
             return response()->json([
                 'status' => true,
                 'message' => 'Order placed successfully',
@@ -1601,10 +1572,6 @@ class OrderController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('🔥 ORDER FAILED', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
 
             return response()->json([
                 'status' => false,
@@ -1612,6 +1579,9 @@ class OrderController extends Controller
             ], 500);
         }
     }
+
+
+
     public function updateFromDashboard(Request $request, $orderId)
     {
         $storeId = current_store_id();
@@ -1820,6 +1790,7 @@ class OrderController extends Controller
             'receiveOffers' => 'nullable|boolean',
             'comments' => 'nullable|string|max:1000',
             'staffNotes' => 'nullable|string|max:1000',
+
             'billingInformation' => 'required|array',
             'billingInformation.firstName' => 'nullable|string|max:255',
             'billingInformation.lastName' => 'nullable|string|max:255',
@@ -1834,6 +1805,7 @@ class OrderController extends Controller
             'billingInformation.email' => 'nullable|email',
             'billingInformation.paymentMethod' => 'nullable|string',
             'billingInformation.shippingMethod' => 'nullable|string',
+
             'paymentMethod' => 'nullable|array',
             'paymentMethod.method' => 'nullable|string',
             'paymentMethod.cardType' => 'nullable|string',
@@ -1843,12 +1815,15 @@ class OrderController extends Controller
             'paymentMethod.expirationMonth' => 'nullable|string',
             'paymentMethod.expirationYear' => 'nullable|string',
             'paymentMethod.emailInvoice' => 'nullable|boolean',
+
             'products' => 'required|array|min:1',
             'products.*.productId' => 'required|exists:products,id',
             'products.*.quantity' => 'required|integer|min:1',
+
             'shippingDestinations' => 'nullable|array',
             'shippingDestinations.*.address' => 'required|array',
             'shippingDestinations.*.products' => 'required|array',
+
             'shippingMethod' => 'nullable|array',
             'shippingMethod.provider' => 'nullable|string',
             'shippingMethod.cost' => 'nullable|string',
@@ -1857,6 +1832,7 @@ class OrderController extends Controller
 
         try {
             DB::beginTransaction();
+
             $user = auth('sanctum')->user();
 
             // 1️⃣ Create new customer
@@ -1870,25 +1846,33 @@ class OrderController extends Controller
                 'receive_review_emails' => $request->receiveOffers ?? true,
             ]);
 
-            /* 🔧 FIXED SHIPPING DESTINATIONS */
+            /*
+        |--------------------------------------------------------------------------
+        | ✅ FIX HERE (IMPORTANT)
+        |--------------------------------------------------------------------------
+        | Agar shippingDestinations empty ho
+        | to SINGLE destination banao jisme ALL products hon
+        */
             $shippingDestinations = $validated['shippingDestinations'] ?? [];
 
             if (empty($shippingDestinations)) {
-                $shippingDestinations = collect($validated['products'])->map(function ($product) use ($validated) {
-                    return [
+                $shippingDestinations = [
+                    [
                         'address' => $validated['billingInformation'],
-                        'products' => [$product],
+                        'products' => $validated['products'], // ✅ ALL PRODUCTS
                         'staffNotes' => ''
-                    ];
-                })->toArray();
+                    ]
+                ];
             }
+
             $orders = [];
 
             foreach ($shippingDestinations as $destination) {
+
                 $address = $destination['address'];
                 $products = $destination['products'];
 
-                // 3️⃣ Save billing/shipping info
+                // 3️⃣ Save billing/shipping info (ONLY ONCE)
                 $billing = $this->saveBillingInformation([
                     'store_id' => $storeId,
                     'customer_id' => $customer->id,
@@ -1908,15 +1892,15 @@ class OrderController extends Controller
                     'shipping_method' => $address['shippingMethod'] ?? null,
                 ], $user, $customer);
 
-                // 4️⃣ Create order
+                // 4️⃣ Create order (ONLY ONE)
                 $order = Order::create([
                     'store_id' => $storeId,
                     'customer_id' => $customer->id,
                     'user_id' => $user->id,
                     'billing_information_id' => $billing->id,
                     'order_number' => 'ORD-' . strtoupper(Str::random(8)),
-                    'status' => 'pending',
-                    'is_draft' => false,
+                    'status' => 'Awaiting Payment',
+                    'is_draft' => $validated['isDraft'] ?? false,
                     'channel' => 'admin-panel',
                     'shipping_cost' => (float)($validated['shippingMethod']['cost'] ?? 0),
                     'shipping_provider' => $validated['shippingMethod']['provider'] ?? null,
@@ -1926,10 +1910,13 @@ class OrderController extends Controller
                     'total_amount' => 0,
                 ]);
 
-                // 5️⃣ Add products to order
+                // 5️⃣ Add products to order (MULTIPLE ITEMS)
                 $total = 0;
+
                 foreach ($products as $item) {
-                    $product = Product::where('store_id', $storeId)->findOrFail($item['productId']);
+                    $product = Product::where('store_id', $storeId)
+                        ->findOrFail($item['productId']);
+
                     $qty = $item['quantity'];
                     $lineTotal = $product->price * $qty;
 
@@ -1947,17 +1934,20 @@ class OrderController extends Controller
                 }
 
                 $order->update(['total_amount' => $total]);
-                $orders[] = ['order' => $order, 'destination' => $destination];
+
+                $orders[] = [
+                    'order' => $order,
+                    'destination' => $destination
+                ];
             }
 
             DB::commit();
 
-            // 6️⃣ Build response matching original payload format
+            // 6️⃣ Response
             $ordersResponse = [];
 
             foreach ($orders as $entry) {
                 $order = $entry['order'];
-                $destination = $entry['destination'];
 
                 $ordersResponse[] = [
                     'id' => $order->id,
@@ -1973,6 +1963,7 @@ class OrderController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'status' => false,
                 'message' => 'Order creation failed.',
