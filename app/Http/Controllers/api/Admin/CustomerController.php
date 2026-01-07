@@ -869,6 +869,7 @@ class CustomerController extends Controller
                     'addressLine1'   => $address->address_line_1,
                     'addressLine2'   => $address->address_line_2,
                     'city'           => $address->city,
+                    'country'          => $address->country,
                     'state'          => $address->state,
                     'zip'            => $address->zip,
                     'customerName'   => $customer->first_name . ' ' . $customer->last_name,
