@@ -58,31 +58,36 @@ class AuthController extends Controller
 
             if ($request->userRole == 1) {
 
-                // ✅ Create Store
-                $store = Store::create([
-                    'name' => $request->storeName,
-                ]);
-
-                // ✅ Create User only
+                // ✅ Create User first
                 $user = User::create([
-                    'name'       => $request->firstName . ' ' . $request->lastName,
-                    'email'      => $request->email,
-                    'password'   => bcrypt($request->password),
-                    'userRole'   => 1,
+                    'name'          => $request->firstName . ' ' . $request->lastName,
+                    'email'         => $request->email,
+                    'password'      => bcrypt($request->password),
+                    'userRole'      => 1,
                     'store_name'    => $request->storeName,
                     'business_size' => $request->businessSize,
                     'region'        => $request->region,
-                    'store_id'   => $store->id,
-                    'customer_id' => null,
+                    'store_id'      => null, // abhi null
+                    'customer_id'   => null,
                 ]);
+
+                // ✅ Create Store with user_id
+                $store = Store::create([
+                    'name'    => $request->storeName,
+                    'user_id' => $user->id, // 👈 yahan user id save ho jayegi
+                ]);
+
+                // ✅ Update user with store_id
+                $user->store_id = $store->id;
+                $user->save();
 
                 DB::commit();
 
                 return response()->json([
-                    'status' => true,
+                    'status'  => true,
                     'message' => 'Store owner registered successfully',
-                    'user' => new UserResource($user),
-                    'store' => $store,
+                    'user'    => new UserResource($user),
+                    'store'   => $store,
                 ], 201);
             }
 

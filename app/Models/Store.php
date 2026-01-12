@@ -11,6 +11,7 @@ class Store extends Model
     use HasFactory;
     protected $fillable = [
         'name',
+        'user_id',
         'base_url',
     ];
 
