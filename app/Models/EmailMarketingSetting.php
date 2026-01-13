@@ -11,17 +11,17 @@ class EmailMarketingSetting extends Model
     use HasFactory;
     protected $fillable = [
         'store_id',
-        'allow_newsletter_subscriptions',
-        'check_newsletter_box_by_default',
-        'show_newsletter_summary',
-        'extra',
+        'allowNewsletterSubscriptions',
+        'checkNewsletterBoxByDefault',
+        'newsletterSummaryText',
+        'showNewsletterSummary',
     ];
 
     protected $casts = [
-        'allow_newsletter_subscriptions' => 'boolean',
-        'check_newsletter_box_by_default' => 'boolean',
-        'show_newsletter_summary' => 'boolean',
-        'extra' => 'array',
+        'allowNewsletterSubscriptions' => 'boolean',
+        'checkNewsletterBoxByDefault' => 'boolean',
+        'newsletterSummaryText' => 'string',
+        'showNewsletterSummary' => 'boolean',
     ];
 
     public function store()

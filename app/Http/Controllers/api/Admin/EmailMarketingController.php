@@ -15,26 +15,26 @@ class EmailMarketingController extends Controller
         try {
             $storeId = current_store_id();
             if (!$storeId) {
-                return response()->json(['status'=>false,'message'=>'Store not selected or token invalid.'],400);
+                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
             }
 
             $settings = EmailMarketingSetting::firstOrCreate(
-                ['store_id'=>$storeId],
+                ['store_id' => $storeId],
                 [
-                    'allow_newsletter_subscriptions'=>true,
-                    'check_newsletter_box_by_default'=>false,
-                    'show_newsletter_summary'=>false,
-                    'extra'=>null,
+                    'allowNewsletterSubscriptions' => true,
+                    'checkNewsletterBoxByDefault' => false,
+                    'newsletterSummaryText' => null,
+                    'showNewsletterSummary' => false,
                 ]
             );
 
             return response()->json([
-                'status'=>true,
-                'message'=>'Email marketing settings fetched.',
-                'data'=> new EmailMarketingSettingResource($settings),
+                'status' => true,
+                'message' => 'Email marketing settings fetched.',
+                'data' => new EmailMarketingSettingResource($settings),
             ]);
         } catch (Exception $e) {
-            return response()->json(['status'=>false,'message'=>'Something went wrong.','error'=>$e->getMessage()],500);
+            return response()->json(['status' => false, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
         }
     }
 
@@ -43,32 +43,34 @@ class EmailMarketingController extends Controller
         try {
             $storeId = current_store_id();
             if (!$storeId) {
-                return response()->json(['status'=>false,'message'=>'Store not selected or token invalid.'],400);
+                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
             }
 
             $data = $request->validate([
                 'allowNewsletterSubscriptions' => 'nullable|boolean',
                 'checkNewsletterBoxByDefault'  => 'nullable|boolean',
+                'newsletterSummaryText'        => 'nullable|string|max:255',
                 'showNewsletterSummary'        => 'nullable|boolean',
-                'extra'                        => 'nullable|array',
+                // 'extra'                        => 'nullable|array',
             ]);
 
-            $settings = EmailMarketingSetting::firstOrCreate(['store_id'=>$storeId]);
+            $settings = EmailMarketingSetting::firstOrCreate(['store_id' => $storeId]);
 
             $settings->update([
-                'allow_newsletter_subscriptions' => $data['allowNewsletterSubscriptions'],
-                'check_newsletter_box_by_default'=> $data['checkNewsletterBoxByDefault'],
-                'show_newsletter_summary'        => $data['showNewsletterSummary'],
-                'extra'                          => $data['extra'] ?? null,
+                'allowNewsletterSubscriptions' => $data['allowNewsletterSubscriptions'],
+                'checkNewsletterBoxByDefault'  => $data['checkNewsletterBoxByDefault'],
+                'newsletterSummaryText'        => $data['newsletterSummaryText'],
+                'showNewsletterSummary'        => $data['showNewsletterSummary'],
+                // 'extra'                          => $data['extra'] ?? null,
             ]);
 
             return response()->json([
-                'status'=>true,
-                'message'=>'Email marketing settings updated.',
-                'data'=> new EmailMarketingSettingResource($settings->fresh()),
+                'status' => true,
+                'message' => 'Email marketing settings updated.',
+                'data' => new EmailMarketingSettingResource($settings->fresh()),
             ]);
         } catch (Exception $e) {
-            return response()->json(['status'=>false,'message'=>'Something went wrong.','error'=>$e->getMessage()],500);
+            return response()->json(['status' => false, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
         }
     }
 }

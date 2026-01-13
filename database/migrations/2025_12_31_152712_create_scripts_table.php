@@ -12,7 +12,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('scripts', function (Blueprint $table) {
-             $table->id();
+            $table->id();
+
+            $table->unsignedBigInteger('store_id');
+            $table->foreign('store_id')->references('id')->on('stores')->onDelete('cascade');
+
             $table->string('script_name')->nullable();
             $table->text('description')->nullable();
             $table->string('placement')->nullable();
@@ -21,7 +25,6 @@ return new class extends Migration
             $table->string('script_type')->nullable();
             $table->longText('script_content')->nullable();
             $table->timestamps();
-
         });
     }
 

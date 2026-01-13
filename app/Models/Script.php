@@ -12,6 +12,7 @@ class Script extends Model
     protected $table = 'scripts';
 
     protected $fillable = [
+        'store_id',
         'script_name',
         'description',
         'placement',

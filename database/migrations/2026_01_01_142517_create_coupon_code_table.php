@@ -12,8 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('coupon_code', function (Blueprint $table) {
-            
+
             $table->id();
+
+            $table->unsignedBigInteger('store_id');
+            $table->foreign('store_id')->references('id')->on('stores')->onDelete('cascade');
+
             $table->string('appliesToCategories')->nullable();
             $table->string('appliesToProducts')->nullable();
             $table->string('categoryIds')->nullable();
