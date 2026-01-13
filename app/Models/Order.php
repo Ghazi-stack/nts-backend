@@ -18,12 +18,27 @@ class Order extends Model
 {
     use HasFactory;
     protected $fillable = [
-        'store_id', 'user_id', 'session_id', 'order_number',
+        'store_id',
+        'user_id',
+        'session_id',
+        'order_number',
         'billing_information_id', // ✅ Add this
-        'name', 'email', 'phone', 'address', 'status',
-        'is_draft', 'channel',
-        'shipping_cost', 'comments', 'total_amount',
-        'tracking_number','tracking_carrier_code','tracking_carrier_name','shipped_at','customer_id','staff_notes'
+        'name',
+        'email',
+        'phone',
+        'address',
+        'status',
+        'is_draft',
+        'channel',
+        'shipping_cost',
+        'comments',
+        'total_amount',
+        'tracking_number',
+        'tracking_carrier_code',
+        'tracking_carrier_name',
+        'shipped_at',
+        'customer_id',
+        'staff_notes'
     ];
     protected $casts = [
         'is_draft'   => 'boolean',
@@ -66,5 +81,8 @@ class Order extends Model
     {
         return $this->hasMany(ShippingDestination::class);
     }
-
+    public function orderItems()
+    {
+        return $this->hasMany(OrderItem::class);
+    }
 }

@@ -1580,7 +1580,104 @@ class OrderController extends Controller
         }
     }
 
+    // getDraftOrders Api
 
+    public function getDraftOrders(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            // ✅ isDraft must be true
+            if (!$request->boolean('isDraft')) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'isDraft must be true'
+                ], 400);
+            }
+
+            $orders = Order::with([
+                'customer',
+                'billingInformation',
+                'orderItems.product'
+            ])
+                ->where('store_id', $storeId)
+                ->where('is_draft', 1) // 🔥 FIX
+                ->orderBy('id', 'desc')
+                ->get();
+            $response = [];
+
+            foreach ($orders as $order) {
+
+                $products = [];
+
+                foreach ($order->orderItems as $item) {
+                    $products[] = [
+                        'productId' => $item->product_id,
+                        'quantity'  => $item->quantity,
+                    ];
+                }
+
+                $response[] = [
+                    'customerId'     => $order->customer_id,
+                    'email'          => $order->billingInformation?->email,
+                    'firstName'      => $order->billingInformation?->first_name,
+                    'lastName'       => $order->billingInformation?->last_name,
+                    'phone'          => $order->billingInformation?->phone,
+                    'companyName'    => $order->billingInformation?->company_name,
+                    'customerGroup'  => null,
+                    'receiveOffers'  => true,
+                    'isDraft'        => true,
+                    'comments'       => $order->comments,
+                    'staffNotes'     => $order->staff_notes,
+
+                    'billingInformation' => [
+                        'firstName'    => $order->billingInformation?->first_name,
+                        'lastName'     => $order->billingInformation?->last_name,
+                        'phone'        => $order->billingInformation?->phone,
+                        'companyName'  => $order->billingInformation?->company_name,
+                        'addressLine1' => $order->billingInformation?->address_line_1,
+                        'addressLine2' => $order->billingInformation?->address_line_2,
+                        'city'         => $order->billingInformation?->city,
+                        'state'        => $order->billingInformation?->state,
+                        'zip'          => $order->billingInformation?->zip,
+                        'country'      => $order->billingInformation?->country,
+                    ],
+
+                    'paymentMethod' => [
+                        'method' => 'draft'
+                    ],
+
+                    'shippingMethod' => [
+                        'provider' => $order->shipping_provider,
+                        'method'   => $order->shipping_method,
+                        'cost'     => (string)$order->shipping_cost,
+                    ],
+
+                    'products' => $products,
+
+                    'shippingDestinations' => []
+                ];
+            }
+
+            return response()->json([
+                'status' => true,
+                'data'   => $response
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
     public function updateFromDashboard(Request $request, $orderId)
     {
