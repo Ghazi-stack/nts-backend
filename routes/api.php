@@ -21,7 +21,8 @@ use App\Http\Controllers\api\Admin\{
     CarouselController,
     LogoController,
     ScriptController,
-    CouponCodeController
+    CouponCodeController,
+    StoreSettingController
 };
 use App\Http\Controllers\api\Web\{
     CartController,
@@ -277,6 +278,11 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::put('/update-couponcode/{id}', 'update');        // Update coupon
         Route::delete('/delete-couponcode/{id}', 'destroy');    // Delete coupon
 
+    });
+    // StoreSetting api endpoint
+    Route::prefix('store-setting')->controller(StoreSettingController::class)->group(function () {
+        Route::get('/get-store-setting', 'index');
+        Route::post('/add-store-setting', 'store');
     });
 });
 
