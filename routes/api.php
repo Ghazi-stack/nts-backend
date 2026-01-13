@@ -95,6 +95,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/get-return-order', 'listReturnRequestsForAdmin');
         Route::get('/get-notes/{orderId}', 'getOrderNotes');
         Route::post('/existing-customer', 'storeFromDashboard');
+        Route::get('/get-draft-order', 'getDraftOrders');
         Route::post('/new-customer', 'storeNewCustomerOrder');
         Route::post('/search-advanced', 'advancedOrderSearch');
         Route::put('/update-order/{id}', 'updateFromDashboard');
