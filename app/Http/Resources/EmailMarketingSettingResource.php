@@ -12,12 +12,13 @@ class EmailMarketingSettingResource extends JsonResource
     public function toArray($request)
     {
         return [
-            'id'                        =>$this->id,
+            'id'                        => $this->id,
             'storeId'                    => $this->store_id,
-            'allowNewsletterSubscriptions'=> (bool) $this->allow_newsletter_subscriptions,
-            'checkNewsletterBoxByDefault' => (bool) $this->check_newsletter_box_by_default,
-            'showNewsletterSummary'       => (bool) $this->show_newsletter_summary,
-            'extra'                       => $this->extra ?? (object)[],
+            'allowNewsletterSubscriptions' => (bool) $this->allowNewsletterSubscriptions,
+            'checkNewsletterBoxByDefault' => (bool) $this->checkNewsletterBoxByDefault,
+            'newsletterSummaryText'       =>  $this->newsletterSummaryText,
+            'showNewsletterSummary'       => (bool) $this->showNewsletterSummary,
+            // 'extra'                       => $this->extra ?? (object)[],
         ];
     }
 }

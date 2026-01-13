@@ -9,13 +9,31 @@ use Exception;
 
 class CouponCodeController extends Controller
 {
-    // ADD DATA
+    private function getStoreId()
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            abort(response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400));
+        }
+
+        return $storeId;
+    }
+
     public function store(Request $request)
     {
         try {
+            $storeId = $this->getStoreId();
+
             $data = $request->all();
 
-            // categoryIds: array -> json (DB)
+            // ✅ force store_id from header
+            $data['store_id'] = $storeId;
+
+            // categoryIds → json
             if ($request->has('categoryIds')) {
                 $data['categoryIds'] = is_array($request->categoryIds)
                     ? json_encode($request->categoryIds)
@@ -24,7 +42,7 @@ class CouponCodeController extends Controller
 
             $coupon = CouponCode::create($data);
 
-            // Response me json ko wapas array bana do
+            // response me array
             if (!empty($coupon->categoryIds)) {
                 $coupon->categoryIds = json_decode($coupon->categoryIds);
             }
@@ -42,13 +60,14 @@ class CouponCodeController extends Controller
             ], 500);
         }
     }
-    // FETCH ALL
+
     public function index(Request $request)
     {
         try {
-            $query = CouponCode::query();
+            $storeId = $this->getStoreId();
 
-            // Single search key
+            $query = CouponCode::where('store_id', $storeId);
+
             if ($request->filled('search')) {
                 $search = $request->search;
 
@@ -59,7 +78,6 @@ class CouponCodeController extends Controller
                 });
             }
 
-            // Pagination (default 10)
             $coupons = $query->orderBy('id', 'desc')
                 ->paginate($request->get('per_page', 10));
 
@@ -76,17 +94,24 @@ class CouponCodeController extends Controller
         }
     }
 
-    // FETCH BY ID
     public function show($id)
     {
         try {
-            $coupon = CouponCode::find($id);
+            $storeId = $this->getStoreId();
+
+            $coupon = CouponCode::where('id', $id)
+                ->where('store_id', $storeId)
+                ->first();
 
             if (!$coupon) {
                 return response()->json([
                     'status' => false,
                     'message' => 'Record not found'
                 ], 404);
+            }
+
+            if (!empty($coupon->categoryIds)) {
+                $coupon->categoryIds = json_decode($coupon->categoryIds);
             }
 
             return response()->json([
@@ -102,11 +127,14 @@ class CouponCodeController extends Controller
         }
     }
 
-    // UPDATE BY ID
     public function update(Request $request, $id)
     {
         try {
-            $coupon = CouponCode::find($id);
+            $storeId = $this->getStoreId();
+
+            $coupon = CouponCode::where('id', $id)
+                ->where('store_id', $storeId)
+                ->first();
 
             if (!$coupon) {
                 return response()->json([
@@ -116,6 +144,9 @@ class CouponCodeController extends Controller
             }
 
             $data = $request->all();
+
+            // ❌ store_id overwrite prevent
+            unset($data['store_id']);
 
             if (isset($data['categoryIds']) && is_array($data['categoryIds'])) {
                 $data['categoryIds'] = json_encode($data['categoryIds']);
@@ -137,11 +168,14 @@ class CouponCodeController extends Controller
         }
     }
 
-    // DELETE
     public function destroy($id)
     {
         try {
-            $coupon = CouponCode::find($id);
+            $storeId = $this->getStoreId();
+
+            $coupon = CouponCode::where('id', $id)
+                ->where('store_id', $storeId)
+                ->first();
 
             if (!$coupon) {
                 return response()->json([

@@ -9,6 +9,7 @@ class CouponCode extends Model
     protected $table = 'coupon_code';
 
     protected $fillable = [
+        'store_id',
         'appliesToCategories',
         'appliesToProducts',
         'categoryIds',

@@ -9,17 +9,39 @@ use Exception;
 
 class ScriptController extends Controller
 {
-    // ADD DATA
+  
+    private function getStoreId()
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            abort(response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400));
+        }
+
+        return $storeId;
+    }
+
     public function store(Request $request)
     {
         try {
-            $script = Script::create($request->all());
+            $storeId = $this->getStoreId();
+
+            $data = $request->all();
+
+            // ✅ force store_id from header
+            $data['store_id'] = $storeId;
+
+            $script = Script::create($data);
 
             return response()->json([
                 'status' => true,
                 'message' => 'Script added successfully',
                 'data' => $script
             ], 201);
+
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
@@ -28,15 +50,20 @@ class ScriptController extends Controller
             ], 500);
         }
     }
-
-    // FETCH ALL
     public function index()
     {
         try {
+            $storeId = $this->getStoreId();
+
+            $scripts = Script::where('store_id', $storeId)
+                ->orderBy('id', 'desc')
+                ->get();
+
             return response()->json([
                 'status' => true,
-                'script' => Script::all()
+                'script' => $scripts
             ]);
+
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
@@ -46,11 +73,14 @@ class ScriptController extends Controller
         }
     }
 
-    // FETCH BY ID
     public function show($id)
     {
         try {
-            $script = Script::find($id);
+            $storeId = $this->getStoreId();
+
+            $script = Script::where('id', $id)
+                ->where('store_id', $storeId)
+                ->first();
 
             if (!$script) {
                 return response()->json([
@@ -63,6 +93,7 @@ class ScriptController extends Controller
                 'status' => true,
                 'data' => $script
             ]);
+
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
@@ -72,11 +103,14 @@ class ScriptController extends Controller
         }
     }
 
-    // UPDATE BY ID
     public function update(Request $request, $id)
     {
         try {
-            $script = Script::find($id);
+            $storeId = $this->getStoreId();
+
+            $script = Script::where('id', $id)
+                ->where('store_id', $storeId)
+                ->first();
 
             if (!$script) {
                 return response()->json([
@@ -85,13 +119,19 @@ class ScriptController extends Controller
                 ], 404);
             }
 
-            $script->update($request->all());
+            $data = $request->all();
+
+            // ❌ store_id overwrite prevent
+            unset($data['store_id']);
+
+            $script->update($data);
 
             return response()->json([
                 'status' => true,
                 'message' => 'Script updated successfully',
                 'data' => $script
             ]);
+
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
@@ -100,12 +140,14 @@ class ScriptController extends Controller
             ], 500);
         }
     }
-
-    // DELETE
     public function destroy($id)
     {
         try {
-            $script = Script::find($id);
+            $storeId = $this->getStoreId();
+
+            $script = Script::where('id', $id)
+                ->where('store_id', $storeId)
+                ->first();
 
             if (!$script) {
                 return response()->json([
@@ -120,6 +162,7 @@ class ScriptController extends Controller
                 'status' => true,
                 'message' => 'Script deleted successfully'
             ]);
+
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
@@ -129,3 +172,4 @@ class ScriptController extends Controller
         }
     }
 }
+
