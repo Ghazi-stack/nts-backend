@@ -8,7 +8,7 @@ use App\Models\Brand;
 use App\Models\Order;
 use League\Csv\Reader;
 use App\Models\Product;
-use App\Models\Category; 
+use App\Models\Category;
 use App\Models\ProductSeo;
 use Illuminate\Support\Str;
 use App\Models\ProductImage;
@@ -31,6 +31,8 @@ use App\Http\Resources\PopularProductResource;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Models\OrderItem;
+use Carbon\Carbon;
 
 class ProductController extends Controller
 {
@@ -92,7 +94,7 @@ class ProductController extends Controller
 
     public function index(Request $request)
     {
-        
+
 
         try {
             // Base query with full eager loading
@@ -101,11 +103,20 @@ class ProductController extends Controller
                 'categories:id,name',
                 'images:id,product_id,path,is_primary'
             ])
-            ->select([
-                'id', 'name', 'slug', 'sku', 'price', 'msrp', 'brand_id',
-                'current_stock', 'is_featured', 'visible_on_storefront', 'store_id'
-            ])
-            ->where('store_id', current_store_id());
+                ->select([
+                    'id',
+                    'name',
+                    'slug',
+                    'sku',
+                    'price',
+                    'msrp',
+                    'brand_id',
+                    'current_stock',
+                    'is_featured',
+                    'visible_on_storefront',
+                    'store_id'
+                ])
+                ->where('store_id', current_store_id());
 
             // Filters
             if ($request->has('isFeatured')) {
@@ -157,7 +168,6 @@ class ProductController extends Controller
                     'lastPage' => $products->lastPage()
                 ]
             ]);
-
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
@@ -168,7 +178,7 @@ class ProductController extends Controller
     public function show($id)
     {
         try {
-            $product = Product::with(['brand', 'categories', 'images','content','seo'])
+            $product = Product::with(['brand', 'categories', 'images', 'content', 'seo'])
                 ->where('store_id', current_store_id())
                 ->findOrFail($id);
 
@@ -195,11 +205,11 @@ class ProductController extends Controller
     {
         try {
             $storeId = current_store_id();
-        
+
             // Logging for debugging
             Log::info('🔍 Sku requested: ' . $sku);
             Log::info('🏬 Store ID: ' . $storeId);
-        
+
             // Main query
             $product = Product::with([
                 'brand',
@@ -210,10 +220,10 @@ class ProductController extends Controller
                 'seo',
                 'reviews.user'
             ])
-            ->where('sku', $sku)
-            ->where('store_id', $storeId)
-            ->first();
-            
+                ->where('sku', $sku)
+                ->where('store_id', $storeId)
+                ->first();
+
             // Fallback using LIKE if exact match fails
             if (!$product) {
                 Log::warning("⚠️ Exact sku match failed, trying LIKE fallback...");
@@ -226,11 +236,11 @@ class ProductController extends Controller
                     'seo',
                     'reviews.user'
                 ])
-                ->where('sku', 'like', "%$sku%")
-                ->where('store_id', $storeId)
-                ->first();
+                    ->where('sku', 'like', "%$sku%")
+                    ->where('store_id', $storeId)
+                    ->first();
             }
-        
+
             // Still not found? Return 404
             if (!$product) {
                 return response()->json([
@@ -240,17 +250,16 @@ class ProductController extends Controller
                     'store_id' => $storeId
                 ], 404);
             }
-        
+
             // Return product
             return response()->json([
                 'status' => true,
                 'message' => 'Product Retrieved',
                 'data' => new ProductResource($product)
             ]);
-        
         } catch (\Exception $e) {
             Log::error('❌ Exception in showProduct(): ' . $e->getMessage());
-        
+
             return response()->json([
                 'status' => false,
                 'error' => 'Failed to retrieve product.',
@@ -370,13 +379,13 @@ class ProductController extends Controller
                             'alt_text' => $img['alt_text'] ?? null,
                             'description' => $img['description'] ?? null,
                         ];
-                    
+
                         if (!empty($img['url']) && is_string($img['url'])) {
                             $imageEntry['type'] = 'url';
                             $imageEntry['value'] = $img['url'];
                             $images[] = $imageEntry;
                         }
-                    
+
                         if (
                             isset($img['file']) &&
                             $img['file'] instanceof \Illuminate\Http\UploadedFile
@@ -389,40 +398,39 @@ class ProductController extends Controller
                 }
             }
 
-          foreach ($images as $index => $img) {
+            foreach ($images as $index => $img) {
                 $path = null;
 
                 if ($img['type'] === 'url') {
                     if (!filter_var($img['value'], FILTER_VALIDATE_URL)) {
                         continue;
                     }
-                
+
                     try {
                         $response = Http::timeout(5)->get($img['value']);
-                    
+
                         if ($response->ok()) {
                             $imageContent = $response->body();
                             $extension = pathinfo(parse_url($img['value'], PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
                             $imageName = time() . '_' . $index . '.' . $extension;
-                        
+
                             $filePath = public_path('product_images/' . $imageName);
                             file_put_contents($filePath, $imageContent);
-                        
+
                             $path = 'product_images/' . $imageName;
                         }
                     } catch (\Exception $e) {
                         continue;
                     }
-                
                 } elseif ($img['type'] === 'file') {
                     $file = $img['value'];
                     $imageName = time() . '_' . $index . '.' . $file->getClientOriginalExtension();
                     $file->move(public_path('product_images'), $imageName);
                     $path = "product_images/{$imageName}";
                 }
-            
+
                 if (!$path) continue;
-            
+
                 ProductImage::create([
                     'store_id' => $storeId,
                     'product_id' => $product->id,
@@ -431,7 +439,7 @@ class ProductController extends Controller
                     'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
                     'description' => $img['description'] ?? null,
                 ]);
-            } 
+            }
 
             // ✅ Add Content
             ProductContent::create([
@@ -584,7 +592,7 @@ class ProductController extends Controller
             // Sync many-to-many categories
             $product->categories()->sync($validated['categoryIds']);
 
-          // Remove old images only if new ones are provided
+            // Remove old images only if new ones are provided
             if (!empty($validated['image'])) {
                 foreach ($product->images as $oldImage) {
                     $imagePath = public_path($oldImage->path);
@@ -604,7 +612,7 @@ class ProductController extends Controller
                     if (is_string($img)) {
                         $img = ['url' => $img];
                     }
-                
+
                     if (is_array($img)) {
                         $imageEntry = [
                             'type' => null,
@@ -613,14 +621,14 @@ class ProductController extends Controller
                             'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
                             'description' => $img['description'] ?? null,
                         ];
-                    
+
                         // Handle URL input
                         if (!empty($img['url']) && is_string($img['url'])) {
                             $imageEntry['type'] = 'url';
                             $imageEntry['value'] = $img['url'];
                             $images[] = $imageEntry;
                         }
-                    
+
                         // Handle uploaded file
                         if (
                             isset($img['file']) &&
@@ -636,17 +644,17 @@ class ProductController extends Controller
 
             foreach ($images as $index => $img) {
                 $path = null;
-            
+
                 if ($img['type'] === 'url') {
                     $url = $img['value'];
-                
+
                     if (!filter_var($url, FILTER_VALIDATE_URL)) {
                         continue;
                     }
-                
+
                     $parsedUrl = parse_url($url);
                     $host = $parsedUrl['host'] ?? '';
-                
+
                     // Check if it's a self-hosted image already in product_images/
                     if (Str::contains($url, url('/product_images'))) {
                         $path = str_replace(url('/'), '', $url); // e.g. product_images/filename.jpg
@@ -656,7 +664,7 @@ class ProductController extends Controller
                     elseif (Str::contains($host, 'ecom.brokercell.com')) {
                         $relativePath = $parsedUrl['path'] ?? null;
                         $sourcePath = public_path($relativePath);
-                    
+
                         if (file_exists($sourcePath)) {
                             $extension = pathinfo($sourcePath, PATHINFO_EXTENSION);
                             $imageName = time() . '_' . $index . '.' . $extension;
@@ -673,15 +681,15 @@ class ProductController extends Controller
                             $response = Http::timeout(5)->get($url);
                             if ($response->ok()) {
                                 $imageContent = $response->body();
-                            
+
                                 $directory = public_path('product_images');
                                 if (!file_exists($directory)) {
                                     mkdir($directory, 0755, true);
                                 }
-                            
+
                                 $extension = pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION);
                                 $extension = in_array(strtolower($extension), ['jpg', 'jpeg', 'png', 'gif', 'webp']) ? $extension : 'jpg';
-                            
+
                                 $imageName = time() . '_' . $index . '.' . $extension;
                                 $filePath = public_path('product_images/' . $imageName);
                                 file_put_contents($filePath, $imageContent);
@@ -697,9 +705,9 @@ class ProductController extends Controller
                     $file->move(public_path('product_images'), $imageName);
                     $path = "product_images/{$imageName}";
                 }
-            
+
                 if (!$path) continue;
-            
+
                 ProductImage::create([
                     'store_id' => $storeId,
                     'product_id' => $product->id,
@@ -786,183 +794,187 @@ class ProductController extends Controller
             foreach ($data['products'] as $item) {
                 $fields = $item['fields'];
                 $productIds = is_array($item['id']) ? $item['id'] : [$item['id']];
-                
+
                 foreach ($productIds as $productId) {
                     if (!is_numeric($productId)) {
                         continue;
                     }
 
-                $product = Product::where('store_id', $storeId)->findOrFail($productId);
+                    $product = Product::where('store_id', $storeId)->findOrFail($productId);
 
-                // ✅ Main product fields
-                $product->fill([
-                    'name' => $fields['name'] ?? $product->name,
-                    'slug' => isset($fields['name']) ? Str::slug($fields['name']) . '-' . uniqid() : $product->slug,
-                    'sku' => $fields['sku'] ?? $product->sku,
-                    'brand_id' => $fields['brandId'] ?? $product->brand_id,
-                    'condition' => $fields['condition'] ?? $product->condition,
-                    'price' => $fields['price'] ?? $product->price,
-                    'quantity' => $fields['quantity'] ?? $product->quantity,
-                    'msrp' => $fields['msrp'] ?? $product->msrp,
-                    'cost_price' => $fields['costPrice'] ?? $product->cost_price,
-                    'sale_price' => $fields['salePrice'] ?? $product->sale_price,
-                    'dimensions' => $fields['dimensions'] ?? $product->dimensions,
-                    'track_inventory' => $fields['trackInventory'] ?? $product->track_inventory,
-                    'current_stock' => $fields['currentStock'] ?? $product->current_stock,
-                    'low_stock' => $fields['lowStock'] ?? $product->low_stock,
-                    'is_featured' => $fields['isFeatured'] ?? $product->is_featured,
-                    'show_condition' => $fields['showCondition'] ?? $product->show_condition,
-                    'sort_order' => $fields['sortOrder'] ?? $product->sort_order,
-                    'search_keywords' => $fields['searchKeywords'] ?? $product->search_keywords,
-                    'visible_on_storefront' => $fields['isVisible'] ?? $product->visible_on_storefront,
-                    'custom_fields' => $fields['customFields'] ?? $product->custom_fields,
-                    'purchasability_status' => $fields['purchasabilityStatus'] ?? $product->purchasability_status,
-                    'min_purchase_quantity' => $fields['minPurchaseQuantity'] ?? $product->min_purchase_quantity,
-                    'max_purchase_quantity' => $fields['maxPurchaseQuantity'] ?? $product->max_purchase_quantity,
-                    'related_products_enabled' => $fields['relatedProducts'] ?? $product->related_products_enabled,
-                    'fixed_shipping_cost' => $fields['fixedShippingCost'] ?? $product->fixed_shipping_cost,
-                    'product_type' => $fields['productType'] ?? $product->product_type,
-                    'option_set' => $fields['optionSet'] ?? $product->option_set,
-                    'option_set_align' => $fields['optionSetAlign'] ?? $product->option_set_align,
-                    'allow_purchase' => $fields['allowPurchase'] ?? $product->allow_purchase,
-                    'stop_processing_rules' => $fields['stopProcessingRules'] ?? $product->stop_processing_rules,
-                    'tax_class' => $fields['taxClass'] ?? $product->tax_class,
-                    'tax_provider_code' => $fields['taxProviderCode'] ?? $product->tax_provider_code,
-                ])->save();
-
-                // ✅ Sync Categories
-                if (!empty($fields['categoryIds']) && is_array($fields['categoryIds'])) {
-                    $product->categories()->sync($fields['categoryIds']);
-                }
-
-                // ✅ Update Content (description, warranty, etc.)
-                if (isset($fields['description']) || isset($fields['warranty']) || isset($fields['availabilityText']) || isset($fields['templateLayout'])) {
-                    $content = $product->content ?: new ProductContent([
-                        'store_id' => $storeId,
-                        'product_id' => $product->id,
-                    ]);
-
-                    $content->fill([
-                        'description' => $fields['description'] ?? $content->description,
-                        'warranty' => $fields['warranty'] ?? $content->warranty,
-                        'availability_text' => $fields['availabilityText'] ?? $content->availability_text,
-                        'template_layout' => $fields['templateLayout'] ?? $content->template_layout,
+                    // ✅ Main product fields
+                    $product->fill([
+                        'name' => $fields['name'] ?? $product->name,
+                        'slug' => isset($fields['name']) ? Str::slug($fields['name']) . '-' . uniqid() : $product->slug,
+                        'sku' => $fields['sku'] ?? $product->sku,
+                        'brand_id' => $fields['brandId'] ?? $product->brand_id,
+                        'condition' => $fields['condition'] ?? $product->condition,
+                        'price' => $fields['price'] ?? $product->price,
+                        'quantity' => $fields['quantity'] ?? $product->quantity,
+                        'msrp' => $fields['msrp'] ?? $product->msrp,
+                        'cost_price' => $fields['costPrice'] ?? $product->cost_price,
+                        'sale_price' => $fields['salePrice'] ?? $product->sale_price,
+                        'dimensions' => $fields['dimensions'] ?? $product->dimensions,
+                        'track_inventory' => $fields['trackInventory'] ?? $product->track_inventory,
+                        'current_stock' => $fields['currentStock'] ?? $product->current_stock,
+                        'low_stock' => $fields['lowStock'] ?? $product->low_stock,
+                        'is_featured' => $fields['isFeatured'] ?? $product->is_featured,
+                        'show_condition' => $fields['showCondition'] ?? $product->show_condition,
+                        'sort_order' => $fields['sortOrder'] ?? $product->sort_order,
+                        'search_keywords' => $fields['searchKeywords'] ?? $product->search_keywords,
+                        'visible_on_storefront' => $fields['isVisible'] ?? $product->visible_on_storefront,
+                        'custom_fields' => $fields['customFields'] ?? $product->custom_fields,
+                        'purchasability_status' => $fields['purchasabilityStatus'] ?? $product->purchasability_status,
+                        'min_purchase_quantity' => $fields['minPurchaseQuantity'] ?? $product->min_purchase_quantity,
+                        'max_purchase_quantity' => $fields['maxPurchaseQuantity'] ?? $product->max_purchase_quantity,
+                        'related_products_enabled' => $fields['relatedProducts'] ?? $product->related_products_enabled,
+                        'fixed_shipping_cost' => $fields['fixedShippingCost'] ?? $product->fixed_shipping_cost,
+                        'product_type' => $fields['productType'] ?? $product->product_type,
+                        'option_set' => $fields['optionSet'] ?? $product->option_set,
+                        'option_set_align' => $fields['optionSetAlign'] ?? $product->option_set_align,
+                        'allow_purchase' => $fields['allowPurchase'] ?? $product->allow_purchase,
+                        'stop_processing_rules' => $fields['stopProcessingRules'] ?? $product->stop_processing_rules,
+                        'tax_class' => $fields['taxClass'] ?? $product->tax_class,
+                        'tax_provider_code' => $fields['taxProviderCode'] ?? $product->tax_provider_code,
                     ])->save();
-                }
 
-                // ✅ Update Identifiers (MPN, UPC, GTIN, BPN)
-                if (isset($fields['mpn']) || isset($fields['upc']) || isset($fields['gtin']) || isset($fields['bpn'])) {
-                    $identifiers = $product->identifiers ?: new ProductIdentifier([
-                        'store_id' => $storeId,
-                        'product_id' => $product->id,
-                    ]);
-
-                    $identifiers->fill([
-                        'mpn' => $fields['mpn'] ?? $identifiers->mpn,
-                        'upc' => $fields['upc'] ?? $identifiers->upc,
-                        'gtin' => $fields['gtin'] ?? $identifiers->gtin,
-                        'bpn' => $fields['bpn'] ?? $identifiers->bpn,
-                    ])->save();
-                }
-
-                // ✅ Update SEO (meta, page title, product URL)
-                if (isset($fields['pageTitle']) || isset($fields['productUrl']) || isset($fields['metaDescription'])) {
-                    $seo = $product->seo ?: new ProductSeo([
-                        'store_id' => $storeId,
-                        'product_id' => $product->id,
-                    ]);
-
-                    $seo->fill([
-                        'page_title' => $fields['pageTitle'] ?? $seo->page_title,
-                        'product_url' => $fields['productUrl'] ?? $seo->product_url,
-                        'meta_description' => $fields['metaDescription'] ?? $seo->meta_description,
-                    ])->save();
-                }
-
-            // ✅ Update/Add Images
-        if (!empty($fields['image'])) {
-            // 🗑️ Delete old images
-            ProductImage::where('product_id', $product->id)->delete();
-        
-            $imageInputs = is_array($fields['image']) ? $fields['image'] : [$fields['image']];
-            $images = [];
-        
-            foreach ($imageInputs as $img) {
-                if (is_array($img)) {
-                    $imageEntry = [
-                        'type' => null,
-                        'value' => null,
-                        'is_primary' => $img['isThumbnail'] ?? false,
-                        'alt_text' => $img['alt_text'] ?? $product->name,
-                        'description' => $img['description'] ?? null,
-                    ];
-                
-                    if (!empty($img['url']) && is_string($img['url'])) {
-                        $imageEntry['type'] = 'url';
-                        $imageEntry['value'] = $img['url'];
-                        $images[] = $imageEntry;
+                    // ✅ Sync Categories
+                    if (!empty($fields['categoryIds']) && is_array($fields['categoryIds'])) {
+                        $product->categories()->sync($fields['categoryIds']);
                     }
-                
-                    if (
-                        isset($img['file']) &&
-                        $img['file'] instanceof \Illuminate\Http\UploadedFile
-                    ) {
-                        $imageEntry['type'] = 'file';
-                        $imageEntry['value'] = $img['file'];
-                        $images[] = $imageEntry;
+
+                    // ✅ Update Content (description, warranty, etc.)
+                    if (isset($fields['description']) || isset($fields['warranty']) || isset($fields['availabilityText']) || isset($fields['templateLayout'])) {
+                        $content = $product->content ?: new ProductContent([
+                            'store_id' => $storeId,
+                            'product_id' => $product->id,
+                        ]);
+
+                        $content->fill([
+                            'description' => $fields['description'] ?? $content->description,
+                            'warranty' => $fields['warranty'] ?? $content->warranty,
+                            'availability_text' => $fields['availabilityText'] ?? $content->availability_text,
+                            'template_layout' => $fields['templateLayout'] ?? $content->template_layout,
+                        ])->save();
                     }
-                }
-            }
-        
-            foreach ($images as $index => $img) {
-                $path = null;
-            
-                if ($img['type'] === 'url') {
-                    if (!filter_var($img['value'], FILTER_VALIDATE_URL)) {
-                        continue;
+
+                    // ✅ Update Identifiers (MPN, UPC, GTIN, BPN)
+                    if (isset($fields['mpn']) || isset($fields['upc']) || isset($fields['gtin']) || isset($fields['bpn'])) {
+                        $identifiers = $product->identifiers ?: new ProductIdentifier([
+                            'store_id' => $storeId,
+                            'product_id' => $product->id,
+                        ]);
+
+                        $identifiers->fill([
+                            'mpn' => $fields['mpn'] ?? $identifiers->mpn,
+                            'upc' => $fields['upc'] ?? $identifiers->upc,
+                            'gtin' => $fields['gtin'] ?? $identifiers->gtin,
+                            'bpn' => $fields['bpn'] ?? $identifiers->bpn,
+                        ])->save();
                     }
-                
-                    try {
-                        $response = Http::timeout(5)->get($img['value']);
-                    
-                        if ($response->ok()) {
-                            $imageContent = $response->body();
-                            $extension = pathinfo(parse_url($img['value'], PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
-                            $imageName = time() . '_' . $index . '.' . $extension;
-                        
-                            $filePath = public_path('product_images/' . $imageName);
-                            file_put_contents($filePath, $imageContent);
-                        
-                            $path = 'product_images/' . $imageName;
+
+                    // ✅ Update SEO (meta, page title, product URL)
+                    if (isset($fields['pageTitle']) || isset($fields['productUrl']) || isset($fields['metaDescription'])) {
+                        $seo = $product->seo ?: new ProductSeo([
+                            'store_id' => $storeId,
+                            'product_id' => $product->id,
+                        ]);
+
+                        $seo->fill([
+                            'page_title' => $fields['pageTitle'] ?? $seo->page_title,
+                            'product_url' => $fields['productUrl'] ?? $seo->product_url,
+                            'meta_description' => $fields['metaDescription'] ?? $seo->meta_description,
+                        ])->save();
+                    }
+
+                    // ✅ Update/Add Images
+                    if (!empty($fields['image'])) {
+                        // 🗑️ Delete old images
+                        ProductImage::where('product_id', $product->id)->delete();
+
+                        $imageInputs = is_array($fields['image']) ? $fields['image'] : [$fields['image']];
+                        $images = [];
+
+                        foreach ($imageInputs as $img) {
+                            if (is_array($img)) {
+                                $imageEntry = [
+                                    'type' => null,
+                                    'value' => null,
+                                    'is_primary' => $img['isThumbnail'] ?? false,
+                                    'alt_text' => $img['alt_text'] ?? $product->name,
+                                    'description' => $img['description'] ?? null,
+                                ];
+
+                                if (!empty($img['url']) && is_string($img['url'])) {
+                                    $imageEntry['type'] = 'url';
+                                    $imageEntry['value'] = $img['url'];
+                                    $images[] = $imageEntry;
+                                }
+
+                                if (
+                                    isset($img['file']) &&
+                                    $img['file'] instanceof \Illuminate\Http\UploadedFile
+                                ) {
+                                    $imageEntry['type'] = 'file';
+                                    $imageEntry['value'] = $img['file'];
+                                    $images[] = $imageEntry;
+                                }
+                            }
                         }
-                    } catch (\Exception $e) {
-                        continue;
+
+                        foreach ($images as $index => $img) {
+                            $path = null;
+
+                            if ($img['type'] === 'url') {
+                                if (!filter_var($img['value'], FILTER_VALIDATE_URL)) {
+                                    continue;
+                                }
+
+                                try {
+                                    $response = Http::timeout(5)->get($img['value']);
+
+                                    if ($response->ok()) {
+                                        $imageContent = $response->body();
+                                        $extension = pathinfo(parse_url($img['value'], PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+                                        $imageName = time() . '_' . $index . '.' . $extension;
+
+                                        $filePath = public_path('product_images/' . $imageName);
+                                        file_put_contents($filePath, $imageContent);
+
+                                        $path = 'product_images/' . $imageName;
+                                    }
+                                } catch (\Exception $e) {
+                                    continue;
+                                }
+                            }
+
+                            ProductImage::create([
+                                'store_id' => $storeId,
+                                'product_id' => $product->id,
+                                'path' => $path,
+                                'is_primary' => $img['is_primary'] ?? ($index === 0),
+                                'alt_text' => $img['alt_text'] ?? null,
+                                'description' => $img['description'] ?? null,
+                            ]);
+                        }
                     }
+
+                    // ✅ Add to response
+                    $updatedProducts[] = new ProductResource($product->load([
+                        'categories',
+                        'content',
+                        'seo',
+                        'identifiers',
+                        'images'
+                    ]));
                 }
-            
-                ProductImage::create([
-                    'store_id' => $storeId,
-                    'product_id' => $product->id,
-                    'path' => $path,
-                    'is_primary' => $img['is_primary'] ?? ($index === 0),
-                    'alt_text' => $img['alt_text'] ?? null,
-                    'description' => $img['description'] ?? null,
+
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Products updated successfully.',
+                    'data' => $updatedProducts,
                 ]);
             }
-        }
-
-            // ✅ Add to response
-            $updatedProducts[] = new ProductResource($product->load([
-                'categories', 'content', 'seo', 'identifiers', 'images'
-            ]));
-        }
-
-            return response()->json([
-                'status' => true,
-                'message' => 'Products updated successfully.',
-                'data' => $updatedProducts,
-            ]);
-        }
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -987,12 +999,12 @@ class ProductController extends Controller
             $products = Product::where('store_id', $storeId)
                 ->where(function ($q) use ($queryStr) {
                     $q->where('name', 'like', "%$queryStr%")
-                      ->orWhere('sku', 'like', "%$queryStr%")
-                      ->orWhere('slug', 'like', "%$queryStr%")
-                      ->orWhere('price', 'like', "%$queryStr%")
-                      ->orWhere('search_keywords', 'like', "%$queryStr%")
-                      ->orWhereHas('categories', fn($q2) => $q2->where('name', 'like', "%$queryStr%"))
-                      ->orWhereHas('brand', fn($q3) => $q3->where('name', 'like', "%$queryStr%"));
+                        ->orWhere('sku', 'like', "%$queryStr%")
+                        ->orWhere('slug', 'like', "%$queryStr%")
+                        ->orWhere('price', 'like', "%$queryStr%")
+                        ->orWhere('search_keywords', 'like', "%$queryStr%")
+                        ->orWhereHas('categories', fn($q2) => $q2->where('name', 'like', "%$queryStr%"))
+                        ->orWhereHas('brand', fn($q3) => $q3->where('name', 'like', "%$queryStr%"));
                 })
                 ->with(['categories', 'brand'])
                 ->orderByRaw("
@@ -1005,18 +1017,18 @@ class ProductController extends Controller
                 ", [$queryStr, "$queryStr%", "%$queryStr%"])
                 ->orderBy('name', 'asc')
                 ->paginate($pageSize, ['*'], 'page', $page);
-                foreach ($products as $product) {
-            \DB::table('product_searches')->updateOrInsert(
-                [
-                    'product_id' => $product->id,
-                    'store_id'   => $storeId
-                ],
-                [
-                    'search_count' => \DB::raw('search_count + 1'),
-                    'updated_at'   => now()
-                ]
-            );
-        }
+            foreach ($products as $product) {
+                \DB::table('product_searches')->updateOrInsert(
+                    [
+                        'product_id' => $product->id,
+                        'store_id'   => $storeId
+                    ],
+                    [
+                        'search_count' => \DB::raw('search_count + 1'),
+                        'updated_at'   => now()
+                    ]
+                );
+            }
             return response()->json([
                 'status'  => true,
                 'message' => 'Products retrieved successfully.',
@@ -1067,15 +1079,15 @@ class ProductController extends Controller
 
             $products = Product::where('store_id', $storeId)
                 ->where('is_featured', true)
-                 ->with([
-                'categories',
-                'brand',
-                'images',
-                'reviews.user',
-                'content',
-                'identifiers',
-                'seo'
-            ])
+                ->with([
+                    'categories',
+                    'brand',
+                    'images',
+                    'reviews.user',
+                    'content',
+                    'identifiers',
+                    'seo'
+                ])
                 ->latest()
                 ->take(10)
                 ->get();
@@ -1134,9 +1146,9 @@ class ProductController extends Controller
     //             'message' => 'Store not selected.'
     //         ], 400);
     //     }
-    
+
     //     $limit = (int) $request->input('limit', 10);
-    
+
     //     $products = Product::where('store_id', $storeId)
     //         ->with([
     //             'categories',
@@ -1154,7 +1166,7 @@ class ProductController extends Controller
     //         ->orderByDesc('created_at')     // If search_count same, newest first
     //         ->take($limit)
     //         ->get();
-        
+
     //     return response()->json([
     //         'status' => true,
     //         'message' => 'Popular and recent products retrieved.',
@@ -1171,9 +1183,9 @@ class ProductController extends Controller
                 'message' => 'Store not selected.'
             ], 400);
         }
-    
+
         $limit = (int) $request->input('limit', 10);
-    
+
         // STEP 1: Get top product IDs only (FAST)
         $productIds = Product::where('store_id', $storeId)
             ->withCount(['searchStats as search_count' => function ($q) use ($storeId) {
@@ -1193,7 +1205,7 @@ class ProductController extends Controller
             ])
             ->get();
 
-        
+
         return response()->json([
             'status' => true,
             'message' => 'Popular and recent products retrieved.',
@@ -1201,9 +1213,113 @@ class ProductController extends Controller
         ]);
     }
 
-   
+    //last 7 days order products get
+    public function lastWeekOrderedProducts()
+    {
+        try {
+            $storeId = current_store_id();
 
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected'
+                ], 400);
+            }
 
+            // 🔹 Last 7 days orders
+            $orderIds = Order::where('store_id', $storeId)
+                ->whereBetween('created_at', [
+                    Carbon::now()->subWeek(),
+                    Carbon::now()
+                ])
+                ->pluck('id');
+
+            if ($orderIds->isEmpty()) {
+                return response()->json([
+                    'status' => true,
+                    'message' => 'No orders found for last week',
+                    'data' => []
+                ]);
+            }
+
+            // 🔹 Order items → product IDs
+            $productIds = OrderItem::whereIn('order_id', $orderIds)
+                ->pluck('product_id')
+                ->unique();
+
+            // 🔹 Products (same as featuredProducts)
+            $products = Product::where('store_id', $storeId)
+                ->whereIn('id', $productIds)
+                ->with([
+                    'categories',
+                    'brand',
+                    'images',
+                    'reviews.user',
+                    'content',
+                    'identifiers',
+                    'seo'
+                ])
+                ->latest()
+                ->get();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Last week ordered products retrieved successfully',
+                'data' => ProductResource::collection($products)
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    //last 7 days products get
+    public function lastWeekProducts()
+    {
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected'
+                ], 400);
+            }
+
+            // 🔹 Last 7 days products (ONLY products table)
+            $products = Product::where('store_id', $storeId)
+                ->whereBetween('created_at', [
+                    Carbon::now()->subWeek(),
+                    Carbon::now()
+                ])
+                ->with([
+                    'categories',
+                    'brand',
+                    'images',
+                    'reviews.user',
+                    'content',
+                    'identifiers',
+                    'seo'
+                ])
+                ->latest()
+                ->get();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Last week products retrieved successfully',
+                'data' => ProductResource::collection($products)
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
     public function searchAdvanced(Request $request)
     {
@@ -1221,8 +1337,8 @@ class ProductController extends Controller
                 $keywords = $request->searchKeywords;
                 $query->where(function ($q) use ($keywords) {
                     $q->where('name', 'like', "%{$keywords}%")
-                      ->orWhere('sku', 'like', "%{$keywords}%")
-                      ->orWhere('search_keywords', 'like', "%{$keywords}%");
+                        ->orWhere('sku', 'like', "%{$keywords}%")
+                        ->orWhere('search_keywords', 'like', "%{$keywords}%");
                 });
             }
 
@@ -1309,8 +1425,8 @@ class ProductController extends Controller
             'childrenRecursive',
             'products' => fn($q) => $q->where('store_id', $storeId)
         ])
-        ->whereNull('parent_id')
-        ->get();
+            ->whereNull('parent_id')
+            ->get();
 
         return $categories->map(function ($category) use ($storeId) {
             return $this->formatCategoryWithCounts($category, $storeId);
@@ -1347,50 +1463,50 @@ class ProductController extends Controller
     }
 
 
-  public function destroyProduct(Request $request, $id = null)
+    public function destroyProduct(Request $request, $id = null)
     {
         try {
             $storeId = current_store_id(); // ✅ Real dynamic store context
-        
+
             if (!$storeId) {
                 return response()->json([
                     'status' => false,
                     'message' => 'Store not selected or session/token is missing.'
                 ], 400);
             }
-        
+
             // 🔹 SINGLE DELETE
             if ($id) {
                 $product = Product::where('store_id', $storeId)->find($id);
-            
+
                 if (!$product) {
                     return response()->json([
                         'status' => false,
                         'message' => "Product ID $id not found in store_id $storeId."
                     ], 404);
                 }
-            
+
                 $product->delete();
-            
+
                 return response()->json([
                     'status' => true,
                     'message' => 'Product deleted successfully.',
                     'deletedIds' => [$id]
                 ]);
             }
-        
+
             // 🔹 BULK DELETE
             $request->validate([
                 'ids' => 'required|array|min:1',
                 'ids.*' => 'integer'
             ]);
-        
+
             $deleted = [];
             $failed = [];
-        
+
             foreach ($request->ids as $prodId) {
                 $product = Product::where('store_id', $storeId)->find($prodId);
-            
+
                 if (!$product) {
                     $failed[] = [
                         'id' => $prodId,
@@ -1398,7 +1514,7 @@ class ProductController extends Controller
                     ];
                     continue;
                 }
-            
+
                 try {
                     $product->delete();
                     $deleted[] = $prodId;
@@ -1409,14 +1525,13 @@ class ProductController extends Controller
                     ];
                 }
             }
-        
+
             return response()->json([
                 'status' => true,
                 'message' => 'Delete process completed.',
                 'deletedIds' => $deleted,
                 'failed' => $failed
             ]);
-        
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
@@ -1426,132 +1541,132 @@ class ProductController extends Controller
     }
 
 
-//   public function importCSV(Request $request)
-// {
-//     $request->validate([
-//         'file' => 'required|file|mimes:xlsx,xls,csv',
-//         'ignored_fields' => 'nullable|array', // optional array from frontend
-//         'ignored_fields.*' => 'string',
-//     ]);
+    //   public function importCSV(Request $request)
+    // {
+    //     $request->validate([
+    //         'file' => 'required|file|mimes:xlsx,xls,csv',
+    //         'ignored_fields' => 'nullable|array', // optional array from frontend
+    //         'ignored_fields.*' => 'string',
+    //     ]);
 
-//     $file = $request->file('file');
-//     $ignoredFields = $request->input('ignored_fields', []); // dynamically from frontend
+    //     $file = $request->file('file');
+    //     $ignoredFields = $request->input('ignored_fields', []); // dynamically from frontend
 
-//     $storeId = current_store_id(); // your helper to get current store
-//     if (!$storeId) {
-//         return response()->json(['error' => 'Store not selected.'], 400);
-//     }
+    //     $storeId = current_store_id(); // your helper to get current store
+    //     if (!$storeId) {
+    //         return response()->json(['error' => 'Store not selected.'], 400);
+    //     }
 
-//     // Save the uploaded file permanently
-//     $storedFilePath = $file->store('imports'); // e.g., imports/file.xlsx
+    //     // Save the uploaded file permanently
+    //     $storedFilePath = $file->store('imports'); // e.g., imports/file.xlsx
 
-//     // Unique progress key
-//     $progressKey = 'import_progress_' . Str::uuid();
+    //     // Unique progress key
+    //     $progressKey = 'import_progress_' . Str::uuid();
 
-//     // Initialize progress tracking
-//     Cache::put($progressKey, [
-//         'current' => 0,
-//         'status'  => 'queued',
-//     ], 7200); // 2 hours
+    //     // Initialize progress tracking
+    //     Cache::put($progressKey, [
+    //         'current' => 0,
+    //         'status'  => 'queued',
+    //     ], 7200); // 2 hours
 
-//     Cache::put($progressKey . "_cancel", false, 7200);
-//     Cache::put($progressKey . "_count", 0, 7200);
+    //     Cache::put($progressKey . "_cancel", false, 7200);
+    //     Cache::put($progressKey . "_count", 0, 7200);
 
-//     // Queue the import and pass ignored fields
-//     Excel::queueImport(
-//         new ProductImport(
-//             $storeId,
-//             $progressKey,
-//             storage_path('app/' . $storedFilePath),
-//             $ignoredFields // <- dynamic ignored fields
-//         ),
-//         $storedFilePath
-//     );
+    //     // Queue the import and pass ignored fields
+    //     Excel::queueImport(
+    //         new ProductImport(
+    //             $storeId,
+    //             $progressKey,
+    //             storage_path('app/' . $storedFilePath),
+    //             $ignoredFields // <- dynamic ignored fields
+    //         ),
+    //         $storedFilePath
+    //     );
 
-//     return response()->json([
-//         'success' => true,
-//         'progress_key' => $progressKey
-//     ]);
-// }
+    //     return response()->json([
+    //         'success' => true,
+    //         'progress_key' => $progressKey
+    //     ]);
+    // }
 
-public function importCSV(Request $request)
-{
-    $request->validate([
-        'file' => 'required|file|mimes:xlsx,xls,csv',
-        'ignored_fields' => 'nullable|array', // optional array from frontend
-        'ignored_fields.*' => 'string',
-    ]);
+    public function importCSV(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls,csv',
+            'ignored_fields' => 'nullable|array', // optional array from frontend
+            'ignored_fields.*' => 'string',
+        ]);
 
-    $file = $request->file('file');
-    $ignoredFields = $request->input('ignored_fields', []);
+        $file = $request->file('file');
+        $ignoredFields = $request->input('ignored_fields', []);
 
-    $storeId = current_store_id(); // your helper to get current store
-    if (!$storeId) {
-        return response()->json(['error' => 'Store not selected.'], 400);
-    }
+        $storeId = current_store_id(); // your helper to get current store
+        if (!$storeId) {
+            return response()->json(['error' => 'Store not selected.'], 400);
+        }
 
-    // Save the uploaded file permanently
-    $storedFilePath = $file->store('imports'); // e.g., imports/file.xlsx
-    $fullPath = storage_path('app/' . $storedFilePath);
+        // Save the uploaded file permanently
+        $storedFilePath = $file->store('imports'); // e.g., imports/file.xlsx
+        $fullPath = storage_path('app/' . $storedFilePath);
 
-    // Unique progress key
-    $progressKey = 'import_progress_' . Str::uuid();
+        // Unique progress key
+        $progressKey = 'import_progress_' . Str::uuid();
 
-    // Initialize progress tracking
-    Cache::put($progressKey, [
-        'current' => 0,
-        'status'  => 'queued',
-    ], 7200); // 2 hours
+        // Initialize progress tracking
+        Cache::put($progressKey, [
+            'current' => 0,
+            'status'  => 'queued',
+        ], 7200); // 2 hours
 
-    Cache::put($progressKey . "_cancel", false, 7200);
-    Cache::put($progressKey . "_count", 0, 7200);
+        Cache::put($progressKey . "_cancel", false, 7200);
+        Cache::put($progressKey . "_count", 0, 7200);
 
-    // --- Calculate total rows once (before queuing) ---
-    $totalRows = 0;
-    $extension = strtolower($file->getClientOriginalExtension());
+        // --- Calculate total rows once (before queuing) ---
+        $totalRows = 0;
+        $extension = strtolower($file->getClientOriginalExtension());
 
-    if ($extension === 'xlsx') {
-        if (class_exists(\ZipArchive::class)) {
-            $zip = new \ZipArchive;
-            if ($zip->open($fullPath) === true) {
-                $xml = $zip->getFromName('xl/worksheets/sheet1.xml');
-                if ($xml !== false) {
-                    preg_match_all('/<row r="(\d+)"/', $xml, $matches);
-                    $totalRows = count($matches[1]) - 1; // subtract header row
+        if ($extension === 'xlsx') {
+            if (class_exists(\ZipArchive::class)) {
+                $zip = new \ZipArchive;
+                if ($zip->open($fullPath) === true) {
+                    $xml = $zip->getFromName('xl/worksheets/sheet1.xml');
+                    if ($xml !== false) {
+                        preg_match_all('/<row r="(\d+)"/', $xml, $matches);
+                        $totalRows = count($matches[1]) - 1; // subtract header row
+                    }
                 }
             }
-        }
-    } elseif ($extension === 'csv' || $extension === 'xls') {
-        // For CSV/XLS, use a lightweight approach
-        $fileHandle = fopen($fullPath, 'r');
-        if ($fileHandle) {
-            $totalRows = 0;
-            while (($line = fgetcsv($fileHandle)) !== false) {
-                $totalRows++;
+        } elseif ($extension === 'csv' || $extension === 'xls') {
+            // For CSV/XLS, use a lightweight approach
+            $fileHandle = fopen($fullPath, 'r');
+            if ($fileHandle) {
+                $totalRows = 0;
+                while (($line = fgetcsv($fileHandle)) !== false) {
+                    $totalRows++;
+                }
+                $totalRows = max(0, $totalRows - 1); // subtract header
+                fclose($fileHandle);
             }
-            $totalRows = max(0, $totalRows - 1); // subtract header
-            fclose($fileHandle);
         }
+
+        Cache::put($progressKey . "_total", $totalRows, 7200);
+
+        // Queue the import and pass ignored fields
+        Excel::queueImport(
+            new ProductImport(
+                $storeId,
+                $progressKey,
+                $fullPath,
+                $ignoredFields
+            ),
+            $storedFilePath
+        );
+
+        return response()->json([
+            'success' => true,
+            'progress_key' => $progressKey
+        ]);
     }
-
-    Cache::put($progressKey . "_total", $totalRows, 7200);
-
-    // Queue the import and pass ignored fields
-    Excel::queueImport(
-        new ProductImport(
-            $storeId,
-            $progressKey,
-            $fullPath,
-            $ignoredFields
-        ),
-        $storedFilePath
-    );
-
-    return response()->json([
-        'success' => true,
-        'progress_key' => $progressKey
-    ]);
-}
 
     /**
      * Get the current import progress
@@ -1587,9 +1702,9 @@ public function importCSV(Request $request)
             'status' => 'cancel_requested'
         ]);
     }
-    
 
-    
+
+
 
 
     /**
@@ -1639,64 +1754,60 @@ public function importCSV(Request $request)
     }
 
     public function destroyProductCategories(Request $request, $id)
-{
-    try {
-        $storeId = current_store_id();
-        if (!$storeId) {
-            return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
-        }
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
+            }
 
-        $request->validate([
-            'categoryIds'   => 'required|array|min:1',
-            'categoryIds.*' => 'integer'
-        ]);
+            $request->validate([
+                'categoryIds'   => 'required|array|min:1',
+                'categoryIds.*' => 'integer'
+            ]);
 
-        $product = Product::where('store_id', $storeId)
-            ->with('categories:id')
-            ->findOrFail($id);
+            $product = Product::where('store_id', $storeId)
+                ->with('categories:id')
+                ->findOrFail($id);
 
-        $attachedIds = $product->categories->pluck('id')->toArray();
+            $attachedIds = $product->categories->pluck('id')->toArray();
 
-        // Only detach categories that are attached and belong to same store
-        $validIds = Category::where('store_id', $storeId)
-            ->whereIn('id', $request->categoryIds)
-            ->pluck('id')
-            ->toArray();
+            // Only detach categories that are attached and belong to same store
+            $validIds = Category::where('store_id', $storeId)
+                ->whereIn('id', $request->categoryIds)
+                ->pluck('id')
+                ->toArray();
 
-        $toDetach = array_values(array_intersect($attachedIds, $validIds));
+            $toDetach = array_values(array_intersect($attachedIds, $validIds));
 
-        if (empty($toDetach)) {
+            if (empty($toDetach)) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'No matching categories to detach.'
+                ], 422);
+            }
+
+            // ✅ Allow removing even the last category (no remaining-count check)
+            $product->categories()->detach($toDetach);
+
+            // If primary category removed, set a new one or null
+            if (!empty($product->category_id) && in_array((int)$product->category_id, $toDetach, true)) {
+                $newPrimary = $product->categories()->pluck('categories.id')->first(); // could be null now
+                $product->update(['category_id' => $newPrimary]); // make sure products.category_id is nullable
+            }
+
             return response()->json([
-                'status'  => false,
-                'message' => 'No matching categories to detach.'
-            ], 422);
+                'status'      => true,
+                'message'     => 'Categories detached from product.',
+                'deletedIds' => $toDetach,
+                'data'        => new ProductResource($product->fresh(['categories', 'brand', 'images', 'content', 'seo']))
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['status' => false, 'message' => 'Product not found.'], 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
         }
-
-        // ✅ Allow removing even the last category (no remaining-count check)
-        $product->categories()->detach($toDetach);
-
-        // If primary category removed, set a new one or null
-        if (!empty($product->category_id) && in_array((int)$product->category_id, $toDetach, true)) {
-            $newPrimary = $product->categories()->pluck('categories.id')->first(); // could be null now
-            $product->update(['category_id' => $newPrimary]); // make sure products.category_id is nullable
-        }
-
-        return response()->json([
-            'status'      => true,
-            'message'     => 'Categories detached from product.',
-            'deletedIds' => $toDetach,
-            'data'        => new ProductResource($product->fresh(['categories','brand','images','content','seo']))
-        ]);
-
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-        return response()->json(['status' => false, 'message' => 'Product not found.'], 404);
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        return response()->json(['errors' => $e->errors()], 422);
-    } catch (\Exception $e) {
-        return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
     }
-}
-
-  
-
 }
