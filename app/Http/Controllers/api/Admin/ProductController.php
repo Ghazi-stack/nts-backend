@@ -1276,7 +1276,50 @@ class ProductController extends Controller
         }
     }
 
+    //last 7 days products get
+    public function lastWeekProducts()
+    {
+        try {
+            $storeId = current_store_id();
 
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected'
+                ], 400);
+            }
+
+            // 🔹 Last 7 days products (ONLY products table)
+            $products = Product::where('store_id', $storeId)
+                ->whereBetween('created_at', [
+                    Carbon::now()->subWeek(),
+                    Carbon::now()
+                ])
+                ->with([
+                    'categories',
+                    'brand',
+                    'images',
+                    'reviews.user',
+                    'content',
+                    'identifiers',
+                    'seo'
+                ])
+                ->latest()
+                ->get();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Last week products retrieved successfully',
+                'data' => ProductResource::collection($products)
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
     public function searchAdvanced(Request $request)
     {

@@ -334,6 +334,7 @@ Route::prefix('web')->group(function () {
         Route::get('/featured-products', 'featuredProducts');
         Route::get('/popular-products', 'popularProducts');
         Route::get('/last-week-orders', 'lastWeekOrderedProducts');
+        Route::get('/last-week-product', 'lastWeekProducts');
     });
     // 🛒 Cart
     Route::prefix('cart')->controller(CartController::class)->group(function () {
