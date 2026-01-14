@@ -1636,6 +1636,8 @@ class OrderController extends Controller
                     'isDraft'        => true,
                     'comments'       => $order->comments,
                     'staffNotes'     => $order->staff_notes,
+                    'created_at'     => $order->created_at,
+                    'updated_at'     => $order->updated_at,
 
                     'billingInformation' => [
                         'firstName'    => $order->billingInformation?->first_name,
