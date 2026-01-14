@@ -333,6 +333,7 @@ Route::prefix('web')->group(function () {
         Route::get('/search-product', 'searchProduct');
         Route::get('/featured-products', 'featuredProducts');
         Route::get('/popular-products', 'popularProducts');
+        Route::get('/last-week-orders', 'lastWeekOrderedProducts');
     });
     // 🛒 Cart
     Route::prefix('cart')->controller(CartController::class)->group(function () {
