@@ -55,6 +55,7 @@ class OrderController extends Controller
 
             $orders = Order::with(['items.product.images', 'customer', 'billingInformation', 'notes'])
                 ->where('store_id', $storeId)
+                ->where('is_draft', 0) 
                 ->when($keyword, function ($q) use ($keyword) {
                     $q->where(function ($query) use ($keyword) {
                         $query->where('id', 'like', "%{$keyword}%")
