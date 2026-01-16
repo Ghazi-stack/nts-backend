@@ -214,11 +214,14 @@ class ProductController extends Controller
     $cacheKey = "product_detail_store_{$storeId}_sku_" . md5($sku);
 
     try {
-        // STEP 1: Product + lightweight relations
+
+        // -------------------------
+        // STEP 1: Product + LIGHT relations
+        // -------------------------
         $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
             return Product::where('sku', $sku)
                 ->where('store_id', $storeId)
-                ->select('id','name','sku','price','brand_id') // essential fields only
+                ->select('id', 'name', 'sku', 'price', 'brand_id')  // essential only
                 ->with([
                     'brand:id,name,logo',
                     'images:id,product_id,path,is_primary',
@@ -237,13 +240,21 @@ class ProductController extends Controller
             ], 404);
         }
 
-        // STEP 2: Lazy load heavy relations in cache
+        // -------------------------
+        // STEP 2: Heavy relations (categories + reviews)
+        // -------------------------
         $categories = Cache::remember("product_categories_{$product->id}", 3600, function () use ($product) {
-            return $product->categories()->with('parent.parent.parent')->get(); // max 3 levels
+            // **LIMIT recursion** to 2 levels only (fast)
+            return $product->categories()->with('parent.parent')->get();
         });
 
         $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
-            return $product->reviews()->with('user:id,name')->latest()->limit(10)->get();
+            // **LIMIT reviews** to 10 (fast)
+            return $product->reviews()
+                ->with('user:id,name')
+                ->latest()
+                ->limit(10)
+                ->get();
         });
 
         $product->setRelation('categories', $categories);
@@ -263,7 +274,6 @@ class ProductController extends Controller
         ], 500);
     }
 }
-
 
 
     public function addProduct(Request $request)
