@@ -201,88 +201,71 @@ class ProductController extends Controller
         }
     }
 
-    public function showProduct($sku, Request $request)
-    {
-        try {
-            $storeId = current_store_id();
+public function showProduct($sku, Request $request)
+{
+    $storeId = current_store_id();
+    if (!$storeId) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Store not selected.'
+        ], 400);
+    }
 
-            if (!$storeId) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Store not selected.'
-                ], 400);
-            }
+    // 🔑 Cache key
+    $cacheKey = "product_detail_store_{$storeId}_sku_" . md5($sku);
 
-            // 🔑 Unique cache key
-            $cacheKey = "product_detail_store_{$storeId}_sku_" . md5($sku);
+    try {
+        // STEP 1: Product + lightweight relations (FAST)
+        $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
+            return Product::where('sku', $sku)
+                ->where('store_id', $storeId)
+                ->with([
+                    'brand:id,name,logo',
+                    'images:id,product_id,path,is_primary',
+                    'content',
+                    'identifiers',
+                    'seo'
+                ])
+                ->first();
+        });
 
-            $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
-
-                // ✅ STEP 1: FAST PRODUCT LOOKUP (index hit)
-                $product = Product::where('sku', $sku)
-                    ->where('store_id', $storeId)
-                    ->with([
-                        'brand:id,name,logo',
-                        'images:id,product_id,path,is_primary',
-                        'content',
-                        'identifiers',
-                        'seo'
-                    ])
-                    ->first();
-
-                return $product;
-            });
-
-            if (!$product) {
-                // ⚠️ Optional LIKE fallback (slow)
-                $product = Cache::remember("product_fallback_{$storeId}_sku_" . md5($sku), 300, function () use ($sku, $storeId) {
-                    return Product::where('store_id', $storeId)
-                        ->where('sku', 'LIKE', "{$sku}%")
-                        ->with([
-                            'brand:id,name,slug,logo',
-                            'images:id,product_id,path,is_primary',
-                            'content',
-                            'identifiers',
-                            'seo'
-                        ])
-                        ->first();
-                });
-            }
-
-            if (!$product) {
-                return response()->json([
-                    'status' => false,
-                    'error' => 'Product not found',
-                    'sku' => $sku
-                ], 404);
-            }
-
-            // ✅ STEP 2: HEAVY RELATIONS CACHE (optional)
-            $categories = Cache::remember("product_categories_{$product->id}", 3600, function () use ($product) {
-                return $product->categories()->with('parent.parent.parent')->get();
-            });
-
-            $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
-                return $product->reviews()->with('user:id,name')->latest()->limit(10)->get();
-            });
-
-            // ✅ STEP 3: Attach cached relations
-            $product->setRelation('categories', $categories);
-            $product->setRelation('reviews', $reviews);
-
-            return response()->json([
-                'status' => true,
-                'message' => 'Product Retrieved',
-                'data' => new ProductResource($product)
-            ]);
-        } catch (\Exception $e) {
+        if (!$product) {
             return response()->json([
                 'status' => false,
-                'error' => 'Something went wrong',
-                'debug' => $e->getMessage()
-            ], 500);
+                'error' => 'Product not found',
+                'sku' => $sku
+            ], 404);
         }
+
+        // STEP 2: Lazy load heavy relations in background
+        $categories = Cache::remember("product_categories_{$product->id}", 3600, function () use ($product) {
+            // Max 3 levels deep only, faster
+            return $product->categories()->with('parent.parent.parent')->get();
+        });
+
+        $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
+            // Limit top 10 reviews only
+            return $product->reviews()->with('user:id,name')->latest()->limit(10)->get();
+        });
+
+        $product->setRelation('categories', $categories);
+        $product->setRelation('reviews', $reviews);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Product Retrieved',
+            'data' => new ProductResource($product)
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'error' => 'Something went wrong',
+            'debug' => $e->getMessage()
+        ], 500);
     }
+}
+
 
 
     public function addProduct(Request $request)
