@@ -201,7 +201,7 @@ class ProductController extends Controller
         }
     }
 
-public function showProduct($sku, Request $request)
+   public function showProduct($sku, Request $request)
 {
     $storeId = current_store_id();
     if (!$storeId) {
@@ -211,14 +211,14 @@ public function showProduct($sku, Request $request)
         ], 400);
     }
 
-    // 🔑 Cache key
     $cacheKey = "product_detail_store_{$storeId}_sku_" . md5($sku);
 
     try {
-        // STEP 1: Product + lightweight relations (FAST)
+        // STEP 1: Product + lightweight relations
         $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
             return Product::where('sku', $sku)
                 ->where('store_id', $storeId)
+                ->select('id','name','sku','price','brand_id') // essential fields only
                 ->with([
                     'brand:id,name,logo',
                     'images:id,product_id,path,is_primary',
@@ -237,14 +237,12 @@ public function showProduct($sku, Request $request)
             ], 404);
         }
 
-        // STEP 2: Lazy load heavy relations in background
+        // STEP 2: Lazy load heavy relations in cache
         $categories = Cache::remember("product_categories_{$product->id}", 3600, function () use ($product) {
-            // Max 3 levels deep only, faster
-            return $product->categories()->with('parent.parent.parent')->get();
+            return $product->categories()->with('parent.parent.parent')->get(); // max 3 levels
         });
 
         $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
-            // Limit top 10 reviews only
             return $product->reviews()->with('user:id,name')->latest()->limit(10)->get();
         });
 
