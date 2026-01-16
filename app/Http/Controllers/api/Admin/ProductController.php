@@ -1174,6 +1174,46 @@ class ProductController extends Controller
     //     ]);
     // }
 
+    // last code
+    // public function popularProducts(Request $request)
+    // {
+    //     $storeId = current_store_id();
+    //     if (!$storeId) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Store not selected.'
+    //         ], 400);
+    //     }
+
+    //     $limit = (int) $request->input('limit', 10);
+
+    //     // STEP 1: Get top product IDs only (FAST)
+    //     $productIds = Product::where('store_id', $storeId)
+    //         ->withCount(['searchStats as search_count' => function ($q) use ($storeId) {
+    //             $q->where('store_id', $storeId);
+    //         }])
+    //         ->orderByDesc('search_count')
+    //         ->orderByDesc('created_at')
+    //         ->limit($limit)
+    //         ->pluck('id');
+
+    //     // STEP 2: Load only required fields + relationships
+    //     $products = Product::whereIn('id', $productIds)
+    //         ->with([
+    //             'brand:id,name',
+    //             'categories:id,name',
+    //             'images:id,product_id,path,is_primary'
+    //         ])
+    //         ->get();
+
+
+    //     return response()->json([
+    //         'status' => true,
+    //         'message' => 'Popular and recent products retrieved.',
+    //         'data' => PopularProductResource::collection($products)
+    //     ]);
+    // }
+
     public function popularProducts(Request $request)
     {
         $storeId = current_store_id();
@@ -1186,32 +1226,33 @@ class ProductController extends Controller
 
         $limit = (int) $request->input('limit', 10);
 
-        // STEP 1: Get top product IDs only (FAST)
-        $productIds = Product::where('store_id', $storeId)
-            ->withCount(['searchStats as search_count' => function ($q) use ($storeId) {
-                $q->where('store_id', $storeId);
-            }])
+        // STEP 1: Get popular product IDs from product_searches (FAST)
+        $productIds = DB::table('product_searches')
+            ->where('store_id', $storeId)
             ->orderByDesc('search_count')
-            ->orderByDesc('created_at')
             ->limit($limit)
-            ->pluck('id');
+            ->pluck('product_id');
 
-        // STEP 2: Load only required fields + relationships
-        $products = Product::whereIn('id', $productIds)
+        // STEP 2: Load products (lightweight)
+        $products = Product::select('id', 'name', 'sku', 'price', 'brand_id')
+            ->whereIn('id', $productIds)
             ->with([
                 'brand:id,name',
                 'categories:id,name',
-                'images:id,product_id,path,is_primary'
+                'images' => function ($q) {
+                    $q->select('id', 'product_id', 'path')
+                        ->where('is_primary', 1);
+                }
             ])
             ->get();
 
-
         return response()->json([
             'status' => true,
-            'message' => 'Popular and recent products retrieved.',
+            'message' => 'Popular products retrieved.',
             'data' => PopularProductResource::collection($products)
         ]);
     }
+
 
     //last 7 days order products get
     public function lastWeekOrderedProducts()
