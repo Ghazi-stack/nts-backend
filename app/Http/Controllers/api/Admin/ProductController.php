@@ -206,67 +206,84 @@ class ProductController extends Controller
         try {
             $storeId = current_store_id();
 
-            // Logging for debugging
-            Log::info('🔍 Sku requested: ' . $sku);
-            Log::info('🏬 Store ID: ' . $storeId);
-
-            // Main query
-            $product = Product::with([
-                'brand',
-                'categories.parent.parent.parent.parent',
-                'images',
-                'content',
-                'identifiers',
-                'seo',
-                'reviews.user'
-            ])
-                ->where('sku', $sku)
-                ->where('store_id', $storeId)
-                ->first();
-
-            // Fallback using LIKE if exact match fails
-            if (!$product) {
-                Log::warning("⚠️ Exact sku match failed, trying LIKE fallback...");
-                $product = Product::with([
-                    'brand',
-                    'categories.parent.parent.parent.parent',
-                    'images',
-                    'content',
-                    'identifiers',
-                    'seo',
-                    'reviews.user'
-                ])
-                    ->where('sku', 'like', "%$sku%")
-                    ->where('store_id', $storeId)
-                    ->first();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected.'
+                ], 400);
             }
 
-            // Still not found? Return 404
+            // 🔑 Unique cache key
+            $cacheKey = "product_detail_store_{$storeId}_sku_" . md5($sku);
+
+            $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
+
+                // ✅ STEP 1: FAST PRODUCT LOOKUP (index hit)
+                $product = Product::where('sku', $sku)
+                    ->where('store_id', $storeId)
+                    ->with([
+                        'brand:id,name,logo',
+                        'images:id,product_id,path,is_primary',
+                        'content',
+                        'identifiers',
+                        'seo'
+                    ])
+                    ->first();
+
+                return $product;
+            });
+
+            if (!$product) {
+                // ⚠️ Optional LIKE fallback (slow)
+                $product = Cache::remember("product_fallback_{$storeId}_sku_" . md5($sku), 300, function () use ($sku, $storeId) {
+                    return Product::where('store_id', $storeId)
+                        ->where('sku', 'LIKE', "{$sku}%")
+                        ->with([
+                            'brand:id,name,slug,logo',
+                            'images:id,product_id,path,is_primary',
+                            'content',
+                            'identifiers',
+                            'seo'
+                        ])
+                        ->first();
+                });
+            }
+
             if (!$product) {
                 return response()->json([
                     'status' => false,
-                    'error' => 'Product not found.',
-                    'sku' => $sku,
-                    'store_id' => $storeId
+                    'error' => 'Product not found',
+                    'sku' => $sku
                 ], 404);
             }
 
-            // Return product
+            // ✅ STEP 2: HEAVY RELATIONS CACHE (optional)
+            $categories = Cache::remember("product_categories_{$product->id}", 3600, function () use ($product) {
+                return $product->categories()->with('parent.parent.parent')->get();
+            });
+
+            $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
+                return $product->reviews()->with('user:id,name')->latest()->limit(10)->get();
+            });
+
+            // ✅ STEP 3: Attach cached relations
+            $product->setRelation('categories', $categories);
+            $product->setRelation('reviews', $reviews);
+
             return response()->json([
                 'status' => true,
                 'message' => 'Product Retrieved',
                 'data' => new ProductResource($product)
             ]);
         } catch (\Exception $e) {
-            Log::error('❌ Exception in showProduct(): ' . $e->getMessage());
-
             return response()->json([
                 'status' => false,
-                'error' => 'Failed to retrieve product.',
+                'error' => 'Something went wrong',
                 'debug' => $e->getMessage()
             ], 500);
         }
     }
+
 
     public function addProduct(Request $request)
     {
