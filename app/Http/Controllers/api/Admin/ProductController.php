@@ -989,22 +989,28 @@ class ProductController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
-    public function searchProduct(Request $request)
-    {
-        try {
-            $storeId = current_store_id();
-            if (!$storeId) {
-                return response()->json(['error' => 'Store not selected or token invalid.'], 400);
-            }
+ public function searchProduct(Request $request)
+{
+    try {
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json(['error' => 'Store not selected or token invalid.'], 400);
+        }
 
-            $request->validate([
-                'query' => 'required|string|min:1'
-            ]);
+        $request->validate([
+            'query' => 'required|string|min:1'
+        ]);
 
-            $queryStr = $request->input('query');
-            $page = (int) $request->input('page', 1);
-            $pageSize = (int) $request->input('pageSize', 50);
-            $products = Product::where('store_id', $storeId)
+        $queryStr = $request->input('query');
+        $page = (int) $request->input('page', 1);
+        $pageSize = (int) $request->input('pageSize', 50);
+
+        // Cache key with query + page
+        $cacheKey = "product_search_store_{$storeId}_query_" . md5($queryStr) . "_page_{$page}_size_{$pageSize}";
+
+        // Cache results for 5 minutes (300 seconds)
+        $products = Cache::remember($cacheKey, 300, function () use ($queryStr, $storeId, $page, $pageSize) {
+            return Product::where('store_id', $storeId)
                 ->where(function ($q) use ($queryStr) {
                     $q->where('name', 'like', "%$queryStr%")
                         ->orWhere('sku', 'like', "%$queryStr%")
@@ -1014,7 +1020,11 @@ class ProductController extends Controller
                         ->orWhereHas('categories', fn($q2) => $q2->where('name', 'like', "%$queryStr%"))
                         ->orWhereHas('brand', fn($q3) => $q3->where('name', 'like', "%$queryStr%"));
                 })
-                ->with(['categories', 'brand'])
+                ->select('id', 'name', 'sku', 'price', 'slug', 'brand_id') // Only essential columns
+                ->with([
+                    'categories:id,name',  // Only id and name
+                    'brand:id,name,logo'   // Only id, name, logo
+                ])
                 ->orderByRaw("
                     CASE
                         WHEN name = ? THEN 0
@@ -1025,30 +1035,43 @@ class ProductController extends Controller
                 ", [$queryStr, "$queryStr%", "%$queryStr%"])
                 ->orderBy('name', 'asc')
                 ->paginate($pageSize, ['*'], 'page', $page);
-            foreach ($products as $product) {
-                \DB::table('product_searches')->updateOrInsert(
-                    [
-                        'product_id' => $product->id,
-                        'store_id'   => $storeId
-                    ],
-                    [
-                        'search_count' => \DB::raw('search_count + 1'),
-                        'updated_at'   => now()
-                    ]
-                );
-            }
-            return response()->json([
-                'status'  => true,
-                'message' => 'Products retrieved successfully.',
-                'data'    => ProductResource::collection($products)
-            ]);
-        } catch (ValidationException $e) {
-            return response()->json(['errors' => $e->errors()], 422);
-        } catch (Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    }
+        });
 
+        // Background mein search count update (non-blocking)
+        if ($products->isNotEmpty()) {
+            $productIds = $products->pluck('id')->toArray();
+            
+            // Bulk update in single query (fast)
+            dispatch(function () use ($productIds, $storeId) {
+                if (empty($productIds)) return;
+                
+                $values = implode(',', array_map(
+                    fn($id) => "($id, $storeId, 1, NOW(), NOW())",
+                    $productIds
+                ));
+
+                \DB::statement("
+                    INSERT INTO product_searches (product_id, store_id, search_count, created_at, updated_at)
+                    VALUES {$values}
+                    ON DUPLICATE KEY UPDATE 
+                        search_count = search_count + 1,
+                        updated_at = NOW()
+                ");
+            })->afterResponse();
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Products retrieved successfully.',
+            'data'    => ProductResource::collection($products)
+        ]);
+
+    } catch (ValidationException $e) {
+        return response()->json(['errors' => $e->errors()], 422);
+    } catch (Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+}
 
 
 
