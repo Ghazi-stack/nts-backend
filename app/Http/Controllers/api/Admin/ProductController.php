@@ -201,79 +201,79 @@ class ProductController extends Controller
         }
     }
 
-   public function showProduct($sku, Request $request)
-{
-    $storeId = current_store_id();
-    if (!$storeId) {
-        return response()->json([
-            'status' => false,
-            'message' => 'Store not selected.'
-        ], 400);
-    }
-
-    $cacheKey = "product_detail_store_{$storeId}_sku_" . md5($sku);
-
-    try {
-
-        // -------------------------
-        // STEP 1: Product + LIGHT relations
-        // -------------------------
-        $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
-            return Product::where('sku', $sku)
-                ->where('store_id', $storeId)
-                ->select('id', 'name', 'sku', 'price', 'brand_id')  // essential only
-                ->with([
-                    'brand:id,name,logo',
-                    'images:id,product_id,path,is_primary',
-                    'content',
-                    'identifiers',
-                    'seo'
-                ])
-                ->first();
-        });
-
-        if (!$product) {
+    public function showProduct($sku, Request $request)
+    {
+        $storeId = current_store_id();
+        if (!$storeId) {
             return response()->json([
                 'status' => false,
-                'error' => 'Product not found',
-                'sku' => $sku
-            ], 404);
+                'message' => 'Store not selected.'
+            ], 400);
         }
 
-        // -------------------------
-        // STEP 2: Heavy relations (categories + reviews)
-        // -------------------------
-        $categories = Cache::remember("product_categories_{$product->id}", 3600, function () use ($product) {
-            // **LIMIT recursion** to 2 levels only (fast)
-            return $product->categories()->with('parent.parent')->get();
-        });
+        $cacheKey = "product_detail_store_{$storeId}_sku_" . md5($sku);
 
-        $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
-            // **LIMIT reviews** to 10 (fast)
-            return $product->reviews()
-                ->with('user:id,name')
-                ->latest()
-                ->limit(10)
-                ->get();
-        });
+        try {
 
-        $product->setRelation('categories', $categories);
-        $product->setRelation('reviews', $reviews);
+            // -------------------------
+            // STEP 1: Product + LIGHT relations
+            // -------------------------
+            $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
+                return Product::where('sku', $sku)
+                    ->where('store_id', $storeId)
+                    ->select('id', 'name', 'sku', 'price', 'brand_id')  // essential only
+                    ->with([
+                        'brand:id,name,logo',
+                        'images:id,product_id,path,is_primary',
+                        'content',
+                        'identifiers',
+                        'seo'
+                    ])
+                    ->first();
+            });
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Product Retrieved',
-            'data' => new ProductResource($product)
-        ]);
+            if (!$product) {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Product not found',
+                    'sku' => $sku
+                ], 404);
+            }
 
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => false,
-            'error' => 'Something went wrong',
-            'debug' => $e->getMessage()
-        ], 500);
+            // -------------------------
+            // STEP 2: Heavy relations (categories + reviews)
+            // -------------------------
+            $categories = Cache::remember("product_categories_{$product->id}", 3600, function () use ($product) {
+                // **LIMIT recursion** to 2 levels only (fast)
+                return $product->categories()->with('parent.parent')->get();
+            });
+
+            $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
+                // **LIMIT reviews** to 10 (fast)
+                return $product->reviews()
+                    ->with('user:id,name')
+                    ->latest()
+                    ->limit(10)
+                    ->get();
+            });
+
+            $product->setRelation('categories', $categories);
+            $product->setRelation('reviews', $reviews);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Product Retrieved',
+                'data' => new ProductResource($product)
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error' => 'Something went wrong',
+                'debug' => $e->getMessage()
+            ], 500);
+        }
     }
-}
+
 
 
     public function addProduct(Request $request)
@@ -374,9 +374,8 @@ class ProductController extends Controller
             ]);
 
             $product->categories()->sync($validated['categoryIds']);
-            // ✅ Handle both uploaded files and external URLs
-            $images = [];
 
+            $images = [];
             if (!empty($validated['image'])) {
                 foreach ($validated['image'] as $img) {
                     if (is_array($img)) {
@@ -394,10 +393,7 @@ class ProductController extends Controller
                             $images[] = $imageEntry;
                         }
 
-                        if (
-                            isset($img['file']) &&
-                            $img['file'] instanceof \Illuminate\Http\UploadedFile
-                        ) {
+                        if (isset($img['file']) && $img['file'] instanceof \Illuminate\Http\UploadedFile) {
                             $imageEntry['type'] = 'file';
                             $imageEntry['value'] = $img['file'];
                             $images[] = $imageEntry;
@@ -422,10 +418,9 @@ class ProductController extends Controller
                             $extension = pathinfo(parse_url($img['value'], PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
                             $imageName = time() . '_' . $index . '.' . $extension;
 
-                            $filePath = public_path('product_images/' . $imageName);
-                            file_put_contents($filePath, $imageContent);
-
+                            // 🟢 S3 Upload Instead of Public Folder
                             $path = 'product_images/' . $imageName;
+                            Storage::disk('s3')->put($path, $imageContent, 'public');
                         }
                     } catch (\Exception $e) {
                         continue;
@@ -433,8 +428,10 @@ class ProductController extends Controller
                 } elseif ($img['type'] === 'file') {
                     $file = $img['value'];
                     $imageName = time() . '_' . $index . '.' . $file->getClientOriginalExtension();
-                    $file->move(public_path('product_images'), $imageName);
-                    $path = "product_images/{$imageName}";
+
+                    // 🟢 S3 Upload Instead of Public Folder
+                    $path = 'product_images/' . $imageName;
+                    Storage::disk('s3')->putFileAs('product_images', $file, $imageName, 'public');
                 }
 
                 if (!$path) continue;
@@ -443,13 +440,13 @@ class ProductController extends Controller
                     'store_id' => $storeId,
                     'product_id' => $product->id,
                     'path' => $path,
+                    'url' => Storage::disk('s3')->url($path), // save S3 url
                     'is_primary' => filter_var($img['is_primary'] ?? ($index === 0), FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
                     'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
                     'description' => $img['description'] ?? null,
                 ]);
             }
 
-            // ✅ Add Content
             ProductContent::create([
                 'store_id' => $storeId,
                 'product_id' => $product->id,
@@ -459,7 +456,6 @@ class ProductController extends Controller
                 'template_layout' => $validated['templateLayout'] ?? null,
             ]);
 
-            // ✅ Add Identifiers
             ProductIdentifier::create([
                 'store_id' => $storeId,
                 'product_id' => $product->id,
@@ -469,7 +465,6 @@ class ProductController extends Controller
                 'bpn' => $validated['bpn'] ?? null,
             ]);
 
-            // ✅ Add SEO
             ProductSeo::create([
                 'store_id' => $storeId,
                 'product_id' => $product->id,
