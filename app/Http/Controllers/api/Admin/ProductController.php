@@ -243,10 +243,10 @@ class ProductController extends Controller
         // -------------------------
         // STEP 2: Heavy relations (categories + reviews)
         // -------------------------
-        $categories = Cache::remember("product_categories_{$product->id}", 3600, function () use ($product) {
-            // **LIMIT recursion** to 2 levels only (fast)
-            return $product->categories()->with('parent.parent')->get();
-        });
+        // $categories = Cache::remember("product_categories_{$product->id}", 3600, function () use ($product) {
+        //     // **LIMIT recursion** to 2 levels only (fast)
+        //     return $product->categories()->with('parent.parent')->get();
+        // });
 
         $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
             // **LIMIT reviews** to 10 (fast)
@@ -257,7 +257,7 @@ class ProductController extends Controller
                 ->get();
         });
 
-        $product->setRelation('categories', $categories);
+        // $product->setRelation('categories', $categories);
         $product->setRelation('reviews', $reviews);
 
         return response()->json([
