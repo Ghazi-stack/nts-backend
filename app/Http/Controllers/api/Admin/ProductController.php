@@ -201,79 +201,79 @@ class ProductController extends Controller
         }
     }
 
-   public function showProduct($sku, Request $request)
-{
-    $storeId = current_store_id();
-    if (!$storeId) {
-        return response()->json([
-            'status' => false,
-            'message' => 'Store not selected.'
-        ], 400);
-    }
-
-    $cacheKey = "product_detail_store_{$storeId}_sku_" . md5($sku);
-
-    try {
-
-        // -------------------------
-        // STEP 1: Product + LIGHT relations
-        // -------------------------
-        $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
-            return Product::where('sku', $sku)
-                ->where('store_id', $storeId)
-                ->select('id', 'name', 'sku', 'price', 'brand_id')  // essential only
-                ->with([
-                    'brand:id,name,logo',
-                    'images:id,product_id,path,is_primary',
-                    'content',
-                    'identifiers',
-                    'seo'
-                ])
-                ->first();
-        });
-
-        if (!$product) {
+    public function showProduct($sku, Request $request)
+    {
+        $storeId = current_store_id();
+        if (!$storeId) {
             return response()->json([
                 'status' => false,
-                'error' => 'Product not found',
-                'sku' => $sku
-            ], 404);
+                'message' => 'Store not selected.'
+            ], 400);
         }
 
-        // -------------------------
-        // STEP 2: Heavy relations (categories + reviews)
-        // -------------------------
-        // $categories = Cache::remember("product_categories_{$product->id}", 3600, function () use ($product) {
-        //     // **LIMIT recursion** to 2 levels only (fast)
-        //     return $product->categories()->with('parent.parent')->get();
-        // });
+        $cacheKey = "product_detail_store_{$storeId}_sku_" . md5($sku);
 
-        $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
-            // **LIMIT reviews** to 10 (fast)
-            return $product->reviews()
-                ->with('user:id,name')
-                ->latest()
-                ->limit(10)
-                ->get();
-        });
+        try {
 
-        // $product->setRelation('categories', $categories);
-        $product->setRelation('reviews', $reviews);
+            // -------------------------
+            // STEP 1: Product + LIGHT relations
+            // -------------------------
+            $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
+                return Product::where('sku', $sku)
+                    ->where('store_id', $storeId)
+                    ->select('id', 'name', 'sku', 'price', 'brand_id')  // essential only
+                    ->with([
+                        'brand:id,name,logo',
+                        'images:id,product_id,path,is_primary',
+                        'content',
+                        'identifiers',
+                        'seo'
+                    ])
+                    ->first();
+            });
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Product Retrieved',
-            'data' => new ProductResource($product)
-        ]);
+            if (!$product) {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Product not found',
+                    'sku' => $sku
+                ], 404);
+            }
 
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => false,
-            'error' => 'Something went wrong',
-            'debug' => $e->getMessage()
-        ], 500);
+            // -------------------------
+            // STEP 2: Heavy relations (categories + reviews)
+            // -------------------------
+            $categories = Cache::remember("product_categories_{$product->id}", 3600, function () use ($product) {
+                // **LIMIT recursion** to 2 levels only (fast)
+                return $product->categories()->with('parent.parent')->get();
+            });
+
+            $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
+                // **LIMIT reviews** to 10 (fast)
+                return $product->reviews()
+                    ->with('user:id,name')
+                    ->latest()
+                    ->limit(10)
+                    ->get();
+            });
+
+            $product->setRelation('categories', $categories);
+            $product->setRelation('reviews', $reviews);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Product Retrieved',
+                'data' => new ProductResource($product)
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error' => 'Something went wrong',
+                'debug' => $e->getMessage()
+            ], 500);
+        }
     }
-}
+
 
 
     public function addProduct(Request $request)
@@ -291,52 +291,67 @@ class ProductController extends Controller
                 'categoryIds' => 'required|array|min:1',
                 'categoryIds.*' => 'exists:categories,id',
                 'condition' => 'nullable|string',
-                'price' => 'nullable',
-                'quantity' => 'nullable',
-                'msrp' => 'nullable',
-                'costPrice' => 'nullable',
-                'salePrice' => 'nullable',
+                'price' => 'nullable|numeric',
+                'quantity' => 'nullable|integer',
+                'msrp' => 'nullable|numeric',
+                'costPrice' => 'nullable|numeric',
+                'salePrice' => 'nullable|numeric',
+
                 'dimensions' => 'nullable|array',
                 'dimensions.weight' => 'nullable|numeric',
                 'dimensions.width' => 'nullable|numeric',
                 'dimensions.height' => 'nullable|numeric',
                 'dimensions.depth' => 'nullable|numeric',
+
                 'trackInventory' => 'nullable|boolean',
                 'currentStock' => 'nullable|integer',
                 'lowStock' => 'nullable|integer',
+
                 'isFeatured' => 'nullable|boolean',
                 'showCondition' => 'nullable|boolean',
                 'sortOrder' => 'nullable|integer',
                 'searchKeywords' => 'nullable|string',
                 'isVisible' => 'nullable|boolean',
+
                 'customFields' => 'nullable|array',
+
+                // ✅ IMAGE FILES
                 'image' => 'nullable|array',
-                'image.*' => 'nullable',
+                'image.*' => 'file|mimes:jpg,jpeg,png,webp|max:5120',
+
                 'description' => 'nullable|string',
                 'warranty' => 'nullable|string',
                 'availabilityText' => 'nullable|string',
                 'templateLayout' => 'nullable|string',
+
                 'mpn' => 'nullable|string',
                 'upc' => 'nullable|string',
                 'gtin' => 'nullable|string',
                 'bpn' => 'nullable|string',
+
                 'pageTitle' => 'nullable|string',
                 'productUrl' => 'nullable|string',
                 'metaDescription' => 'nullable|string',
+
                 'purchasabilityStatus' => 'nullable|string',
                 'minPurchaseQuantity' => 'nullable|integer|min:1',
                 'maxPurchaseQuantity' => 'nullable|integer|min:1',
+
                 'relatedProducts' => 'nullable|boolean',
                 'fixedShippingCost' => 'nullable|numeric',
+
                 'productType' => 'nullable|string',
                 'optionSet' => 'nullable|string',
                 'optionSetAlign' => 'nullable|string',
+
                 'allowPurchase' => 'nullable|boolean',
                 'stopProcessingRules' => 'nullable|boolean',
+
                 'taxClass' => 'nullable|string',
                 'taxProviderCode' => 'nullable|string',
             ]);
 
+            // ---------------- PRODUCT ----------------
             $product = Product::create([
                 'store_id' => $storeId,
                 'name' => $validated['name'],
@@ -374,82 +389,37 @@ class ProductController extends Controller
             ]);
 
             $product->categories()->sync($validated['categoryIds']);
-            // ✅ Handle both uploaded files and external URLs
-            $images = [];
 
-            if (!empty($validated['image'])) {
-                foreach ($validated['image'] as $img) {
-                    if (is_array($img)) {
-                        $imageEntry = [
-                            'type' => null,
-                            'value' => null,
-                            'is_primary' => $img['isThumbnail'] ?? false,
-                            'alt_text' => $img['alt_text'] ?? null,
-                            'description' => $img['description'] ?? null,
-                        ];
+            // ---------------- S3 IMAGE UPLOAD ----------------
+            if ($request->hasFile('image')) {
+                foreach ($request->file('image') as $index => $file) {
 
-                        if (!empty($img['url']) && is_string($img['url'])) {
-                            $imageEntry['type'] = 'url';
-                            $imageEntry['value'] = $img['url'];
-                            $images[] = $imageEntry;
-                        }
+                    $fileName =
+                        time() . '_' .
+                        Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME))
+                        . '.' . $file->getClientOriginalExtension();
 
-                        if (
-                            isset($img['file']) &&
-                            $img['file'] instanceof \Illuminate\Http\UploadedFile
-                        ) {
-                            $imageEntry['type'] = 'file';
-                            $imageEntry['value'] = $img['file'];
-                            $images[] = $imageEntry;
-                        }
-                    }
+                    $path = 'product_images/' . $fileName;
+
+                    // ✅ S3 PUBLIC UPLOAD
+                    Storage::disk('s3')->put(
+                        $path,
+                        file_get_contents($file),
+                        'public'
+                    );
+
+                    ProductImage::create([
+                        'store_id' => $storeId,
+                        'product_id' => $product->id,
+                        'path' => $path, // ONLY PATH SAVE
+                        'is_primary' => $index === 0 ? 1 : 0,
+                        'alt_text' => $validated['name'],
+                        'description' => null,
+                    ]);
                 }
             }
 
-            foreach ($images as $index => $img) {
-                $path = null;
-
-                if ($img['type'] === 'url') {
-                    if (!filter_var($img['value'], FILTER_VALIDATE_URL)) {
-                        continue;
-                    }
-
-                    try {
-                        $response = Http::timeout(5)->get($img['value']);
-
-                        if ($response->ok()) {
-                            $imageContent = $response->body();
-                            $extension = pathinfo(parse_url($img['value'], PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
-                            $imageName = time() . '_' . $index . '.' . $extension;
-
-                            $filePath = public_path('product_images/' . $imageName);
-                            file_put_contents($filePath, $imageContent);
-
-                            $path = 'product_images/' . $imageName;
-                        }
-                    } catch (\Exception $e) {
-                        continue;
-                    }
-                } elseif ($img['type'] === 'file') {
-                    $file = $img['value'];
-                    $imageName = time() . '_' . $index . '.' . $file->getClientOriginalExtension();
-                    $file->move(public_path('product_images'), $imageName);
-                    $path = "product_images/{$imageName}";
-                }
-
-                if (!$path) continue;
-
-                ProductImage::create([
-                    'store_id' => $storeId,
-                    'product_id' => $product->id,
-                    'path' => $path,
-                    'is_primary' => filter_var($img['is_primary'] ?? ($index === 0), FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
-                    'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
-                    'description' => $img['description'] ?? null,
-                ]);
-            }
-
-            // ✅ Add Content
+            // ---------------- CONTENT ----------------
             ProductContent::create([
                 'store_id' => $storeId,
                 'product_id' => $product->id,
@@ -459,7 +429,7 @@ class ProductController extends Controller
                 'template_layout' => $validated['templateLayout'] ?? null,
             ]);
 
-            // ✅ Add Identifiers
+            // ---------------- IDENTIFIERS ----------------
             ProductIdentifier::create([
                 'store_id' => $storeId,
                 'product_id' => $product->id,
@@ -469,7 +439,7 @@ class ProductController extends Controller
                 'bpn' => $validated['bpn'] ?? null,
             ]);
 
-            // ✅ Add SEO
+            // ---------------- SEO ----------------
             ProductSeo::create([
                 'store_id' => $storeId,
                 'product_id' => $product->id,
@@ -480,19 +450,21 @@ class ProductController extends Controller
 
             return response()->json([
                 'status' => true,
-                'message' => 'Product created successfully.',
-                'data' => new ProductResource($product->load([
-                    'brand',
-                    'categories',
-                    'images',
-                    'content',
-                    'identifiers',
-                    'seo'
-                ]))
+                'message' => 'Product created successfully',
+                'data' => new ProductResource(
+                    $product->load([
+                        'brand',
+                        'categories',
+                        'images',
+                        'content',
+                        'identifiers',
+                        'seo'
+                    ])
+                )
             ], 201);
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
