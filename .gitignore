@@ -20,3 +20,5 @@ yarn-error.log
 /public/banner_images/
 /public/brand_logos/
 /public/product_images/
+composer.lock
+/public/debug

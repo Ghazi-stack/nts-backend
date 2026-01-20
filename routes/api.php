@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\api\Admin\{
     BannerController,
     BrandController,
@@ -394,4 +395,14 @@ Route::prefix('web')->group(function () {
 
     // 3️⃣ Webhook for Stripe event notifications
     Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
+});
+
+Route::get('/test-s3', function () {
+    $path = 'debug/tests.txt';
+
+    return [
+        'put_result' => Storage::disk('s3')->put($path, 'S3 DEBUG FILE'),
+        'exists' => Storage::disk('s3')->exists($path),
+        'url' => Storage::disk('s3')->url($path),
+    ];
 });
