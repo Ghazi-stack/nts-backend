@@ -291,52 +291,67 @@ class ProductController extends Controller
                 'categoryIds' => 'required|array|min:1',
                 'categoryIds.*' => 'exists:categories,id',
                 'condition' => 'nullable|string',
-                'price' => 'nullable',
-                'quantity' => 'nullable',
-                'msrp' => 'nullable',
-                'costPrice' => 'nullable',
-                'salePrice' => 'nullable',
+                'price' => 'nullable|numeric',
+                'quantity' => 'nullable|integer',
+                'msrp' => 'nullable|numeric',
+                'costPrice' => 'nullable|numeric',
+                'salePrice' => 'nullable|numeric',
+
                 'dimensions' => 'nullable|array',
                 'dimensions.weight' => 'nullable|numeric',
                 'dimensions.width' => 'nullable|numeric',
                 'dimensions.height' => 'nullable|numeric',
                 'dimensions.depth' => 'nullable|numeric',
+
                 'trackInventory' => 'nullable|boolean',
                 'currentStock' => 'nullable|integer',
                 'lowStock' => 'nullable|integer',
+
                 'isFeatured' => 'nullable|boolean',
                 'showCondition' => 'nullable|boolean',
                 'sortOrder' => 'nullable|integer',
                 'searchKeywords' => 'nullable|string',
                 'isVisible' => 'nullable|boolean',
+
                 'customFields' => 'nullable|array',
+
+                // ✅ IMAGE FILES
                 'image' => 'nullable|array',
-                'image.*' => 'nullable',
+                'image.*' => 'file|mimes:jpg,jpeg,png,webp|max:5120',
+
                 'description' => 'nullable|string',
                 'warranty' => 'nullable|string',
                 'availabilityText' => 'nullable|string',
                 'templateLayout' => 'nullable|string',
+
                 'mpn' => 'nullable|string',
                 'upc' => 'nullable|string',
                 'gtin' => 'nullable|string',
                 'bpn' => 'nullable|string',
+
                 'pageTitle' => 'nullable|string',
                 'productUrl' => 'nullable|string',
                 'metaDescription' => 'nullable|string',
+
                 'purchasabilityStatus' => 'nullable|string',
                 'minPurchaseQuantity' => 'nullable|integer|min:1',
                 'maxPurchaseQuantity' => 'nullable|integer|min:1',
+
                 'relatedProducts' => 'nullable|boolean',
                 'fixedShippingCost' => 'nullable|numeric',
+
                 'productType' => 'nullable|string',
                 'optionSet' => 'nullable|string',
                 'optionSetAlign' => 'nullable|string',
+
                 'allowPurchase' => 'nullable|boolean',
                 'stopProcessingRules' => 'nullable|boolean',
+
                 'taxClass' => 'nullable|string',
                 'taxProviderCode' => 'nullable|string',
             ]);
 
+            // ---------------- PRODUCT ----------------
             $product = Product::create([
                 'store_id' => $storeId,
                 'name' => $validated['name'],
@@ -375,78 +390,36 @@ class ProductController extends Controller
 
             $product->categories()->sync($validated['categoryIds']);
 
-            $images = [];
-            if (!empty($validated['image'])) {
-                foreach ($validated['image'] as $img) {
-                    if (is_array($img)) {
-                        $imageEntry = [
-                            'type' => null,
-                            'value' => null,
-                            'is_primary' => $img['isThumbnail'] ?? false,
-                            'alt_text' => $img['alt_text'] ?? null,
-                            'description' => $img['description'] ?? null,
-                        ];
+            // ---------------- S3 IMAGE UPLOAD ----------------
+            if ($request->hasFile('image')) {
+                foreach ($request->file('image') as $index => $file) {
 
-                        if (!empty($img['url']) && is_string($img['url'])) {
-                            $imageEntry['type'] = 'url';
-                            $imageEntry['value'] = $img['url'];
-                            $images[] = $imageEntry;
-                        }
+                    $fileName =
+                        time() . '_' .
+                        Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME))
+                        . '.' . $file->getClientOriginalExtension();
 
-                        if (isset($img['file']) && $img['file'] instanceof \Illuminate\Http\UploadedFile) {
-                            $imageEntry['type'] = 'file';
-                            $imageEntry['value'] = $img['file'];
-                            $images[] = $imageEntry;
-                        }
-                    }
+                    $path = 'product_images/' . $fileName;
+
+                    // ✅ S3 PUBLIC UPLOAD
+                    Storage::disk('s3')->put(
+                        $path,
+                        file_get_contents($file),
+                        'public'
+                    );
+
+                    ProductImage::create([
+                        'store_id' => $storeId,
+                        'product_id' => $product->id,
+                        'path' => $path, // ONLY PATH SAVE
+                        'is_primary' => $index === 0 ? 1 : 0,
+                        'alt_text' => $validated['name'],
+                        'description' => null,
+                    ]);
                 }
             }
 
-            foreach ($images as $index => $img) {
-                $path = null;
-
-                if ($img['type'] === 'url') {
-                    if (!filter_var($img['value'], FILTER_VALIDATE_URL)) {
-                        continue;
-                    }
-
-                    try {
-                        $response = Http::timeout(5)->get($img['value']);
-
-                        if ($response->ok()) {
-                            $imageContent = $response->body();
-                            $extension = pathinfo(parse_url($img['value'], PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
-                            $imageName = time() . '_' . $index . '.' . $extension;
-
-                            // 🟢 S3 Upload Instead of Public Folder
-                            $path = 'product_images/' . $imageName;
-                            Storage::disk('s3')->put($path, $imageContent, 'public');
-                        }
-                    } catch (\Exception $e) {
-                        continue;
-                    }
-                } elseif ($img['type'] === 'file') {
-                    $file = $img['value'];
-                    $imageName = time() . '_' . $index . '.' . $file->getClientOriginalExtension();
-
-                    // 🟢 S3 Upload Instead of Public Folder
-                    $path = 'product_images/' . $imageName;
-                    Storage::disk('s3')->putFileAs('product_images', $file, $imageName, 'public');
-                }
-
-                if (!$path) continue;
-
-                ProductImage::create([
-                    'store_id' => $storeId,
-                    'product_id' => $product->id,
-                    'path' => $path,
-                    'url' => Storage::disk('s3')->url($path), // save S3 url
-                    'is_primary' => filter_var($img['is_primary'] ?? ($index === 0), FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
-                    'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
-                    'description' => $img['description'] ?? null,
-                ]);
-            }
-
+            // ---------------- CONTENT ----------------
             ProductContent::create([
                 'store_id' => $storeId,
                 'product_id' => $product->id,
@@ -456,6 +429,7 @@ class ProductController extends Controller
                 'template_layout' => $validated['templateLayout'] ?? null,
             ]);
 
+            // ---------------- IDENTIFIERS ----------------
             ProductIdentifier::create([
                 'store_id' => $storeId,
                 'product_id' => $product->id,
@@ -465,6 +439,7 @@ class ProductController extends Controller
                 'bpn' => $validated['bpn'] ?? null,
             ]);
 
+            // ---------------- SEO ----------------
             ProductSeo::create([
                 'store_id' => $storeId,
                 'product_id' => $product->id,
@@ -475,19 +450,21 @@ class ProductController extends Controller
 
             return response()->json([
                 'status' => true,
-                'message' => 'Product created successfully.',
-                'data' => new ProductResource($product->load([
-                    'brand',
-                    'categories',
-                    'images',
-                    'content',
-                    'identifiers',
-                    'seo'
-                ]))
+                'message' => 'Product created successfully',
+                'data' => new ProductResource(
+                    $product->load([
+                        'brand',
+                        'categories',
+                        'images',
+                        'content',
+                        'identifiers',
+                        'seo'
+                    ])
+                )
             ], 201);
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
