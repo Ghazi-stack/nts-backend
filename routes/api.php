@@ -333,6 +333,7 @@ Route::prefix('web')->group(function () {
         Route::get('/get-product/{slug}', 'showProduct');
         Route::get('/search-product', 'searchProduct');
         Route::get('/featured-products', 'featuredProducts');
+        Route::get('/products/by-brand', 'productsByBrand');
         Route::get('/popular-products', 'popularProducts');
         Route::get('/last-week-orders', 'lastWeekOrderedProducts');
         Route::get('/last-week-product', 'lastWeekProducts');

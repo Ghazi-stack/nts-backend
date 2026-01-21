@@ -221,7 +221,7 @@ class ProductController extends Controller
             $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
                 return Product::where('sku', $sku)
                     ->where('store_id', $storeId)
-                    ->select('id', 'name', 'sku', 'price', 'brand_id')  // essential only
+                    ->select('id', 'name', 'sku', 'price', 'brand_id', 'category_id')  // essential only
                     ->with([
                         'brand:id,name,logo',
                         'images:id,product_id,path,is_primary',
@@ -243,10 +243,10 @@ class ProductController extends Controller
             // -------------------------
             // STEP 2: Heavy relations (categories + reviews)
             // -------------------------
-            $categories = Cache::remember("product_categories_{$product->id}", 3600, function () use ($product) {
-                // **LIMIT recursion** to 2 levels only (fast)
-                return $product->categories()->with('parent.parent')->get();
-            });
+            // $categories = Cache::remember("product_categories_{$product->id}", 3600, function () use ($product) {
+            //     // **LIMIT recursion** to 2 levels only (fast)
+            //     return $product->categories()->with('parent.parent')->get();
+            // });
 
             $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
                 // **LIMIT reviews** to 10 (fast)
@@ -257,7 +257,7 @@ class ProductController extends Controller
                     ->get();
             });
 
-            $product->setRelation('categories', $categories);
+            // $product->setRelation('categories', $categories);
             $product->setRelation('reviews', $reviews);
 
             return response()->json([
@@ -960,7 +960,7 @@ class ProductController extends Controller
                                         'store_id'   => $storeId,
                                         'is_primary' => $hasPrimary ? 0 : 1,
                                         'alt_text'   => $img['alt_text'] ?? $product->name,
-                                        'description'=> $img['description'] ?? null,
+                                        'description' => $img['description'] ?? null,
                                     ]
                                 );
 
@@ -1049,43 +1049,43 @@ class ProductController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
- public function searchProduct(Request $request)
-{
-    try {
-        $storeId = current_store_id();
-        if (!$storeId) {
-            return response()->json(['error' => 'Store not selected or token invalid.'], 400);
-        }
+    public function searchProduct(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json(['error' => 'Store not selected or token invalid.'], 400);
+            }
 
-        $request->validate([
-            'query' => 'required|string|min:1'
-        ]);
+            $request->validate([
+                'query' => 'required|string|min:1'
+            ]);
 
-        $queryStr = $request->input('query');
-        $page = (int) $request->input('page', 1);
-        $pageSize = (int) $request->input('pageSize', 50);
+            $queryStr = $request->input('query');
+            $page = (int) $request->input('page', 1);
+            $pageSize = (int) $request->input('pageSize', 50);
 
-        // Cache key with query + page
-        $cacheKey = "product_search_store_{$storeId}_query_" . md5($queryStr) . "_page_{$page}_size_{$pageSize}";
+            // Cache key with query + page
+            $cacheKey = "product_search_store_{$storeId}_query_" . md5($queryStr) . "_page_{$page}_size_{$pageSize}";
 
-        // Cache results for 5 minutes (300 seconds)
-        $products = Cache::remember($cacheKey, 300, function () use ($queryStr, $storeId, $page, $pageSize) {
-            return Product::where('store_id', $storeId)
-                ->where(function ($q) use ($queryStr) {
-                    $q->where('name', 'like', "%$queryStr%")
-                        ->orWhere('sku', 'like', "%$queryStr%")
-                        ->orWhere('slug', 'like', "%$queryStr%")
-                        ->orWhere('price', 'like', "%$queryStr%")
-                        ->orWhere('search_keywords', 'like', "%$queryStr%")
-                        ->orWhereHas('categories', fn($q2) => $q2->where('name', 'like', "%$queryStr%"))
-                        ->orWhereHas('brand', fn($q3) => $q3->where('name', 'like', "%$queryStr%"));
-                })
-                ->select('id', 'name', 'sku', 'price', 'slug', 'brand_id') // Only essential columns
-                ->with([
-                    'categories:id,name',  // Only id and name
-                    'brand:id,name,logo'   // Only id, name, logo
-                ])
-                ->orderByRaw("
+            // Cache results for 5 minutes (300 seconds)
+            $products = Cache::remember($cacheKey, 300, function () use ($queryStr, $storeId, $page, $pageSize) {
+                return Product::where('store_id', $storeId)
+                    ->where(function ($q) use ($queryStr) {
+                        $q->where('name', 'like', "%$queryStr%")
+                            ->orWhere('sku', 'like', "%$queryStr%")
+                            ->orWhere('slug', 'like', "%$queryStr%")
+                            ->orWhere('price', 'like', "%$queryStr%")
+                            ->orWhere('search_keywords', 'like', "%$queryStr%")
+                            ->orWhereHas('categories', fn($q2) => $q2->where('name', 'like', "%$queryStr%"))
+                            ->orWhereHas('brand', fn($q3) => $q3->where('name', 'like', "%$queryStr%"));
+                    })
+                    ->select('id', 'name', 'sku', 'price', 'slug', 'brand_id') // Only essential columns
+                    ->with([
+                        'categories:id,name',  // Only id and name
+                        'brand:id,name,logo'   // Only id, name, logo
+                    ])
+                    ->orderByRaw("
                     CASE
                         WHEN name = ? THEN 0
                         WHEN name LIKE ? THEN 1
@@ -1093,45 +1093,44 @@ class ProductController extends Controller
                         ELSE 3
                     END
                 ", [$queryStr, "$queryStr%", "%$queryStr%"])
-                ->orderBy('name', 'asc')
-                ->paginate($pageSize, ['*'], 'page', $page);
-        });
+                    ->orderBy('name', 'asc')
+                    ->paginate($pageSize, ['*'], 'page', $page);
+            });
 
-        // Background mein search count update (non-blocking)
-        if ($products->isNotEmpty()) {
-            $productIds = $products->pluck('id')->toArray();
-            
-            // Bulk update in single query (fast)
-            dispatch(function () use ($productIds, $storeId) {
-                if (empty($productIds)) return;
-                
-                $values = implode(',', array_map(
-                    fn($id) => "($id, $storeId, 1, NOW(), NOW())",
-                    $productIds
-                ));
+            // Background mein search count update (non-blocking)
+            if ($products->isNotEmpty()) {
+                $productIds = $products->pluck('id')->toArray();
 
-                \DB::statement("
+                // Bulk update in single query (fast)
+                dispatch(function () use ($productIds, $storeId) {
+                    if (empty($productIds)) return;
+
+                    $values = implode(',', array_map(
+                        fn($id) => "($id, $storeId, 1, NOW(), NOW())",
+                        $productIds
+                    ));
+
+                    \DB::statement("
                     INSERT INTO product_searches (product_id, store_id, search_count, created_at, updated_at)
                     VALUES {$values}
                     ON DUPLICATE KEY UPDATE 
                         search_count = search_count + 1,
                         updated_at = NOW()
                 ");
-            })->afterResponse();
+                })->afterResponse();
+            }
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Products retrieved successfully.',
+                'data'    => ProductResource::collection($products)
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json(['errors' => $e->errors()], 422);
+        } catch (Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
         }
-
-        return response()->json([
-            'status'  => true,
-            'message' => 'Products retrieved successfully.',
-            'data'    => ProductResource::collection($products)
-        ]);
-
-    } catch (ValidationException $e) {
-        return response()->json(['errors' => $e->errors()], 422);
-    } catch (Exception $e) {
-        return response()->json(['error' => $e->getMessage()], 500);
     }
-}
 
 
 
@@ -1192,6 +1191,75 @@ class ProductController extends Controller
             return response()->json(['error' => 'Failed to load featured products.'], 500);
         }
     }
+
+
+    public function productsByBrand(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected.'
+                ], 400);
+            }
+
+            $request->validate([
+                'brand_id' => 'required|integer'
+            ]);
+
+            $brandId = $request->brand_id;
+
+            // ✅ CACHE KEY
+            $cacheKey = "brand_products_store_{$storeId}_brand_{$brandId}";
+
+            $products = Cache::remember($cacheKey, 300, function () use ($storeId, $brandId) {
+
+                return Product::where('store_id', $storeId)
+                    ->where('brand_id', $brandId)
+
+                    // ✅ ONLY REQUIRED FIELDS
+                    ->select(
+                        'id',
+                        'name',
+                        'sku',
+                        'price',
+                        'brand_id',
+                        'category_id'
+                    )
+
+                    // ✅ LIGHT RELATIONS ONLY
+                    ->with([
+                        'brand:id,name,logo',
+                        'images:id,product_id,path,is_primary'
+                    ])
+
+                    // ❌ REMOVE HEAVY RELATIONS
+                    // reviews
+                    // categories
+                    // seo
+                    // content
+                    // identifiers
+
+                    ->orderByDesc('id')
+                    ->limit(10)
+                    ->get();
+            });
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Brand products retrieved successfully.',
+                'data' => ProductResource::collection($products)
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error' => 'Something went wrong',
+                'debug' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 
     // public function popularProducts(Request $request)
     // {
