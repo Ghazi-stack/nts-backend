@@ -1192,7 +1192,6 @@ class ProductController extends Controller
         }
     }
 
-
     public function productsByBrand(Request $request)
     {
         try {
@@ -1210,39 +1209,43 @@ class ProductController extends Controller
 
             $brandId = $request->brand_id;
 
-            // ✅ CACHE KEY
-            $cacheKey = "brand_products_store_{$storeId}_brand_{$brandId}";
+            $cacheKey = "brand_products_full_store_{$storeId}_brand_{$brandId}";
 
             $products = Cache::remember($cacheKey, 300, function () use ($storeId, $brandId) {
 
-                return Product::where('store_id', $storeId)
+                // 🔥 STEP 1: PRODUCTS (LIGHT)
+                $products = Product::where('store_id', $storeId)
                     ->where('brand_id', $brandId)
-
-                    // ✅ ONLY REQUIRED FIELDS
-                    ->select(
-                        'id',
-                        'name',
-                        'sku',
-                        'price',
-                        'brand_id',
-                        'category_id'
-                    )
-
-                    // ✅ LIGHT RELATIONS ONLY
-                    ->with([
-                        'brand:id,name,logo',
-                        'images:id,product_id,path,is_primary'
-                    ])
-
-                    // ❌ REMOVE HEAVY RELATIONS
-                    // reviews
-                    // categories
-                    // seo
-                    // content
-                    // identifiers
-
+                    ->select('id') // ONLY ID FIRST
                     ->orderByDesc('id')
                     ->limit(10)
+                    ->get();
+
+                $productIds = $products->pluck('id');
+
+                // 🔥 STEP 2: LOAD ALL RELATIONS OPTIMIZED
+                return Product::whereIn('id', $productIds)
+                    ->with([
+                        'categories:id,name,parent_id',
+                        'categories.parent:id,name,parent_id',
+
+                        'brand:id,name,logo',
+
+                        'images:id,product_id,path,is_primary',
+
+                        'reviews' => function ($q) {
+                            $q->select('id', 'product_id', 'user_id', 'rating', 'comment', 'created_at')
+                                ->latest()
+                                ->limit(10);
+                        },
+                        'reviews.user:id,name',
+
+                        'content:product_id,description,warranty',
+
+                        'identifiers:product_id,mpn,upc,gtin',
+
+                        'seo:product_id,page_title,meta_description'
+                    ])
                     ->get();
             });
 
