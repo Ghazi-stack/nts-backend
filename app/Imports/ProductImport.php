@@ -348,6 +348,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                         [
                             'product_id' => $product->id,
                             'path'       => $savedPath,
+                            'url'       => $savedPath,
                         ],
                         [
                             'store_id'   => $this->storeId,
