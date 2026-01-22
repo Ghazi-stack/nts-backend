@@ -18,6 +18,8 @@ use Maatwebsite\Excel\Concerns\OnEachRow;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 
 class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, ShouldQueue
 {
@@ -77,13 +79,22 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
             // --- Required fields: SKU + Name ---------------------------------
             $sku = $this->getField($data, [
-                'product code/sku', 'product code / sku', 'product code sku',
-                'product code', 'sku', 'product_code', 'productcode',
-                'distributor sku', 'distributor_sku',
+                'product code/sku',
+                'product code / sku',
+                'product code sku',
+                'product code',
+                'sku',
+                'product_code',
+                'productcode',
+                'distributor sku',
+                'distributor_sku',
             ]);
 
             $productName = $this->getField($data, [
-                'product name', 'name', 'product_name', 'productname',
+                'product name',
+                'name',
+                'product_name',
+                'productname',
             ]);
 
             if (!$sku || !$productName) {
@@ -148,7 +159,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'sale_price'           => $salePrice,
                     'cost_price'           => $costPrice,
                     'fixed_shipping_cost'  => $fixedShipping,
-                    'msrp'                 => $msrp,  
+                    'msrp'                 => $msrp,
                     'dimensions'           => json_encode([
                         'weight' => $weight,
                         'width'  => $width,
@@ -163,7 +174,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'product_type'         => $this->getField($data, ['product type', 'product_type']) ?? null,
                     'option_set'           => $this->getField($data, ['option set', 'option_set']) ?? null,
                     'option_set_align'     => $this->getField($data, ['option set align', 'option_set_align']) ?? null,
-                    'visible_on_storefront'=> $this->toBool($this->getField($data, ['product visible?', 'visible']) ?? 'Yes'),
+                    'visible_on_storefront' => $this->toBool($this->getField($data, ['product visible?', 'visible']) ?? 'Yes'),
                     'free_shipping'        => $this->toBool($this->getField($data, ['free shipping', 'free_shipping']) ?? 'No'),
                     'search_keywords'      => $this->getField($data, ['search keywords', 'keywords']) ?? null,
                 ]
@@ -240,6 +251,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             // IMAGE IMPORT (Product Image File - 1)
             // ----------------------------------------
 
+
             $imageKeyOptions = [
                 'product image file - 1',
                 'product image file 1',
@@ -266,43 +278,72 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 }
 
                 $imageValue = trim($val);
-                $savedPath = null;
+                $savedPath  = null;
 
-                // (A) URL image
+                /* =====================================================
+       (A) URL IMAGE → DIRECT S3 UPLOAD
+    ===================================================== */
                 if (filter_var($imageValue, FILTER_VALIDATE_URL)) {
+
                     try {
-                        $imageContent = @file_get_contents($imageValue);
-
-                        if ($imageContent !== false) {
-                            $extension = pathinfo(parse_url($imageValue, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
-                            $fileName = time() . '_' . uniqid() . '.' . $extension;
-
-                            $pathFull = public_path('product_images/' . $fileName);
-                            file_put_contents($pathFull, $imageContent);
-
-                            $savedPath = '/product_images/' . $fileName;
+                        $response = Http::timeout(10)->get($imageValue);
+                        if (!$response->successful()) {
+                            continue;
                         }
+
+                        $originalName = pathinfo(
+                            parse_url($imageValue, PHP_URL_PATH),
+                            PATHINFO_FILENAME
+                        );
+
+                        $extension = pathinfo(
+                            parse_url($imageValue, PHP_URL_PATH),
+                            PATHINFO_EXTENSION
+                        ) ?: 'jpg';
+
+                        $fileName = Str::slug($originalName)
+                            . '-' . time() . '-' . uniqid() . '.' . $extension;
+
+                        $savedPath = "product_images/{$product->id}/{$fileName}";
+
+                        Storage::disk('s3')->put(
+                            $savedPath,
+                            $response->body()
+                        );
                     } catch (\Throwable $e) {
                         continue;
                     }
                 }
 
-                // (B) Local filename
-                else {
+                /* =====================================================
+       (B) LOCAL FILENAME (LEGACY) → MOVE TO S3
+    ===================================================== */ else {
+
+                    // existing local image (old imports)
                     $localPath = public_path('product_images/' . $imageValue);
 
                     if (file_exists($localPath)) {
+
                         $extension = pathinfo($imageValue, PATHINFO_EXTENSION) ?: 'jpg';
-                        $fileName = time() . '_' . uniqid() . '.' . $extension;
 
-                        copy($localPath, public_path('product_images/' . $fileName));
+                        $fileName = Str::slug(
+                            pathinfo($imageValue, PATHINFO_FILENAME)
+                        ) . '-' . time() . '-' . uniqid() . '.' . $extension;
 
-                        $savedPath = '/product_images/' . $fileName;
+                        $savedPath = "product_images/{$product->id}/{$fileName}";
+
+                        Storage::disk('s3')->put(
+                            $savedPath,
+                            file_get_contents($localPath)
+                        );
                     }
                 }
 
-                // (C) Save to DB
+                /* =====================================================
+       (C) SAVE IMAGE RECORD (UNCHANGED LOGIC)
+    ===================================================== */
                 if ($savedPath) {
+
                     ProductImage::updateOrCreate(
                         [
                             'product_id' => $product->id,
