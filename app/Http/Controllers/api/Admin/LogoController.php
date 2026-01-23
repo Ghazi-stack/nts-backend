@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\LogoResource;
+use Illuminate\Support\Facades\Storage;
 
 class LogoController extends Controller
 {
@@ -18,7 +19,7 @@ class LogoController extends Controller
     {
         try {
             $storeId = current_store_id();
-            if (!$storeId) return response()->json(['status'=>false,'message'=>'Store not selected'],400);
+            if (!$storeId) return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
 
             $perPage = (int) $request->get('perPage', 10);
             $page = (int) $request->get('page', 1);
@@ -37,15 +38,15 @@ class LogoController extends Controller
                     'totalPages' => $logos->lastPage(),
                     'totalItems' => $logos->total(),
                 ],
-                
+
             ]);
         } catch (Exception $e) {
             Log::error('Error fetching logos: ' . $e->getMessage());
             return response()->json([
-                'status'=>false,
-                'message'=>'Failed to retrieve logos',
-                'error'=>$e->getMessage()
-            ],500);
+                'status' => false,
+                'message' => 'Failed to retrieve logos',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 
@@ -56,22 +57,22 @@ class LogoController extends Controller
     {
         try {
             $storeId = current_store_id();
-            if (!$storeId) return response()->json(['status'=>false,'message'=>'Store not selected'],400);
+            if (!$storeId) return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
 
             $logo = Logo::where('store_id', $storeId)->findOrFail($id);
 
             return response()->json([
-                'status'=>true,
-                'message'=>'Logo retrieved successfully',
-                'data'=>new LogoResource($logo),
+                'status' => true,
+                'message' => 'Logo retrieved successfully',
+                'data' => new LogoResource($logo),
             ]);
         } catch (Exception $e) {
             Log::error('Error fetching logo: ' . $e->getMessage());
             return response()->json([
-                'status'=>false,
-                'message'=>'Logo not found',
-                'error'=>$e->getMessage()
-            ],404);
+                'status' => false,
+                'message' => 'Logo not found',
+                'error' => $e->getMessage()
+            ], 404);
         }
     }
 
@@ -85,7 +86,7 @@ class LogoController extends Controller
             if (!$storeId) {
                 return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
             }
-        
+
             $validated = $request->validate([
                 'logoText' => 'nullable|string',
                 'logoType' => 'nullable|string',
@@ -96,52 +97,74 @@ class LogoController extends Controller
                 'dimensions.width' => 'nullable|integer',
                 'dimensions.height' => 'nullable|integer',
             ]);
-        
+
             // Check if logo already exists for this store
             $logo = Logo::where('store_id', $storeId)->first();
-        
-            // Handle image upload
+
+
+            /* ================= LOGO IMAGE ================= */
             if ($request->hasFile('image')) {
-                // delete old image if exists
+
+                // delete old logo from S3 if exists
                 if ($logo && $logo->logo_url) {
-                    $old = public_path('logos/' . basename($logo->logo_url));
-                    if (file_exists($old)) unlink($old);
+                    $oldPath = parse_url($logo->logo_url, PHP_URL_PATH);
+                    $oldPath = ltrim($oldPath, '/'); // remove leading slash
+                    Storage::disk('s3')->delete($oldPath);
                 }
-            
+
                 $file = $request->file('image');
+
                 $name = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-                $file->move(public_path('logos'), $name);
-                $logoUrl = url('logos/' . $name);
+
+                $path = Storage::disk('s3')->putFileAs(
+                    'logos',
+                    $file,
+                    $name
+                );
+
+                $logoUrl = Storage::disk('s3')->url($path);
             } else {
                 $logoUrl = $logo->logo_url ?? null;
             }
-        
-            // Handle favicon upload
+
+
+            /* ================= FAVICON IMAGE ================= */
             if ($request->hasFile('favicon')) {
+
+                // delete old favicon from S3 if exists
                 if ($logo && $logo->favicon_url) {
-                    $old = public_path('logos/' . basename($logo->favicon_url));
-                    if (file_exists($old)) unlink($old);
+                    $oldPath = parse_url($logo->favicon_url, PHP_URL_PATH);
+                    $oldPath = ltrim($oldPath, '/');
+                    Storage::disk('s3')->delete($oldPath);
                 }
-            
+
                 $file = $request->file('favicon');
+
                 $name = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-                $file->move(public_path('logos'), $name);
-                $faviconUrl = url('logos/' . $name);
+
+                $path = Storage::disk('s3')->putFileAs(
+                    'logos',
+                    $file,
+                    $name
+                );
+
+                $faviconUrl = Storage::disk('s3')->url($path);
             } else {
                 $faviconUrl = $logo->favicon_url ?? null;
             }
-        
-            // Prepare data
+
+
+            /* ================= PREPARE DATA (UNCHANGED) ================= */
             $data = [
-                'store_id' => $storeId,
-                'logo_text' => $validated['logoText'] ?? $logo->logo_text ?? null,
-                'logo_type' => $validated['logoType'] ?? $logo->logo_type ?? null,
-                'logo_size' => $validated['logoSize'] ?? $logo->logo_size ?? null,
-                'logo_url' => $logoUrl,
-                'favicon_url' => $faviconUrl,
-                'dimensions' => $validated['dimensions'] ?? $logo->dimensions ?? null,
+                'store_id'     => $storeId,
+                'logo_text'    => $validated['logoText'] ?? $logo->logo_text ?? null,
+                'logo_type'    => $validated['logoType'] ?? $logo->logo_type ?? null,
+                'logo_size'    => $validated['logoSize'] ?? $logo->logo_size ?? null,
+                'logo_url'     => $logoUrl,
+                'favicon_url'  => $faviconUrl,
+                'dimensions'   => $validated['dimensions'] ?? $logo->dimensions ?? null,
             ];
-        
+
             // If logo exists -> update, else -> create new
             if ($logo) {
                 $logo->update($data);
@@ -150,13 +173,12 @@ class LogoController extends Controller
                 $logo = Logo::create($data);
                 $message = 'Logo created successfully';
             }
-        
+
             return response()->json([
                 'status' => true,
                 'message' => $message,
                 'data' => new LogoResource($logo)
             ]);
-        
         } catch (Exception $e) {
             Log::error('Error saving logo: ' . $e->getMessage());
             return response()->json([
@@ -175,72 +197,100 @@ class LogoController extends Controller
     {
         try {
             $storeId = current_store_id();
-            if (!$storeId) return response()->json(['status'=>false,'message'=>'Store not selected'],400);
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected'
+                ], 400);
+            }
 
-            $logo = Logo::where('store_id',$storeId)->findOrFail($id);
+            $logo = Logo::where('store_id', $storeId)->findOrFail($id);
 
             $validated = $request->validate([
-                'logoText'=>'nullable|string',
-                'logoType'=>'nullable|string',
-                'logoSize'=>'nullable|string',
-                'image'=>'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
-                'favicon'=>'nullable|image|mimes:ico,png|max:1024',
-                'dimensions'=>'nullable|array',
+                'logoText' => 'nullable|string',
+                'logoType' => 'nullable|string',
+                'logoSize' => 'nullable|string',
+                'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
+                'favicon' => 'nullable|image|mimes:ico,png|max:1024',
+                'dimensions' => 'nullable|array',
                 'dimensions.width' => 'nullable|integer',
                 'dimensions.height' => 'nullable|integer',
             ]);
 
             $updateData = [];
             $fields = [
-                'logoText'=>'logo_text',
-                'logoType'=>'logo_type',
-                'logoSize'=>'logo_size',
-                'dimensions'=>'dimensions'
+                'logoText'   => 'logo_text',
+                'logoType'   => 'logo_type',
+                'logoSize'   => 'logo_size',
+                'dimensions' => 'dimensions'
             ];
 
-            foreach($fields as $input=>$db){
-                if($request->has($input)) $updateData[$db] = $request->input($input);
+            foreach ($fields as $input => $db) {
+                if ($request->has($input)) {
+                    $updateData[$db] = $request->input($input);
+                }
             }
 
-            // Update logo image
-            if($request->hasFile('image')){
-                if($logo->logo_url){
-                    $old = public_path('logos/'.basename($logo->logo_url));
-                    if(file_exists($old)) unlink($old);
+            /* ================= LOGO IMAGE (S3) ================= */
+            if ($request->hasFile('image')) {
+
+                // delete old logo from S3
+                if ($logo->logo_url) {
+                    $oldPath = parse_url($logo->logo_url, PHP_URL_PATH);
+                    $oldPath = ltrim($oldPath, '/');
+                    Storage::disk('s3')->delete($oldPath);
                 }
-                $file=$request->file('image');
-                $name=time().'_'.uniqid().'.'.$file->getClientOriginalExtension();
-                $file->move(public_path('logos'),$name);
-                $updateData['logo_url']=url('logos/'.$name);
+
+                $file = $request->file('image');
+                $name = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+
+                $path = Storage::disk('s3')->putFileAs(
+                    'logos',
+                    $file,
+                    $name
+                );
+
+                $updateData['logo_url'] = Storage::disk('s3')->url($path);
             }
 
-            // Update favicon
-            if($request->hasFile('favicon')){
-                if($logo->favicon_url){
-                    $old = public_path('logos/'.basename($logo->favicon_url));
-                    if(file_exists($old)) unlink($old);
+            /* ================= FAVICON (S3) ================= */
+            if ($request->hasFile('favicon')) {
+
+                // delete old favicon from S3
+                if ($logo->favicon_url) {
+                    $oldPath = parse_url($logo->favicon_url, PHP_URL_PATH);
+                    $oldPath = ltrim($oldPath, '/');
+                    Storage::disk('s3')->delete($oldPath);
                 }
-                $file=$request->file('favicon');
-                $name=time().'_'.uniqid().'.'.$file->getClientOriginalExtension();
-                $file->move(public_path('logos'),$name);
-                $updateData['favicon_url']=url('logos/'.$name);
+
+                $file = $request->file('favicon');
+                $name = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+
+                $path = Storage::disk('s3')->putFileAs(
+                    'logos',
+                    $file,
+                    $name
+                );
+
+                $updateData['favicon_url'] = Storage::disk('s3')->url($path);
             }
 
             $logo->update($updateData);
 
             return response()->json([
-                'status'=>true,
-                'message'=>'Logo updated successfully',
-                'data'=>new LogoResource($logo)
+                'status' => true,
+                'message' => 'Logo updated successfully',
+                'data'    => new LogoResource($logo)
             ]);
+        } catch (\Exception $e) {
 
-        } catch(Exception $e){
-            Log::error('Error updating logo: '.$e->getMessage());
+            Log::error('Error updating logo: ' . $e->getMessage());
+
             return response()->json([
-                'status'=>false,
-                'message'=>'Failed to update logo',
-                'error'=>$e->getMessage()
-            ],500);
+                'status'  => false,
+                'message' => 'Failed to update logo',
+                'error'   => $e->getMessage()
+            ], 500);
         }
     }
 
@@ -249,27 +299,27 @@ class LogoController extends Controller
      */
     public function destroy($ids)
     {
-        try{
+        try {
             $storeId = current_store_id();
-            if(!$storeId) return response()->json(['status'=>false,'message'=>'Store not selected'],400);
+            if (!$storeId) return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
 
-            $idArray=explode(',',$ids);
-            $logos=Logo::where('store_id',$storeId)->whereIn('id',$idArray)->get();
+            $idArray = explode(',', $ids);
+            $logos = Logo::where('store_id', $storeId)->whereIn('id', $idArray)->get();
 
-            if($logos->isEmpty()){
-                return response()->json(['status'=>false,'message'=>'No matching logos found'],404);
+            if ($logos->isEmpty()) {
+                return response()->json(['status' => false, 'message' => 'No matching logos found'], 404);
             }
 
-            foreach($logos as $logo){
-                if($logo->logo_url && file_exists(public_path('logos/'.basename($logo->logo_url)))) unlink(public_path('logos/'.basename($logo->logo_url)));
-                if($logo->favicon_url && file_exists(public_path('logos/'.basename($logo->favicon_url)))) unlink(public_path('logos/'.basename($logo->favicon_url)));
+            foreach ($logos as $logo) {
+                if ($logo->logo_url && file_exists(public_path('logos/' . basename($logo->logo_url)))) unlink(public_path('logos/' . basename($logo->logo_url)));
+                if ($logo->favicon_url && file_exists(public_path('logos/' . basename($logo->favicon_url)))) unlink(public_path('logos/' . basename($logo->favicon_url)));
                 $logo->delete();
             }
 
-            return response()->json(['status'=>true,'message'=>'Logo(s) deleted successfully']);
-        }catch(Exception $e){
-            Log::error('Error deleting logos: '.$e->getMessage());
-            return response()->json(['status'=>false,'message'=>'Failed to delete logos','error'=>$e->getMessage()],500);
+            return response()->json(['status' => true, 'message' => 'Logo(s) deleted successfully']);
+        } catch (Exception $e) {
+            Log::error('Error deleting logos: ' . $e->getMessage());
+            return response()->json(['status' => false, 'message' => 'Failed to delete logos', 'error' => $e->getMessage()], 500);
         }
     }
 }
