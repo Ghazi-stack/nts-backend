@@ -287,6 +287,12 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                     try {
                         $response = Http::timeout(10)->get($imageValue);
+
+                        logger()->info('IMAGE FETCH RESULT', [
+                            'url' => $imageValue,
+                            'status' => optional($response)->status(),
+                            'ok' => optional($response)->successful(),
+                        ]);
                         if (!$response->successful()) {
                             continue;
                         }
