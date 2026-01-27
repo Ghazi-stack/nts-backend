@@ -1855,15 +1855,28 @@ class ProductController extends Controller
         Cache::put($progressKey . "_total", $totalRows, 7200);
 
         // Queue the import and pass ignored fields
-        Excel::import(
-            new ProductImport(
-                $storeId,
-                $progressKey,
-                $fullPath,
-                $ignoredFields
-            ),
-            $storedFilePath
+        // Excel::import(
+        //     new ProductImport(
+        //         $storeId,
+        //         $progressKey,
+        //         $fullPath,
+        //         $ignoredFields
+        //     ),
+        //     $storedFilePath
+        // );
+
+        $ignoredJson = json_encode($ignoredFields);
+
+        $command = sprintf(
+            'php %s import:products %d %s %s %s > /dev/null 2>&1 &',
+            base_path('artisan'),
+            $storeId,
+            escapeshellarg($progressKey),
+            escapeshellarg($fullPath),
+            escapeshellarg($ignoredJson)
         );
+
+        exec($command);
 
         return response()->json([
             'success' => true,

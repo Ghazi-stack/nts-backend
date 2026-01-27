@@ -21,7 +21,8 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
-class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, ShouldQueue
+class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow
+// , ShouldQueue
 {
     protected $storeId;
     protected $progressKey;
