@@ -48,6 +48,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
     public function onRow(Row $row)
     {
 
+        Log::channel('single')->error('🔥 PRODUCT IMPORT ROW HIT');
         $traceId = 'IMG-' . uniqid();
 
         Log::channel('single')->info("[$traceId] onRow STARTED", [
