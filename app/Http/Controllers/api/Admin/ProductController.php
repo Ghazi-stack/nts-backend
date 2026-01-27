@@ -337,8 +337,8 @@ class ProductController extends Controller
                 'metaDescription' => 'nullable|string',
 
                 'purchasabilityStatus' => 'nullable|string',
-                'minPurchaseQuantity' => 'nullable|integer|min:1',
-                'maxPurchaseQuantity' => 'nullable|integer|min:1',
+                'minPurchaseQuantity' => 'nullable|integer',
+                'maxPurchaseQuantity' => 'nullable|integer',
 
                 'relatedProducts' => 'nullable|boolean',
                 'fixedShippingCost' => 'nullable|numeric',
