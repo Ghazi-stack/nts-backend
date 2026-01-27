@@ -47,6 +47,12 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
     public function onRow(Row $row)
     {
+
+        $traceId = 'IMG-' . uniqid();
+
+        Log::channel('single')->info("[$traceId] onRow STARTED", [
+            'row_index' => $row->getIndex(),
+        ]);
         $rowIndex = $row->getIndex();
 
         try {
@@ -251,6 +257,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             // IMAGE IMPORT (Product Image File - 1)
             // ----------------------------------------
 
+            Log::channel('single')->info("[$traceId] IMAGE SECTION ENTERED", [
+                'available_keys' => array_keys($data),
+            ]);
+
 
             $imageKeyOptions = [
                 'product image file - 1',
@@ -267,6 +277,11 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
             foreach ($data as $rawKey => $val) {
 
+            Log::channel('single')->info("[$traceId] IMAGE LOOP ITERATION", [
+                'raw_key' => $rawKey,
+                'raw_value' => $val,
+            ]);
+
                 if (!$val) continue;
 
                 // Normalize the incoming CSV header
@@ -274,6 +289,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                 // Process ONLY if it matches expected image headers
                 if (!in_array($keyNorm, $normalizedTargets)) {
+                    Log::channel('single')->warning("[$traceId] IMAGE HEADER SKIPPED", [
+                        'normalized_key' => $keyNorm,
+                        'targets' => $normalizedTargets,
+                    ]);
                     continue;
                 }
 
@@ -286,7 +305,17 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 if (filter_var($imageValue, FILTER_VALIDATE_URL)) {
 
                     try {
-                        $response = Http::timeout(10)->get($imageValue);
+                        $response = Http::timeout(30)
+                        ->retry(3, 500)
+                        ->withHeaders([
+                            'User-Agent' => 'Mozilla/5.0',
+                            'Accept' => 'image/*,*/*',
+                        ])
+                        ->withOptions([
+                            'verify' => false,
+                            'allow_redirects' => true,
+                        ])
+                        ->get($imageValue);
 
                         logger()->info('IMAGE FETCH RESULT', [
                             'url' => $imageValue,
