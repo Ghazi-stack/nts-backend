@@ -16,7 +16,7 @@ class ProductImageResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'path'      => $this->path,
+            'path'      => Storage::disk('s3')->url($this->path),
             'url'       => $this->url ?? Storage::disk('s3')->url($this->path),
             'isPrimary' => $this->is_primary,
             'store_id'  => $this->store_id,
