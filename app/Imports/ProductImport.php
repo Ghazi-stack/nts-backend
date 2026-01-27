@@ -306,24 +306,11 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 if (filter_var($imageValue, FILTER_VALIDATE_URL)) {
 
                     try {
-                        // $response = Http::timeout(30)
-                        // ->retry(3, 500)
-                        // ->withHeaders([
-                        //     'User-Agent' => 'Mozilla/5.0',
-                        //     'Accept' => 'image/*,*/*',
-                        // ])
-                        // ->withOptions([
-                        //     'verify' => false,
-                        //     'allow_redirects' => true,
-                        // ])
-                        // ->get($imageValue);
-
-                        $response = Http::timeout(60)
-                        ->retry(5, 2000)
+                        $response = Http::timeout(30)
+                        ->retry(3, 500)
                         ->withHeaders([
                             'User-Agent' => 'Mozilla/5.0',
                             'Accept' => 'image/*,*/*',
-                            'Referer' => parse_url($imageValue, PHP_URL_SCHEME) . '://' . parse_url($imageValue, PHP_URL_HOST),
                         ])
                         ->withOptions([
                             'verify' => false,
@@ -331,18 +318,12 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                         ])
                         ->get($imageValue);
 
-
                         logger()->info('IMAGE FETCH RESULT', [
                             'url' => $imageValue,
                             'status' => optional($response)->status(),
                             'ok' => optional($response)->successful(),
                         ]);
                         if (!$response->successful()) {
-                            Log::channel('single')->error('IMAGE FETCH FAILED IN QUEUE', [
-                                'url' => $imageValue,
-                                'status' => $response->status(),
-                            ]);
-                            throw new \Exception('Image fetch failed');
                             continue;
                         }
 

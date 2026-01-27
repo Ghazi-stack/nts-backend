@@ -1855,7 +1855,7 @@ class ProductController extends Controller
         Cache::put($progressKey . "_total", $totalRows, 7200);
 
         // Queue the import and pass ignored fields
-        Excel::queueImport(
+        Excel::import(
             new ProductImport(
                 $storeId,
                 $progressKey,
