@@ -32,7 +32,7 @@ class Product extends Model
         'min_purchase_quantity',
         'max_purchase_quantity',
         'related_products_enabled',
-        'related_products', 'condition_id', 'quantity','sold_count'
+        'related_products', 'condition_id', 'quantity','sold_count','condition'
     ];
 
     protected $casts = [
