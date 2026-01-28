@@ -17,7 +17,9 @@ class ImportProductsCommand extends Command
         {storeId}
         {progressKey}
         {filePath}
-        {ignoredFields?}';
+        {ignoredFields?}
+        {offset=0}
+        {limit=500}';
 
     /**
      * The console command description.
@@ -35,6 +37,8 @@ class ImportProductsCommand extends Command
         $progressKey   = $this->argument('progressKey');
         $filePath      = $this->argument('filePath');
         $ignoredFields = $this->argument('ignoredFields');
+        $offset        = (int) $this->argument('offset');
+        $limit         = (int) $this->argument('limit');
 
         $ignoredFields = $ignoredFields
             ? json_decode($ignoredFields, true)
@@ -45,7 +49,9 @@ class ImportProductsCommand extends Command
                 $storeId,
                 $progressKey,
                 $filePath,
-                $ignoredFields
+                $ignoredFields,
+                $offset,
+                $limit
             ),
             $filePath
         );

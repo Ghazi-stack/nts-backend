@@ -1867,16 +1867,39 @@ class ProductController extends Controller
 
         $ignoredJson = json_encode($ignoredFields);
 
-        $command = sprintf(
-            'php %s import:products %d %s %s %s > /dev/null 2>&1 &',
-            base_path('artisan'),
-            $storeId,
-            escapeshellarg($progressKey),
-            escapeshellarg($fullPath),
-            escapeshellarg($ignoredJson)
-        );
+        // $command = sprintf(
+        //     'php %s import:products %d %s %s %s > /dev/null 2>&1 &',
+        //     base_path('artisan'),
+        //     $storeId,
+        //     escapeshellarg($progressKey),
+        //     escapeshellarg($fullPath),
+        //     escapeshellarg($ignoredJson)
+        // );
 
-        exec($command);
+        // exec($command);
+
+        $batchSize = 500;
+        $ignoredJson = json_encode($ignoredFields);
+
+        for ($offset = 0; $offset < $totalRows; $offset += $batchSize) {
+
+            $logFile = storage_path("logs/import-{$progressKey}-{$offset}.log");
+
+            $command = sprintf(
+                'nohup php -d memory_limit=1024M -d max_execution_time=0 %s import:products %d %s %s %s %d %d >> %s 2>&1 &',
+                base_path('artisan'),
+                $storeId,
+                escapeshellarg($progressKey),
+                escapeshellarg($fullPath),
+                escapeshellarg($ignoredJson),
+                $offset,
+                $batchSize,
+                escapeshellarg($logFile)
+            );
+
+            exec($command);
+        }
+
 
         return response()->json([
             'success' => true,

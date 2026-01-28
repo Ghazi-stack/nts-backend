@@ -28,22 +28,27 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow
     protected $progressKey;
     protected $filePath;
     protected $ignoredFields = [];
+    protected int $offset;
+    protected int $limit;
 
     protected static $brandCache = [];
     protected static $categoryCache = [];
 
-    public function __construct($storeId, $progressKey, $filePath, $ignoredFields = [])
+    public function __construct($storeId, $progressKey, $filePath, $ignoredFields = [], int $offset = 0, int $limit = 500)
     {
         $this->storeId       = $storeId;
         $this->progressKey   = $progressKey;
         $this->filePath      = $filePath;
         $this->ignoredFields = array_map('strtolower', $ignoredFields);
+        $this->offset        = $offset;
+        $this->limit         = $limit;
+
     }
 
     public function chunkSize(): int
     {
         // Safe for t3.medium + Redis + swap
-        return 250;
+        return 25;
     }
 
     public function onRow(Row $row)
@@ -56,6 +61,18 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow
             'row_index' => $row->getIndex(),
         ]);
         $rowIndex = $row->getIndex();
+
+        if ($rowIndex === 1) {
+            return;
+        }
+
+        // Convert to zero-based data index
+        $dataIndex = $rowIndex - 2;
+
+        // Skip rows outside this batch
+        if ($dataIndex < $this->offset || $dataIndex >= ($this->offset + $this->limit)) {
+            return;
+        }
 
         try {
             $raw  = $row->toArray();
