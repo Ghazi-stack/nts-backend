@@ -65,6 +65,7 @@ class AuthController extends Controller
                     'password'      => bcrypt($request->password),
                     'userRole'      => 1,
                     'store_name'    => $request->storeName,
+                    'base_url'    => $request->base_url,
                     'business_size' => $request->businessSize,
                     'region'        => $request->region,
                     'store_id'      => null, // abhi null
@@ -74,7 +75,8 @@ class AuthController extends Controller
                 // ✅ Create Store with user_id
                 $store = Store::create([
                     'name'    => $request->storeName,
-                    'user_id' => $user->id, // 👈 yahan user id save ho jayegi
+                    'user_id' => $user->id,
+                    'base_url' =>$request->base_url, 
                 ]);
 
                 // ✅ Update user with store_id
