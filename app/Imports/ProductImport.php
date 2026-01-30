@@ -20,6 +20,7 @@ use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Aws\S3\Exception\S3Exception;
 
 class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, ShouldQueue
 {
@@ -426,14 +427,42 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                             'bytes' => strlen($response->body()),
                         ]);
 
-                        Storage::disk('s3')->put(
+                        // Storage::disk('s3')->put(
+                        //     $savedPath,
+                        //     file_get_contents($localPath),
+                        //     [
+                        //         'visibility' => 'public',
+                        //         'ContentType' => mime_content_type($localPath) ?: 'image/jpeg',
+                        //     ]
+                        // );
+
+                        $tmpDir = storage_path('app/tmp');
+
+                        if (!is_dir($tmpDir)) {
+                            mkdir($tmpDir, 0755, true);
+                        }
+
+                        $tmpPath = $tmpDir . '/' . uniqid('img_');
+
+                        file_put_contents($tmpPath, $response->body());
+
+                        $uploaded = Storage::disk('s3')->put(
                             $savedPath,
-                            file_get_contents($localPath),
+                            fopen($tmpPath, 'r'),
                             [
-                                'visibility' => 'public',
-                                'ContentType' => mime_content_type($localPath) ?: 'image/jpeg',
+                                'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
                             ]
                         );
+
+                        Log::info("[$traceId] S3 PUT RESULT", [
+                            'path' => $savedPath,
+                            'result' => $uploaded,
+                            'bucket' => config('filesystems.disks.s3.bucket'),
+                            'region' => config('filesystems.disks.s3.region'),
+                        ]);
+
+
+                        @unlink($tmpPath);
                     }
                 }
 
