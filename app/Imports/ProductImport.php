@@ -378,14 +378,21 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                         file_put_contents($tmpPath, $response->body());
 
-                        Storage::disk('s3')->put(
+                        $uploaded = Storage::disk('s3')->put(
                             $savedPath,
                             fopen($tmpPath, 'r'),
                             [
-                                'visibility'  => 'public',
                                 'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
                             ]
                         );
+
+                        Log::info("[$traceId] S3 PUT RESULT", [
+                            'path' => $savedPath,
+                            'result' => $uploaded,
+                            'bucket' => config('filesystems.disks.s3.bucket'),
+                            'region' => config('filesystems.disks.s3.region'),
+                        ]);
+
 
                         @unlink($tmpPath);
 
