@@ -21,13 +21,14 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
-class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow
-// , ShouldQueue
+class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, ShouldQueue
 {
     protected $storeId;
     protected $progressKey;
     protected $filePath;
     protected $ignoredFields = [];
+    public $timeout = 0;
+    public $tries = 1;
 
     protected static $brandCache = [];
     protected static $categoryCache = [];
@@ -345,7 +346,11 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow
 
                         Storage::disk('s3')->put(
                             $savedPath,
-                            $response->body()
+                            $response->body(),
+                            [
+                                'visibility' => 'public',
+                                'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
+                            ]
                         );
                     } catch (\Throwable $e) {
                         continue;
@@ -371,7 +376,11 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow
 
                         Storage::disk('s3')->put(
                             $savedPath,
-                            file_get_contents($localPath)
+                            file_get_contents($localPath),
+                            [
+                                'visibility' => 'public',
+                                'ContentType' => mime_content_type($localPath) ?: 'image/jpeg',
+                            ]
                         );
                     }
                 }
