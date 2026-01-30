@@ -53,9 +53,9 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
         Log::channel('single')->error('🔥 PRODUCT IMPORT ROW HIT');
         $traceId = 'IMG-' . uniqid();
 
-        Log::channel('single')->info("[$traceId] onRow STARTED", [
-            'row_index' => $row->getIndex(),
-        ]);
+        // Log::channel('single')->info("[$traceId] onRow STARTED", [
+        //     'row_index' => $row->getIndex(),
+        // ]);
         $rowIndex = $row->getIndex();
 
         try {
@@ -260,9 +260,9 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             // IMAGE IMPORT (Product Image File - 1)
             // ----------------------------------------
 
-            Log::channel('single')->info("[$traceId] IMAGE SECTION ENTERED", [
-                'available_keys' => array_keys($data),
-            ]);
+            // Log::channel('single')->info("[$traceId] IMAGE SECTION ENTERED", [
+            //     'available_keys' => array_keys($data),
+            // ]);
 
 
             $imageKeyOptions = [
@@ -280,10 +280,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
             foreach ($data as $rawKey => $val) {
 
-            Log::channel('single')->info("[$traceId] IMAGE LOOP ITERATION", [
-                'raw_key' => $rawKey,
-                'raw_value' => $val,
-            ]);
+            // Log::channel('single')->info("[$traceId] IMAGE LOOP ITERATION", [
+            //     'raw_key' => $rawKey,
+            //     'raw_value' => $val,
+            // ]);
 
                 if (!$val) continue;
 
@@ -292,10 +292,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                 // Process ONLY if it matches expected image headers
                 if (!in_array($keyNorm, $normalizedTargets)) {
-                    Log::channel('single')->warning("[$traceId] IMAGE HEADER SKIPPED", [
-                        'normalized_key' => $keyNorm,
-                        'targets' => $normalizedTargets,
-                    ]);
+                    // Log::channel('single')->warning("[$traceId] IMAGE HEADER SKIPPED", [
+                    //     'normalized_key' => $keyNorm,
+                    //     'targets' => $normalizedTargets,
+                    // ]);
                     continue;
                 }
 
@@ -354,16 +354,39 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                             . '-' . time() . '-' . uniqid() . '.' . $extension;
 
                         $savedPath = "product_images/{$product->id}/{$fileName}";
+                        
+                        Log::info("[$traceId] IMAGE SIZE", [
+                            'bytes' => strlen($response->body()),
+                        ]);
+
+                        // Storage::disk('s3')->put(
+                        //     $savedPath,
+                        //     $response->body(),
+                        //     [
+                        //         'visibility' => 'public',
+                        //         'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
+                        //     ]
+                        // );
+
+                        $tmpPath = storage_path('app/tmp/' . uniqid('img_'));
+
+                        file_put_contents($tmpPath, $response->body());
 
                         Storage::disk('s3')->put(
                             $savedPath,
-                            $response->body(),
+                            fopen($tmpPath, 'r'),
                             [
-                                'visibility' => 'public',
+                                'visibility'  => 'public',
                                 'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
                             ]
                         );
+
+                        @unlink($tmpPath);
+
                     } catch (\Throwable $e) {
+                        Log::error("[$traceId] IMAGE UPLOAD FAILED", [
+                            'message' => $e->getMessage(),
+                        ]);
                         continue;
                     }
                 }
@@ -384,6 +407,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                         ) . '-' . time() . '-' . uniqid() . '.' . $extension;
 
                         $savedPath = "product_images/{$product->id}/{$fileName}";
+
+                        Log::info("[$traceId] IMAGE SIZE", [
+                            'bytes' => strlen($response->body()),
+                        ]);
 
                         Storage::disk('s3')->put(
                             $savedPath,
