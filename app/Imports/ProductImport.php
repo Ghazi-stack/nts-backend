@@ -325,7 +325,18 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                             'status' => optional($response)->status(),
                             'ok' => optional($response)->successful(),
                         ]);
-                        if (!$response->successful()) {
+                        if (
+                            !$response->successful() ||
+                            !str_starts_with(
+                                $response->header('Content-Type'),
+                                'image/'
+                            )
+                        ) {
+                            Log::warning('IMAGE SKIPPED (INVALID RESPONSE)', [
+                                'url' => $imageValue,
+                                'status' => $response->status(),
+                                'content_type' => $response->header('Content-Type'),
+                            ]);
                             continue;
                         }
 
