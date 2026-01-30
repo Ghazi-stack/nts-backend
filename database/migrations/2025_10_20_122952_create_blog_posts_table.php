@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('store_id')->index();
             $table->string('title')->nullable();
+            $table->string('slug')->nullable();
             $table->longText('body')->nullable();
             $table->string('author')->nullable();
             $table->string('tags')->nullable(); // comma-separated or JSON

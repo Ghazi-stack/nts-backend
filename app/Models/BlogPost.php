@@ -12,6 +12,7 @@ class BlogPost extends Model
     protected $fillable = [
         'store_id',
         'title',
+        'slug',
         'body',
         'author',
         'tags',

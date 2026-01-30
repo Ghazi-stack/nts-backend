@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api\Admin;
 use Exception;
 use App\Models\BlogPost;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BlogPostResource;
@@ -51,7 +52,6 @@ class BlogPostController extends Controller
                     'totalPages' => $posts->lastPage(),
                 ]
             ]);
-
         } catch (Exception $e) {
             Log::error('Error fetching published blog posts: ' . $e->getMessage());
             return response()->json([
@@ -65,7 +65,7 @@ class BlogPostController extends Controller
     /**
      * Show a single blog post by ID.
      */
-    public function show($id)
+    public function show($slug)
     {
         try {
             $storeId = current_store_id();
@@ -77,22 +77,30 @@ class BlogPostController extends Controller
                 ], 400);
             }
 
-            $post = BlogPost::where('store_id', $storeId)->findOrFail($id);
+            $post = BlogPost::where('store_id', $storeId)
+                ->where('slug', $slug)
+                ->firstOrFail();
 
             return response()->json([
                 'status' => true,
                 'message' => 'Blog post retrieved successfully',
                 'data' => new BlogPostResource($post),
             ]);
-        } catch (Exception $e) {
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Blog post not found'
+            ], 404);
+        } catch (\Exception $e) {
             Log::error('Error fetching blog post: ' . $e->getMessage());
             return response()->json([
                 'status' => false,
-                'message' => 'Blog post not found',
+                'message' => 'Something went wrong',
                 'error' => $e->getMessage()
-            ], 404);
+            ], 500);
         }
     }
+
 
     /**
      * Store a newly created blog post.
@@ -139,6 +147,7 @@ class BlogPostController extends Controller
             $post = BlogPost::create([
                 'store_id' => $storeId,
                 'title' => $validated['title'] ?? null,
+                'slug' => Str::slug($validated['title']) . '-' . uniqid(),
                 'body' => $validated['body'] ?? null,
                 'author' => $validated['author'] ?? null,
                 'tags' => $validated['tags'] ?? null,
@@ -146,7 +155,7 @@ class BlogPostController extends Controller
                 'post_url' => $validated['post_url'] ?? null,
                 'meta_description' => $validated['meta_description'] ?? null,
                 'is_draft' => filter_var($validated['is_draft'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
-                
+
             ]);
 
             return response()->json([
@@ -154,7 +163,6 @@ class BlogPostController extends Controller
                 'message' => 'Blog post created successfully',
                 'data' => new BlogPostResource($post),
             ], 201);
-
         } catch (Exception $e) {
             Log::error('Error creating blog post: ' . $e->getMessage());
             return response()->json([
@@ -168,23 +176,23 @@ class BlogPostController extends Controller
     {
         try {
             $storeId = current_store_id();
-        
+
             if (!$storeId) {
                 return response()->json([
                     'status' => false,
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
-        
+
             $post = BlogPost::where('store_id', $storeId)->findOrFail($id);
-        
+
             // ✅ Merge camelCase → snake_case
             $request->merge([
                 'post_url' => $request->postUrl,
                 'meta_description' => $request->metaDescription,
-                'is_draft' => $request->isDraft, 
+                'is_draft' => $request->isDraft,
             ]);
-        
+
             $validated = $request->validate([
                 'title' => 'nullable',
                 'body' => 'nullable',
@@ -195,22 +203,23 @@ class BlogPostController extends Controller
                 'meta_description' => 'nullable',
                 'is_draft' => 'nullable',
             ]);
-        
+
             // ✅ Handle new thumbnail upload
             if ($request->hasFile('thumbnail')) {
                 // Delete old file if exists
                 if ($post->thumbnail_image && file_exists(public_path('blog_images/' . $post->thumbnail_image))) {
                     unlink(public_path('blog_images/' . $post->thumbnail_image));
                 }
-            
+
                 $file = $request->file('thumbnail');
                 $thumbnailName = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                 $file->move(public_path('blog_images'), $thumbnailName);
                 $validated['thumbnail_image'] = $thumbnailName;
             }
-        
+
             $post->update([
                 'title' => $validated['title'] ?? $post->title,
+                'slug' => Str::slug($validated['title'] ?? $post->title) . '-' . uniqid(),
                 'body' => $validated['body'] ?? $post->body,
                 'author' => $validated['author'] ?? $post->author,
                 'tags' => $validated['tags'] ?? $post->tags,
@@ -218,16 +227,15 @@ class BlogPostController extends Controller
                 'post_url' => $validated['post_url'] ?? $post->post_url,
                 'meta_description' => $validated['meta_description'] ?? $post->meta_description,
                 'is_draft' => isset($validated['is_draft'])
-                ? (filter_var($validated['is_draft'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0)
-                : $post->is_draft,
+                    ? (filter_var($validated['is_draft'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0)
+                    : $post->is_draft,
             ]);
-        
+
             return response()->json([
                 'status' => true,
                 'message' => $post->is_draft ? 'Blog draft updated successfully' : 'Blog post updated successfully',
                 'data' => new BlogPostResource($post),
             ]);
-        
         } catch (Exception $e) {
             Log::error('Error updating blog post: ' . $e->getMessage());
             return response()->json([
@@ -253,8 +261,8 @@ class BlogPostController extends Controller
             $page = (int) $request->query('page', 1);
 
             $query = BlogPost::where('store_id', $storeId)
-                             ->where('is_draft', true)
-                             ->orderBy('id', 'desc');
+                ->where('is_draft', true)
+                ->orderBy('id', 'desc');
 
             $drafts = $query->paginate($perPage, ['*'], 'page', $page);
 
@@ -270,7 +278,6 @@ class BlogPostController extends Controller
                     'totalPages' => $drafts->lastPage(),
                 ]
             ]);
-
         } catch (Exception $e) {
             Log::error('Error fetching draft posts: ' . $e->getMessage());
             return response()->json([

@@ -52,7 +52,7 @@ class ProductResource extends JsonResource
             'taxClass' => $this->tax_class,
             'taxProviderCode' => $this->tax_provider_code,
             'brandId' => (int) $this->brand_id,
-            'categoryIds' =>  $this->category_id ? [$this->category_id] : [],
+            'categoryIds' => $this->categories->pluck('id')->map(fn($id) => (int)$id),
             'brand' => new BrandResource($this->whenLoaded('brand')),
             //'categories' => CategoryResource::collection($this->whenLoaded('categories')),
             'dimensions' => [

@@ -527,7 +527,7 @@ class ProductController extends Controller
                 'name' => 'nullable|string|max:255',
                 'sku' => 'nullable|string|unique:products,sku,' . $product->id,
                 'brandId' => 'required|exists:brands,id',
-                'categoryIds' => 'required|array|min:1',
+                'categoryIds' => 'required|array',
                 'categoryIds.*' => 'exists:categories,id',
                 'condition' => 'nullable|string',
                 'price' => 'nullable',
@@ -831,6 +831,7 @@ class ProductController extends Controller
                         'slug' => isset($fields['name']) ? Str::slug($fields['name']) . '-' . uniqid() : $product->slug,
                         'sku' => $fields['sku'] ?? $product->sku,
                         'brand_id' => $fields['brandId'] ?? $product->brand_id,
+                        'category_id' => $fields['categoryIds'] ?? $product->category_id,
                         'condition' => $fields['condition'] ?? $product->condition,
                         'price' => $fields['price'] ?? $product->price,
                         'quantity' => $fields['quantity'] ?? $product->quantity,
@@ -863,9 +864,9 @@ class ProductController extends Controller
 
                     // ✅ Sync Categories
                     if (!empty($fields['categoryIds']) && is_array($fields['categoryIds'])) {
-                        $product->categories()->sync($fields['categoryIds']);
+                        $categoryIds = array_map(fn($id) => (int)$id, $fields['categoryIds']);
+                        $product->categories()->sync($categoryIds);
                     }
-
                     // ✅ Update Content (description, warranty, etc.)
                     if (isset($fields['description']) || isset($fields['warranty']) || isset($fields['availabilityText']) || isset($fields['templateLayout'])) {
                         $content = $product->content ?: new ProductContent([
