@@ -358,9 +358,9 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                         $savedPath = "product_images/{$product->id}/{$fileName}";
                         $uploaded  = false;
                         
-                        Log::info("[$traceId] IMAGE SIZE", [
-                            'bytes' => strlen($response->body()),
-                        ]);
+                        // Log::info("[$traceId] IMAGE SIZE", [
+                        //     'bytes' => strlen($response->body()),
+                        // ]);
 
                         // Storage::disk('s3')->put(
                         //     $savedPath,
