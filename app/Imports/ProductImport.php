@@ -302,6 +302,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                 $imageValue = trim($val);
                 $savedPath  = null;
+                $uploaded = false;
 
                 /* =====================================================
        (A) URL IMAGE → DIRECT S3 UPLOAD
@@ -355,6 +356,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                             . '-' . time() . '-' . uniqid() . '.' . $extension;
 
                         $savedPath = "product_images/{$product->id}/{$fileName}";
+                        $uploaded  = false;
                         
                         Log::info("[$traceId] IMAGE SIZE", [
                             'bytes' => strlen($response->body()),
@@ -379,13 +381,18 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                         file_put_contents($tmpPath, $response->body());
 
+                        $stream = fopen($tmpPath, 'r');
+
                         $uploaded = Storage::disk('s3')->put(
                             $savedPath,
-                            fopen($tmpPath, 'r'),
+                            $stream,
                             [
                                 'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
                             ]
                         );
+
+                        fclose($stream);
+
 
                         Log::info("[$traceId] S3 PUT RESULT", [
                             'path' => $savedPath,
@@ -469,7 +476,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 /* =====================================================
        (C) SAVE IMAGE RECORD (UNCHANGED LOGIC)
     ===================================================== */
-                if ($savedPath) {
+                if ($uploaded === true) {
 
                     ProductImage::updateOrCreate(
                         [
