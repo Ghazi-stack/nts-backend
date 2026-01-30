@@ -368,7 +368,13 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                         //     ]
                         // );
 
-                        $tmpPath = storage_path('app/tmp/' . uniqid('img_'));
+                        $tmpDir = storage_path('app/tmp');
+
+                        if (!is_dir($tmpDir)) {
+                            mkdir($tmpDir, 0755, true);
+                        }
+
+                        $tmpPath = $tmpDir . '/' . uniqid('img_');
 
                         file_put_contents($tmpPath, $response->body());
 
@@ -382,6 +388,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                         );
 
                         @unlink($tmpPath);
+
 
                     } catch (\Throwable $e) {
                         Log::error("[$traceId] IMAGE UPLOAD FAILED", [
