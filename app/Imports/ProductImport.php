@@ -20,6 +20,7 @@ use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Aws\S3\Exception\S3Exception;
 
 class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, ShouldQueue
 {
@@ -53,9 +54,9 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
         Log::channel('single')->error('🔥 PRODUCT IMPORT ROW HIT');
         $traceId = 'IMG-' . uniqid();
 
-        Log::channel('single')->info("[$traceId] onRow STARTED", [
-            'row_index' => $row->getIndex(),
-        ]);
+        // Log::channel('single')->info("[$traceId] onRow STARTED", [
+        //     'row_index' => $row->getIndex(),
+        // ]);
         $rowIndex = $row->getIndex();
 
         try {
@@ -260,9 +261,9 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             // IMAGE IMPORT (Product Image File - 1)
             // ----------------------------------------
 
-            Log::channel('single')->info("[$traceId] IMAGE SECTION ENTERED", [
-                'available_keys' => array_keys($data),
-            ]);
+            // Log::channel('single')->info("[$traceId] IMAGE SECTION ENTERED", [
+            //     'available_keys' => array_keys($data),
+            // ]);
 
 
             $imageKeyOptions = [
@@ -280,10 +281,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
             foreach ($data as $rawKey => $val) {
 
-            Log::channel('single')->info("[$traceId] IMAGE LOOP ITERATION", [
-                'raw_key' => $rawKey,
-                'raw_value' => $val,
-            ]);
+            // Log::channel('single')->info("[$traceId] IMAGE LOOP ITERATION", [
+            //     'raw_key' => $rawKey,
+            //     'raw_value' => $val,
+            // ]);
 
                 if (!$val) continue;
 
@@ -292,15 +293,16 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                 // Process ONLY if it matches expected image headers
                 if (!in_array($keyNorm, $normalizedTargets)) {
-                    Log::channel('single')->warning("[$traceId] IMAGE HEADER SKIPPED", [
-                        'normalized_key' => $keyNorm,
-                        'targets' => $normalizedTargets,
-                    ]);
+                    // Log::channel('single')->warning("[$traceId] IMAGE HEADER SKIPPED", [
+                    //     'normalized_key' => $keyNorm,
+                    //     'targets' => $normalizedTargets,
+                    // ]);
                     continue;
                 }
 
                 $imageValue = trim($val);
                 $savedPath  = null;
+                $uploaded = false;
 
                 /* =====================================================
        (A) URL IMAGE → DIRECT S3 UPLOAD
@@ -354,16 +356,59 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                             . '-' . time() . '-' . uniqid() . '.' . $extension;
 
                         $savedPath = "product_images/{$product->id}/{$fileName}";
+                        $uploaded  = false;
+                        
+                        // Log::info("[$traceId] IMAGE SIZE", [
+                        //     'bytes' => strlen($response->body()),
+                        // ]);
 
-                        Storage::disk('s3')->put(
+                        // Storage::disk('s3')->put(
+                        //     $savedPath,
+                        //     $response->body(),
+                        //     [
+                        //         'visibility' => 'public',
+                        //         'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
+                        //     ]
+                        // );
+
+                        $tmpDir = storage_path('app/tmp');
+
+                        if (!is_dir($tmpDir)) {
+                            mkdir($tmpDir, 0755, true);
+                        }
+
+                        $tmpPath = $tmpDir . '/' . uniqid('img_');
+
+                        file_put_contents($tmpPath, $response->body());
+
+                        $stream = fopen($tmpPath, 'r');
+
+                        $uploaded = Storage::disk('s3')->put(
                             $savedPath,
-                            $response->body(),
+                            $stream,
                             [
-                                'visibility' => 'public',
                                 'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
                             ]
                         );
+
+                        fclose($stream);
+
+
+                        Log::info("[$traceId] S3 PUT RESULT", [
+                            'path' => $savedPath,
+                            'result' => $uploaded,
+                            'bucket' => config('filesystems.disks.s3.bucket'),
+                            'region' => config('filesystems.disks.s3.region'),
+                        ]);
+
+
+                        @unlink($tmpPath);
+
+
                     } catch (\Throwable $e) {
+                        Log::error("[$traceId] IMAGE UPLOAD FAILED", [
+                            'message' => $e->getMessage(),
+                        ]);
                         continue;
                     }
                 }
@@ -385,21 +430,53 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                         $savedPath = "product_images/{$product->id}/{$fileName}";
 
-                        Storage::disk('s3')->put(
+                        Log::info("[$traceId] IMAGE SIZE", [
+                            'bytes' => strlen($response->body()),
+                        ]);
+
+                        // Storage::disk('s3')->put(
+                        //     $savedPath,
+                        //     file_get_contents($localPath),
+                        //     [
+                        //         'visibility' => 'public',
+                        //         'ContentType' => mime_content_type($localPath) ?: 'image/jpeg',
+                        //     ]
+                        // );
+
+                        $tmpDir = storage_path('app/tmp');
+
+                        if (!is_dir($tmpDir)) {
+                            mkdir($tmpDir, 0755, true);
+                        }
+
+                        $tmpPath = $tmpDir . '/' . uniqid('img_');
+
+                        file_put_contents($tmpPath, $response->body());
+
+                        $uploaded = Storage::disk('s3')->put(
                             $savedPath,
-                            file_get_contents($localPath),
+                            fopen($tmpPath, 'r'),
                             [
-                                'visibility' => 'public',
-                                'ContentType' => mime_content_type($localPath) ?: 'image/jpeg',
+                                'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
                             ]
                         );
+
+                        Log::info("[$traceId] S3 PUT RESULT", [
+                            'path' => $savedPath,
+                            'result' => $uploaded,
+                            'bucket' => config('filesystems.disks.s3.bucket'),
+                            'region' => config('filesystems.disks.s3.region'),
+                        ]);
+
+
+                        @unlink($tmpPath);
                     }
                 }
 
                 /* =====================================================
        (C) SAVE IMAGE RECORD (UNCHANGED LOGIC)
     ===================================================== */
-                if ($savedPath) {
+                if ($uploaded === true) {
 
                     ProductImage::updateOrCreate(
                         [
