@@ -391,6 +391,10 @@ Route::prefix('web')->group(function () {
         Route::post('/submit', 'store');          // Submit bulk inquiry
     });
 
+    Route::prefix('store-setting')->controller(StoreSettingController::class)->group(function () {
+        Route::get('/get-store-setting', 'index');
+    });
+
     // 💳 Stripe
     Route::post('/stripe/pay', [StripePaymentController::class, 'pay']);
 
