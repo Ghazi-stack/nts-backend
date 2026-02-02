@@ -37,20 +37,23 @@ class OrderResource extends JsonResource
                 ? new BillingInformationResource($this->billingInformation)
                 : null,
             'notes' => $this->whenLoaded('notes', function () {
-                    return $this->notes->pluck('note');
-                }),
+                return $this->notes->pluck('note');
+            }),
             // ✅ Only product details here
             // 'products' => ProductResource::collection(
             //     $this->whenLoaded('items', fn() => $this->items->pluck('product'))
             // ),
             'products' => $this->whenLoaded('items', function () {
-                    return $this->items->map(function ($item) {
+                return $this->items
+                    ->filter(fn($item) => $item->product) // ✅ NULL product remove
+                    ->map(function ($item) {
                         return (new ProductResource($item->product))->additional([
                             'quantity' => $item->quantity,
                             'price' => $item->price,
                         ]);
                     });
-                }),
+            }),
+
             // 'items'    => OrderItemResource::collection($this->whenLoaded('items')),
             'customer' => new CustomerResource($this->whenLoaded('customer')),
             'shippingDestinations' => ShippingDestinationResource::collection($this->whenLoaded('shippingDestinations')),
