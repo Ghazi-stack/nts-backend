@@ -1493,23 +1493,60 @@ class ProductController extends Controller
                 ], 400);
             }
 
-            // 🔹 Last 7 days products (ONLY products table)
-            $products = Product::where('store_id', $storeId)
-                ->whereBetween('created_at', [
-                    Carbon::now()->subWeek(),
-                    Carbon::now()
-                ])
-                ->with([
-                    'categories',
-                    'brand',
-                    'images',
-                    'reviews.user',
-                    'content',
-                    'identifiers',
-                    'seo'
-                ])
-                ->latest()
-                ->get();
+            $cacheKey = "last_week_products_store_{$storeId}";
+
+            $products = Cache::remember($cacheKey, 300, function () use ($storeId) {
+
+                // 🔥 STEP 1: FAST PRODUCT IDS
+                $productIds = Product::where('store_id', $storeId)
+                    ->where('created_at', '>=', Carbon::now()->subWeek())
+                    ->orderByDesc('id')
+                    ->pluck('id');
+
+                if ($productIds->isEmpty()) {
+                    return collect();
+                }
+
+                // 🔥 STEP 2: LOAD FULL DATA (OPTIMIZED)
+                return Product::whereIn('id', $productIds)
+                    ->with([
+                        // categories (LIMIT recursion)
+                        'categories:id,name,parent_id',
+                        'categories.parent:id,name,parent_id',
+
+                        // brand
+                        'brand:id,name,logo',
+
+                        // images
+                        'images:id,product_id,path,is_primary',
+
+                        // reviews (LIMITED)
+                        'reviews' => function ($q) {
+                            $q->select(
+                                'id',
+                                'product_id',
+                                'user_id',
+                                'rating',
+                                'comment',
+                                'created_at'
+                            )
+                                ->latest()
+                                ->limit(10);
+                        },
+                        'reviews.user:id,name',
+
+                        // content
+                        'content:product_id,description,warranty',
+
+                        // identifiers
+                        'identifiers:product_id,mpn,upc,gtin',
+
+                        // seo
+                        'seo:product_id,page_title,meta_description'
+                    ])
+                    ->orderByDesc('id')
+                    ->get();
+            });
 
             return response()->json([
                 'status' => true,
