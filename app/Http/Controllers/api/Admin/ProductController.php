@@ -221,7 +221,7 @@ class ProductController extends Controller
             $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
                 return Product::where('sku', $sku)
                     ->where('store_id', $storeId)
-                    ->select('id', 'name', 'sku', 'price', 'brand_id', 'category_id')  // essential only
+                    ->select('id', 'name', 'sku', 'price', 'brand_id', 'category_id','dimensions')  // essential only
                     ->with([
                         'brand:id,name,logo',
                         'images:id,product_id,path,is_primary',
