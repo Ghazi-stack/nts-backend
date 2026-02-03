@@ -221,7 +221,7 @@ class ProductController extends Controller
             $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
                 return Product::where('sku', $sku)
                     ->where('store_id', $storeId)
-                    ->select('id', 'name', 'sku', 'price', 'brand_id', 'category_id','dimensions')  // essential only
+                    ->select('id', 'name', 'sku', 'price', 'brand_id', 'category_id', 'dimensions')  // essential only
                     ->with([
                         'brand:id,name,logo',
                         'images:id,product_id,path,is_primary',
@@ -352,6 +352,21 @@ class ProductController extends Controller
 
                 'taxClass' => 'nullable|string',
                 'taxProviderCode' => 'nullable|string',
+
+                'objectType' => 'nullable|string',
+                'useProductName' => 'nullable|boolean',
+                'graphDescription' => 'nullable|boolean',
+                'useThumbnail' => 'nullable|boolean',
+                'dontUse' => 'nullable|boolean',
+                'manageCustoms' => 'nullable|boolean',
+
+                'commodityDescription' => 'nullable|string',
+                'countryOfOrigin' => 'nullable|string',
+
+                'hsCodes' => 'nullable|array',
+                'hsCodes.*.country' => 'nullable|string',
+                'hsCodes.*.code' => 'nullable|string',
+
             ]);
 
             // ---------------- PRODUCT ----------------
@@ -389,6 +404,19 @@ class ProductController extends Controller
                 'stop_processing_rules' => $validated['stopProcessingRules'] ?? false,
                 'tax_class' => $validated['taxClass'] ?? '',
                 'tax_provider_code' => $validated['taxProviderCode'] ?? '',
+
+                'object_type' => $validated['objectType'] ?? null,
+                'use_product_name' => $validated['useProductName'] ?? false,
+                'graph_description' => $validated['graphDescription'] ?? false,
+                'use_thumbnail' => $validated['useThumbnail'] ?? false,
+                'dont_use' => $validated['dontUse'] ?? false,
+                'manage_customs' => $validated['manageCustoms'] ?? false,
+
+                'commodity_description' => $validated['commodityDescription'] ?? null,
+                'country_of_origin' => $validated['countryOfOrigin'] ?? null,
+
+                'hs_codes' => $validated['hsCodes'] ?? [],
+
             ]);
 
             $product->categories()->sync($validated['categoryIds']);
@@ -574,6 +602,20 @@ class ProductController extends Controller
                 'stopProcessingRules' => 'nullable|boolean',
                 'taxClass' => 'nullable|string',
                 'taxProviderCode' => 'nullable|string',
+
+                'objectType' => 'nullable|string',
+                'useProductName' => 'nullable|boolean',
+                'graphDescription' => 'nullable|boolean',
+                'useThumbnail' => 'nullable|boolean',
+                'dontUse' => 'nullable|boolean',
+                'manageCustoms' => 'nullable|boolean',
+
+                'commodityDescription' => 'nullable|string',
+                'countryOfOrigin' => 'nullable|string',
+
+                'hsCodes' => 'nullable|array',
+                'hsCodes.*.country' => 'nullable|string',
+                'hsCodes.*.code' => 'nullable|string',
             ]);
 
             $product->update([
@@ -610,6 +652,18 @@ class ProductController extends Controller
                 'stop_processing_rules' => $validated['stopProcessingRules'] ?? false,
                 'tax_class' => $validated['taxClass'] ?? '',
                 'tax_provider_code' => $validated['taxProviderCode'] ?? '',
+
+                'object_type' => $validated['objectType'] ?? null,
+                'use_product_name' => $validated['useProductName'] ?? false,
+                'graph_description' => $validated['graphDescription'] ?? false,
+                'use_thumbnail' => $validated['useThumbnail'] ?? false,
+                'dont_use' => $validated['dontUse'] ?? false,
+                'manage_customs' => $validated['manageCustoms'] ?? false,
+
+                'commodity_description' => $validated['commodityDescription'] ?? null,
+                'country_of_origin' => $validated['countryOfOrigin'] ?? null,
+
+                'hs_codes' => $validated['hsCodes'] ?? [],
             ]);
 
             // Sync many-to-many categories

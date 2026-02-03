@@ -22,17 +22,55 @@ class Product extends Model
 {
     use HasFactory;
     protected $fillable = [
-        'name', 'slug', 'sku', 'price', 'brand_id','category_id',
-        'dimensions', 'track_inventory', 'current_stock', 'low_stock',
-        'is_featured', 'show_condition', 'sort_order', 'search_keywords',
-        'visible_on_storefront', 'custom_fields', 'free_shipping','price',
-        'product_type', 'option_set', 'option_set_align',
-        'cost_price', 'sale_price', 'fixed_shipping_cost',
-        'allow_purchase', 'stop_processing_rules', 'tax_class', 'tax_provider_code','item_type','store_id','msrp', 'purchasability_status',
+        'name',
+        'slug',
+        'sku',
+        'price',
+        'brand_id',
+        'category_id',
+        'dimensions',
+        'track_inventory',
+        'current_stock',
+        'low_stock',
+        'is_featured',
+        'show_condition',
+        'sort_order',
+        'search_keywords',
+        'visible_on_storefront',
+        'custom_fields',
+        'free_shipping',
+        'price',
+        'product_type',
+        'option_set',
+        'option_set_align',
+        'cost_price',
+        'sale_price',
+        'fixed_shipping_cost',
+        'allow_purchase',
+        'stop_processing_rules',
+        'tax_class',
+        'tax_provider_code',
+        'item_type',
+        'store_id',
+        'msrp',
+        'purchasability_status',
         'min_purchase_quantity',
         'max_purchase_quantity',
         'related_products_enabled',
-        'related_products', 'condition_id', 'quantity','sold_count','condition'
+        'related_products',
+        'condition_id',
+        'quantity',
+        'sold_count',
+        'object_type',
+        'use_product_name',
+        'graph_description',
+        'use_thumbnail',
+        'dont_use',
+        'manage_customs',
+        'hs_codes',
+        'commodity_description',
+        'country_of_origin',
+        'condition'
     ];
 
     protected $casts = [
@@ -49,10 +87,16 @@ class Product extends Model
         'related_products_enabled' => 'boolean',
         'min_purchase_quantity' => 'integer',
         'max_purchase_quantity' => 'integer',
+        'hs_codes' => 'array',
+        'use_product_name' => 'boolean',
+        'graph_description' => 'boolean',
+        'use_thumbnail' => 'boolean',
+        'dont_use' => 'boolean',
+        'manage_customs' => 'boolean',
     ];
 
-      // Relationships
-       public function brand()
+    // Relationships
+    public function brand()
     {
         return $this->belongsTo(Brand::class);
     }
@@ -81,12 +125,12 @@ class Product extends Model
     {
         return $this->hasOne(ProductSeo::class);
     }
-    
+
     public function store()
     {
         return $this->belongsTo(Store::class);
     }
-     public function categoriesForCurrentStore()
+    public function categoriesForCurrentStore()
     {
         return $this->belongsToMany(Category::class, 'category_product', 'product_id', 'category_id')
             ->where('categories.store_id', current_store_id());
@@ -99,7 +143,7 @@ class Product extends Model
     public function reviews()
     {
         return $this->hasMany(Review::class)
-                    ->where('approved', 1); // only approved reviews
+            ->where('approved', 1); // only approved reviews
     }
     public function extra()
     {
