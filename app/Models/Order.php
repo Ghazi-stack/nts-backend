@@ -31,6 +31,8 @@ class Order extends Model
         'is_draft',
         'channel',
         'shipping_cost',
+        'shipping_provider',
+        'shipping_method',
         'comments',
         'total_amount',
         'tracking_number',

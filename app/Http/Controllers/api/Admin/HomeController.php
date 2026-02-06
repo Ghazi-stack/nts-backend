@@ -15,7 +15,7 @@ use App\Http\Controllers\Controller;
 
 class HomeController extends Controller
 {
-   
+
     public function storePerformance(Request $request)
     {
         $storeId = current_store_id();
@@ -109,7 +109,9 @@ class HomeController extends Controller
         try {
             $storeId = current_store_id(); // 🔐 Your existing helper to fetch store ID
 
-            $totalOrders = Order::where('store_id', $storeId)->count();
+            $totalOrders = Order::where('store_id', $storeId)
+                ->where('is_draft', '!=', 1)
+                ->count();
             $totalProducts = Product::where('store_id', $storeId)->count();
             $totalCategories = Category::where('store_id', $storeId)->count();
             $totalCustomers = Customer::where('store_id', $storeId)->count();

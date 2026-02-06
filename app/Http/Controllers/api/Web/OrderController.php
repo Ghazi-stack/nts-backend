@@ -55,7 +55,7 @@ class OrderController extends Controller
 
             $orders = Order::with(['items.product.images', 'customer', 'billingInformation', 'notes'])
                 ->where('store_id', $storeId)
-                ->where('is_draft', 0) 
+                ->where('is_draft', 0)
                 ->when($keyword, function ($q) use ($keyword) {
                     $q->where(function ($query) use ($keyword) {
                         $query->where('id', 'like', "%{$keyword}%")
@@ -1626,6 +1626,7 @@ class OrderController extends Controller
                 }
 
                 $response[] = [
+                    'orderId'     => $order->id,
                     'customerId'     => $order->customer_id,
                     'email'          => $order->billingInformation?->email,
                     'firstName'      => $order->billingInformation?->first_name,
@@ -1725,6 +1726,8 @@ class OrderController extends Controller
             'shippingMethod.provider' => 'nullable|string',
             'shippingMethod.cost' => 'nullable|string',
             'shippingMethod.method' => 'nullable|string',
+            'isDraft' => 'nullable|boolean',
+
         ]);
 
         try {
@@ -1784,6 +1787,7 @@ class OrderController extends Controller
                 'customer_id'       => $customer->id,
                 'user_id'           => $user->id,
                 'comments'          => $validated['comments'] ?? $order->comments,
+                'is_draft'          => $validated['isDraft'] ?? $order->is_draft,
                 'staff_notes'       => $validated['staffNotes'] ?? $order->staff_notes,
                 'shipping_cost'     => (float)($validated['shippingMethod']['cost'] ?? $order->shipping_cost),
                 'shipping_provider' => $validated['shippingMethod']['provider'] ?? $order->shipping_provider,
