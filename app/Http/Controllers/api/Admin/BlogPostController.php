@@ -65,7 +65,7 @@ class BlogPostController extends Controller
     /**
      * Show a single blog post by ID.
      */
-    public function show($slug)
+    public function show($identifier)
     {
         try {
             $storeId = current_store_id();
@@ -78,7 +78,13 @@ class BlogPostController extends Controller
             }
 
             $post = BlogPost::where('store_id', $storeId)
-                ->where('slug', $slug)
+                ->where(function ($q) use ($identifier) {
+                    if (is_numeric($identifier)) {
+                        $q->where('id', $identifier);
+                    } else {
+                        $q->where('slug', $identifier);
+                    }
+                })
                 ->firstOrFail();
 
             return response()->json([
