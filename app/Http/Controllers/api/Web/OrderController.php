@@ -858,31 +858,40 @@ class OrderController extends Controller
         $user = auth('sanctum')->user();
 
         $request->validate([
-            'orderId'     => 'required|exists:orders,id',
-            'orderItemId' => 'nullable|exists:order_items,id',
-            'reason'      => 'nullable|string|max:500',
+            'orderId'       => 'required|exists:orders,id',
+            'reason'        => 'nullable|string|max:500',
+            'returnAction'  => 'nullable|string|max:500',
+            'comments'      => 'nullable|string|max:500',
         ]);
 
         $order = Order::where('id', $request->orderId)
-            ->where('user_id', $user->id)
             ->where('store_id', current_store_id())
-            ->firstOrFail();
+            ->first();
+
+        if (!$order) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Order not found.'
+            ], 404);
+        }
 
         $returnRequest = ReturnRequest::create([
-            'store_id'      => current_store_id(),
-            'order_id'      => $request->orderId,
-            'order_item_id' => $request->orderItemId,
-            'user_id'       => $user->id,
-            'reason'        => $request->reason,
-            'status'        => 'Pending',
+            'store_id'     => current_store_id(),
+            'order_id'     => $order->id,
+            'user_id'      => $user->id,
+            'reason'       => $request->reason,
+            'returnAction' => $request->returnAction,
+            'comments'     => $request->comments,
+            'status'       => 'Pending',
         ]);
 
         return response()->json([
             'status'  => true,
             'message' => 'Return request submitted successfully.',
-            'data'    => new ReturnRequestResource($returnRequest->load('orderItem.product'))
+            'data'    => new ReturnRequestResource($returnRequest)
         ]);
     }
+
 
     public function listReturnRequestsForAdmin(Request $request)
     {
