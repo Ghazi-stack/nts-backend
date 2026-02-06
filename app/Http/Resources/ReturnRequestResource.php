@@ -19,6 +19,7 @@ class ReturnRequestResource extends JsonResource
             'returnAction'       => $this->returnAction,
             'comments'       => $this->comments,
             'status'       => $this->status,
+            'is_submit'       => $this->is_submit,
             'createdAt'    => $this->created_at?->toDateTimeString(),
         ];
     }

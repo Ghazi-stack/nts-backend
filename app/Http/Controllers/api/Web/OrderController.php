@@ -858,10 +858,11 @@ class OrderController extends Controller
         $user = auth('sanctum')->user();
 
         $request->validate([
-            'orderId'       => 'required|exists:orders,id',
+            'orderId'       => 'required|exists:orders,id|unique:return_requests,order_id',
             'reason'        => 'nullable|string|max:500',
             'returnAction'  => 'nullable|string|max:500',
             'comments'      => 'nullable|string|max:500',
+            'isSubmit'      => 'nullable|boolean',
         ]);
 
         $order = Order::where('id', $request->orderId)
@@ -883,6 +884,7 @@ class OrderController extends Controller
             'returnAction' => $request->returnAction,
             'comments'     => $request->comments,
             'status'       => 'Pending',
+            'is_submit'    => $request->isSubmit ?? false,
         ]);
 
         return response()->json([

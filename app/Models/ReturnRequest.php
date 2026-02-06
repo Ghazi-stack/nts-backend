@@ -17,6 +17,7 @@ class ReturnRequest extends Model
         'returnAction',
         'comments',
         'status',
+        'is_submit',
     ];
 
     public function order() {
