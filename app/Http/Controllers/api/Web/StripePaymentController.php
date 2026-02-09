@@ -104,7 +104,7 @@ class StripePaymentController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'amount' => $totalAmount,
+                'amount' => $intent->amount,
                 'payment_intent_id' => $intent->id,
                 'payment_status' => $intent->status
             ]);
