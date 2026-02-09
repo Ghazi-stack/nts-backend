@@ -895,18 +895,22 @@ class OrderController extends Controller
     }
 
 
-    public function listReturnRequestsForAdmin(Request $request)
-    {
-        $requests = ReturnRequest::with(['order', 'user', 'orderItem.product'])
-            ->where('store_id', current_store_id())
-            ->latest()
-            ->paginate(20);
+   public function listReturnRequestsForAdmin(Request $request)
+{
+    $requests = ReturnRequest::with([
+            'order.items.product.images',
+            'user',
+            'order.customer'
+        ])
+        ->where('store_id', current_store_id())
+        ->latest()
+        ->paginate(20);
 
-        return response()->json([
-            'status' => true,
-            'data'   => ReturnRequestResource::collection($requests)
-        ]);
-    }
+    return response()->json([
+        'status' => true,
+        'data'   => ReturnRequestResource::collection($requests)
+    ]);
+}
 
     public function cancelOrder(Request $request, $id)
     {
