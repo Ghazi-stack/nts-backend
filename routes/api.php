@@ -395,6 +395,12 @@ Route::prefix('web')->group(function () {
         Route::get('/get-store-setting', 'index');
     });
 
+        Route::prefix('coupons')->controller(CouponCodeController::class)->group(function () {
+        Route::get('/get-couponcode', 'showWebCouponCode'); 
+        
+
+    });
+
     // 💳 Stripe
     Route::post('/stripe/pay', [StripePaymentController::class, 'pay']);
 

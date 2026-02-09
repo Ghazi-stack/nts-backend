@@ -127,6 +127,55 @@ class CouponCodeController extends Controller
         }
     }
 
+    // show CouponCode web
+    public function showWebCouponCode(Request $request, $id = null)
+    {
+        try {
+            $storeId = $this->getStoreId();
+
+            $query = CouponCode::where('store_id', $storeId);
+
+            // ✅ Agar request me couponCode aya hai
+            if ($request->filled('couponCode')) {
+                $query->where('couponCode', $request->couponCode);
+            }
+            // ✅ Warna ID se fetch karo
+            elseif ($id) {
+                $query->where('id', $id);
+            } else {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'CouponCode or ID is required'
+                ], 400);
+            }
+
+            $coupon = $query->first();
+
+            if (!$coupon) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Record not found'
+                ], 404);
+            }
+
+            // ✅ Decode categoryIds if exists
+            if (!empty($coupon->categoryIds)) {
+                $coupon->categoryIds = json_decode($coupon->categoryIds);
+            }
+
+            return response()->json([
+                'status' => true,
+                'data'   => $coupon
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function update(Request $request, $id)
     {
         try {
