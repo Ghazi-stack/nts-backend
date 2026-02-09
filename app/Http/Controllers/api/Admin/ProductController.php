@@ -317,10 +317,10 @@ class ProductController extends Controller
 
                 // ✅ IMAGE FILES
                 'image' => 'nullable|array',
-                'image.*' => 'file|mimes:jpg,jpeg,png,webp|max:5120',
-
-                'image_url' => 'nullable|array',
-                'image_url.*' => 'url',
+                'image.*.file' => 'nullable|file|mimes:jpg,jpeg,png,webp|max:5120',
+                'image.*.url' => 'nullable|url',
+                'image.*.description' => 'nullable|string|max:255',
+                'image.*.isPrimary' => 'nullable|boolean',
 
                 'description' => 'nullable|string',
                 'warranty' => 'nullable|string',
@@ -424,72 +424,65 @@ class ProductController extends Controller
             $hasPrimary = false;
 
             // ---------------- IMAGES ----------------
-            if ($request->hasFile('image')) {
+            if (!empty($validated['image'])) {
 
-                foreach ($request->file('image') as $file) {
+                foreach ($validated['image'] as $img) {
 
-                    $name = Str::slug(
-                        pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)
-                    );
+                    $path = null;
 
-                    $extension = $file->getClientOriginalExtension();
+                    // ✅ FILE IMAGE
+                    if (!empty($img['file']) && $img['file'] instanceof \Illuminate\Http\UploadedFile) {
 
-                    $fileName = $name . '.' . $extension;
+                        $file = $img['file'];
 
-                    $path = Storage::disk('s3')->putFileAs(
-                        "product_images/{$product->id}",
-                        $file,
-                        $fileName
-                    );
+                        $name = Str::slug(
+                            pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)
+                        );
 
-                    ProductImage::create([
-                        'store_id'   => $storeId,
-                        'product_id' => $product->id,
-                        'path'       => $path,
-                        'is_primary' => $hasPrimary ? 0 : 1,
-                        'alt_text'   => $validated['name'] ?? null,
-                    ]);
+                        $extension = $file->getClientOriginalExtension();
+                        $fileName = $name . '.' . $extension;
 
-                    $hasPrimary = true;
-                }
-            }
+                        $path = Storage::disk('s3')->putFileAs(
+                            "product_images/{$product->id}",
+                            $file,
+                            $fileName
+                        );
+                    }
 
-            // ---------------- URL IMAGES ----------------
-            elseif (!empty($validated['image_url'])) {
+                    // ✅ URL IMAGE
+                    elseif (!empty($img['url'])) {
 
-                foreach ($validated['image_url'] as $url) {
+                        $response = Http::timeout(10)->get($img['url']);
+                        if (!$response->successful()) continue;
 
-                    $response = Http::timeout(10)->get($url);
-                    if (!$response->successful()) continue;
+                        $originalName = pathinfo(
+                            parse_url($img['url'], PHP_URL_PATH),
+                            PATHINFO_FILENAME
+                        );
 
-                    $originalName = pathinfo(
-                        parse_url($url, PHP_URL_PATH),
-                        PATHINFO_FILENAME
-                    );
+                        $extension = pathinfo(
+                            parse_url($img['url'], PHP_URL_PATH),
+                            PATHINFO_EXTENSION
+                        ) ?: 'jpg';
 
-                    $extension = pathinfo(
-                        parse_url($url, PHP_URL_PATH),
-                        PATHINFO_EXTENSION
-                    ) ?: 'jpg';
+                        $fileName = Str::slug($originalName) . '.' . $extension;
 
-                    $fileName = Str::slug($originalName) . '.' . $extension;
+                        $path = "product_images/{$product->id}/{$fileName}";
 
-                    $path = "product_images/{$product->id}/{$fileName}";
+                        Storage::disk('s3')->put($path, $response->body());
+                    }
 
-                    Storage::disk('s3')->put($path, $response->body());
+                    if (!$path) continue;
 
                     ProductImage::create([
                         'store_id'   => $storeId,
                         'product_id' => $product->id,
                         'path'       => $path,
-                        'is_primary' => $hasPrimary ? 0 : 1,
-                        'alt_text'   => $validated['name'] ?? null,
+                        'is_primary' => !empty($img['isPrimary']) ? 1 : 0,
+                        'alt_text'   => $img['description'] ?? $validated['name'] ?? null,
                     ]);
-
-                    $hasPrimary = true;
                 }
             }
-
             // ---------------- CONTENT ----------------
             ProductContent::create([
                 'store_id' => $storeId,
