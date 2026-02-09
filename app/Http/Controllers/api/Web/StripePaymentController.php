@@ -23,6 +23,7 @@ class StripePaymentController extends Controller
         // \Log::info('Stripe Secret:', ['stripe_secret' => env('STRIPE_SECRET')]);
         $request->validate([
             'payment_method_id' => 'required|string',
+            'amount'         => 'required',
             'products'         => 'required|array|min:1',
             'products.*.product_id' => 'required|integer|exists:products,id',
             'products.*.quantity'   => 'required|integer|min:1',
@@ -31,11 +32,11 @@ class StripePaymentController extends Controller
         $user = auth('sanctum')->user();
         $cartItems = $request->products;
 
-        $totalAmount = 0;
-        foreach ($cartItems as $item) {
-            $product = Product::find($item['product_id']);
-            $totalAmount += $product->price * $item['quantity'];
-        }
+        // $totalAmount = 0;
+        // foreach ($cartItems as $item) {
+        //     $product = Product::find($item['product_id']);
+        //     $totalAmount += $product->price * $item['quantity'];
+        // }
         $currency = 'usd';
 
         // 2️⃣ Generate order number
@@ -48,7 +49,7 @@ class StripePaymentController extends Controller
 
          
             $intent = PaymentIntent::create([
-                'amount' => intval($totalAmount * 100), // cents
+                'amount' => $request->amount,
                 'currency' => $currency,
                 'payment_method' => $request->payment_method_id,
                 'confirmation_method' => 'manual',
