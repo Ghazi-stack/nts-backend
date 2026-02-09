@@ -21,14 +21,16 @@ class ReturnRequestResource extends JsonResource
             'is_submit'     => (bool) $this->is_submit,
             'createdAt'     => $this->created_at?->format('Y-m-d H:i:s'),
 
-            // ✅ FULL PRODUCT DATA
-            'product' => $this->order && $this->order->items->first()
-                ? (new ProductResource(
-                    $this->order->items->first()->product->load([
-                        'images',
-             
-                    ])
-                )): null,
+            // ✅ PRODUCT AS ARRAY WITH OBJECT INSIDE
+            'product' => ($this->order && $this->order->items->first())
+                ? [
+                    new ProductResource(
+                        $this->order->items->first()->product->load([
+                            'images'
+                        ])
+                    )
+                ]
+                : [],
         ];
     }
 }
