@@ -22,14 +22,14 @@ class ReturnRequestResource extends JsonResource
             'createdAt'     => $this->created_at?->format('Y-m-d H:i:s'),
 
             // ✅ PRODUCT AS ARRAY WITH OBJECT INSIDE
-            'product' => ($this->order && $this->order->items->first())
-                ? [
-                    new ProductResource(
-                        $this->order->items->first()->product->load([
+         'product' => $this->order
+                ? $this->order->items->map(function ($item) {
+                    return new ProductResource(
+                        $item->product->load([
                             'images'
                         ])
-                    )
-                ]
+                    );
+                })->values()
                 : [],
         ];
     }
