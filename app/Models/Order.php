@@ -35,6 +35,7 @@ class Order extends Model
         'shipping_method',
         'comments',
         'total_amount',
+        'discountAmount',
         'tracking_number',
         'tracking_carrier_code',
         'tracking_carrier_name',

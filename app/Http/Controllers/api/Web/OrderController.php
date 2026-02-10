@@ -594,6 +594,7 @@ class OrderController extends Controller
                 'shippingMethod' => 'required|string|max:100',
                 'shippingCost'   => 'required|numeric',
                 'comments'       => 'nullable|string|max:1000',
+                'discountAmount' => 'nullable',
                 'products'       => 'required|array|min:1',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
@@ -643,6 +644,7 @@ class OrderController extends Controller
                 'shipping_cost'          => $shippingCost,
                 'comments'               => $validated['comments'] ?? null,
                 'total_amount'           => $totalAmount,
+                'discountAmount'        =>  $validated['discountAmount'] ?? null,
             ]);
 
             // Step 5: Create order items
@@ -662,6 +664,7 @@ class OrderController extends Controller
                 'order_id' => $order->id,
                 'stripe_session_id' => $request->paymentIntentId, // frontend will send this
                 'amount' => $totalAmount,
+                'discountAmount' => $request->discountAmount,
                 'payment_status' => 'completed',
             ]);
 

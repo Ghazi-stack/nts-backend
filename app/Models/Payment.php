@@ -14,6 +14,7 @@ class Payment extends Model
         'stripe_session_id',
         'payment_status',
         'amount',
+        'discountAmount',
     ];
 
     public function order()

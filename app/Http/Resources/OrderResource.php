@@ -27,6 +27,7 @@ class OrderResource extends JsonResource
             'staffNotes'         => $this->staff_notes,
             'isDraft'            => (bool) $this->is_draft,
             'totalAmount'        => $this->total_amount,
+            'discountAmount'        => $this->discountAmount,
 
             'trackingNumber'     => $this->tracking_number,
             'carrierCode'        => $this->tracking_carrier_code,
