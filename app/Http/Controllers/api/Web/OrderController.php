@@ -577,7 +577,7 @@ class OrderController extends Controller
     public function store(Request $request)
     {
         try {
-            // Step 1: Validate input
+
             $validated = $request->validate([
                 'firstName'      => 'required|string|max:255',
                 'lastName'       => 'required|string|max:255',
@@ -594,32 +594,128 @@ class OrderController extends Controller
                 'shippingMethod' => 'required|string|max:100',
                 'shippingCost'   => 'required|numeric',
                 'comments'       => 'nullable|string|max:1000',
-                'discountAmount' => 'nullable',
+                'discountAmount' => 'nullable|numeric',
                 'products'       => 'required|array|min:1',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
-                'paymentIntentId'   => 'required',
+                'paymentIntentId' => 'required|string',
             ]);
 
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected'
+                ], 400);
+            }
+
+            /**
+             * 🔴 CHECK: paymentIntentId already used
+             */
+            $paymentExists = Payment::where('stripe_session_id', $validated['paymentIntentId'])->first();
+            if ($paymentExists) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'This payment has already been processed.'
+                ], 409);
+            }
+
+            /**
+             * 🔴 AUTH USER / GUEST USER
+             */
             $user = auth('sanctum')->user();
+            $customer = null;
 
-            // Step 2: Calculate totals from frontend products
-            $cartItems = $validated['products'];
+            if ($user) {
+                $customer = $user->customer;
+            } else {
+
+                /**
+                 * 🔴 CHECK: Email already exists
+                 */
+                $existingUser = User::where('email', $validated['email'])->first();
+                if ($existingUser) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Email already exists. Please login to continue.'
+                    ], 409);
+                }
+
+                // 🔐 Generate random password
+                $plainPassword = Str::random(10);
+
+                // ✅ Create User
+                $user = User::create([
+                    'name'     => $validated['firstName'] . ' ' . $validated['lastName'],
+                    'email'    => $validated['email'],
+                    'password' => Hash::make($plainPassword),
+                    'userRole' => 2,
+                    'store_id' => $storeId,
+                ]);
+
+                // ✅ Create Customer
+                $customer = Customer::create([
+                    'store_id'      => $storeId,
+                    'first_name'    => $validated['firstName'],
+                    'last_name'     => $validated['lastName'],
+                    'email'         => $validated['email'],
+                    'phone'         => $validated['phone'] ?? null,
+                    'company_name'  => $validated['companyName'] ?? null,
+                    'address'       => $validated['addressLine1'],
+                    'address_line_2' => $validated['addressLine2'] ?? null,
+                    'city'          => $validated['city'] ?? null,
+                    'state'         => $validated['state'] ?? null,
+                    'zip'           => $validated['zip'] ?? null,
+                    'country'       => $validated['country'] ?? null,
+                    'store_credit'  => 0,
+                    'receive_review_emails' => false,
+                    'force_password_reset'  => false,
+                ]);
+
+                $user->customer_id = $customer->id;
+                $user->save();
+                // 🔹 SEND EMAIL HERE 👇
+                Mail::raw(
+                    "Hello {$validated['firstName']},
+
+Your account has been created successfully.
+
+Login Email: {$validated['email']}
+Password: {$plainPassword}
+
+You can login anytime using these credentials.
+
+Thanks,
+Team",
+                    function ($message) use ($validated) {
+                        $message->to($validated['email'])
+                            ->subject('Your Login Details');
+                    }
+                );
+            }
+
+            /**
+             * 🔢 Calculate totals
+             */
             $cartTotal = 0;
-
-            foreach ($cartItems as $item) {
+            foreach ($validated['products'] as $item) {
                 $product = Product::find($item['product_id']);
                 if (!$product) continue;
+
                 $cartTotal += $product->price * $item['quantity'];
             }
 
             $shippingCost = $validated['shippingCost'];
-            $totalAmount  = $cartTotal + $shippingCost;
+            $discount     = $validated['discountAmount'] ?? 0;
+            $totalAmount  = ($cartTotal + $shippingCost) - $discount;
 
-            // Step 3: Save billing information
+            /**
+             * 💳 Billing
+             */
             $billing = $this->saveBillingInformation([
                 'first_name'      => $validated['firstName'],
                 'last_name'       => $validated['lastName'],
+                'customer_id'     => $customer?->id,
                 'company_name'    => $validated['companyName'] ?? null,
                 'email'           => $validated['email'],
                 'phone'           => $validated['phone'] ?? null,
@@ -633,62 +729,75 @@ class OrderController extends Controller
                 'shipping_method' => $validated['shippingMethod'],
             ], $user);
 
-            // Step 4: Create order
+            /**
+             * 🧾 Order
+             */
             $order = Order::create([
-                'store_id'               => current_store_id(),
-                'user_id'                => $user?->id,
-                'session_id'             => $user ? null : session()->getId(),
-                'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
+                'store_id'     => $storeId,
+                'user_id'      => $user->id,
+                'customer_id'  => $customer?->id,
+                'order_number' => 'ORD-' . strtoupper(Str::random(8)),
                 'billing_information_id' => $billing->id,
-                'status'                 => 'Pending',
-                'shipping_cost'          => $shippingCost,
-                'comments'               => $validated['comments'] ?? null,
-                'total_amount'           => $totalAmount,
-                'discountAmount'        =>  $validated['discountAmount'] ?? null,
+                'status'       => 'Pending',
+                'shipping_cost' => $shippingCost,
+                'comments'     => $validated['comments'] ?? null,
+                'total_amount' => $totalAmount,
+                'discountAmount' => $discount,
             ]);
 
-            // Step 5: Create order items
-            foreach ($cartItems as $item) {
+            /**
+             * 📦 Order Items
+             */
+            foreach ($validated['products'] as $item) {
                 $product = Product::find($item['product_id']);
                 if (!$product) continue;
 
                 $order->items()->create([
-                    'store_id'   => current_store_id(),
+                    'store_id'   => $storeId,
                     'product_id' => $product->id,
                     'quantity'   => $item['quantity'],
                     'price'      => $product->price,
                 ]);
             }
 
+            /**
+             * 💰 Payment
+             */
             Payment::create([
                 'order_id' => $order->id,
-                'stripe_session_id' => $request->paymentIntentId, // frontend will send this
+                'stripe_session_id' => $validated['paymentIntentId'],
                 'amount' => $totalAmount,
-                'discountAmount' => $request->discountAmount,
+                'discountAmount' => $discount,
                 'payment_status' => 'completed',
             ]);
-
 
             return response()->json([
                 'status'  => true,
                 'message' => 'Order placed successfully.',
-                'data'    => new OrderResource($order->load('items.product.images', 'billingInformation', 'customer')),
+                'data'    => new OrderResource(
+                    $order->load(
+                        'items.product.images',
+                        'billingInformation',
+                        'customer'
+                    )
+                ),
             ]);
         } catch (ValidationException $e) {
+
             return response()->json([
                 'status'  => false,
-                'message' => 'Validation failed.',
+                'message' => 'Validation failed',
                 'errors'  => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
+
             return response()->json([
                 'status'  => false,
-                'message' => 'Order creation failed.',
+                'message' => 'Order creation failed',
                 'error'   => $e->getMessage(),
             ], 500);
         }
     }
-
     /**
      * Update an existing order
      */
