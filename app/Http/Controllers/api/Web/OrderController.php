@@ -612,8 +612,7 @@ class OrderController extends Controller
             /**
              * 🔴 CHECK: paymentIntentId already used
              */
-            $paymentExists = Payment::where('stripe_session_id', $validated['paymentIntentId'])->first();
-            if ($paymentExists) {
+            if (Payment::where('stripe_session_id', $validated['paymentIntentId'])->exists()) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'This payment has already been processed.'
@@ -621,62 +620,77 @@ class OrderController extends Controller
             }
 
             /**
-             * 🔴 AUTH USER / GUEST USER
+             * 🔴 AUTH / GUEST HANDLING
              */
             $user = auth('sanctum')->user();
             $customer = null;
 
             if ($user) {
+                // ✅ Token aya
                 $customer = $user->customer;
             } else {
 
-                /**
-                 * 🔴 CHECK: Email already exists
-                 */
-                $existingUser = User::where('email', $validated['email'])->first();
-                if ($existingUser) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'Email already exists. Please login to continue.'
-                    ], 409);
-                }
+                // 🔎 EMAIL CHECK (USER TABLE)
+                $user = User::where('email', $validated['email'])->first();
 
-                // 🔐 Generate random password
-                $plainPassword = Str::random(10);
+                if ($user) {
+                    // ✅ User exists → reuse
+                    $customer = $user->customer;
 
-                // ✅ Create User
-                $user = User::create([
-                    'name'     => $validated['firstName'] . ' ' . $validated['lastName'],
-                    'email'    => $validated['email'],
-                    'password' => Hash::make($plainPassword),
-                    'userRole' => 2,
-                    'store_id' => $storeId,
-                ]);
+                    // agar kisi wajah se customer missing ho
+                    if (!$customer) {
+                        $customer = Customer::create([
+                            'store_id'      => $storeId,
+                            'first_name'    => $validated['firstName'],
+                            'last_name'     => $validated['lastName'],
+                            'email'         => $validated['email'],
+                            'phone'         => $validated['phone'] ?? null,
+                            'company_name'  => $validated['companyName'] ?? null,
+                            'address'       => $validated['addressLine1'],
+                            'address_line_2' => $validated['addressLine2'] ?? null,
+                            'city'          => $validated['city'] ?? null,
+                            'state'         => $validated['state'] ?? null,
+                            'zip'           => $validated['zip'] ?? null,
+                            'country'       => $validated['country'] ?? null,
+                        ]);
 
-                // ✅ Create Customer
-                $customer = Customer::create([
-                    'store_id'      => $storeId,
-                    'first_name'    => $validated['firstName'],
-                    'last_name'     => $validated['lastName'],
-                    'email'         => $validated['email'],
-                    'phone'         => $validated['phone'] ?? null,
-                    'company_name'  => $validated['companyName'] ?? null,
-                    'address'       => $validated['addressLine1'],
-                    'address_line_2' => $validated['addressLine2'] ?? null,
-                    'city'          => $validated['city'] ?? null,
-                    'state'         => $validated['state'] ?? null,
-                    'zip'           => $validated['zip'] ?? null,
-                    'country'       => $validated['country'] ?? null,
-                    'store_credit'  => 0,
-                    'receive_review_emails' => false,
-                    'force_password_reset'  => false,
-                ]);
+                        $user->customer_id = $customer->id;
+                        $user->save();
+                    }
+                } else {
+                    // ❌ User does NOT exist → CREATE NEW
 
-                $user->customer_id = $customer->id;
-                $user->save();
-                // 🔹 SEND EMAIL HERE 👇
-                Mail::raw(
-                    "Hello {$validated['firstName']},
+                    $plainPassword = Str::random(10);
+
+                    $user = User::create([
+                        'name'     => $validated['firstName'] . ' ' . $validated['lastName'],
+                        'email'    => $validated['email'],
+                        'password' => Hash::make($plainPassword),
+                        'userRole' => 2,
+                        'store_id' => $storeId,
+                    ]);
+
+                    $customer = Customer::create([
+                        'store_id'      => $storeId,
+                        'first_name'    => $validated['firstName'],
+                        'last_name'     => $validated['lastName'],
+                        'email'         => $validated['email'],
+                        'phone'         => $validated['phone'] ?? null,
+                        'company_name'  => $validated['companyName'] ?? null,
+                        'address'       => $validated['addressLine1'],
+                        'address_line_2' => $validated['addressLine2'] ?? null,
+                        'city'          => $validated['city'] ?? null,
+                        'state'         => $validated['state'] ?? null,
+                        'zip'           => $validated['zip'] ?? null,
+                        'country'       => $validated['country'] ?? null,
+                    ]);
+
+                    $user->customer_id = $customer->id;
+                    $user->save();
+
+                    // 📧 SEND LOGIN EMAIL
+                    Mail::raw(
+                        "Hello {$validated['firstName']},
 
 Your account has been created successfully.
 
@@ -687,30 +701,31 @@ You can login anytime using these credentials.
 
 Thanks,
 Team",
-                    function ($message) use ($validated) {
-                        $message->to($validated['email'])
-                            ->subject('Your Login Details');
-                    }
-                );
+                        function ($message) use ($validated) {
+                            $message->to($validated['email'])
+                                ->subject('Your Login Details');
+                        }
+                    );
+                }
             }
 
             /**
-             * 🔢 Calculate totals
+             * 🔢 CART TOTAL
              */
             $cartTotal = 0;
             foreach ($validated['products'] as $item) {
                 $product = Product::find($item['product_id']);
-                if (!$product) continue;
-
-                $cartTotal += $product->price * $item['quantity'];
+                if ($product) {
+                    $cartTotal += $product->price * $item['quantity'];
+                }
             }
 
             $shippingCost = $validated['shippingCost'];
-            $discount     = $validated['discountAmount'] ?? 0;
-            $totalAmount  = ($cartTotal + $shippingCost) - $discount;
+            $discount = $validated['discountAmount'] ?? 0;
+            $totalAmount = ($cartTotal + $shippingCost) - $discount;
 
             /**
-             * 💳 Billing
+             * 💳 BILLING
              */
             $billing = $this->saveBillingInformation([
                 'first_name'      => $validated['firstName'],
@@ -730,7 +745,7 @@ Team",
             ], $user);
 
             /**
-             * 🧾 Order
+             * 🧾 ORDER
              */
             $order = Order::create([
                 'store_id'     => $storeId,
@@ -745,24 +760,18 @@ Team",
                 'discountAmount' => $discount,
             ]);
 
-            /**
-             * 📦 Order Items
-             */
             foreach ($validated['products'] as $item) {
                 $product = Product::find($item['product_id']);
-                if (!$product) continue;
-
-                $order->items()->create([
-                    'store_id'   => $storeId,
-                    'product_id' => $product->id,
-                    'quantity'   => $item['quantity'],
-                    'price'      => $product->price,
-                ]);
+                if ($product) {
+                    $order->items()->create([
+                        'store_id'   => $storeId,
+                        'product_id' => $product->id,
+                        'quantity'   => $item['quantity'],
+                        'price'      => $product->price,
+                    ]);
+                }
             }
 
-            /**
-             * 💰 Payment
-             */
             Payment::create([
                 'order_id' => $order->id,
                 'stripe_session_id' => $validated['paymentIntentId'],
@@ -772,29 +781,17 @@ Team",
             ]);
 
             return response()->json([
-                'status'  => true,
+                'status' => true,
                 'message' => 'Order placed successfully.',
-                'data'    => new OrderResource(
-                    $order->load(
-                        'items.product.images',
-                        'billingInformation',
-                        'customer'
-                    )
+                'data' => new OrderResource(
+                    $order->load('items.product.images', 'billingInformation', 'customer')
                 ),
             ]);
-        } catch (ValidationException $e) {
-
-            return response()->json([
-                'status'  => false,
-                'message' => 'Validation failed',
-                'errors'  => $e->errors(),
-            ], 422);
         } catch (\Exception $e) {
-
             return response()->json([
-                'status'  => false,
+                'status' => false,
                 'message' => 'Order creation failed',
-                'error'   => $e->getMessage(),
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
