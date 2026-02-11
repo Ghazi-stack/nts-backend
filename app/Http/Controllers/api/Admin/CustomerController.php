@@ -22,7 +22,7 @@ use Illuminate\Validation\ValidationException;
 
 class CustomerController extends Controller
 {
-   
+
     public function index(Request $request)
     {
         try {
@@ -35,21 +35,21 @@ class CustomerController extends Controller
             }
 
             // $query = Customer::where('store_id', $storeId);
-            
+
             $query = Customer::with(['addresses', 'billingInformations'])
-                         ->where('store_id', $storeId);
+                ->where('store_id', $storeId);
 
             // 🔍 Search by keyword
             if ($request->filled('search')) {
                 $search = $request->input('search');
                 $query->where(function ($q) use ($search) {
                     $q->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'like', "%{$search}%")
-                      ->orWhere('first_name', 'like', "%{$search}%")
-                      ->orWhere('last_name', 'like', "%{$search}%")
-                      ->orWhere('email', 'like', "%{$search}%")
-                      ->orWhere('phone', 'like', "%{$search}%")
-                      ->orWhere('customer_group', 'like', "%{$search}%")
-                      ->orWhere('company_name', 'like', "%{$search}%");
+                        ->orWhere('first_name', 'like', "%{$search}%")
+                        ->orWhere('last_name', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('customer_group', 'like', "%{$search}%")
+                        ->orWhere('company_name', 'like', "%{$search}%");
                 });
             }
 
@@ -88,8 +88,8 @@ class CustomerController extends Controller
             }
 
             $customer = Customer::with(['addresses', 'billingInformations'])
-                            ->where('store_id', $storeId)
-                            ->findOrFail($id);
+                ->where('store_id', $storeId)
+                ->findOrFail($id);
             return response()->json([
                 'status' => true,
                 'message' => 'Customer retrieved.',
@@ -285,7 +285,6 @@ class CustomerController extends Controller
                 'message' => 'Customer created successfully',
                 'data' => new CustomerResource($customer)
             ], 201);
-
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -294,7 +293,7 @@ class CustomerController extends Controller
     }
 
 
-     public function update(Request $request, $id)
+    public function update(Request $request, $id)
     {
         try {
             $storeId = current_store_id();
@@ -405,7 +404,6 @@ class CustomerController extends Controller
                 'message' => 'Customer updated successfully',
                 'data' => new CustomerResource($customer)
             ]);
-
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -479,7 +477,6 @@ class CustomerController extends Controller
                 'message' => 'Account updated successfully.',
                 'customer' => new CustomerResource($customer),
             ], 200);
-
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -497,7 +494,7 @@ class CustomerController extends Controller
     //                 'message' => 'User not authenticated.'
     //             ], 401);
     //         }
-        
+
     //         $customer = $user->customer; // Associated customer
     //         if (!$customer) {
     //             return response()->json([
@@ -505,17 +502,17 @@ class CustomerController extends Controller
     //                 'message' => 'Customer record not found.'
     //             ], 404);
     //         }
-        
+
     //         // Fetch orders of logged-in customer
     //         $orders = Order::where('customer_id', $customer->id)
     //                         ->orderBy('created_at', 'desc')
     //                         ->get();
-        
+
     //         return response()->json([
     //             'status' => true,
     //             'orders' => OrderResource::collection($orders),
     //         ], 200);
-        
+
     //     } catch (\Exception $e) {
     //         return response()->json([
     //             'status' => false,
@@ -524,7 +521,7 @@ class CustomerController extends Controller
     //     }
     // }
 
-   
+
     public function myOrders(Request $request)
     {
         try {
@@ -538,16 +535,18 @@ class CustomerController extends Controller
             }
 
             // Fetch orders based on user_id
-           $orders = Order::with(['items.product.images'])
-                       ->where('user_id', $user->id)
-                       ->orderBy('created_at', 'desc')
-                       ->get();
+            $orders = Order::with([
+                'items.product.images',
+                'returnRequest' // ✅ ADD THIS
+            ])
+                ->where('user_id', $user->id)
+                ->orderBy('created_at', 'desc')
+                ->get();
             // Return orders using a resource
             return response()->json([
                 'status' => true,
                 'orders' => MyOrderResource::collection($orders)
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
@@ -566,54 +565,54 @@ class CustomerController extends Controller
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
-        
+
             // 🔹 Single delete
             if ($id) {
                 $customer = Customer::where('store_id', $storeId)->findOrFail($id);
-            
+
                 // 🧨 Delete linked user if exists
                 if ($customer->user) {
                     $customer->user->delete();
                 }
-            
+
                 $customer->delete();
-            
+
                 return response()->json([
                     'status' => true,
                     'message' => 'Customer deleted.',
                     'deletedIds' => [$id]
                 ]);
             }
-        
+
             // 🔹 Bulk delete
             $request->validate([
                 'ids' => 'required|array|min:1',
                 'ids.*' => 'exists:customers,id'
             ]);
-        
+
             $deleted = [];
             $failed = [];
-        
+
             foreach ($request->ids as $cid) {
                 try {
                     $customer = Customer::where('store_id', $storeId)->findOrFail($cid);
-                
+
                     // 🧨 Delete linked user if exists
                     if ($customer->user) {
                         $customer->user->delete();
                     }
-                
+
                     $customer->delete();
                     $deleted[] = $cid;
                 } catch (Exception $e) {
                     $failed[] = ['id' => $cid, 'error' => $e->getMessage()];
                 }
             }
-        
+
             $message = count($deleted) === 1
                 ? 'Customer deleted.'
                 : 'Customers deleted.';
-        
+
             return response()->json([
                 'status' => true,
                 'message' => $message,
@@ -625,20 +624,20 @@ class CustomerController extends Controller
         }
     }
 
-     public function importCSV(Request $request)
+    public function importCSV(Request $request)
     {
         try {
             $request->validate([
                 'file' => 'required|file|mimes:xlsx,xls,csv,txt'
             ]);
-        
+
             $storeId = current_store_id();
             if (!$storeId) {
                 return response()->json(['error' => 'Store not selected.'], 400);
             }
-        
+
             Excel::import(new CustomerImport($storeId), $request->file('file'));
-        
+
             return response()->json([
                 'status' => true,
                 'message' => 'Customers imported successfully.'
@@ -662,7 +661,7 @@ class CustomerController extends Controller
                 'message' => 'Store not selected or token invalid.'
             ], 400);
         }
-    
+
         $fileName = 'customers_export_' . now()->format('Ymd_His') . '.xlsx';
         return Excel::download(new CustomerExport($storeId), $fileName);
     }
@@ -670,26 +669,26 @@ class CustomerController extends Controller
     public function search(Request $request)
     {
         $storeId = current_store_id();
-    
+
         if (!$storeId) {
             return response()->json(['error' => 'Store not selected or token invalid.'], 400);
         }
-    
+
         $q = $request->input('query');
-    
+
         if (!$q || strlen($q) < 2) {
             return response()->json(['error' => 'Search query too short.'], 422);
         }
-    
+
         $results = Customer::where('store_id', $storeId)
             ->where(function ($qBuilder) use ($q) {
                 $qBuilder->where('name', 'like', "%{$q}%")
-                         ->orWhere('email', 'like', "%{$q}%")
-                         ->orWhere('phone', 'like', "%{$q}%");
+                    ->orWhere('email', 'like', "%{$q}%")
+                    ->orWhere('phone', 'like', "%{$q}%");
             })
             ->limit(10)
             ->get();
-        
+
         return response()->json([
             'status' => true,
             'data' => CustomerResource::collection($results)
@@ -714,12 +713,12 @@ class CustomerController extends Controller
                 $search = $request->input('searchKeywords');
                 $query->where(function ($q) use ($search) {
                     $q->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'like', "%{$search}%")
-                      ->orWhere('email', 'like', "%{$search}%")
-                      ->orWhere('phone', 'like', "%{$search}%")
-                      ->orWhere('first_name', 'like', "%{$search}%")
-                      ->orWhere('last_name', 'like', "%{$search}%")
-                      ->orWhere('customer_group', 'like', "%{$search}%")
-                      ->orWhere('company_name', 'like', "%{$search}%");
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('first_name', 'like', "%{$search}%")
+                        ->orWhere('last_name', 'like', "%{$search}%")
+                        ->orWhere('customer_group', 'like', "%{$search}%")
+                        ->orWhere('company_name', 'like', "%{$search}%");
                 });
             }
 
@@ -820,7 +819,7 @@ class CustomerController extends Controller
         }
     }
 
-   public function deleteMyAddress(Request $request, $addressId)
+    public function deleteMyAddress(Request $request, $addressId)
     {
         try {
             $user = auth()->user();
@@ -860,10 +859,10 @@ class CustomerController extends Controller
                     'message' => 'User not authenticated or customer not found.'
                 ], 401);
             }
-        
+
             $customer = $user->customer;
-        
-            $addresses = $customer->addresses()->get()->map(function($address) use ($customer) {
+
+            $addresses = $customer->addresses()->get()->map(function ($address) use ($customer) {
                 return [
                     'addressId'      => $address->id,
                     'addressLine1'   => $address->address_line_1,
@@ -875,7 +874,7 @@ class CustomerController extends Controller
                     'customerName'   => $customer->first_name . ' ' . $customer->last_name,
                 ];
             });
-        
+
             return response()->json([
                 'status' => true,
                 'addresses' => $addresses
@@ -887,5 +886,4 @@ class CustomerController extends Controller
             ], 500);
         }
     }
-
 }

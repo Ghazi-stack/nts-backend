@@ -14,14 +14,28 @@ class MyOrderResource extends JsonResource
             'order_number' => $this->order_number,
             'status' => $this->status,
             'total_amount' => $this->total_amount,
-            'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at,
-            'products' => $this->items->map(function($item) {
+            'created_at' => $this->created_at?->toDateTimeString(),
+            'updated_at' => $this->updated_at?->toDateTimeString(),
+
+            // ✅ RETURN REQUEST OBJECT
+            'returnRequest' => $this->returnRequest ? [
+                'id'           => $this->returnRequest->id,
+                'reason'       => $this->returnRequest->reason,
+                'returnAction' => $this->returnRequest->returnAction,
+                'comments'     => $this->returnRequest->comments,
+                'status'       => $this->returnRequest->status,
+                'isSubmit'     => (bool) $this->returnRequest->is_submit,
+                'createdAt'    => $this->returnRequest->created_at?->toDateTimeString(),
+            ] : null,
+
+            'products' => $this->items->map(function ($item) {
                 return [
-                    'id' => $item->product->id,
-                    'name' => $item->product->name,
+                    'id'       => $item->product->id,
+                    'name'     => $item->product->name,
                     'quantity' => $item->quantity,
-                    'images' => $item->product->images->map(fn($img) => url($img->path))->toArray(),
+                    'images'   => $item->product->images
+                        ->map(fn($img) => url($img->path))
+                        ->toArray(),
                 ];
             }),
         ];
