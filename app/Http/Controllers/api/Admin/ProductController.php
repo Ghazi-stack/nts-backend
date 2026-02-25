@@ -92,12 +92,9 @@ class ProductController extends Controller
     //     }
     // }
 
-    public function index(Request $request)
+  public function index(Request $request)
     {
-
-
         try {
-            // Base query with full eager loading
             $query = Product::with([
                 'brand:id,name',
                 'categories:id,name',
@@ -116,15 +113,11 @@ class ProductController extends Controller
                     'visible_on_storefront',
                     'store_id'
                 ])
-                ->where('store_id', current_store_id());
+                ->where('store_id', current_store_id())
+                ->where('visible_on_storefront', 1);
 
-            // Filters
             if ($request->has('isFeatured')) {
                 $query->where('is_featured', $request->boolean('isFeatured'));
-            }
-
-            if ($request->has('isVisible')) {
-                $query->where('visible_on_storefront', $request->boolean('isVisible'));
             }
 
             if ($request->has('outOfStock') && $request->boolean('outOfStock')) {
@@ -143,20 +136,17 @@ class ProductController extends Controller
                 });
             }
 
-            // Sorting
             if ($request->has('sortBy')) {
                 $query->orderBy($request->sortBy, $request->get('sortOrder', 'asc'));
             } else {
                 $query->orderBy('id', 'desc');
             }
 
-            // Pagination
             $page = (int) $request->input('page', 1);
             $pageSize = (int) $request->input('pageSize', 20);
 
             $products = $query->paginate($pageSize, ['*'], 'page', $page);
 
-            // Return JSON response
             return response()->json([
                 'status' => true,
                 'message' => 'Product list fetched.',
