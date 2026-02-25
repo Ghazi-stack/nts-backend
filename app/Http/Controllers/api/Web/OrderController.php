@@ -31,6 +31,7 @@ use App\Http\Resources\CustomerResource;
 use App\Http\Resources\ShipmentResource;
 use App\Http\Resources\OrderNoteResource;
 use App\Http\Resources\ReturnRequestResource;
+use App\Mail\OrderPlacedMail;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
@@ -1597,20 +1598,13 @@ Team",
             $customer = Customer::where('store_id', $storeId)
                 ->findOrFail($validated['customerId']);
 
-            /*
-        |--------------------------------------------------------------------------
-        | ✅ FIX HERE (IMPORTANT)
-        |--------------------------------------------------------------------------
-        | Agar shippingDestinations empty ho
-        | to SINGLE destination banao jisme ALL products hon
-        */
             if (!empty($validated['shippingDestinations'])) {
                 $shippingDestinations = $validated['shippingDestinations'];
             } else {
                 $shippingDestinations = [
                     [
                         'address' => $validated['billingInformation'],
-                        'products' => $validated['products'], // ✅ ALL PRODUCTS
+                        'products' => $validated['products'],
                     ]
                 ];
             }
@@ -1619,7 +1613,6 @@ Team",
 
             foreach ($shippingDestinations as $destination) {
 
-                /* ---------- BILLING SAVE (ONLY ONCE) ---------- */
                 $billing = $this->saveBillingInformation([
                     'store_id' => $storeId,
                     'customer_id' => $customer->id,
@@ -1639,7 +1632,6 @@ Team",
                     'shipping_method' => $validated['shippingMethod']['method'] ?? null,
                 ], $user, $customer);
 
-                /* ---------- ORDER CREATE (ONLY ONCE) ---------- */
                 $order = Order::create([
                     'store_id' => $storeId,
                     'customer_id' => $customer->id,
@@ -1657,7 +1649,6 @@ Team",
                     'total_amount' => 0,
                 ]);
 
-                /* ---------- ORDER ITEMS (MULTIPLE) ---------- */
                 $total = 0;
 
                 foreach ($destination['products'] as $item) {
@@ -1681,11 +1672,22 @@ Team",
 
                 $order->update(['total_amount' => $total]);
 
-                $ordersResponse[] = [
+                $orderData = [
                     'orderNumber' => $order->order_number,
                     'totalAmount' => $order->total_amount,
                     'status' => $order->status,
                 ];
+
+                $ordersResponse[] = $orderData;
+
+                // ✅ EMAIL SEND - customer ki email pe
+                $customerEmail = $destination['address']['email'] 
+                    ?? $customer->email 
+                    ?? null;
+
+                if ($customerEmail) {
+                    Mail::to($customerEmail)->send(new OrderPlacedMail($orderData, $customer));
+                }
             }
 
             DB::commit();
