@@ -92,7 +92,7 @@ class ProductController extends Controller
     //     }
     // }
 
-  public function index(Request $request)
+    public function index(Request $request)
     {
         try {
             $query = Product::with([
