@@ -1681,8 +1681,8 @@ Team",
                 $ordersResponse[] = $orderData;
 
                 // ✅ EMAIL SEND - customer ki email pe
-                $customerEmail = $destination['address']['email'] 
-                    ?? $customer->email 
+                $customerEmail = $destination['address']['email']
+                    ?? $customer->email
                     ?? null;
 
                 if ($customerEmail) {
@@ -2011,7 +2011,6 @@ Team",
     {
         $storeId = current_store_id();
 
-        // Validate request for new customer + order details
         $validated = $request->validate([
             'email' => 'required|email|unique:customers,email',
             'password' => 'required|string|min:6|confirmed',
@@ -2066,7 +2065,6 @@ Team",
 
             $user = auth('sanctum')->user();
 
-            // 1️⃣ Create new customer
             $customer = Customer::create([
                 'store_id' => $storeId,
                 'first_name' => $validated['firstName'],
@@ -2077,20 +2075,13 @@ Team",
                 'receive_review_emails' => $request->receiveOffers ?? true,
             ]);
 
-            /*
-        |--------------------------------------------------------------------------
-        | ✅ FIX HERE (IMPORTANT)
-        |--------------------------------------------------------------------------
-        | Agar shippingDestinations empty ho
-        | to SINGLE destination banao jisme ALL products hon
-        */
             $shippingDestinations = $validated['shippingDestinations'] ?? [];
 
             if (empty($shippingDestinations)) {
                 $shippingDestinations = [
                     [
                         'address' => $validated['billingInformation'],
-                        'products' => $validated['products'], // ✅ ALL PRODUCTS
+                        'products' => $validated['products'],
                         'staffNotes' => ''
                     ]
                 ];
@@ -2103,7 +2094,6 @@ Team",
                 $address = $destination['address'];
                 $products = $destination['products'];
 
-                // 3️⃣ Save billing/shipping info (ONLY ONCE)
                 $billing = $this->saveBillingInformation([
                     'store_id' => $storeId,
                     'customer_id' => $customer->id,
@@ -2123,7 +2113,6 @@ Team",
                     'shipping_method' => $address['shippingMethod'] ?? null,
                 ], $user, $customer);
 
-                // 4️⃣ Create order (ONLY ONE)
                 $order = Order::create([
                     'store_id' => $storeId,
                     'customer_id' => $customer->id,
@@ -2141,7 +2130,6 @@ Team",
                     'total_amount' => 0,
                 ]);
 
-                // 5️⃣ Add products to order (MULTIPLE ITEMS)
                 $total = 0;
 
                 foreach ($products as $item) {
@@ -2174,17 +2162,27 @@ Team",
 
             DB::commit();
 
-            // 6️⃣ Response
             $ordersResponse = [];
 
             foreach ($orders as $entry) {
                 $order = $entry['order'];
 
-                $ordersResponse[] = [
+                $orderData = [
                     'id' => $order->id,
                     'orderNumber' => $order->order_number,
                     'status' => ucfirst($order->status),
                 ];
+
+                $ordersResponse[] = $orderData;
+
+                // ✅ EMAIL SEND - customer ki email pe
+                $customerEmail = $entry['destination']['address']['email']
+                    ?? $customer->email
+                    ?? null;
+
+                if ($customerEmail) {
+                    Mail::to($customerEmail)->send(new OrderPlacedMail($orderData, $customer));
+                }
             }
 
             return response()->json([
