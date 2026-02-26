@@ -211,7 +211,7 @@ class ProductController extends Controller
             $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
                 return Product::where('sku', $sku)
                     ->where('store_id', $storeId)
-                    ->select('id', 'name', 'sku', 'price', 'brand_id', 'category_id', 'dimensions')  // essential only
+                    ->select('id', 'name', 'sku', 'price', 'brand_id', 'category_id', 'dimensions', 'visible_on_storefront')
                     ->with([
                         'brand:id,name,logo',
                         'images:id,product_id,path,is_primary',
@@ -228,6 +228,16 @@ class ProductController extends Controller
                     'error' => 'Product not found',
                     'sku' => $sku
                 ], 404);
+            }
+
+            // -------------------------
+            // STEP 1.5: Visible check
+            // -------------------------
+            if (!$product->visible_on_storefront) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Product is disabled.'
+                ], 403);
             }
 
             // -------------------------
