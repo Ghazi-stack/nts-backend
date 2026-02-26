@@ -113,8 +113,7 @@ class ProductController extends Controller
                     'visible_on_storefront',
                     'store_id'
                 ])
-                ->where('store_id', current_store_id())
-                ->where('visible_on_storefront', 1);
+                ->where('store_id', current_store_id());
 
             if ($request->has('isFeatured')) {
                 $query->where('is_featured', $request->boolean('isFeatured'));
