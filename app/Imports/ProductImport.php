@@ -45,7 +45,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
     public function chunkSize(): int
     {
         // Safe for t3.medium + Redis + swap
-        return 25;
+        return 500;
     }
 
     public function onRow(Row $row)
