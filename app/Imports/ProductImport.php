@@ -34,24 +34,34 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
     protected static $brandCache = [];
     protected static $categoryCache = [];
 
+    protected $tmpDir;
+
     public function __construct($storeId, $progressKey, $filePath, $ignoredFields = [])
     {
         $this->storeId       = $storeId;
         $this->progressKey   = $progressKey;
         $this->filePath      = $filePath;
         $this->ignoredFields = array_map('strtolower', $ignoredFields);
+
+        $this->tmpDir = storage_path('app/tmp');
+
+        if (!is_dir($this->tmpDir)) {
+            mkdir($this->tmpDir, 0755, true);
+        }
+
+        \DB::connection()->disableQueryLog();
     }
 
     public function chunkSize(): int
     {
         // Safe for t3.medium + Redis + swap
-        return 1000;
+        return 200;
     }
 
     public function onRow(Row $row)
     {
 
-        Log::channel('single')->error('🔥 PRODUCT IMPORT ROW HIT');
+        // Log::channel('single')->error('🔥 PRODUCT IMPORT ROW HIT');
         $traceId = 'IMG-' . uniqid();
 
         // Log::channel('single')->info("[$traceId] onRow STARTED", [
@@ -108,13 +118,15 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             ]);
 
             if (!$sku || !$productName) {
-                Log::warning('Row skipped (missing sku or product name)', [
-                    'row' => $rowIndex,
-                    'sku' => $sku,
-                    'name' => $productName,
-                ]);
+                // Log::warning('Row skipped (missing sku or product name)', [
+                //     'row' => $rowIndex,
+                //     'sku' => $sku,
+                //     'name' => $productName,
+                // ]);
 
-                $this->updateProgress();
+                if ($rowIndex % 20 === 0) {
+                    $this->updateProgress();
+                }
                 return;
             }
 
@@ -310,7 +322,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 if (filter_var($imageValue, FILTER_VALIDATE_URL)) {
 
                     try {
-                        $response = Http::timeout(30)
+                        $response = Http::timeout(20)
                         ->retry(3, 500)
                         ->withHeaders([
                             'User-Agent' => 'Mozilla/5.0',
@@ -322,11 +334,11 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                         ])
                         ->get($imageValue);
 
-                        logger()->info('IMAGE FETCH RESULT', [
-                            'url' => $imageValue,
-                            'status' => optional($response)->status(),
-                            'ok' => optional($response)->successful(),
-                        ]);
+                        // logger()->info('IMAGE FETCH RESULT', [
+                        //     'url' => $imageValue,
+                        //     'status' => optional($response)->status(),
+                        //     'ok' => optional($response)->successful(),
+                        // ]);
                         if (
                             !$response->successful() ||
                             !str_starts_with(
@@ -334,11 +346,11 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                                 'image/'
                             )
                         ) {
-                            Log::warning('IMAGE SKIPPED (INVALID RESPONSE)', [
-                                'url' => $imageValue,
-                                'status' => $response->status(),
-                                'content_type' => $response->header('Content-Type'),
-                            ]);
+                            // Log::warning('IMAGE SKIPPED (INVALID RESPONSE)', [
+                            //     'url' => $imageValue,
+                            //     'status' => $response->status(),
+                            //     'content_type' => $response->header('Content-Type'),
+                            // ]);
                             continue;
                         }
 
@@ -371,13 +383,15 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                         //     ]
                         // );
 
-                        $tmpDir = storage_path('app/tmp');
+                        // $tmpDir = storage_path('app/tmp');
 
-                        if (!is_dir($tmpDir)) {
-                            mkdir($tmpDir, 0755, true);
-                        }
+                        // if (!is_dir($tmpDir)) {
+                        //     mkdir($tmpDir, 0755, true);
+                        // }
 
-                        $tmpPath = $tmpDir . '/' . uniqid('img_');
+                        // $tmpPath = $tmpDir . '/' . uniqid('img_');
+
+                        $tmpPath = $this->tmpDir . '/' . uniqid('img_');
 
                         file_put_contents($tmpPath, $response->body());
 
@@ -394,21 +408,21 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                         fclose($stream);
 
 
-                        Log::info("[$traceId] S3 PUT RESULT", [
-                            'path' => $savedPath,
-                            'result' => $uploaded,
-                            'bucket' => config('filesystems.disks.s3.bucket'),
-                            'region' => config('filesystems.disks.s3.region'),
-                        ]);
+                        // Log::info("[$traceId] S3 PUT RESULT", [
+                        //     'path' => $savedPath,
+                        //     'result' => $uploaded,
+                        //     'bucket' => config('filesystems.disks.s3.bucket'),
+                        //     'region' => config('filesystems.disks.s3.region'),
+                        // ]);
 
 
                         @unlink($tmpPath);
 
 
                     } catch (\Throwable $e) {
-                        Log::error("[$traceId] IMAGE UPLOAD FAILED", [
-                            'message' => $e->getMessage(),
-                        ]);
+                        // Log::error("[$traceId] IMAGE UPLOAD FAILED", [
+                        //     'message' => $e->getMessage(),
+                        // ]);
                         continue;
                     }
                 }
@@ -430,9 +444,9 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                         $savedPath = "product_images/{$product->id}/{$fileName}";
 
-                        Log::info("[$traceId] IMAGE SIZE", [
-                            'bytes' => strlen($response->body()),
-                        ]);
+                        // Log::info("[$traceId] IMAGE SIZE", [
+                        //     'bytes' => strlen($response->body()),
+                        // ]);
 
                         // Storage::disk('s3')->put(
                         //     $savedPath,
@@ -461,12 +475,12 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                             ]
                         );
 
-                        Log::info("[$traceId] S3 PUT RESULT", [
-                            'path' => $savedPath,
-                            'result' => $uploaded,
-                            'bucket' => config('filesystems.disks.s3.bucket'),
-                            'region' => config('filesystems.disks.s3.region'),
-                        ]);
+                        // Log::info("[$traceId] S3 PUT RESULT", [
+                        //     'path' => $savedPath,
+                        //     'result' => $uploaded,
+                        //     'bucket' => config('filesystems.disks.s3.bucket'),
+                        //     'region' => config('filesystems.disks.s3.region'),
+                        // ]);
 
 
                         @unlink($tmpPath);
@@ -503,7 +517,9 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             ]);
 
             // Still move progress forward
-            $this->updateProgress();
+            if ($rowIndex % 20 === 0) {
+                $this->updateProgress();
+            }
         }
     }
 
