@@ -21,6 +21,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Aws\S3\Exception\S3Exception;
+use App\Jobs\ProcessProductImage;
 
 class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, ShouldQueue
 {
@@ -278,237 +279,29 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             // ]);
 
 
-            $imageKeyOptions = [
+            $image = $this->getField($data, [
                 'product image file - 1',
                 'product image file 1',
                 'product_image_file_1',
                 'product image file-1',
                 'product_image_file - 1',
-            ];
+            ]);
 
-            // Normalize all candidate keys
-            $normalizedTargets = array_map(function ($h) {
-                return $this->normalizeKey($h);
-            }, $imageKeyOptions);
-
-            foreach ($data as $rawKey => $val) {
-
-            // Log::channel('single')->info("[$traceId] IMAGE LOOP ITERATION", [
-            //     'raw_key' => $rawKey,
-            //     'raw_value' => $val,
-            // ]);
-
-                if (!$val) continue;
-
-                // Normalize the incoming CSV header
-                $keyNorm = $this->normalizeKey($rawKey);
-
-                // Process ONLY if it matches expected image headers
-                if (!in_array($keyNorm, $normalizedTargets)) {
-                    // Log::channel('single')->warning("[$traceId] IMAGE HEADER SKIPPED", [
-                    //     'normalized_key' => $keyNorm,
-                    //     'targets' => $normalizedTargets,
-                    // ]);
-                    continue;
-                }
-
-                $imageValue = trim($val);
-                $savedPath  = null;
-                $uploaded = false;
-
-                /* =====================================================
-       (A) URL IMAGE → DIRECT S3 UPLOAD
-    ===================================================== */
-                if (filter_var($imageValue, FILTER_VALIDATE_URL)) {
-
-                    try {
-                        $response = Http::timeout(20)
-                        ->retry(3, 500)
-                        ->withHeaders([
-                            'User-Agent' => 'Mozilla/5.0',
-                            'Accept' => 'image/*,*/*',
-                        ])
-                        ->withOptions([
-                            'verify' => false,
-                            'allow_redirects' => true,
-                        ])
-                        ->get($imageValue);
-
-                        // logger()->info('IMAGE FETCH RESULT', [
-                        //     'url' => $imageValue,
-                        //     'status' => optional($response)->status(),
-                        //     'ok' => optional($response)->successful(),
-                        // ]);
-                        if (
-                            !$response->successful() ||
-                            !str_starts_with(
-                                $response->header('Content-Type'),
-                                'image/'
-                            )
-                        ) {
-                            // Log::warning('IMAGE SKIPPED (INVALID RESPONSE)', [
-                            //     'url' => $imageValue,
-                            //     'status' => $response->status(),
-                            //     'content_type' => $response->header('Content-Type'),
-                            // ]);
-                            continue;
-                        }
-
-                        $originalName = pathinfo(
-                            parse_url($imageValue, PHP_URL_PATH),
-                            PATHINFO_FILENAME
-                        );
-
-                        $extension = pathinfo(
-                            parse_url($imageValue, PHP_URL_PATH),
-                            PATHINFO_EXTENSION
-                        ) ?: 'jpg';
-
-                        $fileName = Str::slug($originalName)
-                            . '-' . time() . '-' . uniqid() . '.' . $extension;
-
-                        $savedPath = "product_images/{$product->id}/{$fileName}";
-                        $uploaded  = false;
-                        
-                        // Log::info("[$traceId] IMAGE SIZE", [
-                        //     'bytes' => strlen($response->body()),
-                        // ]);
-
-                        // Storage::disk('s3')->put(
-                        //     $savedPath,
-                        //     $response->body(),
-                        //     [
-                        //         'visibility' => 'public',
-                        //         'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
-                        //     ]
-                        // );
-
-                        // $tmpDir = storage_path('app/tmp');
-
-                        // if (!is_dir($tmpDir)) {
-                        //     mkdir($tmpDir, 0755, true);
-                        // }
-
-                        // $tmpPath = $tmpDir . '/' . uniqid('img_');
-
-                        $tmpPath = $this->tmpDir . '/' . uniqid('img_');
-
-                        file_put_contents($tmpPath, $response->body());
-
-                        $stream = fopen($tmpPath, 'r');
-
-                        $uploaded = Storage::disk('s3')->put(
-                            $savedPath,
-                            $stream,
-                            [
-                                'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
-                            ]
-                        );
-
-                        fclose($stream);
-
-
-                        // Log::info("[$traceId] S3 PUT RESULT", [
-                        //     'path' => $savedPath,
-                        //     'result' => $uploaded,
-                        //     'bucket' => config('filesystems.disks.s3.bucket'),
-                        //     'region' => config('filesystems.disks.s3.region'),
-                        // ]);
-
-
-                        @unlink($tmpPath);
-
-
-                    } catch (\Throwable $e) {
-                        // Log::error("[$traceId] IMAGE UPLOAD FAILED", [
-                        //     'message' => $e->getMessage(),
-                        // ]);
-                        continue;
-                    }
-                }
-
-                /* =====================================================
-       (B) LOCAL FILENAME (LEGACY) → MOVE TO S3
-    ===================================================== */ else {
-
-                    // existing local image (old imports)
-                    $localPath = public_path('product_images/' . $imageValue);
-
-                    if (file_exists($localPath)) {
-
-                        $extension = pathinfo($imageValue, PATHINFO_EXTENSION) ?: 'jpg';
-
-                        $fileName = Str::slug(
-                            pathinfo($imageValue, PATHINFO_FILENAME)
-                        ) . '-' . time() . '-' . uniqid() . '.' . $extension;
-
-                        $savedPath = "product_images/{$product->id}/{$fileName}";
-
-                        // Log::info("[$traceId] IMAGE SIZE", [
-                        //     'bytes' => strlen($response->body()),
-                        // ]);
-
-                        // Storage::disk('s3')->put(
-                        //     $savedPath,
-                        //     file_get_contents($localPath),
-                        //     [
-                        //         'visibility' => 'public',
-                        //         'ContentType' => mime_content_type($localPath) ?: 'image/jpeg',
-                        //     ]
-                        // );
-
-                        $tmpDir = storage_path('app/tmp');
-
-                        if (!is_dir($tmpDir)) {
-                            mkdir($tmpDir, 0755, true);
-                        }
-
-                        $tmpPath = $tmpDir . '/' . uniqid('img_');
-
-                        file_put_contents($tmpPath, $response->body());
-
-                        $uploaded = Storage::disk('s3')->put(
-                            $savedPath,
-                            fopen($tmpPath, 'r'),
-                            [
-                                'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
-                            ]
-                        );
-
-                        // Log::info("[$traceId] S3 PUT RESULT", [
-                        //     'path' => $savedPath,
-                        //     'result' => $uploaded,
-                        //     'bucket' => config('filesystems.disks.s3.bucket'),
-                        //     'region' => config('filesystems.disks.s3.region'),
-                        // ]);
-
-
-                        @unlink($tmpPath);
-                    }
-                }
-
-                /* =====================================================
-       (C) SAVE IMAGE RECORD (UNCHANGED LOGIC)
-    ===================================================== */
-                if ($uploaded === true) {
-
-                    ProductImage::updateOrCreate(
-                        [
-                            'product_id' => $product->id,
-                            'path'       => $savedPath,
-                            'url'       => $savedPath,
-                        ],
-                        [
-                            'store_id'   => $this->storeId,
-                            'alt_text'   => $productName,
-                            'is_primary' => 1,
-                        ]
-                    );
-                }
+            if ($image) {
+                ProcessProductImage::dispatch(
+                    $product->id,
+                    $image,
+                    $this->storeId,
+                    $productName,
+                    $product->slug
+                )->onQueue('images');
             }
 
             // --- Progress update for successful row ---------------------------
-            $this->updateProgress();
+            if ($rowIndex % 20 === 0) {
+                $this->updateProgress();
+            }
+            
         } catch (\Throwable $e) {
             // Do not stop the whole job if one row fails
             Log::error('Import row error', [
