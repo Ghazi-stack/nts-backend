@@ -56,7 +56,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
     public function chunkSize(): int
     {
         // Safe for t3.medium + Redis + swap
-        return 10;
+        return 50;
     }
 
     public function onRow(Row $row)
@@ -125,9 +125,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 //     'name' => $productName,
                 // ]);
 
-                if ($rowIndex % 20 === 0) {
-                    $this->updateProgress();
-                }
+                // if ($rowIndex % 20 === 0) {
+                    
+                // }
+                $this->updateProgress();
                 return;
             }
 
@@ -298,9 +299,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             }
 
             // --- Progress update for successful row ---------------------------
-            if ($rowIndex % 20 === 0) {
-                $this->updateProgress();
-            }
+            // if ($rowIndex % 20 === 0) {
+            //     $this->updateProgress();
+            // }
+            $this->updateProgress();
 
         } catch (\Throwable $e) {
             // Do not stop the whole job if one row fails
@@ -310,9 +312,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             ]);
 
             // Still move progress forward
-            if ($rowIndex % 20 === 0) {
-                $this->updateProgress();
-            }
+            // if ($rowIndex % 20 === 0) {
+            //     $this->updateProgress();
+            // }
+            $this->updateProgress();
         }
     }
 
