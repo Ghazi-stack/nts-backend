@@ -1527,6 +1527,89 @@ class ProductController extends Controller
     }
 
     //last 7 days products get
+
+    // public function lastWeekProducts()
+    // {
+    //     try {
+    //         $storeId = current_store_id();
+
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Store not selected'
+    //             ], 400);
+    //         }
+
+    //         $cacheKey = "last_week_products_store_{$storeId}";
+
+    //         $products = Cache::remember($cacheKey, 300, function () use ($storeId) {
+
+    //             // 🔥 STEP 1: FAST PRODUCT IDS
+    //             $productIds = Product::where('store_id', $storeId)
+    //                 ->where('created_at', '>=', Carbon::now()->subWeek())
+    //                 ->orderByDesc('id')
+    //                 ->pluck('id');
+
+    //             if ($productIds->isEmpty()) {
+    //                 return collect();
+    //             }
+
+    //             // 🔥 STEP 2: LOAD FULL DATA (OPTIMIZED)
+    //             return Product::whereIn('id', $productIds)
+    //                 ->with([
+    //                     // categories (LIMIT recursion)
+    //                     'categories:id,name,parent_id',
+    //                     'categories.parent:id,name,parent_id',
+
+    //                     // brand
+    //                     'brand:id,name,logo',
+
+    //                     // images
+    //                     'images:id,product_id,path,is_primary',
+
+    //                     // reviews (LIMITED)
+    //                     'reviews' => function ($q) {
+    //                         $q->select(
+    //                             'id',
+    //                             'product_id',
+    //                             'user_id',
+    //                             'rating',
+    //                             'comment',
+    //                             'created_at'
+    //                         )
+    //                             ->latest()
+    //                             ->limit(10);
+    //                     },
+    //                     'reviews.user:id,name',
+
+    //                     // content
+    //                     'content:product_id,description,warranty',
+
+    //                     // identifiers
+    //                     'identifiers:product_id,mpn,upc,gtin',
+
+    //                     // seo
+    //                     'seo:product_id,page_title,meta_description'
+    //                 ])
+    //                 ->orderByDesc('id')
+    //                 ->get();
+    //         });
+
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Last week products retrieved successfully',
+    //             'data' => ProductResource::collection($products)
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Something went wrong',
+    //             'error' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
+
     public function lastWeekProducts()
     {
         try {
@@ -1543,20 +1626,13 @@ class ProductController extends Controller
 
             $products = Cache::remember($cacheKey, 300, function () use ($storeId) {
 
-                // 🔥 STEP 1: FAST PRODUCT IDS
-                $productIds = Product::where('store_id', $storeId)
+                return Product::where('store_id', $storeId)
                     ->where('created_at', '>=', Carbon::now()->subWeek())
                     ->orderByDesc('id')
-                    ->pluck('id');
 
-                if ($productIds->isEmpty()) {
-                    return collect();
-                }
-
-                // 🔥 STEP 2: LOAD FULL DATA (OPTIMIZED)
-                return Product::whereIn('id', $productIds)
+                    // 🔥 LOAD RELATIONS DIRECTLY (NO whereIn)
                     ->with([
-                        // categories (LIMIT recursion)
+                        // categories
                         'categories:id,name,parent_id',
                         'categories.parent:id,name,parent_id',
 
@@ -1590,7 +1666,6 @@ class ProductController extends Controller
                         // seo
                         'seo:product_id,page_title,meta_description'
                     ])
-                    ->orderByDesc('id')
                     ->get();
             });
 
@@ -1607,7 +1682,6 @@ class ProductController extends Controller
             ], 500);
         }
     }
-
     public function searchAdvanced(Request $request)
     {
         try {
