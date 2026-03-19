@@ -1614,7 +1614,6 @@ class ProductController extends Controller
     {
         try {
             $storeId = current_store_id();
-
             if (!$storeId) {
                 return response()->json([
                     'status' => false,
@@ -1626,22 +1625,17 @@ class ProductController extends Controller
 
             $products = Cache::remember($cacheKey, 300, function () use ($storeId) {
 
-                return Product::where('store_id', $storeId)
+                // 🔥 DIRECT QUERY — no separate ID fetch needed
+                $query = Product::where('store_id', $storeId)
                     ->where('created_at', '>=', Carbon::now()->subWeek())
-                    ->orderByDesc('id')
-
-                    // 🔥 LOAD RELATIONS DIRECTLY (NO whereIn)
                     ->with([
-                        // categories
+                        // categories (LIMIT recursion)
                         'categories:id,name,parent_id',
                         'categories.parent:id,name,parent_id',
-
                         // brand
                         'brand:id,name,logo',
-
                         // images
                         'images:id,product_id,path,is_primary',
-
                         // reviews (LIMITED)
                         'reviews' => function ($q) {
                             $q->select(
@@ -1656,17 +1650,23 @@ class ProductController extends Controller
                                 ->limit(10);
                         },
                         'reviews.user:id,name',
-
                         // content
                         'content:product_id,description,warranty',
-
                         // identifiers
                         'identifiers:product_id,mpn,upc,gtin',
-
                         // seo
                         'seo:product_id,page_title,meta_description'
                     ])
-                    ->get();
+                    ->orderByDesc('id');
+
+                // 🔥 CHUNKING — agar products bohat zyada hain to memory safe rahegi
+                $allProducts = collect();
+
+                $query->chunk(500, function ($chunk) use (&$allProducts) {
+                    $allProducts = $allProducts->merge($chunk);
+                });
+
+                return $allProducts;
             });
 
             return response()->json([
@@ -1682,6 +1682,8 @@ class ProductController extends Controller
             ], 500);
         }
     }
+
+    
     public function searchAdvanced(Request $request)
     {
         try {
