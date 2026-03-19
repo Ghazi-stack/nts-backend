@@ -1621,12 +1621,14 @@ class ProductController extends Controller
                 ], 400);
             }
 
-            $cacheKey = "last_week_products_store_{$storeId}";
+            $page    = request()->get('page', 1);
+            $perPage = request()->get('per_page', 20); // default 20, max 100
+            $perPage = min((int) $perPage, 100);
 
-            $products = Cache::remember($cacheKey, 300, function () use ($storeId) {
+            $cacheKey = "last_week_products_store_{$storeId}_page_{$page}_per_{$perPage}";
 
-                // 🔥 DIRECT QUERY — no separate ID fetch needed
-                $query = Product::where('store_id', $storeId)
+            $products = Cache::remember($cacheKey, 300, function () use ($storeId, $perPage) {
+                return Product::where('store_id', $storeId)
                     ->where('created_at', '>=', Carbon::now()->subWeek())
                     ->with([
                         // categories (LIMIT recursion)
@@ -1657,33 +1659,32 @@ class ProductController extends Controller
                         // seo
                         'seo:product_id,page_title,meta_description'
                     ])
-                    ->orderByDesc('id');
-
-                // 🔥 CHUNKING — agar products bohat zyada hain to memory safe rahegi
-                $allProducts = collect();
-
-                $query->chunk(500, function ($chunk) use (&$allProducts) {
-                    $allProducts = $allProducts->merge($chunk);
-                });
-
-                return $allProducts;
+                    ->orderByDesc('id')
+                    ->paginate($perPage);
             });
 
             return response()->json([
-                'status' => true,
+                'status'  => true,
                 'message' => 'Last week products retrieved successfully',
-                'data' => ProductResource::collection($products)
+                'data'    => ProductResource::collection($products->items()),
+                'pagination' => [
+                    'current_page' => $products->currentPage(),
+                    'per_page'     => $products->perPage(),
+                    'total'        => $products->total(),
+                    'last_page'    => $products->lastPage(),
+                    'has_more'     => $products->hasMorePages(),
+                ]
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Something went wrong',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage()
             ], 500);
         }
     }
 
-    
+
     public function searchAdvanced(Request $request)
     {
         try {
