@@ -906,7 +906,32 @@ Team",
 
     public function exportToExcel()
     {
-        return Excel::download(new OrdersExport, 'orders.xlsx');
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $orderExists = Order::where('store_id', $storeId)->exists();
+
+            if (!$orderExists) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'No orders found for this store to export.'
+                ], 404);
+            }
+
+            return Excel::download(new OrdersExport, 'orders.xlsx');
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to export orders: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function listDraftOrders(Request $request)
