@@ -182,7 +182,9 @@ class ProductController extends Controller
                 ], 422);
             }
 
-            $query = Product::with([
+            $categoryIds = [];
+
+            $baseQuery = Product::with([
                 'brand:id,name',
                 'categories:id,name',
                 'images:id,product_id,path,is_primary'
@@ -203,7 +205,7 @@ class ProductController extends Controller
                 ])
                 ->where('store_id', $storeId);
 
-            // ✅ Filter by category IDs (comma separated — ?isCategory=1,2,3)
+            // ✅ Validate category IDs
             if ($hasCategory) {
                 $categoryIds = array_filter(array_map('intval', explode(',', $request->isCategory)));
 
@@ -213,30 +215,78 @@ class ProductController extends Controller
                         'message' => 'Invalid category IDs provided.'
                     ], 422);
                 }
-
-                $query->whereIn('category_id', $categoryIds);
             }
 
-            // ✅ Filter by SKU (single value — ?isSku=SKU-1234)
-            if ($hasSku) {
-                $query->where('sku', $request->isSku);
-            }
+            // ✅ Both filters — run separately then merge
+            if ($hasCategory && $hasSku) {
 
-            $page     = (int) $request->input('page', 1);
-            $pageSize = (int) $request->input('pageSize', 20);
+                $categoryProducts = (clone $baseQuery)
+                    ->whereIn('category_id', $categoryIds)
+                    ->orderBy('id', 'desc')
+                    ->get();
 
-            $products = $query->orderBy('id', 'desc')->paginate($pageSize, ['*'], 'page', $page);
+                $skuProducts = (clone $baseQuery)
+                    ->where('sku', $request->isSku)
+                    ->orderBy('id', 'desc')
+                    ->get();
 
-            // ✅ Specific messages based on which filter was used
-            if ($products->isEmpty()) {
+                $categoryFound = $categoryProducts->isNotEmpty();
+                $skuFound      = $skuProducts->isNotEmpty();
 
-                if ($hasCategory && $hasSku) {
-                    $message = 'No product found against this SKU and Category.';
-                } elseif ($hasSku) {
-                    $message = 'No product found against this SKU.';
-                } else {
-                    $message = 'No product found against this Category.';
+                // ✅ Neither found
+                if (!$categoryFound && !$skuFound) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'No product found against this SKU and Category.',
+                        'data'    => []
+                    ], 404);
                 }
+
+                // ✅ Only SKU not found
+                if (!$skuFound) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'No product found against this SKU.',
+                        'data'    => []
+                    ], 404);
+                }
+
+                // ✅ Only Category not found
+                if (!$categoryFound) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'No product found against this Category.',
+                        'data'    => []
+                    ], 404);
+                }
+
+                // ✅ Both found — merge & remove duplicates
+                $merged = $categoryProducts->merge($skuProducts)->unique('id')->values();
+
+                return response()->json([
+                    'status'  => true,
+                    'message' => 'Filtered products fetched successfully.',
+                    'data'    => ProductListResource::collection($merged),
+                ]);
+            }
+
+            // ✅ Only Category filter
+            if ($hasCategory) {
+                $baseQuery->whereIn('category_id', $categoryIds);
+            }
+
+            // ✅ Only SKU filter
+            if ($hasSku) {
+                $baseQuery->where('sku', $request->isSku);
+            }
+
+            $products = $baseQuery->orderBy('id', 'desc')->get(); // ✅ get() instead of paginate()
+
+            // ✅ Single filter not found messages
+            if ($products->isEmpty()) {
+                $message = $hasSku
+                    ? 'No product found against this SKU.'
+                    : 'No product found against this Category.';
 
                 return response()->json([
                     'status'  => false,
@@ -246,15 +296,9 @@ class ProductController extends Controller
             }
 
             return response()->json([
-                'status'     => true,
-                'message'    => 'Filtered products fetched successfully.',
-                'data'       => ProductListResource::collection($products),
-                'pagination' => [
-                    'total'    => $products->total(),
-                    'page'     => $products->currentPage(),
-                    'pageSize' => $products->perPage(),
-                    'lastPage' => $products->lastPage()
-                ]
+                'status'  => true,
+                'message' => 'Filtered products fetched successfully.',
+                'data'    => ProductListResource::collection($products),
             ]);
         } catch (\Exception $e) {
             return response()->json(['status' => false, 'error' => $e->getMessage()], 500);
