@@ -162,7 +162,104 @@ class ProductController extends Controller
         }
     }
 
+    public function filterProducts(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
 
+            if (!$storeId) {
+                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
+            }
+
+            $hasCategory = $request->has('isCategory') && !empty($request->isCategory);
+            $hasSku      = $request->has('isSku') && !empty($request->isSku);
+
+            // ✅ If neither filter provided
+            if (!$hasCategory && !$hasSku) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Please provide at least one filter: isCategory or isSku.'
+                ], 422);
+            }
+
+            $query = Product::with([
+                'brand:id,name',
+                'categories:id,name',
+                'images:id,product_id,path,is_primary'
+            ])
+                ->select([
+                    'id',
+                    'name',
+                    'slug',
+                    'sku',
+                    'price',
+                    'msrp',
+                    'brand_id',
+                    'category_id',
+                    'current_stock',
+                    'is_featured',
+                    'visible_on_storefront',
+                    'store_id'
+                ])
+                ->where('store_id', $storeId);
+
+            // ✅ Filter by category IDs (comma separated — ?isCategory=1,2,3)
+            if ($hasCategory) {
+                $categoryIds = array_filter(array_map('intval', explode(',', $request->isCategory)));
+
+                if (empty($categoryIds)) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Invalid category IDs provided.'
+                    ], 422);
+                }
+
+                $query->whereIn('category_id', $categoryIds);
+            }
+
+            // ✅ Filter by SKU (single value — ?isSku=SKU-1234)
+            if ($hasSku) {
+                $query->where('sku', $request->isSku);
+            }
+
+            $page     = (int) $request->input('page', 1);
+            $pageSize = (int) $request->input('pageSize', 20);
+
+            $products = $query->orderBy('id', 'desc')->paginate($pageSize, ['*'], 'page', $page);
+
+            // ✅ Specific messages based on which filter was used
+            if ($products->isEmpty()) {
+
+                if ($hasCategory && $hasSku) {
+                    $message = 'No product found against this SKU and Category.';
+                } elseif ($hasSku) {
+                    $message = 'No product found against this SKU.';
+                } else {
+                    $message = 'No product found against this Category.';
+                }
+
+                return response()->json([
+                    'status'  => false,
+                    'message' => $message,
+                    'data'    => []
+                ], 404);
+            }
+
+            return response()->json([
+                'status'     => true,
+                'message'    => 'Filtered products fetched successfully.',
+                'data'       => ProductListResource::collection($products),
+                'pagination' => [
+                    'total'    => $products->total(),
+                    'page'     => $products->currentPage(),
+                    'pageSize' => $products->perPage(),
+                    'lastPage' => $products->lastPage()
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
 
     public function show($id)
     {
