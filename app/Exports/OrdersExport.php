@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Exports;
 
 use App\Models\Order;
@@ -11,11 +12,11 @@ class OrdersExport implements FromCollection, WithHeadings
     public function collection(): Collection
     {
         try {
-            $orders = Order::with('customer:id,name,email') // ✅ eager load user
+            $orders = Order::with('customer:id,first_name,last_name,email') // ✅ first_name & last_name
                 ->select(
                     'id',
                     'order_number',
-                    'customer_id',  // ✅ needed for relation
+                    'customer_id',
                     'status',
                     'total_amount',
                     'created_at'
@@ -31,17 +32,21 @@ class OrdersExport implements FromCollection, WithHeadings
             }
 
             return $orders->map(function ($order) {
+                // ✅ first_name + last_name combined
+                $firstName = $order->customer->first_name ?? '';
+                $lastName  = $order->customer->last_name  ?? '';
+                $fullName  = trim($firstName . ' ' . $lastName) ?: 'N/A';
+
                 return [
                     'id'           => $order->id,
                     'order_number' => $order->order_number,
-                    'name'         => $order->customer->name  ?? 'N/A', // ✅ from users table
-                    'email'        => $order->customer->email ?? 'N/A', // ✅ from users table
+                    'name'         => $fullName,                          // ✅ combined
+                    'email'        => $order->customer->email ?? 'N/A',
                     'status'       => $order->status,
                     'total_amount' => $order->total_amount,
                     'created_at'   => $order->created_at?->format('Y-m-d H:i:s'),
                 ];
             });
-
         } catch (\Exception $e) {
             return collect([
                 ['Error generating export: ' . $e->getMessage()]
@@ -54,8 +59,8 @@ class OrdersExport implements FromCollection, WithHeadings
         return [
             'ID',
             'Order Number',
-            'Customer Name',  // ✅ from users table
-            'Customer Email', // ✅ from users table
+            'Customer Name',
+            'Customer Email',
             'Status',
             'Total Amount',
             'Created At',
