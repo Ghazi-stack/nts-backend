@@ -242,27 +242,28 @@ class ProductController extends Controller
                     ], 404);
                 }
 
-                // ✅ Only SKU not found
-                if (!$skuFound) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'No product found against this SKU.',
-                        'data'    => []
-                    ], 404);
-                }
-
-                // ✅ Only Category not found
-                if (!$categoryFound) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'No product found against this Category.',
-                        'data'    => []
-                    ], 404);
-                }
-
-                // ✅ Both found — merge & remove duplicates
+                // ✅ Merge both (unique by id — same product won't duplicate)
                 $merged = $categoryProducts->merge($skuProducts)->unique('id')->values();
 
+                // ✅ Category found, SKU not found — return category data + SKU message
+                if ($categoryFound && !$skuFound) {
+                    return response()->json([
+                        'status'  => true,
+                        'message' => 'Products fetched from Category. No product found against this SKU.',
+                        'data'    => ProductListResource::collection($merged),
+                    ]);
+                }
+
+                // ✅ SKU found, Category not found — return SKU data + Category message
+                if ($skuFound && !$categoryFound) {
+                    return response()->json([
+                        'status'  => true,
+                        'message' => 'Products fetched from SKU. No product found against this Category.',
+                        'data'    => ProductListResource::collection($merged),
+                    ]);
+                }
+
+                // ✅ Both found — merge, deduplicate by id
                 return response()->json([
                     'status'  => true,
                     'message' => 'Filtered products fetched successfully.',
@@ -280,7 +281,7 @@ class ProductController extends Controller
                 $baseQuery->where('sku', $request->isSku);
             }
 
-            $products = $baseQuery->orderBy('id', 'desc')->get(); // ✅ get() instead of paginate()
+            $products = $baseQuery->orderBy('id', 'desc')->get();
 
             // ✅ Single filter not found messages
             if ($products->isEmpty()) {
