@@ -9,7 +9,7 @@ class OrdersExport implements FromCollection, WithHeadings
 {
     public function collection()
     {
-        return Order::select('id', 'order_number', 'name', 'email', 'status', 'total_amount')
+        return Order::select('id', 'order_number', 'email', 'status', 'total_amount')
             ->where('store_id', current_store_id())
             ->latest()
             ->get();
@@ -20,7 +20,7 @@ class OrdersExport implements FromCollection, WithHeadings
         return [
             'ID',
             'Order Number',
-            'Name',
+            // 'Name',
             'Email',
             'Status',
             'Total Amount',
