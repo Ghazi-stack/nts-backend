@@ -2257,29 +2257,42 @@ class ProductController extends Controller
         }
         return $fields;
     }
-  public function exportCSV()
-{
-    try {
-        $storeId = current_store_id();
-        if (!$storeId) {
+    public function exportCSV()
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            // ✅ Check products exist first
+            $count = Product::where('store_id', $storeId)->count();
+            if ($count === 0) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'No products found to export.'
+                ], 404);
+            }
+
+            $fileName = 'products_export_' . now()->format('Ymd_His') . '.xlsx';
+
+            return Excel::download(new ProductExport($storeId), $fileName);
+        } catch (\Throwable $e) {
+            \Log::error('Export CSV Error: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
             return response()->json([
                 'status'  => false,
-                'message' => 'Store not selected or token invalid.'
-            ], 400);
+                'message' => 'Export failed: ' . $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ], 500);
         }
-
-        $originalFileName = session()->get("import_file_name_{$storeId}", 'products_export');
-        $fileName = $originalFileName . '_export_' . now()->format('Ymd_His') . '.xlsx';
-
-        return Excel::download(new ProductExport($storeId), $fileName);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'status'  => false,
-            'message' => 'Export failed: ' . $e->getMessage()
-        ], 500);
     }
-}
     public function destroyProductCategories(Request $request, $id)
     {
         try {
