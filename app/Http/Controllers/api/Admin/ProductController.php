@@ -118,6 +118,9 @@ class ProductController extends Controller
             if ($request->has('isFeatured')) {
                 $query->where('is_featured', $request->boolean('isFeatured'));
             }
+            if ($request->has('freeShipping')) {
+                $query->where('free_shipping', $request->boolean('freeShipping'));
+            }
 
             if ($request->has('outOfStock') && $request->boolean('outOfStock')) {
                 $query->where('current_stock', '<=', 0);
