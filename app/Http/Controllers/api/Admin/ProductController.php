@@ -2257,24 +2257,29 @@ class ProductController extends Controller
         }
         return $fields;
     }
-    public function exportCSV()
-    {
+  public function exportCSV()
+{
+    try {
         $storeId = current_store_id();
         if (!$storeId) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Store not selected or token invalid.'
             ], 400);
         }
 
-        // 🧠 Get original import file name from session (default fallback)
         $originalFileName = session()->get("import_file_name_{$storeId}", 'products_export');
-
         $fileName = $originalFileName . '_export_' . now()->format('Ymd_His') . '.xlsx';
 
         return Excel::download(new ProductExport($storeId), $fileName);
-    }
 
+    } catch (\Exception $e) {
+        return response()->json([
+            'status'  => false,
+            'message' => 'Export failed: ' . $e->getMessage()
+        ], 500);
+    }
+}
     public function destroyProductCategories(Request $request, $id)
     {
         try {

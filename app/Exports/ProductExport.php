@@ -18,62 +18,87 @@ class ProductExport implements FromCollection, WithHeadings, WithMapping
 
     public function collection()
     {
-        return Product::with(['brand', 'categories.parent', 'content', 'identifiers', 'seo', 'images'])
+        return Product::with([
+            'brand',
+            'categories.parent',
+            'content',
+            'identifiers',
+            'seo',
+            'images'
+        ])
             ->where('store_id', $this->storeId)
-            ->get();
+            ->get()
+            ->map(function ($product) {
+                // ✅ Cast dimensions safely
+                $product->dimensions = is_array($product->dimensions)
+                    ? $product->dimensions
+                    : (json_decode($product->dimensions, true) ?? []);
+
+                // ✅ Cast custom_fields safely
+                $product->custom_fields = is_array($product->custom_fields)
+                    ? $product->custom_fields
+                    : (json_decode($product->custom_fields, true) ?? []);
+
+                return $product;
+            });
     }
 
     public function map($product): array
     {
-        $primaryImage = $product->images->firstWhere('is_primary', true);
+        try {
+            $primaryImage = $product->images->firstWhere('is_primary', true);
 
-        return [
-            $product->item_type ?? '',
-            '',
-            $product->name ?? '',
-            $product->sku ?? '',
-            optional($product->brand)->name ?? '',
-            $this->getCategoryPath($product) ?? '',
-            $product->price ?? '',
-            $product->cost_price ?? '',
-            $product->sale_price ?? '',
-            $product->fixed_shipping_cost ?? '',
-            $this->boolOut($product->free_shipping),
-            $this->boolOut($product->allow_purchase),
-            $product->item_type ?? '',
-            $product->product_type ?? '',
-            optional($product->content)->description ?? '',
-            optional($product->content)->warranty ?? '',
-            optional($product->content)->availability_text ?? '',
-            $product->option_set ?? '',
-            $product->option_set_align ?? '',
-            $product->dimensions['weight'] ?? '',
-            $product->dimensions['width'] ?? '',
-            $product->dimensions['height'] ?? '',
-            $product->dimensions['depth'] ?? '',
-            optional($product->seo)->page_title ?? '',
-            optional($product->seo)->product_url ?? '',
-            optional($product->seo)->meta_description ?? '',
-            optional($product->seo)->meta_keywords ?? '',
-            $this->boolOut(optional($product->seo)->redirect_old_url),
-            optional($product->identifiers)->mpn ?? '',
-            optional($product->identifiers)->gtin ?? '',
-            optional($product->identifiers)->upc ?? '',
-            optional($product->identifiers)->bpn ?? '',
-            $product->condition ?? '',
-            $this->boolOut($product->show_condition),
-            $this->boolOut($product->track_inventory),
-            $product->current_stock ?? '',
-            $product->low_stock ?? '',
-            $this->formatCustomFields($product->custom_fields),
-            $primaryImage->path ?? '',
-            $this->boolOut($product->visible_on_storefront),
-            $product->sort_order ?? '',
-            $product->search_keywords ?? '',
-            $product->tax_class ?? '',
-            $product->tax_provider_code ?? '',
-            $this->boolOut($product->stop_processing_rules),
-        ];
+            return [
+                $product->item_type ?? '',
+                '',
+                $product->name ?? '',
+                $product->sku ?? '',
+                optional($product->brand)->name ?? '',
+                $this->getCategoryPath($product) ?? '',
+                $product->price ?? '',
+                $product->cost_price ?? '',
+                $product->sale_price ?? '',
+                $product->fixed_shipping_cost ?? '',
+                $this->boolOut($product->free_shipping),
+                $this->boolOut($product->allow_purchase),
+                $product->item_type ?? '',
+                $product->product_type ?? '',
+                optional($product->content)->description ?? '',
+                optional($product->content)->warranty ?? '',
+                optional($product->content)->availability_text ?? '',
+                $product->option_set ?? '',
+                $product->option_set_align ?? '',
+                $product->dimensions['weight'] ?? '',
+                $product->dimensions['width'] ?? '',
+                $product->dimensions['height'] ?? '',
+                $product->dimensions['depth'] ?? '',
+                optional($product->seo)->page_title ?? '',
+                optional($product->seo)->product_url ?? '',
+                optional($product->seo)->meta_description ?? '',
+                optional($product->seo)->meta_keywords ?? '',
+                $this->boolOut(optional($product->seo)->redirect_old_url),
+                optional($product->identifiers)->mpn ?? '',
+                optional($product->identifiers)->gtin ?? '',
+                optional($product->identifiers)->upc ?? '',
+                optional($product->identifiers)->bpn ?? '',
+                $product->condition ?? '',
+                $this->boolOut($product->show_condition),
+                $this->boolOut($product->track_inventory),
+                $product->current_stock ?? '',
+                $product->low_stock ?? '',
+                $this->formatCustomFields($product->custom_fields),
+                $primaryImage->path ?? '',
+                $this->boolOut($product->visible_on_storefront),
+                $product->sort_order ?? '',
+                $product->search_keywords ?? '',
+                $product->tax_class ?? '',
+                $product->tax_provider_code ?? '',
+                $this->boolOut($product->stop_processing_rules),
+            ];
+        } catch (\Exception $e) {
+            // ✅ If one product fails, return empty row instead of crashing
+            return array_fill(0, count($this->headings()), 'ERROR: ' . $e->getMessage());
+        }
     }
 
     public function headings(): array
@@ -84,7 +109,7 @@ class ProductExport implements FromCollection, WithHeadings, WithMapping
             'Product Name',
             'Product Code/SKU',
             'Brand Name',
-            'Category', // GPS Category
+            'Category',
             'Retail Price',
             'Cost Price',
             'Sale Price',
@@ -129,7 +154,7 @@ class ProductExport implements FromCollection, WithHeadings, WithMapping
 
     private function formatCustomFields($fields)
     {
-        if (!is_array($fields)) return '';
+        if (empty($fields) || !is_array($fields)) return '';
 
         return collect($fields)->map(function ($val, $key) {
             if (is_array($val)) {
@@ -146,15 +171,23 @@ class ProductExport implements FromCollection, WithHeadings, WithMapping
 
     private function getCategoryPath($product)
     {
-        $category = $product->categories->first();
-        if (!$category) return '';
+        try {
+            $category = $product->categories->first();
+            if (!$category) return '';
 
-        $names = [];
-        while ($category) {
-            array_unshift($names, $category->name);
-            $category = $category->parent;
+            $names  = [];
+            $limit  = 10; // ✅ prevent infinite loop
+            $count  = 0;
+
+            while ($category && $count < $limit) {
+                array_unshift($names, $category->name);
+                $category = $category->parent;
+                $count++;
+            }
+
+            return implode('/', $names);
+        } catch (\Exception $e) {
+            return '';
         }
-
-        return implode('/', $names); // e.g., Electronics/Laptops
     }
 }
