@@ -8,7 +8,7 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
 
-class ProductExport implements FromQuery, WithHeadings, WithMapping
+class ProductExport implements FromQuery, WithHeadings, WithMapping, WithChunkReading
 {
     protected $storeId;
 
@@ -17,7 +17,12 @@ class ProductExport implements FromQuery, WithHeadings, WithMapping
         $this->storeId = $storeId;
     }
 
-    // ✅ FromQuery — much faster than FromCollection
+    // ✅ Process 100 records at a time — prevents memory crash
+    public function chunkSize(): int
+    {
+        return 100;
+    }
+
     public function query()
     {
         return Product::with([
@@ -39,12 +44,10 @@ class ProductExport implements FromQuery, WithHeadings, WithMapping
             $primaryImage = $product->images->firstWhere('is_primary', true)
                 ?? $product->images->first();
 
-            // ✅ Safe dimensions
             $dimensions = is_array($product->dimensions)
                 ? $product->dimensions
                 : (json_decode($product->dimensions, true) ?? []);
 
-            // ✅ Safe custom_fields
             $customFields = is_array($product->custom_fields)
                 ? $product->custom_fields
                 : (json_decode($product->custom_fields, true) ?? []);
@@ -97,7 +100,7 @@ class ProductExport implements FromQuery, WithHeadings, WithMapping
                 $this->boolOut($product->stop_processing_rules),
             ];
         } catch (\Throwable $e) {
-            \Log::error('ProductExport map error for product ' . $product->id . ': ' . $e->getMessage());
+            \Log::error('ProductExport map error — product ' . $product->id . ': ' . $e->getMessage());
             return array_fill(0, 45, '');
         }
     }

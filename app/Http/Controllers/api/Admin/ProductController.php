@@ -2261,6 +2261,7 @@ class ProductController extends Controller
     {
         try {
             $storeId = current_store_id();
+
             if (!$storeId) {
                 return response()->json([
                     'status'  => false,
@@ -2268,7 +2269,6 @@ class ProductController extends Controller
                 ], 400);
             }
 
-            // ✅ Check products exist first
             $count = Product::where('store_id', $storeId)->count();
             if ($count === 0) {
                 return response()->json([
@@ -2276,6 +2276,10 @@ class ProductController extends Controller
                     'message' => 'No products found to export.'
                 ], 404);
             }
+
+            // ✅ Increase limits for large exports
+            ini_set('memory_limit', '512M');
+            set_time_limit(300); // 5 minutes
 
             $fileName = 'products_export_' . now()->format('Ymd_His') . '.xlsx';
 
@@ -2288,8 +2292,8 @@ class ProductController extends Controller
             return response()->json([
                 'status'  => false,
                 'message' => 'Export failed: ' . $e->getMessage(),
-                'file'    => $e->getFile(),
                 'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
             ], 500);
         }
     }
