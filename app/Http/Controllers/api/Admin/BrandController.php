@@ -38,8 +38,12 @@ class BrandController extends Controller
                 return [
                     'brand' => new BrandResource($items->first()),
                     'productsCount' => $items->sum('products_count'),
+                    'latest_id' => $items->max('id'),
                 ];
             })->values();
+
+            // Sort by newest first
+            $merged = $merged->sortByDesc('latest_id')->values();
 
             // Apply keyword filtering
             if ($keyword !== '') {
@@ -54,6 +58,12 @@ class BrandController extends Controller
             $page = (int) $request->query('page', 1);
             $paged = $merged->forPage($page, $perPage);
             $total = $merged->count();
+
+            // Remove latest_id from final output
+            $paged = $paged->map(function ($item) {
+                unset($item['latest_id']);
+                return $item;
+            });
 
             return response()->json([
                 'status' => true,
