@@ -62,7 +62,7 @@ class CategoryController extends Controller
         // ⚡ Load categories WITHOUT products to avoid huge payloads
         $categories = Category::with(['childrenRecursive'])
             ->withCount('products') // direct product count
-            ->where('store_id', $storeId)
+            ->where('store_id',"=", $storeId)
             ->whereNull('parent_id')
             ->get();
 
