@@ -18,25 +18,25 @@ class ShipmentController extends Controller
     {
         $storeId = current_store_id();
         $keyword = $request->get('keyword');
-        
+
         // Eager-load related order, items, and products
         $query = Shipment::with(['order.items.product'])
             ->where('store_id', $storeId);
-        
+
         // Apply keyword search (if provided)
         if ($keyword) {
             $query->where(function ($q) use ($keyword) {
-                $q->where('shipped_to', 'like', '%' . $keyword . '%')
-                  ->orWhere('tracking_number', 'like', '%' . $keyword . '%')
-                  ->orWhereHas('order', function ($q2) use ($keyword) {
-                      $q2->where('name', 'like', '%' . $keyword . '%');
-                  });
+                $q->where('shipments.shipped_to', 'like', '%' . $keyword . '%')
+                    ->orWhere('shipments.tracking_number', 'like', '%' . $keyword . '%')
+                    ->orWhereHas('order', function ($q2) use ($keyword) {
+                        $q2->where('orders.name', 'like', '%' . $keyword . '%');
+                    });
             });
         }
-    
+
         // Paginate results
         $shipments = $query->orderByDesc('id')->paginate($request->get('pageSize', 20));
-    
+
         // Return response
         return response()->json([
             'status' => true,
@@ -80,16 +80,16 @@ class ShipmentController extends Controller
             'dateShipped' => 'required|date',
             'trackingNumber' => 'nullable|string|max:255',
         ]);
-    
+
         $storeId = current_store_id();
         $order = Order::with('customer') // ⬅️ make sure customer is eager-loaded
             ->where('store_id', $storeId)
             ->findOrFail($validated['orderId']);
-    
+
         $existing = Shipment::where('store_id', $storeId)
             ->where('order_id', $order->id)
             ->first();
-    
+
         if ($existing) {
             return response()->json([
                 'status' => false,
@@ -97,25 +97,25 @@ class ShipmentController extends Controller
                 'data' => new ShipmentResource($existing)
             ], 409); // Conflict
         }
-    
+
         $shipment = Shipment::create([
             'order_id'        => $order->id,
             'store_id'        => $storeId,
-            'shipped_to'      => $validated['shippedTo'] 
-                                ?? trim(optional($order->customer)->first_name . ' ' . optional($order->customer)->last_name)
-                                ?? 'Unknown',
+            'shipped_to'      => $validated['shippedTo']
+                ?? trim(optional($order->customer)->first_name . ' ' . optional($order->customer)->last_name)
+                ?? 'Unknown',
             'date_shipped'    => $validated['dateShipped'],
             'tracking_number' => $validated['trackingNumber'] ?? $this->generateTrackingNumber(),
         ]);
-    
+
         $order->tracking_number = $shipment->tracking_number;
         $order->save();
-    
+
         event(new ShipmentCreated($shipment));
         sleep(1);
-    
+
         $emailStatus = Cache::pull('shipment_email_status_' . $shipment->id);
-    
+
         return response()->json([
             'status' => true,
             'message' => 'Shipment created successfully.',
@@ -180,22 +180,22 @@ class ShipmentController extends Controller
     public function printPackingSlip($id)
     {
         $storeId = current_store_id();
-    
+
         $shipment = Shipment::with(['order.items.product'])
             ->where('store_id', $storeId)
             ->findOrFail($id);
-    
+
         // Convert logo to base64
         $logoPath = public_path('logo/nts-logo.png');
         $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
-    
+
         // Load PDF with view and pass base64 logo
         $pdf = Pdf::loadView('pdf.packing-slip', [
             'shipment' => $shipment,
             'order' => $shipment->order,
             'logoBase64' => $logoBase64
         ]);
-    
+
         return $pdf->download('packing-slip-' . $shipment->id . '.pdf');
     }
 
@@ -223,8 +223,8 @@ class ShipmentController extends Controller
 
                     $mainQuery->where(function ($q) use ($keyword) {
                         $q->where('shipped_to', 'like', "%$keyword%")
-                          ->orWhere('tracking_number', 'like', "%$keyword%")
-                          ->orWhere('id', $keyword); // ID search
+                            ->orWhere('tracking_number', 'like', "%$keyword%")
+                            ->orWhere('id', $keyword); // ID search
                     });
                 }
 
