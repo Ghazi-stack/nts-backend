@@ -34,15 +34,15 @@ class ProductExport implements FromQuery, WithHeadings, WithMapping, WithChunkRe
             'seo:id,product_id,page_title,product_url,meta_description,meta_keywords,redirect_old_url',
             'images:id,product_id,path,is_primary',
         ])
-            ->where('store_id', $this->storeId)
-            ->orderBy('id', 'desc');
+        ->where('store_id', $this->storeId)
+        ->orderBy('id', 'desc');
     }
 
     public function map($product): array
     {
         try {
             $primaryImage = $product->images->firstWhere('is_primary', true)
-                ?? $product->images->first();
+                         ?? $product->images->first();
 
             $dimensions = is_array($product->dimensions)
                 ? $product->dimensions
@@ -99,6 +99,7 @@ class ProductExport implements FromQuery, WithHeadings, WithMapping, WithChunkRe
                 $product->tax_provider_code ?? '',
                 $this->boolOut($product->stop_processing_rules),
             ];
+
         } catch (\Throwable $e) {
             \Log::error('ProductExport map error — product ' . $product->id . ': ' . $e->getMessage());
             return array_fill(0, 45, '');
