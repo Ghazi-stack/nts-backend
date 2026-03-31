@@ -26,11 +26,8 @@ class ShipmentController extends Controller
         // Apply keyword search (if provided)
         if ($keyword) {
             $query->where(function ($q) use ($keyword) {
-                $q->where('shipments.shipped_to', 'like', '%' . $keyword . '%')
-                    ->orWhere('shipments.tracking_number', 'like', '%' . $keyword . '%')
-                    ->orWhereHas('order', function ($q2) use ($keyword) {
-                        $q2->where('orders.name', 'like', '%' . $keyword . '%');
-                    });
+                $q->where('shipped_to', 'like', '%' . $keyword . '%')
+                    ->orWhere('tracking_number', 'like', '%' . $keyword . '%');
             });
         }
 
