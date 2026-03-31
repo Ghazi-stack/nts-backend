@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class BrandController extends Controller
 {
-    
+
     public function index(Request $request)
     {
         try {
@@ -24,19 +24,15 @@ class BrandController extends Controller
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
-        
+
             $perPage = (int) $request->query('perPage', 20);
             $keyword = trim((string) $request->query('keyword', ''));
-        
-            $query = Brand::select('name', DB::raw('SUM(products_count) as products_count'))
-                ->where('store_id', $storeId)
-                ->groupBy('name');
-        
-            // Eager-load product count relation if needed (assumes `withCount('products')` is being handled elsewhere)
+
+            // Eager-load product count relation
             $brandsWithProducts = Brand::withCount('products')
                 ->where('store_id', $storeId)
                 ->get();
-        
+
             // Merge duplicated brand names and their product counts
             $merged = $brandsWithProducts->groupBy('name')->map(function ($items, $name) {
                 return [
@@ -44,22 +40,21 @@ class BrandController extends Controller
                     'productsCount' => $items->sum('products_count'),
                 ];
             })->values();
-        
+
             // Apply keyword filtering
             if ($keyword !== '') {
                 $merged = $merged->filter(function ($item) use ($keyword) {
-                    return stripos($item['name'], $keyword) !== false;
+                    return stripos($item['brand']['name'], $keyword) !== false;
                 })->sortBy(function ($item) use ($keyword) {
-                    // Prioritize names that start with the keyword
-                    return stripos($item['name'], $keyword) === 0 ? 0 : 1;
+                    return stripos($item['brand']['name'], $keyword) === 0 ? 0 : 1;
                 })->values();
             }
-        
+
             // Paginate manually
             $page = (int) $request->query('page', 1);
             $paged = $merged->forPage($page, $perPage);
             $total = $merged->count();
-        
+
             return response()->json([
                 'status' => true,
                 'message' => 'Brands retrieved successfully',
@@ -69,19 +64,19 @@ class BrandController extends Controller
                     'count' => $paged->count(),
                     'perPage' => $perPage,
                     'currentPage' => $page,
-                    'totalPages' => ceil($total / $perPage),
+                    'totalPages' => (int) ceil($total / $perPage),
                 ]
             ], 200);
-        
         } catch (Exception $e) {
             Log::error('Error fetching brands: ' . $e->getMessage());
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to retrieve brands',
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
             ], 500);
         }
     }
-
     public function showBrands($id)
     {
         try {
@@ -150,7 +145,7 @@ class BrandController extends Controller
             ], 500);
         }
     }
- 
+
     public function updateBrands(Request $request, $id)
     {
         try {
@@ -241,8 +236,8 @@ class BrandController extends Controller
 
             // Fetch brands for deletion
             $brands = Brand::where('store_id', $storeId)
-                           ->whereIn('id', $idArray)
-                           ->get();
+                ->whereIn('id', $idArray)
+                ->get();
 
             if ($brands->isEmpty()) {
                 return response()->json([
