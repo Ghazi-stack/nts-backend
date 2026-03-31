@@ -247,19 +247,19 @@ class CategoryController extends Controller
                 'isVisible' => 'nullable|boolean',
             ]);
 
-            $slug = Str::slug($request->name);
+            // $slug = Str::slug($request->name);
 
-            if (Category::where('slug', $slug)
-                ->where('id', '!=', $category->id) // ✅ use $category->id
-                ->where('store_id', $storeId)
-                ->exists()
-            ) {
-                return response()->json(['status' => false, 'message' => 'Slug already exists.'], 422);
-            }
+            // if (Category::where('slug', $slug)
+            //     ->where('id', '!=', $category->id) // ✅ use $category->id
+            //     ->where('store_id', $storeId)
+            //     ->exists()
+            // ) {
+            //     return response()->json(['status' => false, 'message' => 'Slug already exists.'], 422);
+            // }
 
             $category->update([
                 'name' => $request->name,
-                'slug' => $slug,
+                // 'slug' => $slug,
                 'description' => $request->description,
                 'parent_id' => $request->parentId,
                 'is_visible' => $request->boolean('isVisible', $category->is_visible),
