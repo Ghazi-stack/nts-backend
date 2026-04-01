@@ -44,6 +44,7 @@ class OrderController extends Controller
             $sessionId = $request->header('X-Session-ID') ?? session()->getId();
             $perPage = $request->query('perPage', 20);
             $keyword = $request->query('keyword');
+            $status = $request->query('status');
 
             $storeId = current_store_id();
 
@@ -57,6 +58,9 @@ class OrderController extends Controller
             $orders = Order::with(['items.product.images', 'customer', 'billingInformation', 'notes'])
                 ->where('store_id', $storeId)
                 ->where('is_draft', 0)
+                ->when($status, function ($q) use ($status) {
+                    $q->where('status', $status);
+                })
                 ->when($keyword, function ($q) use ($keyword) {
                     $q->where(function ($query) use ($keyword) {
                         $query->where('id', 'like', "%{$keyword}%")
