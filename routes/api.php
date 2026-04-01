@@ -61,19 +61,18 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
 
 
 
-// ─── Public (token ki zaroorat nahi) ─────────────────────────
- 
+
 Route::post('/auth/login', [AuthController::class, 'login']);
- 
+
 Route::prefix('2fa')->group(function () {
     Route::post('/verify',     [TwoFactorController::class, 'verify']);      // OTP verify → real token
     Route::post('/resend-otp', [TwoFactorController::class, 'resendOtp']);   // Email OTP dobara bhejo
 });
- 
+
 // ─── Protected (auth:sanctum middleware) ─────────────────────
- 
+
 Route::middleware('auth:sanctum')->group(function () {
- 
+
     Route::prefix('2fa')->group(function () {
         Route::get('/status',                  [TwoFactorController::class, 'status']);
         Route::post('/enable/email',           [TwoFactorController::class, 'enableEmail']);
@@ -81,7 +80,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/confirm/authenticator',  [TwoFactorController::class, 'confirmAuthenticator']);
         Route::post('/disable',                [TwoFactorController::class, 'disable']);
     });
- 
 });
 
 // ===============================
