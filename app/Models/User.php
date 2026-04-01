@@ -31,7 +31,14 @@ class User extends Authenticatable
         'business_size',
         'region',
         'customer_id',
-        'store_id'
+        'store_id',
+
+        'two_factor_enabled',
+        'two_factor_type',
+        'two_factor_secret',
+        'two_factor_otp',
+        'two_factor_otp_expires_at',
+        'two_factor_confirmed',
     ];
 
     /**
@@ -42,6 +49,9 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+
+        'two_factor_secret',
+        'two_factor_otp',
     ];
 
     /**
@@ -52,6 +62,10 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+
+        'two_factor_enabled'        => 'boolean',
+        'two_factor_confirmed'      => 'boolean',
+        'two_factor_otp_expires_at' => 'datetime',
     ];
 
 

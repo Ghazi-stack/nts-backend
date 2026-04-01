@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Password;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
 use Exception;
+use App\Services\TwoFactorService;
 
 class AuthController extends Controller
 {
@@ -76,7 +77,7 @@ class AuthController extends Controller
                 $store = Store::create([
                     'name'    => $request->storeName,
                     'user_id' => $user->id,
-                    'base_url' =>$request->base_url, 
+                    'base_url' => $request->base_url,
                 ]);
 
                 // ✅ Update user with store_id
@@ -158,6 +159,170 @@ class AuthController extends Controller
     }
 
 
+    protected TwoFactorService $twoFactorService;
+
+    public function __construct(TwoFactorService $twoFactorService)
+    {
+        $this->twoFactorService = $twoFactorService;
+    }
+
+    public function login(Request $request)
+    {
+        try {
+            $request->validate([
+                'email'    => 'required|email',
+                'password' => 'required',
+            ]);
+
+            $email    = $request->email;
+            $password = $request->password;
+
+            // storeId header ya body se
+            $storeId = $request->header('storeId', $request->input('storeId'));
+
+            /*
+            |--------------------------------------------------------------------------
+            | ADMIN LOGIN (userRole = 1)
+            |--------------------------------------------------------------------------
+            */
+            $admin = User::where('email', $email)
+                ->where('userRole', 1)
+                ->first();
+
+            if ($admin) {
+
+                if (!Hash::check($password, $admin->password)) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Invalid email or password.',
+                    ], 401);
+                }
+
+                // ── 2FA CHECK (Admin) ──────────────────────────────────────────
+                if ($admin->two_factor_enabled) {
+
+                    if ($admin->two_factor_type === 'email') {
+                        $this->twoFactorService->sendEmailOtp($admin);
+                    }
+
+                    $pendingToken = $this->twoFactorService->storePendingLogin($admin);
+
+                    return response()->json([
+                        'status'              => true,
+                        'two_factor_required' => true,
+                        'two_factor_type'     => $admin->two_factor_type,
+                        'pending_token'       => $pendingToken,
+                        'message'             => $admin->two_factor_type === 'email'
+                            ? 'OTP sent to your email. Please verify to continue.'
+                            : 'Please enter the code from your authenticator app.',
+                    ], 200);
+                }
+                // ── END 2FA CHECK ──────────────────────────────────────────────
+
+                $stores = Store::where('user_id', $admin->id)->get();
+
+                $tokenResult    = $admin->createToken('adminToken');
+                $plainTextToken = $tokenResult->plainTextToken;
+
+                $expireAt    = now()->addHours(24);
+                $accessToken = PersonalAccessToken::findToken($plainTextToken);
+                if ($accessToken) {
+                    $accessToken->expires_at = $expireAt;
+                    $accessToken->save();
+                }
+
+                return response()->json([
+                    'status'   => true,
+                    'message'  => 'Admin logged in successfully.',
+                    'token'    => $plainTextToken,
+                    'expireAt' => $expireAt->toDateTimeString(),
+                    'user'     => new UserResource($admin),
+                    'stores'   => StoreResource::collection($stores),
+                ]);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | CUSTOMER LOGIN (userRole = 2)
+            |--------------------------------------------------------------------------
+            */
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store ID is required for customer login.',
+                ], 422);
+            }
+
+            // Store validate
+            $store = Store::where('id', $storeId)->first();
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid store.',
+                ], 404);
+            }
+
+            $customer = User::where('email', $email)
+                ->where('userRole', 2)
+                ->where('store_id', $storeId)
+                ->first();
+
+            if (!$customer || !Hash::check($password, $customer->password)) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid email, password, or store.',
+                ], 401);
+            }
+
+            // ── 2FA CHECK (Customer) ───────────────────────────────────────────
+            if ($customer->two_factor_enabled) {
+
+                if ($customer->two_factor_type === 'email') {
+                    $this->twoFactorService->sendEmailOtp($customer);
+                }
+
+                $pendingToken = $this->twoFactorService->storePendingLogin($customer);
+
+                return response()->json([
+                    'status'              => true,
+                    'two_factor_required' => true,
+                    'two_factor_type'     => $customer->two_factor_type,
+                    'pending_token'       => $pendingToken,
+                    'message'             => $customer->two_factor_type === 'email'
+                        ? 'OTP sent to your email. Please verify to continue.'
+                        : 'Please enter the code from your authenticator app.',
+                ], 200);
+            }
+            // ── END 2FA CHECK ──────────────────────────────────────────────────
+
+            $tokenResult    = $customer->createToken('customerToken');
+            $plainTextToken = $tokenResult->plainTextToken;
+
+            $expireAt    = now()->addHours(24);
+            $accessToken = PersonalAccessToken::findToken($plainTextToken);
+            if ($accessToken) {
+                $accessToken->expires_at = $expireAt;
+                $accessToken->save();
+            }
+
+            return response()->json([
+                'status'   => true,
+                'message'  => 'Customer logged in successfully.',
+                'token'    => $plainTextToken,
+                'expireAt' => $expireAt->toDateTimeString(),
+                'store'    => new StoreResource($store),
+                'customer' => new CustomerResource($customer->customer),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Login failed: ' . $e->getMessage());
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong during login.',
+            ], 500);
+        }
+    }
+
     // public function login(Request $request)
     // {
     //     try {
@@ -215,120 +380,120 @@ class AuthController extends Controller
 
 
 
-    public function login(Request $request)
-    {
-        try {
-            $request->validate([
-                'email' => 'required|email',
-                'password' => 'required',
-            ]);
+    // public function login(Request $request)
+    // {
+    //     try {
+    //         $request->validate([
+    //             'email' => 'required|email',
+    //             'password' => 'required',
+    //         ]);
 
-            $email = $request->email;
-            $password = $request->password;
+    //         $email = $request->email;
+    //         $password = $request->password;
 
-            // storeId header ya body se
-            $storeId = $request->header('storeId', $request->input('storeId'));
+    //         // storeId header ya body se
+    //         $storeId = $request->header('storeId', $request->input('storeId'));
 
-            /*
-        |--------------------------------------------------------------------------
-        | ADMIN LOGIN (userRole = 1)
-        |--------------------------------------------------------------------------
-        */
-            $admin = User::where('email', $email)
-                ->where('userRole', 1)
-                ->first();
+    //         /*
+    //     |--------------------------------------------------------------------------
+    //     | ADMIN LOGIN (userRole = 1)
+    //     |--------------------------------------------------------------------------
+    //     */
+    //         $admin = User::where('email', $email)
+    //             ->where('userRole', 1)
+    //             ->first();
 
-            if ($admin) {
+    //         if ($admin) {
 
-                if (!Hash::check($password, $admin->password)) {
-                    return response()->json([
-                        'status' => false,
-                        'message' => 'Invalid email or password.',
-                    ], 401);
-                }
+    //             if (!Hash::check($password, $admin->password)) {
+    //                 return response()->json([
+    //                     'status' => false,
+    //                     'message' => 'Invalid email or password.',
+    //                 ], 401);
+    //             }
 
-                $stores = Store::where('user_id', $admin->id)->get();
+    //             $stores = Store::where('user_id', $admin->id)->get();
 
-                $tokenResult = $admin->createToken('adminToken');
-                $plainTextToken = $tokenResult->plainTextToken;
+    //             $tokenResult = $admin->createToken('adminToken');
+    //             $plainTextToken = $tokenResult->plainTextToken;
 
-                $expireAt = now()->addHours(24);
-                $accessToken = PersonalAccessToken::findToken($plainTextToken);
-                if ($accessToken) {
-                    $accessToken->expires_at = $expireAt;
-                    $accessToken->save();
-                }
+    //             $expireAt = now()->addHours(24);
+    //             $accessToken = PersonalAccessToken::findToken($plainTextToken);
+    //             if ($accessToken) {
+    //                 $accessToken->expires_at = $expireAt;
+    //                 $accessToken->save();
+    //             }
 
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Admin logged in successfully.',
-                    'token' => $plainTextToken,
-                    'expireAt' => $expireAt->toDateTimeString(),
-                    'user' => new UserResource($admin),
-                    'stores' => StoreResource::collection($stores),
-                ]);
-            }
+    //             return response()->json([
+    //                 'status' => true,
+    //                 'message' => 'Admin logged in successfully.',
+    //                 'token' => $plainTextToken,
+    //                 'expireAt' => $expireAt->toDateTimeString(),
+    //                 'user' => new UserResource($admin),
+    //                 'stores' => StoreResource::collection($stores),
+    //             ]);
+    //         }
 
-            /*
-        |--------------------------------------------------------------------------
-        | CUSTOMER LOGIN (userRole = 2)
-        |--------------------------------------------------------------------------
-        */
-            if (!$storeId) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Store ID is required for customer login.',
-                ], 422);
-            }
+    //         /*
+    //     |--------------------------------------------------------------------------
+    //     | CUSTOMER LOGIN (userRole = 2)
+    //     |--------------------------------------------------------------------------
+    //     */
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Store ID is required for customer login.',
+    //             ], 422);
+    //         }
 
-            // Store validate
-            $store = Store::where('id', $storeId)->first();
-            if (!$storeId) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Invalid store.',
-                ], 404);
-            }
+    //         // Store validate
+    //         $store = Store::where('id', $storeId)->first();
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Invalid store.',
+    //             ], 404);
+    //         }
 
-            $customer = User::where('email', $email)
-                ->where('userRole', 2)
-                ->where('store_id', $storeId)
-                ->first();
+    //         $customer = User::where('email', $email)
+    //             ->where('userRole', 2)
+    //             ->where('store_id', $storeId)
+    //             ->first();
 
-            if (!$customer || !Hash::check($password, $customer->password)) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Invalid email, password, or store.',
-                ], 401);
-            }
+    //         if (!$customer || !Hash::check($password, $customer->password)) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Invalid email, password, or store.',
+    //             ], 401);
+    //         }
 
-            $tokenResult = $customer->createToken('customerToken');
-            $plainTextToken = $tokenResult->plainTextToken;
+    //         $tokenResult = $customer->createToken('customerToken');
+    //         $plainTextToken = $tokenResult->plainTextToken;
 
-            $expireAt = now()->addHours(24);
-            $accessToken = PersonalAccessToken::findToken($plainTextToken);
-            if ($accessToken) {
-                $accessToken->expires_at = $expireAt;
-                $accessToken->save();
-            }
+    //         $expireAt = now()->addHours(24);
+    //         $accessToken = PersonalAccessToken::findToken($plainTextToken);
+    //         if ($accessToken) {
+    //             $accessToken->expires_at = $expireAt;
+    //             $accessToken->save();
+    //         }
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Customer logged in successfully.',
-                'token' => $plainTextToken,
-                'expireAt' => $expireAt->toDateTimeString(),
-                'store' => new StoreResource($store),
-                'customer' => new CustomerResource($customer->customer),
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Login failed: ' . $e->getMessage());
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Customer logged in successfully.',
+    //             'token' => $plainTextToken,
+    //             'expireAt' => $expireAt->toDateTimeString(),
+    //             'store' => new StoreResource($store),
+    //             'customer' => new CustomerResource($customer->customer),
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         Log::error('Login failed: ' . $e->getMessage());
 
-            return response()->json([
-                'status' => false,
-                'message' => 'Something went wrong during login.',
-            ], 500);
-        }
-    }
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Something went wrong during login.',
+    //         ], 500);
+    //     }
+    // }
 
 
 

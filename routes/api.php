@@ -38,6 +38,7 @@ use App\Http\Controllers\api\Web\{
     BulkInquiryController
 };
 use App\Http\Controllers\api\AuthController;
+use App\Http\Controllers\api\TwoFactorController;
 // ===============================
 // 🔐 AUTHENTICATED USER CHECK
 // ===============================
@@ -56,6 +57,31 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
     Route::post('/forgot-password', 'forgotPassword');
     Route::post('/reset-password', 'resetPassword');
     Route::middleware('auth:sanctum')->post('/logout', 'logout');
+});
+
+
+
+// ─── Public (token ki zaroorat nahi) ─────────────────────────
+ 
+Route::post('/auth/login', [AuthController::class, 'login']);
+ 
+Route::prefix('2fa')->group(function () {
+    Route::post('/verify',     [TwoFactorController::class, 'verify']);      // OTP verify → real token
+    Route::post('/resend-otp', [TwoFactorController::class, 'resendOtp']);   // Email OTP dobara bhejo
+});
+ 
+// ─── Protected (auth:sanctum middleware) ─────────────────────
+ 
+Route::middleware('auth:sanctum')->group(function () {
+ 
+    Route::prefix('2fa')->group(function () {
+        Route::get('/status',                  [TwoFactorController::class, 'status']);
+        Route::post('/enable/email',           [TwoFactorController::class, 'enableEmail']);
+        Route::post('/setup/authenticator',    [TwoFactorController::class, 'setupAuthenticator']);
+        Route::post('/confirm/authenticator',  [TwoFactorController::class, 'confirmAuthenticator']);
+        Route::post('/disable',                [TwoFactorController::class, 'disable']);
+    });
+ 
 });
 
 // ===============================
