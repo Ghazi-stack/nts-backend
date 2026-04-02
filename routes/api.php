@@ -56,6 +56,8 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
     Route::post('/login', 'login');
     Route::post('/forgot-password', 'forgotPassword');
     Route::post('/reset-password', 'resetPassword');
+    Route::post('/change-password', 'changePassword');
+
     Route::middleware('auth:sanctum')->post('/logout', 'logout');
 });
 
@@ -85,7 +87,7 @@ Route::middleware('auth:sanctum')->group(function () {
 // ===============================
 // 🛠️ ADMIN ROUTES (Protected)
 // ===============================
-
+ 
 
 Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 

@@ -21,6 +21,7 @@ use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
 use Exception;
 use App\Services\TwoFactorService;
+use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
 {
@@ -576,6 +577,32 @@ class AuthController extends Controller
                 'message' => 'Something went wrong while resetting the password.',
             ], 500);
         }
+    }
+
+    public function changePassword(Request $request)
+    {
+        $request->validate([
+            'current_password' => 'required',
+            'new_password'     => 'required|min:8|confirmed',
+        ]);
+
+        $user = Auth::user();
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Current password is incorrect.',
+            ], 422);
+        }
+
+        $user->update([
+            'password' => Hash::make($request->new_password),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password changed successfully.',
+        ]);
     }
 
     public function logout(Request $request)
