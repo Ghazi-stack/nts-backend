@@ -703,7 +703,6 @@ class AuthController extends Controller
     public function updatePassword(Request $request)
     {
         try {
-            // ✅ Validate inputs
             $validator = Validator::make($request->all(), [
                 'currentPassword' => 'required|string',
                 'newPassword'     => 'required|string',
@@ -720,7 +719,14 @@ class AuthController extends Controller
 
             $user = $request->user();
 
-            // ✅ Check current password
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Unauthenticated.',
+                ], 401);
+            }
+
+            // Check current password
             if (!Hash::check($request->currentPassword, $user->password)) {
                 return response()->json([
                     'status' => false,
@@ -728,7 +734,7 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            // ✅ Prevent reusing the same password
+            // Prevent reusing the same password
             if (Hash::check($request->newPassword, $user->password)) {
                 return response()->json([
                     'status' => false,
@@ -736,13 +742,16 @@ class AuthController extends Controller
                 ], 400);
             }
 
-            // ✅ Update password
+            // Update password
             $user->password = Hash::make($request->newPassword);
             $user->save();
 
+            // Delete all tokens - logout from all devices
+            $user->tokens()->delete();
+
             return response()->json([
                 'status' => true,
-                'message' => 'Password updated successfully.',
+                'message' => 'Password updated successfully. Please login again.',
             ], 200);
         } catch (\Exception $e) {
             \Log::error('Password update failed: ' . $e->getMessage());
