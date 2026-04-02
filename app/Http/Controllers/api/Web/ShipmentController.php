@@ -102,10 +102,10 @@ class ShipmentController extends Controller
                 ?? trim(optional($order->customer)->first_name . ' ' . optional($order->customer)->last_name)
                 ?? 'Unknown',
             'date_shipped'    => $validated['dateShipped'],
-            'tracking_number' => $validated['trackingNumber'] ?? $this->generateTrackingNumber(),
+            'tracking_number' => $validated['trackingNumber'],
         ]);
 
-        $order->tracking_number = $shipment->tracking_number;
+        $order->tracking_number;
         $order->save();
 
         event(new ShipmentCreated($shipment));
