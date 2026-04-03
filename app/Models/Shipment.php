@@ -13,6 +13,8 @@ class Shipment extends Model
         'store_id',
         'shipped_to',
         'date_shipped',
+        'shipping_method',
+        'tracking_carrie',
         'tracking_number',
     ];
 

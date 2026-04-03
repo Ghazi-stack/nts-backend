@@ -74,8 +74,10 @@ class ShipmentController extends Controller
         $validated = $request->validate([
             'orderId' => 'required|exists:orders,id',
             'shippedTo' => 'nullable|string|max:255',
+            'shippingMethod' => 'nullable|string|max:255',
+            'trackingCarrier' => 'nullable|string|max:255',
             'dateShipped' => 'required|date',
-            'trackingNumber' => 'nullable|string|max:255',
+            'trackingId' => 'required|string|max:255',
         ]);
 
         $storeId = current_store_id();
@@ -102,10 +104,12 @@ class ShipmentController extends Controller
                 ?? trim(optional($order->customer)->first_name . ' ' . optional($order->customer)->last_name)
                 ?? 'Unknown',
             'date_shipped'    => $validated['dateShipped'],
-            'tracking_number'      => $validated['trackingNumber'] ?? null
+            'shipping_method'      => $validated['shippingMethod'] ?? null,
+            'tracking_carrie'      => $validated['trackingCarrier'] ?? null,
+            'tracking_number'      => $validated['trackingId'] ?? null,
         ]);
 
-        $order->tracking_number = $validated['trackingNumber'] ?? null;
+        $order->tracking_number = $validated['trackingId'] ?? null;
         $order->save();
 
         event(new ShipmentCreated($shipment));
