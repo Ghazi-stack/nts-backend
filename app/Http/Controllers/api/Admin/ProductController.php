@@ -355,6 +355,7 @@ class ProductController extends Controller
             $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
                 return Product::where('sku', $sku)
                     ->where('store_id', $storeId)
+                    ->where('visible_on_storefront', 1)
                     ->select('id', 'name', 'sku', 'price', 'brand_id', 'category_id', 'dimensions', 'visible_on_storefront')
                     ->with([
                         'brand:id,name,logo',
@@ -437,7 +438,7 @@ class ProductController extends Controller
                 'condition' => 'nullable|string',
                 'price' => 'nullable|numeric',
                 'quantity' => 'nullable|integer',
-                'msrp' => 'nullable|numeric',
+                'msrp' => 'nullable|integer',
                 'costPrice' => 'nullable|numeric',
                 'salePrice' => 'nullable|numeric',
 
