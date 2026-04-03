@@ -83,7 +83,7 @@ class Product extends Model
         'stop_processing_rules' => 'boolean',
         'free_shipping' => 'boolean',
         'dimensions' => 'array',
-        'msrp' => 'decimal:2',
+        // 'msrp' => 'decimal:2',
         'related_products_enabled' => 'boolean',
         'min_purchase_quantity' => 'integer',
         'max_purchase_quantity' => 'integer',
