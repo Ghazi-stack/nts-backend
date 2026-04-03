@@ -355,7 +355,6 @@ class ProductController extends Controller
             $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
                 return Product::where('sku', $sku)
                     ->where('store_id', $storeId)
-                    ->where('visible_on_storefront', 1)
                     ->select('id', 'name', 'sku', 'price', 'brand_id', 'category_id', 'dimensions', 'visible_on_storefront')
                     ->with([
                         'brand:id,name,logo',
@@ -1264,6 +1263,7 @@ class ProductController extends Controller
             // Cache results for 5 minutes (300 seconds)
             $products = Cache::remember($cacheKey, 300, function () use ($queryStr, $storeId, $page, $pageSize) {
                 return Product::where('store_id', $storeId)
+                    ->where('visible_on_storefront', 1)
                     ->where(function ($q) use ($queryStr) {
                         $q->where('name', 'like', "%$queryStr%")
                             ->orWhere('sku', 'like', "%$queryStr%")
