@@ -137,13 +137,17 @@ class ShipmentController extends Controller
         $validated = $request->validate([
             'shippedTo' => 'nullable|string|max:255',
             'dateShipped' => 'nullable|date',
-            'trackingNumber' => 'nullable|string|max:255',
+            'shippingMethod' => 'nullable|string|max:255',
+            'trackingCarrier' => 'nullable|string|max:255',
+            'trackingId' => 'required|string|max:255',
         ]);
 
         $shipment->update([
             'shipped_to' => $validated['shippedTo'] ?? $shipment->shipped_to,
             'date_shipped' => $validated['dateShipped'] ?? $shipment->date_shipped,
-            'tracking_number' => $validated['trackingNumber'] ?? $shipment->tracking_number,
+            'shipping_method' => $validated['shippingMethod'] ?? $shipment->shipping_method,
+            'tracking_carrie' => $validated['trackingCarrier'] ?? $shipment->tracking_carrie,
+            'tracking_number' => $validated['trackingId'] ?? $shipment->tracking_number,
         ]);
 
         return response()->json([
@@ -203,10 +207,10 @@ class ShipmentController extends Controller
     /**
      * Generate tracking number.
      */
-    private function generateTrackingNumber()
-    {
-        return 'TRK-' . strtoupper(Str::random(10));
-    }
+    // private function generateTrackingNumber()
+    // {
+    //     return 'TRK-' . strtoupper(Str::random(10));
+    // }
 
     public function advancedSearch(Request $request)
     {
