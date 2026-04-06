@@ -335,7 +335,7 @@ class ProductController extends Controller
         }
     }
 
-    public function showProduct($sku, Request $request)
+    public function showProduct($slug, Request $request)
     {
         $storeId = current_store_id();
         if (!$storeId) {
@@ -345,32 +345,44 @@ class ProductController extends Controller
             ], 400);
         }
 
-        $cacheKey = "product_detail_store_{$storeId}_sku_" . md5($sku);
+        // Check if request has isUrl key
+        $isUrl = $request->input('isUrl', null);
+
+        $cacheKey = "product_detail_store_{$storeId}_slug_" . md5($isUrl ?? $slug);
 
         try {
 
             // -------------------------
             // STEP 1: Product + LIGHT relations
             // -------------------------
-            $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
-                return Product::where('sku', $sku)
-                    ->where('store_id', $storeId)
-                    ->where('visible_on_storefront', 1)
-                    ->with([
-                        'brand:id,name,logo',
-                        'images:id,product_id,path,is_primary',
-                        'content',
-                        'identifiers',
-                        'seo'
-                    ])
-                    ->first();
+            $product = Cache::remember($cacheKey, 600, function () use ($slug, $storeId, $isUrl) {
+                $query = Product::where('store_id', $storeId)
+                    ->where('visible_on_storefront', 1);
+
+                if ($isUrl) {
+                    // Search by productUrl from SEO table
+                    $query->whereHas('seo', function ($q) use ($isUrl) {
+                        $q->where('product_url', $isUrl);
+                    });
+                } else {
+                    // Search by SKU
+                    $query->where('sku', $slug);
+                }
+
+                return $query->with([
+                    'brand:id,name,logo',
+                    'images:id,product_id,path,is_primary',
+                    'content',
+                    'identifiers',
+                    'seo'
+                ])->first();
             });
 
             if (!$product) {
                 return response()->json([
                     'status' => false,
                     'error' => 'Product not found',
-                    'sku' => $sku
+                    'sku' => $slug
                 ], 404);
             }
 
@@ -404,10 +416,18 @@ class ProductController extends Controller
             // $product->setRelation('categories', $categories);
             $product->setRelation('reviews', $reviews);
 
+            // Build isUrl - use productUrl if exists, otherwise use SKU
+            $productUrl = optional($product->seo)->product_url;
+            $isUrlValue = $productUrl ?? $product->sku;
+
+            $resourceData = new ProductResource($product);
+            $responseData = $resourceData->toArray($request);
+            $responseData['isUrl'] = $isUrlValue;
+
             return response()->json([
                 'status' => true,
                 'message' => 'Product Retrieved',
-                'data' => new ProductResource($product)
+                'data' => $responseData
             ]);
         } catch (\Exception $e) {
             return response()->json([
