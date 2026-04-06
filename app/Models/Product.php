@@ -50,6 +50,9 @@ class Product extends Model
         'stop_processing_rules',
         'tax_class',
         'tax_provider_code',
+        'tax_code',
+        'discount_type',
+        'bulk_pricing_tiers',
         'item_type',
         'store_id',
         'msrp',
@@ -75,6 +78,7 @@ class Product extends Model
 
     protected $casts = [
         'custom_fields' => 'array',
+        'bulk_pricing_tiers' => 'array',
         'visible_on_storefront' => 'boolean',
         'is_featured' => 'boolean',
         'track_inventory' => 'boolean',

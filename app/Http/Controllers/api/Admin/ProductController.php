@@ -355,7 +355,7 @@ class ProductController extends Controller
             $product = Cache::remember($cacheKey, 600, function () use ($sku, $storeId) {
                 return Product::where('sku', $sku)
                     ->where('store_id', $storeId)
-                    ->select('id', 'name', 'sku', 'price', 'brand_id', 'category_id', 'dimensions', 'visible_on_storefront')
+                    ->where('visible_on_storefront', 1)
                     ->with([
                         'brand:id,name,logo',
                         'images:id,product_id,path,is_primary',
@@ -419,7 +419,6 @@ class ProductController extends Controller
     }
 
 
-
     public function addProduct(Request $request)
     {
         try {
@@ -456,7 +455,6 @@ class ProductController extends Controller
                 'sortOrder' => 'nullable|integer',
                 'searchKeywords' => 'nullable|string',
                 'isVisible' => 'nullable|boolean',
-
                 'customFields' => 'nullable|array',
 
                 // ✅ IMAGE FILES
@@ -496,6 +494,11 @@ class ProductController extends Controller
 
                 'taxClass' => 'nullable|string',
                 'taxProviderCode' => 'nullable|string',
+
+
+                'taxCode' => 'nullable|string|max:255',
+                'discountType' => 'nullable|string|max:255',
+                'bulkPricingTiers' => 'nullable|array',
 
                 'objectType' => 'nullable|string',
                 'useProductName' => 'nullable|boolean',
@@ -549,6 +552,11 @@ class ProductController extends Controller
                 'tax_class' => $validated['taxClass'] ?? '',
                 'tax_provider_code' => $validated['taxProviderCode'] ?? '',
 
+
+                'tax_code' => $validated['taxCode'] ?? null,
+                'discount_type' => $validated['discountType'] ?? null,
+                'bulk_pricing_tiers' => $validated['bulkPricingTiers'] ?? [],
+
                 'object_type' => $validated['objectType'] ?? null,
                 'use_product_name' => $validated['useProductName'] ?? false,
                 'graph_description' => $validated['graphDescription'] ?? false,
@@ -560,6 +568,7 @@ class ProductController extends Controller
                 'country_of_origin' => $validated['countryOfOrigin'] ?? null,
 
                 'hs_codes' => $validated['hsCodes'] ?? [],
+
 
             ]);
 
@@ -739,6 +748,9 @@ class ProductController extends Controller
                 'stopProcessingRules' => 'nullable|boolean',
                 'taxClass' => 'nullable|string',
                 'taxProviderCode' => 'nullable|string',
+                'taxCode' => 'nullable|string|max:255',
+                'discountType' => 'nullable|string|max:255',
+                'bulkPricingTiers' => 'nullable|array',
 
                 'objectType' => 'nullable|string',
                 'useProductName' => 'nullable|boolean',
@@ -765,7 +777,7 @@ class ProductController extends Controller
                 'cost_price' => $validated['costPrice'] ?? null,
                 'sale_price' => $validated['salePrice'] ?? null,
                 'brand_id' => $validated['brandId'],
-                'category_id' => $validated['categoryIds'][0] ?? null, // primary category
+                'category_id' => $validated['categoryIds'][0] ?? null,
                 'condition' => $validated['condition'] ?? null,
                 'dimensions' => $validated['dimensions'] ?? [],
                 'track_inventory' => $validated['trackInventory'] ?? false,
@@ -789,6 +801,9 @@ class ProductController extends Controller
                 'stop_processing_rules' => $validated['stopProcessingRules'] ?? false,
                 'tax_class' => $validated['taxClass'] ?? '',
                 'tax_provider_code' => $validated['taxProviderCode'] ?? '',
+                'tax_code' => $validated['taxCode'] ?? null,
+                'discount_type' => $validated['discountType'] ?? null,
+                'bulk_pricing_tiers' => $validated['bulkPricingTiers'] ?? [],
 
                 'object_type' => $validated['objectType'] ?? null,
                 'use_product_name' => $validated['useProductName'] ?? false,
@@ -871,7 +886,7 @@ class ProductController extends Controller
 
                     // Check if it's a self-hosted image already in product_images/
                     if (Str::contains($url, url('/product_images'))) {
-                        $path = str_replace(url('/'), '', $url); // e.g. product_images/filename.jpg
+                        $path = str_replace(url('/'), '', $url);
                         $path = ltrim($path, '/');
                     }
                     // If internal copy from same host
@@ -995,16 +1010,13 @@ class ProductController extends Controller
 
             $data = $request->validate([
                 'products' => 'required|array|min:1',
-                'products.*.id' => 'required', // Accept both integer and array
+                'products.*.id' => 'required',
                 'products.*.fields' => 'required|array',
             ]);
 
 
             $updatedProducts = [];
 
-            // foreach ($data['products'] as $item) {
-            //     $product = Product::where('store_id', $storeId)->findOrFail($item['id']);
-            //     $fields = $item['fields'];
             foreach ($data['products'] as $item) {
                 $fields = $item['fields'];
                 $productIds = is_array($item['id']) ? $item['id'] : [$item['id']];
@@ -1051,6 +1063,9 @@ class ProductController extends Controller
                         'stop_processing_rules' => $fields['stopProcessingRules'] ?? $product->stop_processing_rules,
                         'tax_class' => $fields['taxClass'] ?? $product->tax_class,
                         'tax_provider_code' => $fields['taxProviderCode'] ?? $product->tax_provider_code,
+                        'tax_code' => $fields['taxCode'] ?? $product->tax_code,
+                        'discount_type' => $fields['discountType'] ?? $product->discount_type,
+                        'bulk_pricing_tiers' => $fields['bulkPricingTiers'] ?? $product->bulk_pricing_tiers,
                     ])->save();
 
                     // ✅ Sync Categories
@@ -1263,7 +1278,7 @@ class ProductController extends Controller
             // Cache results for 5 minutes (300 seconds)
             $products = Cache::remember($cacheKey, 300, function () use ($queryStr, $storeId, $page, $pageSize) {
                 return Product::where('store_id', $storeId)
-                 ->where('visible_on_storefront', 1)
+                    ->where('visible_on_storefront', 1)
                     ->where(function ($q) use ($queryStr) {
                         $q->where('name', 'like', "%$queryStr%")
                             ->orWhere('sku', 'like', "%$queryStr%")

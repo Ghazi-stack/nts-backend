@@ -11,14 +11,11 @@ class ProductResource extends JsonResource
     public function toArray(Request $request): array
     {
         $price = $this->price ?? 0;
-        $retailPrice = $this->extra->retail_price ?? 0;
+        $msrp = $this->msrp ?? 0;
+        $retailPrice = ($msrp > $price) ? round($msrp - $price, 2) : 0;
 
-        // Calculate saving (MSRP)
-        $msrp = ($retailPrice > $price) ? round($retailPrice - $price, 2) : 0;
-
-        // Percentage saving
-        $savingPercent = ($retailPrice > 0 && $msrp > 0)
-            ? round(($msrp / $retailPrice) * 100, 2)
+        $savingPercent = ($msrp > 0 && $retailPrice > 0)
+            ? round(($retailPrice / $msrp) * 100, 2)
             : 0;
 
         $dimensions = [];
@@ -111,6 +108,9 @@ class ProductResource extends JsonResource
             'minPurchaseQuantity' => $this->min_purchase_quantity,
             'maxPurchaseQuantity' => $this->max_purchase_quantity,
             'relatedProductsEnabled' => $this->related_products_enabled,
+            'taxCode' => $this->tax_code,
+            'discountType' => $this->discount_type,
+            'bulkPricingTiers' => $this->bulk_pricing_tiers ?? [],
             'schema' => $this->formatSchema()
         ];
     }
