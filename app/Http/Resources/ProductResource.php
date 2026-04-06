@@ -14,9 +14,9 @@ class ProductResource extends JsonResource
         $msrp = $this->msrp ?? 0;
         $retailPrice = ($msrp > $price) ? round($msrp - $price, 2) : 0;
 
-        $savingPercent = ($msrp > 0 && $retailPrice > 0)
-            ? round(($retailPrice / $msrp) * 100, 2)
-            : 0;
+        // $savingPercent = ($msrp > 0 && $retailPrice > 0)
+        //     ? round(($retailPrice / $msrp) * 100, 2)
+        //     : 0;
 
         $dimensions = [];
         if (is_array($this->dimensions)) {
