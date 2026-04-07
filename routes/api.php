@@ -56,7 +56,7 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
     Route::post('/login', 'login');
     Route::post('/forgot-password', 'forgotPassword');
     Route::post('/reset-password', 'resetPassword');
-    
+
 
     Route::middleware('auth:sanctum')->post('/logout', 'logout');
 });
@@ -87,7 +87,7 @@ Route::middleware('auth:sanctum')->group(function () {
 // ===============================
 // 🛠️ ADMIN ROUTES (Protected)
 // ===============================
- 
+
 
 Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
@@ -358,7 +358,7 @@ Route::prefix('web')->group(function () {
     Route::prefix('products')->controller(ProductController::class)->group(function () {
         Route::get('/products', 'index');
         Route::get('/get-product/{slug}', 'showProduct');
-        Route::get('/get-product-by-url/{slug}', 'showProductByUrl');
+        Route::get('/get-product-by-url/{slug}', 'showProductByUrl')->where('slug', '.*');
         Route::get('/search-product', 'searchProduct');
         Route::get('/featured-products', 'featuredProducts');
         Route::get('/products/by-brand', 'productsByBrand');
