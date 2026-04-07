@@ -1371,7 +1371,7 @@ class ProductController extends Controller
             $cacheKey = "product_search_store_{$storeId}_query_" . md5($queryStr) . "_page_{$page}_size_{$pageSize}";
 
             // Cache results for 5 minutes (300 seconds)
-            $products = Cache::remember($cacheKey, 300, function () use ($queryStr, $storeId, $page, $pageSize) {
+           $products = Cache::remember($cacheKey, 30, function () use ($queryStr, $storeId, $page, $pageSize) {
                 return Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
                     ->where(function ($q) use ($queryStr) {
