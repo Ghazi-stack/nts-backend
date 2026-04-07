@@ -358,6 +358,7 @@ Route::prefix('web')->group(function () {
     Route::prefix('products')->controller(ProductController::class)->group(function () {
         Route::get('/products', 'index');
         Route::get('/get-product/{slug}', 'showProduct');
+        Route::get('/get-product-by-url/{slug}', 'showProductByUrl');
         Route::get('/search-product', 'searchProduct');
         Route::get('/featured-products', 'featuredProducts');
         Route::get('/products/by-brand', 'productsByBrand');

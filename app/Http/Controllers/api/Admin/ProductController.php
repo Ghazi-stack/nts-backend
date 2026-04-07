@@ -418,6 +418,101 @@ class ProductController extends Controller
         }
     }
 
+    public function showProductByUrl($slug, Request $request)
+    {
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected.'
+            ], 400);
+        }
+
+        $cacheKey = "product_by_url_store_{$storeId}_slug_" . md5($slug);
+
+        try {
+
+            // -------------------------
+            // STEP 1: Try productUrl first, then SKU
+            // -------------------------
+            $product = Cache::remember($cacheKey, 600, function () use ($slug, $storeId) {
+
+                // First: try to find by productUrl in SEO table
+                $product = Product::where('store_id', $storeId)
+                    ->where('visible_on_storefront', 1)
+                    ->whereHas('seo', function ($q) use ($slug) {
+                        $q->where('product_url', $slug);
+                    })
+                    ->with([
+                        'brand:id,name,logo',
+                        'images:id,product_id,path,is_primary',
+                        'content',
+                        'identifiers',
+                        'seo'
+                    ])
+                    ->first();
+
+                // Second: if not found by productUrl, try SKU
+                if (!$product) {
+                    $product = Product::where('store_id', $storeId)
+                        ->where('visible_on_storefront', 1)
+                        ->where('sku', $slug)
+                        ->with([
+                            'brand:id,name,logo',
+                            'images:id,product_id,path,is_primary',
+                            'content',
+                            'identifiers',
+                            'seo'
+                        ])
+                        ->first();
+                }
+
+                return $product;
+            });
+
+            if (!$product) {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Product not found',
+                ], 404);
+            }
+
+            // -------------------------
+            // STEP 1.5: Visible check
+            // -------------------------
+            if (!$product->visible_on_storefront) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Product is disabled.'
+                ], 403);
+            }
+
+            // -------------------------
+            // STEP 2: Heavy relations (reviews)
+            // -------------------------
+            $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
+                return $product->reviews()
+                    ->with('user:id,name')
+                    ->latest()
+                    ->limit(10)
+                    ->get();
+            });
+
+            $product->setRelation('reviews', $reviews);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Product Retrieved',
+                'data' => new ProductResource($product)
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error' => 'Something went wrong',
+                'debug' => $e->getMessage()
+            ], 500);
+        }
+    }
 
     public function addProduct(Request $request)
     {
