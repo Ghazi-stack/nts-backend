@@ -531,7 +531,7 @@ class ProductController extends Controller
                 'condition' => 'nullable|string',
                 'price' => 'nullable|numeric',
                 'quantity' => 'nullable|integer',
-                'msrp' => 'nullable|integer',
+                'msrp' => 'nullable|numeric',
                 'costPrice' => 'nullable|numeric',
                 'salePrice' => 'nullable|numeric',
 
@@ -801,7 +801,7 @@ class ProductController extends Controller
                 'condition' => 'nullable|string',
                 'price' => 'nullable',
                 'quantity' => 'nullable',
-                'msrp' => 'nullable|integer',
+                'msrp' => 'nullable|numeric',
                 'costPrice' => 'nullable',
                 'salePrice' => 'nullable',
                 'dimensions' => 'nullable|array',
