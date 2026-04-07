@@ -1471,6 +1471,7 @@ class ProductController extends Controller
             }
 
             $products = Product::where('store_id', $storeId)
+                ->where('visible_on_storefront', 1)
                 ->where('is_featured', true)
                 ->with([
                     'categories',
