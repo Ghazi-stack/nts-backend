@@ -752,6 +752,7 @@ class CategoryController extends Controller
 
             $query = Product::query()
                 ->where('store_id', $storeId)
+                ->where('visible_on_storefront', 1)
                 ->with([
                     'brand:id,name',
                     'categories:id,name',
