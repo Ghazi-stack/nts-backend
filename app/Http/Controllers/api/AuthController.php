@@ -512,7 +512,7 @@ class AuthController extends Controller
                 ], 422);
             }
 
-            DB::table('password_resets')->where('email', $request->email)->delete();
+            DB::table('password_reset_tokens')->where('email', $request->email)->delete();
 
             $status = Password::sendResetLink(
                 $request->only('email')
