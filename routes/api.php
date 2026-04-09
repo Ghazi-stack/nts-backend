@@ -38,6 +38,7 @@ use App\Http\Controllers\api\Web\{
     BulkInquiryController
 };
 use App\Http\Controllers\api\AuthController;
+use App\Http\Controllers\api\SitemapController;
 use App\Http\Controllers\api\TwoFactorController;
 // ===============================
 // 🔐 AUTHENTICATED USER CHECK
@@ -434,6 +435,27 @@ Route::prefix('web')->group(function () {
     Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
 });
 
+
+Route::prefix('sitemap')->group(function () {
+
+    // ── Sitemap Info (for building sitemap index) ──
+    Route::get('/info', [SitemapController::class, 'info']);
+
+    // ── Static Pages ──
+    Route::get('/pages', [SitemapController::class, 'pages']);
+
+    // ── Products (paginated) ──
+    Route::get('/products', [SitemapController::class, 'products']);
+
+    // ── Categories ──
+    Route::get('/categories', [SitemapController::class, 'categories']);
+
+    // ── Brands ──
+    Route::get('/brands', [SitemapController::class, 'brands']);
+
+    // ── Clear Cache (protected — only for admin) ──
+    Route::post('/clear-cache', [SitemapController::class, 'clearCache']);
+});
 Route::get('/test-s3', function () {
     $path = 'debug/tests.txt';
 
