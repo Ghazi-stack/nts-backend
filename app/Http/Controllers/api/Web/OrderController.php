@@ -64,7 +64,7 @@ class OrderController extends Controller
                 })
                 ->when($productId, function ($q) use ($productId) {
                     $q->whereHas('items', function ($item) use ($productId) {
-                        $item->where('product_id', $productId);
+                        $item->where('product_id', (int) $productId);
                     });
                 })
                 ->when($keyword, function ($q) use ($keyword) {
