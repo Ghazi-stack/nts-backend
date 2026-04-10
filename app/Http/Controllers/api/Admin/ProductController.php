@@ -1129,7 +1129,7 @@ class ProductController extends Controller
                         'slug' => isset($fields['name']) ? Str::slug($fields['name']) . '-' . uniqid() : $product->slug,
                         'sku' => $fields['sku'] ?? $product->sku,
                         'brand_id' => $fields['brandId'] ?? $product->brand_id,
-                        'category_id' => $fields['categoryIds'] ?? $product->category_id,
+                        'category_id' => isset($fields['categoryIds']) && is_array($fields['categoryIds']) ? (int)$fields['categoryIds'][0] : ($fields['categoryIds'] ?? $product->category_id),
                         'condition' => $fields['condition'] ?? $product->condition,
                         'price' => $fields['price'] ?? $product->price,
                         'quantity' => $fields['quantity'] ?? $product->quantity,
