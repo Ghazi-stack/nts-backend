@@ -30,6 +30,7 @@ class Order extends Model
         'status',
         'is_draft',
         'device_type',
+        'user_type',
         'channel',
         'shipping_cost',
         'shipping_provider',
