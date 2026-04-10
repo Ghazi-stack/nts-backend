@@ -45,6 +45,7 @@ class OrderController extends Controller
             $perPage = $request->query('perPage', 20);
             $keyword = $request->query('keyword');
             $status = $request->query('status');
+            $productId = $request->query('productId');
 
             $storeId = current_store_id();
 
@@ -60,6 +61,11 @@ class OrderController extends Controller
                 ->where('is_draft', 0)
                 ->when($status, function ($q) use ($status) {
                     $q->where('status', $status);
+                })
+                ->when($productId, function ($q) use ($productId) {
+                    $q->whereHas('items', function ($item) use ($productId) {
+                        $item->where('product_id', $productId);
+                    });
                 })
                 ->when($keyword, function ($q) use ($keyword) {
                     $q->where(function ($query) use ($keyword) {
