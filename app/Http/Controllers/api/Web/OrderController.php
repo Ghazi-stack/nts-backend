@@ -55,33 +55,48 @@ class OrderController extends Controller
                 ], 403);
             }
 
-            $orders = Order::with(['items.product.images', 'customer', 'billingInformation', 'notes'])
+            $query = Order::query()
                 ->where('store_id', $storeId)
-                ->where('is_draft', 0)
-                ->when($status, function ($q) use ($status) {
-                    $q->where('status', $status);
-                })
-                ->when($keyword, function ($q) use ($keyword) {
-                    $q->where(function ($query) use ($keyword) {
-                        $query->where('id', 'like', "%{$keyword}%")
+                ->where('is_draft', 0);
+
+            if ($status) {
+                $query->where('status', $status);
+            }
+
+            if ($keyword) {
+                $query->where(function ($q) use ($keyword) {
+                    if (is_numeric($keyword)) {
+                        $q->where('id', $keyword)
                             ->orWhere('order_number', 'like', "%{$keyword}%")
+                            ->orWhere('total_amount', 'like', "%{$keyword}%");
+                    } else {
+                        $q->where('order_number', 'like', "%{$keyword}%")
                             ->orWhere('status', 'like', "%{$keyword}%")
-                            ->orWhere('total_amount', 'like', "%{$keyword}%")
-                            ->orWhereHas('customer', function ($c) use ($keyword) {
-                                $c->where('first_name', 'like', "%{$keyword}%")
-                                    ->orWhere('last_name', 'like', "%{$keyword}%")
-                                    ->orWhere('email', 'like', "%{$keyword}%")
-                                    ->orWhere('phone', 'like', "%{$keyword}%");
-                            })
-                            ->orWhereHas('billingInformation', function ($b) use ($keyword) {
-                                $b->where('first_name', 'like', "%{$keyword}%")
-                                    ->orWhere('last_name', 'like', "%{$keyword}%")
-                                    ->orWhere('phone', 'like', "%{$keyword}%")
-                                    ->orWhere('payment_method', 'like', "%{$keyword}%")
-                                    ->orWhere('shipping_method', 'like', "%{$keyword}%");
-                            });
+                            ->orWhere('total_amount', 'like', "%{$keyword}%");
+                    }
+
+                    $q->orWhereHas('customer', function ($c) use ($keyword) {
+                        $c->where(function ($inner) use ($keyword) {
+                            $inner->where('first_name', 'like', "%{$keyword}%")
+                                ->orWhere('last_name', 'like', "%{$keyword}%")
+                                ->orWhere('email', 'like', "%{$keyword}%")
+                                ->orWhere('phone', 'like', "%{$keyword}%");
+                        });
                     });
-                })
+
+                    $q->orWhereHas('billingInformation', function ($b) use ($keyword) {
+                        $b->where(function ($inner) use ($keyword) {
+                            $inner->where('first_name', 'like', "%{$keyword}%")
+                                ->orWhere('last_name', 'like', "%{$keyword}%")
+                                ->orWhere('phone', 'like', "%{$keyword}%")
+                                ->orWhere('payment_method', 'like', "%{$keyword}%")
+                                ->orWhere('shipping_method', 'like', "%{$keyword}%");
+                        });
+                    });
+                });
+            }
+
+            $orders = $query->with(['items.product.images', 'customer', 'billingInformation', 'notes'])
                 ->latest()
                 ->paginate($perPage);
 
@@ -105,7 +120,6 @@ class OrderController extends Controller
             ], 500);
         }
     }
-
     public function show(Request $request, $id)
     {
         try {
