@@ -438,7 +438,7 @@ class ProductController extends Controller
             // -------------------------
             // STEP 1: Try productUrl first, then SKU
             // -------------------------
-            $product = Cache::remember($cacheKey, 600, function () use ($slug, $storeId) {
+            $product = Cache::remember($cacheKey, 30, function () use ($slug, $storeId) {
 
                 // First: try to find by productUrl in SEO table
                 $product = Product::where('store_id', $storeId)
