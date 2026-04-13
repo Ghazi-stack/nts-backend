@@ -210,7 +210,7 @@ class SitemapController extends Controller
 
                 $products = Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
-                    ->select('slug')
+                    ->select('sku')
                     ->orderBy('id')
                     ->offset(($page - 1) * self::PRODUCTS_PER_PAGE)
                     ->limit(self::PRODUCTS_PER_PAGE)
@@ -218,7 +218,7 @@ class SitemapController extends Controller
 
                 $urls = '';
                 foreach ($products as $product) {
-                    $urls .= "  <url>\n    <loc>{$siteUrl}/{$product->slug}/</loc>\n  </url>\n";
+                    $urls .= "  <url>\n    <loc>{$siteUrl}/{$product->sku}/</loc>\n  </url>\n";
                 }
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
@@ -259,7 +259,7 @@ class SitemapController extends Controller
             $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $siteUrl) {
 
                 $categories = Category::where('store_id', $storeId)
-                    ->select('id', 'slug', 'parent_id')
+                    ->select('id', 'sku', 'parent_id')
                     ->get();
 
                 $categoryMap = $categories->keyBy('id');
@@ -316,9 +316,9 @@ class SitemapController extends Controller
 
                 $urls = '';
                 foreach ($brands as $brand) {
-                    $slug = Str::slug($brand->name);
-                    if ($slug) {
-                        $urls .= "  <url>\n    <loc>{$siteUrl}/brand/{$slug}/</loc>\n  </url>\n";
+                    $sku = Str::sku($brand->name);
+                    if ($sku) {
+                        $urls .= "  <url>\n    <loc>{$siteUrl}/brand/{$sku}/</loc>\n  </url>\n";
                     }
                 }
 
@@ -402,7 +402,7 @@ class SitemapController extends Controller
      */
     private function buildCategoryPath($category, $categoryMap, $depth = 0): string
     {
-        if ($depth > 5) return $category->slug;
+        if ($depth > 5) return $category->sku;
 
         if ($category->parent_id && isset($categoryMap[$category->parent_id])) {
             $parentPath = $this->buildCategoryPath(
@@ -410,9 +410,9 @@ class SitemapController extends Controller
                 $categoryMap,
                 $depth + 1
             );
-            return $parentPath . '/' . $category->slug;
+            return $parentPath . '/' . $category->sku;
         }
 
-        return $category->slug;
+        return $category->sku;
     }
 }
