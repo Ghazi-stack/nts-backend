@@ -65,7 +65,7 @@ class ProductResource extends JsonResource
             'isFeatured' => $this->is_featured,
             'isVisible' => $this->visible_on_storefront,
             'showCondition' => $this->show_condition,
-            'showShipping' => $this->show_shipping,
+            'freeShipping' => $this->show_shipping,
             'sortOrder' => $this->sort_order,
             'searchKeywords' => $this->search_keywords,
 
