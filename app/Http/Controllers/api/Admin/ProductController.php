@@ -510,7 +510,7 @@ class ProductController extends Controller
             // -------------------------
             // STEP 2: Heavy relations (reviews)
             // -------------------------
-            $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
+            $reviews = Cache::remember("product_reviews_{$product->id}", 30, function () use ($product) {
                 return $product->reviews()
                     ->with('user:id,name')
                     ->latest()
