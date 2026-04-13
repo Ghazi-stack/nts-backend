@@ -34,6 +34,7 @@ class Product extends Model
         'low_stock',
         'is_featured',
         'show_condition',
+        'show_shipping',
         'sort_order',
         'search_keywords',
         'visible_on_storefront',
