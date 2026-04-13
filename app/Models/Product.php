@@ -84,6 +84,7 @@ class Product extends Model
         'is_featured' => 'boolean',
         'track_inventory' => 'boolean',
         'show_condition' => 'boolean',
+        'show_shipping' => 'boolean',
         'allow_purchase' => 'boolean',
         'stop_processing_rules' => 'boolean',
         'free_shipping' => 'boolean',
