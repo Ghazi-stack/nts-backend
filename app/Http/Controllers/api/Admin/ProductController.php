@@ -428,6 +428,9 @@ class ProductController extends Controller
             ], 400);
         }
 
+        // ✅ Strip leading/trailing slashes so both "/part-123/product" and "part-123/product" work
+        $slug = trim($slug, '/');
+
         $cacheKey = "product_by_url_store_{$storeId}_slug_" . md5($slug);
 
         try {
@@ -457,6 +460,23 @@ class ProductController extends Controller
                     $product = Product::where('store_id', $storeId)
                         ->where('visible_on_storefront', 1)
                         ->where('sku', $slug)
+                        ->with([
+                            'brand:id,name,logo',
+                            'images:id,product_id,path,is_primary',
+                            'content',
+                            'identifiers',
+                            'seo'
+                        ])
+                        ->first();
+                }
+
+                // Third: also try with leading slash in case DB has "/part-123/product" format
+                if (!$product) {
+                    $product = Product::where('store_id', $storeId)
+                        ->where('visible_on_storefront', 1)
+                        ->whereHas('seo', function ($q) use ($slug) {
+                            $q->where('product_url', '/' . $slug);
+                        })
                         ->with([
                             'brand:id,name,logo',
                             'images:id,product_id,path,is_primary',
