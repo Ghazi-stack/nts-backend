@@ -438,7 +438,7 @@ class ProductController extends Controller
             // -------------------------
             // STEP 1: Try productUrl first, then SKU
             // -------------------------
-            $product = Cache::remember($cacheKey, 30, function () use ($slug, $storeId) {
+            $product = Cache::remember($cacheKey, 5, function () use ($slug, $storeId) {
 
                 // First: try to find by productUrl in SEO table
                 $product = Product::where('store_id', $storeId)
@@ -510,7 +510,7 @@ class ProductController extends Controller
             // -------------------------
             // STEP 2: Heavy relations (reviews)
             // -------------------------
-            $reviews = Cache::remember("product_reviews_{$product->id}", 30, function () use ($product) {
+            $reviews = Cache::remember("product_reviews_{$product->id}", 5, function () use ($product) {
                 return $product->reviews()
                     ->with('user:id,name')
                     ->latest()
