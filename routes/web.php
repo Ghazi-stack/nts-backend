@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\Dashboard\ChartController;
-
+use App\Http\Controllers\api\SitemapController;
 
 /*
 |--------------------------------------------------------------------------
@@ -20,3 +20,4 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::get('/xmlsitemap', [SitemapController::class, 'index']);
