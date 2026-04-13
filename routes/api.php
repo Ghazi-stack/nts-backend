@@ -437,23 +437,11 @@ Route::prefix('web')->group(function () {
 
 
 Route::prefix('sitemap')->group(function () {
-
-    // ── Sitemap Info (for building sitemap index) ──
-    Route::get('/info', [SitemapController::class, 'info']);
-
-    // ── Static Pages ──
-    Route::get('/pages', [SitemapController::class, 'pages']);
-
-    // ── Products (paginated) ──
-    Route::get('/products', [SitemapController::class, 'products']);
-
-    // ── Categories ──
-    Route::get('/categories', [SitemapController::class, 'categories']);
-
-    // ── Brands ──
-    Route::get('/brands', [SitemapController::class, 'brands']);
-
-    // ── Clear Cache (protected — only for admin) ──
+    Route::get('/info',        [SitemapController::class, 'info']);
+    Route::get('/pages',       [SitemapController::class, 'pages']);
+    Route::get('/products',    [SitemapController::class, 'products']);
+    Route::get('/categories',  [SitemapController::class, 'categories']);
+    Route::get('/brands',      [SitemapController::class, 'brands']);
     Route::post('/clear-cache', [SitemapController::class, 'clearCache']);
 });
 Route::get('/test-s3', function () {
