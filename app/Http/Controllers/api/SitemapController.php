@@ -96,12 +96,12 @@ class SitemapController extends Controller
                 return $this->xmlError('Store not selected.');
             }
 
-            $siteUrl = $this->siteUrl();
+            $baseUrl = $this->getBaseUrl($request);
 
             // Total product pages calculate karo
             $cacheKey = "xmlsitemap_index_store_{$storeId}";
 
-            $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $siteUrl) {
+            $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $baseUrl) {
 
                 $totalProducts = Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
@@ -113,18 +113,18 @@ class SitemapController extends Controller
                 $sitemaps = '';
 
                 // Pages
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n  </sitemap>\n";
+                $sitemaps .= "  <sitemap>\n    <loc>{$baseUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n  </sitemap>\n";
 
                 // Products (paginated)
                 for ($i = 1; $i <= $totalProductPages; $i++) {
-                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n  </sitemap>\n";
+                    $sitemaps .= "  <sitemap>\n    <loc>{$baseUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n  </sitemap>\n";
                 }
 
                 // Categories
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n  </sitemap>\n";
+                $sitemaps .= "  <sitemap>\n    <loc>{$baseUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n  </sitemap>\n";
 
                 // Brands
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n  </sitemap>\n";
+                $sitemaps .= "  <sitemap>\n    <loc>{$baseUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n  </sitemap>\n";
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
                     . '<sitemapindex xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/siteindex.xsd">' . "\n"
