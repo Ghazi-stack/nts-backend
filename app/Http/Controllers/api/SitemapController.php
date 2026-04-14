@@ -133,7 +133,6 @@ class SitemapController extends Controller
             });
 
             return $this->xmlResponse($xml);
-
         } catch (\Exception $e) {
             Log::error('Sitemap index error: ' . $e->getMessage());
             return $this->xmlError($e->getMessage());
@@ -192,8 +191,8 @@ class SitemapController extends Controller
     // Har page mein 1000 products.
     // Browser mein dikhega:
     // <urlset>
-    //   <url><loc>https://server-blink.vercel.app/bxg1-desktop-processor-.../</loc></url>
-    //   ...1000 products...
+    //   <url><loc>https://server-blink.vercel.app/t712c-dell-160gb-7200rpm-sata-2-5-inchhard-drive/</loc></url>
+    //   ...1000 products (URL from product name/title)...
     // </urlset>
     // ─────────────────────────────────────────────
     private function productsXml(Request $request, int $page)
@@ -211,7 +210,7 @@ class SitemapController extends Controller
 
                 $products = Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
-                    ->select('slug')
+                    ->select('name', 'slug', 'sku')
                     ->orderBy('id')
                     ->offset(($page - 1) * self::PRODUCTS_PER_PAGE)
                     ->limit(self::PRODUCTS_PER_PAGE)
@@ -219,7 +218,17 @@ class SitemapController extends Controller
 
                 $urls = '';
                 foreach ($products as $product) {
-                    $urls .= "  <url>\n    <loc>{$siteUrl}/{$product->slug}/</loc>\n  </url>\n";
+                    // URL product name/title se banao — jaise live site pe hai
+                    // Example: "T712C | DELL | 160GB 7200RPM SATA 2.5-INCHHARD DRIVE"
+                    //       → "t712c-dell-160gb-7200rpm-sata-2-5-inchhard-drive"
+                    $productSlug = Str::slug($product->name);
+
+                    // Agar name se slug empty aaye toh database slug use karo
+                    if (!$productSlug) {
+                        $productSlug = $product->slug ?? Str::slug($product->sku);
+                    }
+
+                    $urls .= "  <url>\n    <loc>{$siteUrl}/{$productSlug}/</loc>\n  </url>\n";
                 }
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
@@ -229,7 +238,6 @@ class SitemapController extends Controller
             });
 
             return $this->xmlResponse($xml);
-
         } catch (\Exception $e) {
             Log::error('Sitemap products error: ' . $e->getMessage());
             return $this->xmlError($e->getMessage());
@@ -279,7 +287,6 @@ class SitemapController extends Controller
             });
 
             return $this->xmlResponse($xml);
-
         } catch (\Exception $e) {
             Log::error('Sitemap categories error: ' . $e->getMessage());
             return $this->xmlError($e->getMessage());
@@ -332,7 +339,6 @@ class SitemapController extends Controller
             });
 
             return $this->xmlResponse($xml);
-
         } catch (\Exception $e) {
             Log::error('Sitemap brands error: ' . $e->getMessage());
             return $this->xmlError($e->getMessage());
