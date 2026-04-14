@@ -23,7 +23,8 @@ use App\Http\Controllers\api\Admin\{
     LogoController,
     ScriptController,
     CouponCodeController,
-    StoreSettingController
+    StoreSettingController,
+    UrlSettingController
 };
 use App\Http\Controllers\api\Web\{
     CartController,
@@ -314,6 +315,15 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/get-store-setting', 'index');
         Route::post('/add-store-setting', 'store');
     });
+
+    // UPDATE (Create + Update dono)
+    Route::post('/url-settings/product',  [UrlSettingController::class, 'updateProduct']);
+    Route::post('/url-settings/category', [UrlSettingController::class, 'updateCategory']);
+    Route::post('/url-settings/webpage',  [UrlSettingController::class, 'updateWebpage']);
+
+    // GET current settings
+    Route::get('/url-settings/{entity}', [UrlSettingController::class, 'show']); 
+    // {entity} = product / category / webpage
 });
 
 
