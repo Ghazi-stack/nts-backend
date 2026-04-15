@@ -428,23 +428,21 @@ class ProductController extends Controller
             ], 400);
         }
 
-        // ✅ Strip leading/trailing slashes so both "/part-123/product" and "part-123/product" work
+        // Clean slug (leading/trailing slashes remove karo)
         $slug = trim($slug, '/');
 
         $cacheKey = "product_by_url_store_{$storeId}_slug_" . md5($slug);
 
         try {
 
-            // -------------------------
-            // STEP 1: Try productUrl first, then SKU
-            // -------------------------
-            $product = Cache::remember($cacheKey, 5, function () use ($slug, $storeId) {
+            $product = Cache::remember($cacheKey, 300, function () use ($slug, $storeId) {  // cache time badha diya
 
-                // First: try to find by productUrl in SEO table
+                // STEP 1: Try by SEO product_url (slug) - Yeh sabse pehle try hoga
                 $product = Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
                     ->whereHas('seo', function ($q) use ($slug) {
-                        $q->where('product_url', $slug);
+                        $q->where('product_url', $slug)
+                            ->orWhere('product_url', '/' . $slug);   // dono format support
                     })
                     ->with([
                         'brand:id,name,logo',
@@ -455,11 +453,11 @@ class ProductController extends Controller
                     ])
                     ->first();
 
-                // Second: if not found by productUrl, try SKU
+                // STEP 2: Agar slug se nahi mila to SKU se try karo
                 if (!$product) {
                     $product = Product::where('store_id', $storeId)
                         ->where('visible_on_storefront', 1)
-                        ->where('sku', $slug)
+                        ->where('sku', $slug)           // SKU match
                         ->with([
                             'brand:id,name,logo',
                             'images:id,product_id,path,is_primary',
@@ -470,7 +468,7 @@ class ProductController extends Controller
                         ->first();
                 }
 
-                // Third: also try with leading slash in case DB has "/part-123/product" format
+                // STEP 3: Agar upar dono se nahi mila to slug ke saath slash try karo (extra safety)
                 if (!$product) {
                     $product = Product::where('store_id', $storeId)
                         ->where('visible_on_storefront', 1)
@@ -493,13 +491,12 @@ class ProductController extends Controller
             if (!$product) {
                 return response()->json([
                     'status' => false,
-                    'error' => 'Product not found',
+                    'error'  => 'Product not found',
+                    'slug'   => $slug
                 ], 404);
             }
 
-            // -------------------------
-            // STEP 1.5: Visible check
-            // -------------------------
+            // Visible check
             if (!$product->visible_on_storefront) {
                 return response()->json([
                     'status' => false,
@@ -507,10 +504,8 @@ class ProductController extends Controller
                 ], 403);
             }
 
-            // -------------------------
-            // STEP 2: Heavy relations (reviews)
-            // -------------------------
-            $reviews = Cache::remember("product_reviews_{$product->id}", 5, function () use ($product) {
+            // Reviews (heavy query)
+            $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
                 return $product->reviews()
                     ->with('user:id,name')
                     ->latest()
@@ -521,19 +516,20 @@ class ProductController extends Controller
             $product->setRelation('reviews', $reviews);
 
             return response()->json([
-                'status' => true,
-                'message' => 'Product Retrieved',
-                'data' => new ProductResource($product)
+                'status'  => true,
+                'message' => 'Product Retrieved Successfully',
+                'data'    => new ProductResource($product)
             ]);
         } catch (\Exception $e) {
+            Log::error('Product show by URL error: ' . $e->getMessage());
+
             return response()->json([
                 'status' => false,
-                'error' => 'Something went wrong',
-                'debug' => $e->getMessage()
+                'error'  => 'Something went wrong',
+                'debug'  => $e->getMessage()
             ], 500);
         }
     }
-
     public function addProduct(Request $request)
     {
         try {
