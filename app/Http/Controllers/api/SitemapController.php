@@ -16,12 +16,17 @@ class SitemapController extends Controller
     private const PRODUCTS_PER_PAGE = 1000;
     private const CACHE_TTL = 3600;
 
-    // ── HARDCODED frontend URL ──
+    // ── HARDCODED — sab jagah yahi URL ayega ──
     private function siteUrl(): string
     {
         return 'https://server-blink.vercel.app';
     }
 
+    // ─────────────────────────────────────────────
+    // MAIN ENTRY POINT
+    // GET /xmlsitemap
+    // GET /xmlsitemap?type=products&page=1
+    // ─────────────────────────────────────────────
     public function index(Request $request)
     {
         $type = $request->query('type');
@@ -45,6 +50,12 @@ class SitemapController extends Controller
         }
     }
 
+    // ─────────────────────────────────────────────
+    // SITEMAP INDEX
+    // /xmlsitemap
+    //
+    // Sab <loc> mein server-blink.vercel.app ayega
+    // ─────────────────────────────────────────────
     private function sitemapIndex(Request $request)
     {
         try {
@@ -53,6 +64,7 @@ class SitemapController extends Controller
                 return $this->xmlError('Store not selected.');
             }
 
+            // ✅ HARDCODED frontend URL — backend URL nahi
             $siteUrl = $this->siteUrl();
 
             $cacheKey = "xmlsitemap_index_store_{$storeId}";
@@ -67,6 +79,7 @@ class SitemapController extends Controller
 
                 $sitemaps = '';
 
+                // ✅ siteUrl = server-blink.vercel.app
                 $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n  </sitemap>\n";
 
                 for ($i = 1; $i <= $totalProductPages; $i++) {
@@ -90,6 +103,10 @@ class SitemapController extends Controller
         }
     }
 
+    // ─────────────────────────────────────────────
+    // PAGES XML
+    // /xmlsitemap?type=pages&page=1
+    // ─────────────────────────────────────────────
     private function pagesXml(Request $request)
     {
         $siteUrl = $this->siteUrl();
@@ -121,6 +138,11 @@ class SitemapController extends Controller
         return $this->xmlResponse($xml);
     }
 
+    // ─────────────────────────────────────────────
+    // PRODUCTS XML
+    // /xmlsitemap?type=products&page=1
+    // URL = SKU (frontend SKU se product fetch karta hai)
+    // ─────────────────────────────────────────────
     private function productsXml(Request $request, int $page)
     {
         try {
@@ -160,6 +182,10 @@ class SitemapController extends Controller
         }
     }
 
+    // ─────────────────────────────────────────────
+    // CATEGORIES XML
+    // /xmlsitemap?type=categories&page=1
+    // ─────────────────────────────────────────────
     private function categoriesXml(Request $request)
     {
         try {
@@ -198,6 +224,10 @@ class SitemapController extends Controller
         }
     }
 
+    // ─────────────────────────────────────────────
+    // BRANDS XML
+    // /xmlsitemap?type=brands&page=1
+    // ─────────────────────────────────────────────
     private function brandsXml(Request $request)
     {
         try {
@@ -238,6 +268,10 @@ class SitemapController extends Controller
         }
     }
 
+    // ─────────────────────────────────────────────
+    // CLEAR CACHE
+    // POST /api/sitemap/clear-cache
+    // ─────────────────────────────────────────────
     public function clearCache(Request $request)
     {
         try {
@@ -263,6 +297,10 @@ class SitemapController extends Controller
             ], 500);
         }
     }
+
+    // ═══════════════════════════════════════════════
+    // HELPERS
+    // ═══════════════════════════════════════════════
 
     private function xmlResponse(string $xml)
     {
