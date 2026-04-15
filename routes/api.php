@@ -322,7 +322,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::post('/url-settings/webpage',  [UrlSettingController::class, 'updateWebpage']);
 
     // GET current settings
-    Route::get('/url-settings/{entity}', [UrlSettingController::class, 'show']); 
+    Route::get('/url-settings/{entity}', [UrlSettingController::class, 'show']);
     // {entity} = product / category / webpage
 });
 
@@ -333,7 +333,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 // ===============================
 // 🌐 PUBLIC + WEB ROUTES
 // ===============================
- 
+
 
 // 🔓 Public Routes (accessible without login)
 
@@ -446,16 +446,20 @@ Route::prefix('web')->group(function () {
 });
 
 
+// ===================== SITEMAP ROUTES (Clean Version) =====================
 Route::prefix('sitemap')->group(function () {
 
-    // ── MAIN SITEMAP ENTRY POINT ──
-    // Yeh sabse important route hai
-    Route::get('/xmlsitemap', [SitemapController::class, 'index']);
+    Route::get('/xmlsitemap', [SitemapController::class, 'index']);   // Main sitemap
 
-    // Clear Cache (Admin / Backend ke liye)
+    // Clean URLs
+    Route::get('/pages',       [SitemapController::class, 'pagesXml']);
+    Route::get('/products/{page?}', [SitemapController::class, 'productsXml'])->where('page', '[0-9]+');
+    Route::get('/categories',  [SitemapController::class, 'categoriesXml']);
+    Route::get('/brands',      [SitemapController::class, 'brandsXml']);
+
     Route::post('/clear-cache', [SitemapController::class, 'clearCache']);
-
 });
+
 Route::get('/test-s3', function () {
     $path = 'debug/tests.txt';
 

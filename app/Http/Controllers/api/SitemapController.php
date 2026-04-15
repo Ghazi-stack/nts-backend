@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\Brand;
+use App\Models\UrlSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -16,7 +17,6 @@ class SitemapController extends Controller
     private const PRODUCTS_PER_PAGE = 1000;
     private const CACHE_TTL = 3600;
 
-    // ── HARDCODED — sab jagah yahi URL ayega ──
     private function siteUrl(): string
     {
         return 'https://server-blink.vercel.app';
@@ -24,8 +24,7 @@ class SitemapController extends Controller
 
     // ─────────────────────────────────────────────
     // MAIN ENTRY POINT
-    // GET /xmlsitemap
-    // GET /xmlsitemap?type=products&page=1
+    // GET /api/sitemap/xmlsitemap
     // ─────────────────────────────────────────────
     public function index(Request $request)
     {
@@ -51,10 +50,7 @@ class SitemapController extends Controller
     }
 
     // ─────────────────────────────────────────────
-    // SITEMAP INDEX
-    // /xmlsitemap
-    //
-    // Sab <loc> mein server-blink.vercel.app ayega
+    // SITEMAP INDEX - Ab Clean URLs (xmlsitemap remove kiya)
     // ─────────────────────────────────────────────
     private function sitemapIndex(Request $request)
     {
@@ -64,10 +60,7 @@ class SitemapController extends Controller
                 return $this->xmlError('Store not selected.');
             }
 
-            // ✅ HARDCODED frontend URL — backend URL nahi
-            //$siteUrl = $this->siteUrl();
-            $siteUrl = 'https://server-blink.vercel.app';
-
+            $siteUrl = $this->siteUrl();
             $cacheKey = "xmlsitemap_index_store_{$storeId}";
 
             $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $siteUrl) {
@@ -80,16 +73,15 @@ class SitemapController extends Controller
 
                 $sitemaps = '';
 
-                // ✅ siteUrl = server-blink.vercel.app
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n  </sitemap>\n";
+                // Clean URLs (xmlsitemap?type=... remove kiya)
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/sitemap/pages</loc>\n  </sitemap>\n";
 
                 for ($i = 1; $i <= $totalProductPages; $i++) {
-                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n  </sitemap>\n";
+                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/sitemap/products/{$i}</loc>\n  </sitemap>\n";
                 }
 
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n  </sitemap>\n";
-
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n  </sitemap>\n";
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/sitemap/categories</loc>\n  </sitemap>\n";
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/sitemap/brands</loc>\n  </sitemap>\n";
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
                     . '<sitemapindex xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/siteindex.xsd">' . "\n"
@@ -106,7 +98,6 @@ class SitemapController extends Controller
 
     // ─────────────────────────────────────────────
     // PAGES XML
-    // /xmlsitemap?type=pages&page=1
     // ─────────────────────────────────────────────
     private function pagesXml(Request $request)
     {
@@ -140,9 +131,7 @@ class SitemapController extends Controller
     }
 
     // ─────────────────────────────────────────────
-    // PRODUCTS XML
-    // /xmlsitemap?type=products&page=1
-    // URL = SKU (frontend SKU se product fetch karta hai)
+    // PRODUCTS XML - Dynamic according to URL Settings
     // ─────────────────────────────────────────────
     private function productsXml(Request $request, int $page)
     {
@@ -159,15 +148,24 @@ class SitemapController extends Controller
 
                 $products = Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
-                    ->select('sku')
+                    ->select('id', 'sku', 'name', 'slug')
                     ->orderBy('id')
                     ->offset(($page - 1) * self::PRODUCTS_PER_PAGE)
                     ->limit(self::PRODUCTS_PER_PAGE)
                     ->get();
 
+                // Get URL Setting
+                $urlSetting = UrlSetting::where('store_id', $storeId)
+                    ->where('entity_type', 'product')
+                    ->first();
+
+                $formatType = $urlSetting?->format_type ?? 'title';
+                $customFormat = $urlSetting?->custom_format;
+
                 $urls = '';
                 foreach ($products as $product) {
-                    $urls .= "  <url>\n    <loc>{$siteUrl}/{$product->sku}/</loc>\n  </url>\n";
+                    $productUrl = $this->buildProductUrl($product, $formatType, $customFormat, $siteUrl);
+                    $urls .= "  <url>\n    <loc>{$productUrl}</loc>\n  </url>\n";
                 }
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
@@ -185,7 +183,6 @@ class SitemapController extends Controller
 
     // ─────────────────────────────────────────────
     // CATEGORIES XML
-    // /xmlsitemap?type=categories&page=1
     // ─────────────────────────────────────────────
     private function categoriesXml(Request $request)
     {
@@ -227,7 +224,6 @@ class SitemapController extends Controller
 
     // ─────────────────────────────────────────────
     // BRANDS XML
-    // /xmlsitemap?type=brands&page=1
     // ─────────────────────────────────────────────
     private function brandsXml(Request $request)
     {
@@ -271,7 +267,6 @@ class SitemapController extends Controller
 
     // ─────────────────────────────────────────────
     // CLEAR CACHE
-    // POST /api/sitemap/clear-cache
     // ─────────────────────────────────────────────
     public function clearCache(Request $request)
     {
@@ -318,9 +313,7 @@ class SitemapController extends Controller
             . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n"
             . '</urlset>';
 
-        return response($xml, 200, [
-            'Content-Type' => 'text/xml; charset=UTF-8',
-        ]);
+        return response($xml, 200, ['Content-Type' => 'text/xml; charset=UTF-8']);
     }
 
     private function getStoreId(): ?int
@@ -336,7 +329,7 @@ class SitemapController extends Controller
         $queryId = (int) request()->query('store_id');
         if ($queryId) return $queryId;
 
-        return 10;
+        return 10; // default
     }
 
     private function buildCategoryPath($category, $categoryMap, $depth = 0): string
@@ -344,14 +337,39 @@ class SitemapController extends Controller
         if ($depth > 5) return $category->slug;
 
         if ($category->parent_id && isset($categoryMap[$category->parent_id])) {
-            $parentPath = $this->buildCategoryPath(
-                $categoryMap[$category->parent_id],
-                $categoryMap,
-                $depth + 1
-            );
+            $parentPath = $this->buildCategoryPath($categoryMap[$category->parent_id], $categoryMap, $depth + 1);
             return $parentPath . '/' . $category->slug;
         }
 
         return $category->slug;
+    }
+
+    /**
+     * Build Product URL according to URL Settings
+     */
+    private function buildProductUrl($product, string $formatType, ?string $customFormat, string $siteUrl): string
+    {
+        $slug = $product->slug ?? Str::slug($product->name ?? $product->sku);
+
+        switch ($formatType) {
+            case 'title':
+                return "{$siteUrl}/{$slug}/";
+
+            case 'products':
+                return "{$siteUrl}/products/{$slug}/";
+
+            case 'category':
+                return "{$siteUrl}/category/{$slug}/";   // Agar real category slug chahiye to batao
+
+            case 'custom':
+                if ($customFormat) {
+                    $url = str_replace(['%productname%', '%sku%'], [$slug, $product->sku], $customFormat);
+                    return rtrim($siteUrl, '/') . $url;
+                }
+                return "{$siteUrl}/{$slug}/";
+
+            default:
+                return "{$siteUrl}/{$slug}/";
+        }
     }
 }
