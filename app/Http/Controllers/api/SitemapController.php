@@ -13,54 +13,24 @@ use Illuminate\Support\Str;
 
 class SitemapController extends Controller
 {
-    /**
-     * =============================================
-     * XML SITEMAP CONTROLLER
-     * =============================================
-     *
-     * Bilkul serverblink.com/xmlsitemap.php jaisa kaam karta hai.
-     * Browser mein direct XML dikhata hai.
-     *
-     * URLs:
-     *   /xmlsitemap                              → Sitemap Index
-     *   /xmlsitemap?type=pages&page=1            → Static pages
-     *   /xmlsitemap?type=products&page=1          → Products page 1
-     *   /xmlsitemap?type=products&page=2          → Products page 2
-     *   /xmlsitemap?type=categories&page=1        → Categories
-     *   /xmlsitemap?type=brands&page=1            → Brands
-     *
-     * Route (routes/web.php):
-     *   Route::get('/xmlsitemap', [SitemapController::class, 'index']);
-     *
-     * =============================================
-     */
-
     private const PRODUCTS_PER_PAGE = 1000;
-    private const CACHE_TTL = 3600; // 1 hour
+    private const CACHE_TTL = 3600;
 
-    // ── Site URL — apna frontend URL yahan daalo ──
+    // ── HARDCODED frontend URL ──
     private function siteUrl(): string
     {
-        return rtrim(config('app.frontend_url', 'https://server-blink.vercel.app'), '/');
+        return 'https://server-blink.vercel.app';
     }
 
-    // ─────────────────────────────────────────────
-    // MAIN ENTRY POINT
-    // ─────────────────────────────────────────────
-    // GET /xmlsitemap
-    // GET /xmlsitemap?type=products&page=1
-    // ─────────────────────────────────────────────
     public function index(Request $request)
     {
         $type = $request->query('type');
         $page = max(1, (int) $request->query('page', 1));
 
-        // Agar type nahi diya → Sitemap Index return karo
         if (!$type) {
             return $this->sitemapIndex($request);
         }
 
-        // Type ke hisaab se XML return karo
         switch ($type) {
             case 'pages':
                 return $this->pagesXml($request);
@@ -75,9 +45,6 @@ class SitemapController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────
-    // SITEMAP INDEX
-    // ─────────────────────────────────────────────
     private function sitemapIndex(Request $request)
     {
         try {
@@ -86,7 +53,6 @@ class SitemapController extends Controller
                 return $this->xmlError('Store not selected.');
             }
 
-            // ✅ FIXED: Frontend URL use karo, backend URL nahi
             $siteUrl = $this->siteUrl();
 
             $cacheKey = "xmlsitemap_index_store_{$storeId}";
@@ -99,21 +65,16 @@ class SitemapController extends Controller
 
                 $totalProductPages = (int) ceil($totalProducts / self::PRODUCTS_PER_PAGE);
 
-                // Build sitemap index XML
                 $sitemaps = '';
 
-                // Pages — ✅ siteUrl use ho raha hai
                 $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n  </sitemap>\n";
 
-                // Products (paginated) — ✅ siteUrl use ho raha hai
                 for ($i = 1; $i <= $totalProductPages; $i++) {
                     $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n  </sitemap>\n";
                 }
 
-                // Categories — ✅ siteUrl use ho raha hai
                 $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n  </sitemap>\n";
 
-                // Brands — ✅ siteUrl use ho raha hai
                 $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n  </sitemap>\n";
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
@@ -129,9 +90,6 @@ class SitemapController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────
-    // PAGES XML
-    // ─────────────────────────────────────────────
     private function pagesXml(Request $request)
     {
         $siteUrl = $this->siteUrl();
@@ -163,9 +121,6 @@ class SitemapController extends Controller
         return $this->xmlResponse($xml);
     }
 
-    // ─────────────────────────────────────────────
-    // PRODUCTS XML (Paginated)
-    // ─────────────────────────────────────────────
     private function productsXml(Request $request, int $page)
     {
         try {
@@ -189,7 +144,6 @@ class SitemapController extends Controller
 
                 $urls = '';
                 foreach ($products as $product) {
-                    // URL mein SKU use karo — frontend SKU se product fetch karta hai
                     $urls .= "  <url>\n    <loc>{$siteUrl}/{$product->sku}/</loc>\n  </url>\n";
                 }
 
@@ -206,9 +160,6 @@ class SitemapController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────
-    // CATEGORIES XML
-    // ─────────────────────────────────────────────
     private function categoriesXml(Request $request)
     {
         try {
@@ -247,9 +198,6 @@ class SitemapController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────
-    // BRANDS XML
-    // ─────────────────────────────────────────────
     private function brandsXml(Request $request)
     {
         try {
@@ -290,9 +238,31 @@ class SitemapController extends Controller
         }
     }
 
-    // ═══════════════════════════════════════════════
-    // HELPERS
-    // ═══════════════════════════════════════════════
+    public function clearCache(Request $request)
+    {
+        try {
+            $storeId = $this->getStoreId();
+
+            Cache::forget("xmlsitemap_index_store_{$storeId}");
+            Cache::forget("xmlsitemap_categories_store_{$storeId}");
+            Cache::forget("xmlsitemap_brands_store_{$storeId}");
+
+            for ($i = 1; $i <= 300; $i++) {
+                Cache::forget("xmlsitemap_products_store_{$storeId}_page_{$i}");
+            }
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Sitemap cache cleared successfully.',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to clear sitemap cache.',
+                'debug'   => $e->getMessage(),
+            ], 500);
+        }
+    }
 
     private function xmlResponse(string $xml)
     {
@@ -330,11 +300,6 @@ class SitemapController extends Controller
         return 10;
     }
 
-    private function getBaseUrl(Request $request): string
-    {
-        return rtrim($request->getSchemeAndHttpHost(), '/');
-    }
-
     private function buildCategoryPath($category, $categoryMap, $depth = 0): string
     {
         if ($depth > 5) return $category->slug;
@@ -349,37 +314,5 @@ class SitemapController extends Controller
         }
 
         return $category->slug;
-    }
-
-    public function clearCache(Request $request)
-    {
-        try {
-            $storeId = $this->getStoreId();
-
-            // Sitemap index cache clear
-            Cache::forget("xmlsitemap_index_store_{$storeId}");
-
-            // Categories cache clear
-            Cache::forget("xmlsitemap_categories_store_{$storeId}");
-
-            // Brands cache clear
-            Cache::forget("xmlsitemap_brands_store_{$storeId}");
-
-            // Products pages cache clear (1 to 300)
-            for ($i = 1; $i <= 300; $i++) {
-                Cache::forget("xmlsitemap_products_store_{$storeId}_page_{$i}");
-            }
-
-            return response()->json([
-                'status'  => true,
-                'message' => 'Sitemap cache cleared successfully.',
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Failed to clear sitemap cache.',
-                'debug'   => $e->getMessage(),
-            ], 500);
-        }
     }
 }
