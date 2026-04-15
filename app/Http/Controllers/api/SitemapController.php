@@ -13,8 +13,7 @@ use Illuminate\Support\Str;
 
 class SitemapController extends Controller
 {
-
-    private const PRODUCTS_PER_PAGE = 1000;
+    private const ITEMS_PER_PAGE = 20;   // ← Yeh change kiya hai (20 items per page)
     private const CACHE_TTL = 3600;
 
     private function siteUrl(): string
@@ -22,6 +21,7 @@ class SitemapController extends Controller
         return 'https://server-blink.vercel.app';
     }
 
+    // ===================== MAIN ENTRY POINT =====================
     public function index(Request $request)
     {
         $type = $request->query('type');
@@ -37,19 +37,22 @@ class SitemapController extends Controller
             case 'products':
                 return $this->productsXml($request, $page);
             case 'categories':
-                return $this->categoriesXml($request);
+                return $this->categoriesXml($request, $page);
             case 'brands':
-                return $this->brandsXml($request);
+                return $this->brandsXml($request, $page);
             default:
                 return $this->sitemapIndex($request);
         }
     }
 
+    // ===================== SITEMAP INDEX =====================
     private function sitemapIndex(Request $request)
     {
         try {
             $storeId = $this->getStoreId();
-            if (!$storeId) return $this->xmlError('Store not selected.');
+            if (!$storeId) {
+                return $this->xmlError('Store not selected.');
+            }
 
             $siteUrl = $this->siteUrl();
             $cacheKey = "xmlsitemap_index_store_{$storeId}";
@@ -60,7 +63,7 @@ class SitemapController extends Controller
                     ->where('visible_on_storefront', 1)
                     ->count();
 
-                $totalProductPages = (int) ceil($totalProducts / self::PRODUCTS_PER_PAGE);
+                $totalProductPages = (int) ceil($totalProducts / self::ITEMS_PER_PAGE);
 
                 $sitemaps = '';
 
@@ -70,8 +73,8 @@ class SitemapController extends Controller
                     $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/sitemap/products/{$i}</loc>\n  </sitemap>\n";
                 }
 
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/sitemap/categories</loc>\n  </sitemap>\n";
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/sitemap/brands</loc>\n  </sitemap>\n";
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/sitemap/categories/1</loc>\n  </sitemap>\n";
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/sitemap/brands/1</loc>\n  </sitemap>\n";
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
                     . '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n"
@@ -86,7 +89,7 @@ class SitemapController extends Controller
         }
     }
 
-    // ==================== YE IMPORTANT HAI - PUBLIC METHOD ====================
+    // ===================== PRODUCTS XML (20 per page) =====================
     public function productsXml(Request $request, $page = 1)
     {
         $page = (int) $page;
@@ -106,8 +109,8 @@ class SitemapController extends Controller
                     ->where('visible_on_storefront', 1)
                     ->select('sku', 'name', 'slug')
                     ->orderBy('id')
-                    ->offset(($page - 1) * self::PRODUCTS_PER_PAGE)
-                    ->limit(self::PRODUCTS_PER_PAGE)
+                    ->offset(($page - 1) * self::ITEMS_PER_PAGE)
+                    ->limit(self::ITEMS_PER_PAGE)
                     ->get();
 
                 $urls = '';
@@ -129,49 +132,25 @@ class SitemapController extends Controller
         }
     }
 
-    private function buildProductUrl($product, int $storeId, string $siteUrl): string
+    // ===================== CATEGORIES XML (20 per page) =====================
+    public function categoriesXml(Request $request, $page = 1)
     {
-        if ($storeId == 10) {
-            $slug = $product->slug ?? Str::slug($product->name ?? $product->sku);
-            return "{$siteUrl}/{$slug}/";
-        } else {
-            return "{$siteUrl}/{$product->sku}/";
-        }
-    }
+        $page = (int) $page;
 
-    // Baaki methods (pagesXml, categoriesXml, brandsXml, clearCache) ko bhi public bana do
-    public function pagesXml(Request $request)
-    {
-        $siteUrl = $this->siteUrl();
-
-        $pages = ['', 'disclaimer', 'terms-conditions', 'privacy-policy', 'shipping-policy', 'about-us', 'blog', 'warranty', 'return-refund-policy', 'contact-us'];
-
-        $urls = '';
-        foreach ($pages as $page) {
-            $loc = $page ? "{$siteUrl}/{$page}/" : "{$siteUrl}/";
-            $urls .= "  <url>\n    <loc>{$loc}</loc>\n  </url>\n";
-        }
-
-        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
-            . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n"
-            . $urls
-            . '</urlset>';
-
-        return $this->xmlResponse($xml);
-    }
-
-    public function categoriesXml(Request $request)
-    {
         try {
             $storeId = $this->getStoreId();
             if (!$storeId) return $this->xmlError('Store not selected.');
 
             $siteUrl = $this->siteUrl();
-            $cacheKey = "xmlsitemap_categories_store_{$storeId}";
+            $cacheKey = "xmlsitemap_categories_store_{$storeId}_page_{$page}";
 
-            $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $siteUrl) {
+            $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $page, $siteUrl) {
+
                 $categories = Category::where('store_id', $storeId)
                     ->select('id', 'slug', 'parent_id')
+                    ->orderBy('id')
+                    ->offset(($page - 1) * self::ITEMS_PER_PAGE)
+                    ->limit(self::ITEMS_PER_PAGE)
                     ->get();
 
                 $categoryMap = $categories->keyBy('id');
@@ -195,19 +174,25 @@ class SitemapController extends Controller
         }
     }
 
-    public function brandsXml(Request $request)
+    // ===================== BRANDS XML (20 per page) =====================
+    public function brandsXml(Request $request, $page = 1)
     {
+        $page = (int) $page;
+
         try {
             $storeId = $this->getStoreId();
             if (!$storeId) return $this->xmlError('Store not selected.');
 
             $siteUrl = $this->siteUrl();
-            $cacheKey = "xmlsitemap_brands_store_{$storeId}";
+            $cacheKey = "xmlsitemap_brands_store_{$storeId}_page_{$page}";
 
-            $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $siteUrl) {
+            $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $page, $siteUrl) {
+
                 $brands = Brand::where('store_id', $storeId)
                     ->select('name')
                     ->orderBy('name')
+                    ->offset(($page - 1) * self::ITEMS_PER_PAGE)
+                    ->limit(self::ITEMS_PER_PAGE)
                     ->get()
                     ->unique('name');
 
@@ -232,6 +217,7 @@ class SitemapController extends Controller
         }
     }
 
+    // ===================== CLEAR CACHE =====================
     public function clearCache(Request $request)
     {
         try {
@@ -248,6 +234,17 @@ class SitemapController extends Controller
             return response()->json(['status' => true, 'message' => 'Sitemap cache cleared successfully.']);
         } catch (\Exception $e) {
             return response()->json(['status' => false, 'message' => 'Failed to clear cache.'], 500);
+        }
+    }
+
+    // ===================== BUILD PRODUCT URL =====================
+    private function buildProductUrl($product, int $storeId, string $siteUrl): string
+    {
+        if ($storeId == 10) {
+            $slug = $product->slug ?? Str::slug($product->name ?? $product->sku);
+            return "{$siteUrl}/{$slug}/";
+        } else {
+            return "{$siteUrl}/{$product->sku}/";
         }
     }
 
@@ -276,7 +273,9 @@ class SitemapController extends Controller
             if ($id) return $id;
         }
 
-        return (int) request()->header('store-id') ?: (int) request()->query('store_id') ?: 10;
+        return (int) request()->header('store-id')
+            ?: (int) request()->query('store_id')
+            ?: 10;
     }
 
     private function buildCategoryPath($category, $categoryMap, $depth = 0): string

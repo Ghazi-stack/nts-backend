@@ -452,10 +452,13 @@ Route::prefix('sitemap')->group(function () {
 
     Route::get('/pages',       [SitemapController::class, 'pagesXml']);
     Route::get('/products/{page?}', [SitemapController::class, 'productsXml'])
-         ->where('page', '[0-9]+');
+        ->where('page', '[0-9]+');
 
-    Route::get('/categories',  [SitemapController::class, 'categoriesXml']);
-    Route::get('/brands',      [SitemapController::class, 'brandsXml']);
+    Route::get('/categories/{page?}', [SitemapController::class, 'categoriesXml'])
+        ->where('page', '[0-9]+');
+
+    Route::get('/brands/{page?}', [SitemapController::class, 'brandsXml'])
+        ->where('page', '[0-9]+');
 
     Route::post('/clear-cache', [SitemapController::class, 'clearCache']);
 });
