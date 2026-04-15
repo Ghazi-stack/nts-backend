@@ -422,66 +422,33 @@ class ProductController extends Controller
     {
         $storeId = current_store_id();
         if (!$storeId) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Store not selected.'
-            ], 400);
+            return response()->json(['status' => false, 'message' => 'Store not selected.'], 400);
         }
 
-        // Clean slug (leading/trailing slashes remove karo)
         $slug = trim($slug, '/');
 
         $cacheKey = "product_by_url_store_{$storeId}_slug_" . md5($slug);
 
         try {
+            $product = Cache::remember($cacheKey, 300, function () use ($slug, $storeId) {
 
-            $product = Cache::remember($cacheKey, 300, function () use ($slug, $storeId) {  // cache time badha diya
-
-                // STEP 1: Try by SEO product_url (slug) - Yeh sabse pehle try hoga
+                // Priority 1: Slug se dhoondo
                 $product = Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
-                    ->whereHas('seo', function ($q) use ($slug) {
-                        $q->where('product_url', $slug)
-                            ->orWhere('product_url', '/' . $slug);   // dono format support
+                    ->where(function ($q) use ($slug) {
+                        $q->where('slug', $slug)
+                            ->orWhereHas('seo', fn($sq) => $sq->where('product_url', $slug)
+                                ->orWhere('product_url', '/' . $slug));
                     })
-                    ->with([
-                        'brand:id,name,logo',
-                        'images:id,product_id,path,is_primary',
-                        'content',
-                        'identifiers',
-                        'seo'
-                    ])
+                    ->with(['brand:id,name,logo', 'images:id,product_id,path,is_primary', 'content', 'identifiers', 'seo'])
                     ->first();
 
-                // STEP 2: Agar slug se nahi mila to SKU se try karo
+                // Priority 2: Agar slug na mila to SKU se
                 if (!$product) {
                     $product = Product::where('store_id', $storeId)
                         ->where('visible_on_storefront', 1)
-                        ->where('sku', $slug)           // SKU match
-                        ->with([
-                            'brand:id,name,logo',
-                            'images:id,product_id,path,is_primary',
-                            'content',
-                            'identifiers',
-                            'seo'
-                        ])
-                        ->first();
-                }
-
-                // STEP 3: Agar upar dono se nahi mila to slug ke saath slash try karo (extra safety)
-                if (!$product) {
-                    $product = Product::where('store_id', $storeId)
-                        ->where('visible_on_storefront', 1)
-                        ->whereHas('seo', function ($q) use ($slug) {
-                            $q->where('product_url', '/' . $slug);
-                        })
-                        ->with([
-                            'brand:id,name,logo',
-                            'images:id,product_id,path,is_primary',
-                            'content',
-                            'identifiers',
-                            'seo'
-                        ])
+                        ->where('sku', $slug)
+                        ->with(['brand:id,name,logo', 'images:id,product_id,path,is_primary', 'content', 'identifiers', 'seo'])
                         ->first();
                 }
 
@@ -489,47 +456,30 @@ class ProductController extends Controller
             });
 
             if (!$product) {
-                return response()->json([
-                    'status' => false,
-                    'error'  => 'Product not found',
-                    'slug'   => $slug
-                ], 404);
+                return response()->json(['status' => false, 'error' => 'Product not found', 'slug' => $slug], 404);
             }
 
-            // Visible check
             if (!$product->visible_on_storefront) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Product is disabled.'
-                ], 403);
+                return response()->json(['status' => false, 'message' => 'Product is disabled.'], 403);
             }
 
-            // Reviews (heavy query)
             $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
-                return $product->reviews()
-                    ->with('user:id,name')
-                    ->latest()
-                    ->limit(10)
-                    ->get();
+                return $product->reviews()->with('user:id,name')->latest()->limit(10)->get();
             });
 
             $product->setRelation('reviews', $reviews);
 
             return response()->json([
-                'status'  => true,
-                'message' => 'Product Retrieved Successfully',
-                'data'    => new ProductResource($product)
+                'status' => true,
+                'message' => 'Product Retrieved',
+                'data' => new ProductResource($product)
             ]);
         } catch (\Exception $e) {
-            Log::error('Product show by URL error: ' . $e->getMessage());
-
-            return response()->json([
-                'status' => false,
-                'error'  => 'Something went wrong',
-                'debug'  => $e->getMessage()
-            ], 500);
+            Log::error('Product show error: ' . $e->getMessage());
+            return response()->json(['status' => false, 'error' => 'Something went wrong'], 500);
         }
     }
+
     public function addProduct(Request $request)
     {
         try {

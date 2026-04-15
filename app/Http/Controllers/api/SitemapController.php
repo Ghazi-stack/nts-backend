@@ -90,7 +90,7 @@ class SitemapController extends Controller
         }
     }
 
-    // ===================== PRODUCTS XML - Store 10 ke liye Slug, Baaki ke liye SKU =====================
+    // ===================== PRODUCTS XML - Store 10 = Slug | Others = SKU =====================
     private function productsXml(Request $request, int $page)
     {
         try {
@@ -106,7 +106,7 @@ class SitemapController extends Controller
 
                 $products = Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
-                    ->select('sku', 'name', 'slug')   // slug aur name dono le rahe hain
+                    ->select('sku', 'name', 'slug')           // slug aur name dono chahiye
                     ->orderBy('id')
                     ->offset(($page - 1) * self::PRODUCTS_PER_PAGE)
                     ->limit(self::PRODUCTS_PER_PAGE)
@@ -135,16 +135,16 @@ class SitemapController extends Controller
     private function buildProductUrl($product, int $storeId, string $siteUrl): string
     {
         if ($storeId == 10) {
-            // Store ID 10 ke liye → Slug / Title use karo (jaise aap chahte ho)
+            // Store ID 10 ke liye Long Slug use karo
             $slug = $product->slug ?? Str::slug($product->name ?? $product->sku);
             return "{$siteUrl}/{$slug}/";
         } else {
-            // Baaki stores ke liye → SKU use karo (jaise abhi chal raha hai)
+            // Baaki stores ke liye SKU use karo
             return "{$siteUrl}/{$product->sku}/";
         }
     }
 
-    // ===================== Baaki Functions (Same as before) =====================
+    // ===================== PAGES XML =====================
     private function pagesXml(Request $request)
     {
         $siteUrl = $this->siteUrl();
@@ -176,6 +176,7 @@ class SitemapController extends Controller
         return $this->xmlResponse($xml);
     }
 
+    // ===================== CATEGORIES XML =====================
     private function categoriesXml(Request $request)
     {
         try {
@@ -212,6 +213,7 @@ class SitemapController extends Controller
         }
     }
 
+    // ===================== BRANDS XML =====================
     private function brandsXml(Request $request)
     {
         try {
@@ -250,6 +252,7 @@ class SitemapController extends Controller
         }
     }
 
+    // ===================== CLEAR CACHE =====================
     public function clearCache(Request $request)
     {
         try {
