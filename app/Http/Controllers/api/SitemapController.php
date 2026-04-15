@@ -350,4 +350,36 @@ class SitemapController extends Controller
 
         return $category->slug;
     }
+
+    public function clearCache(Request $request)
+    {
+        try {
+            $storeId = $this->getStoreId();
+
+            // Sitemap index cache clear
+            Cache::forget("xmlsitemap_index_store_{$storeId}");
+
+            // Categories cache clear
+            Cache::forget("xmlsitemap_categories_store_{$storeId}");
+
+            // Brands cache clear
+            Cache::forget("xmlsitemap_brands_store_{$storeId}");
+
+            // Products pages cache clear (1 to 300)
+            for ($i = 1; $i <= 300; $i++) {
+                Cache::forget("xmlsitemap_products_store_{$storeId}_page_{$i}");
+            }
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Sitemap cache cleared successfully.',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to clear sitemap cache.',
+                'debug'   => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
