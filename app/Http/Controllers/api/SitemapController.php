@@ -22,7 +22,7 @@ class SitemapController extends Controller
         return 'https://server-blink.vercel.app';
     }
 
-    // Main Entry Point
+    // ===================== MAIN ENTRY POINT =====================
     public function index(Request $request)
     {
         $type = $request->query('type');
@@ -46,7 +46,7 @@ class SitemapController extends Controller
         }
     }
 
-    // Sitemap Index - Clean URLs
+    // ===================== SITEMAP INDEX =====================
     private function sitemapIndex(Request $request)
     {
         try {
@@ -90,7 +90,7 @@ class SitemapController extends Controller
         }
     }
 
-    // Products XML - Simple Logic (Store 10 = Title, Baaki = SKU)
+    // ===================== PRODUCTS XML - Store 10 ke liye Slug, Baaki ke liye SKU =====================
     private function productsXml(Request $request, int $page)
     {
         try {
@@ -106,7 +106,7 @@ class SitemapController extends Controller
 
                 $products = Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
-                    ->select('id', 'sku', 'name', 'slug')
+                    ->select('sku', 'name', 'slug')   // slug aur name dono le rahe hain
                     ->orderBy('id')
                     ->offset(($page - 1) * self::PRODUCTS_PER_PAGE)
                     ->limit(self::PRODUCTS_PER_PAGE)
@@ -131,20 +131,20 @@ class SitemapController extends Controller
         }
     }
 
-    // Simple Product URL Builder
+    // ===================== BUILD PRODUCT URL =====================
     private function buildProductUrl($product, int $storeId, string $siteUrl): string
     {
         if ($storeId == 10) {
-            // Store 10 ke liye Title use karo (jaise live site)
+            // Store ID 10 ke liye → Slug / Title use karo (jaise aap chahte ho)
             $slug = $product->slug ?? Str::slug($product->name ?? $product->sku);
             return "{$siteUrl}/{$slug}/";
         } else {
-            // Baaki stores (jaise Store 4) ke liye SKU use karo
+            // Baaki stores ke liye → SKU use karo (jaise abhi chal raha hai)
             return "{$siteUrl}/{$product->sku}/";
         }
     }
 
-    // Pages XML
+    // ===================== Baaki Functions (Same as before) =====================
     private function pagesXml(Request $request)
     {
         $siteUrl = $this->siteUrl();
@@ -176,7 +176,6 @@ class SitemapController extends Controller
         return $this->xmlResponse($xml);
     }
 
-    // Categories XML
     private function categoriesXml(Request $request)
     {
         try {
@@ -213,7 +212,6 @@ class SitemapController extends Controller
         }
     }
 
-    // Brands XML
     private function brandsXml(Request $request)
     {
         try {
@@ -252,7 +250,6 @@ class SitemapController extends Controller
         }
     }
 
-    // Clear Cache
     public function clearCache(Request $request)
     {
         try {
@@ -266,16 +263,13 @@ class SitemapController extends Controller
                 Cache::forget("xmlsitemap_products_store_{$storeId}_page_{$i}");
             }
 
-            return response()->json([
-                'status'  => true,
-                'message' => 'Sitemap cache cleared successfully.'
-            ]);
+            return response()->json(['status' => true, 'message' => 'Sitemap cache cleared successfully.']);
         } catch (\Exception $e) {
             return response()->json(['status' => false, 'message' => 'Failed to clear cache.'], 500);
         }
     }
 
-    // ====================== HELPERS ======================
+    // ===================== HELPERS =====================
     private function xmlResponse(string $xml)
     {
         return response($xml, 200, [
@@ -300,13 +294,9 @@ class SitemapController extends Controller
             if ($id) return $id;
         }
 
-        $headerId = (int) request()->header('store-id');
-        if ($headerId) return $headerId;
-
-        $queryId = (int) request()->query('store_id');
-        if ($queryId) return $queryId;
-
-        return 10; // default
+        return (int) request()->header('store-id')
+            ?: (int) request()->query('store_id')
+            ?: 10;
     }
 
     private function buildCategoryPath($category, $categoryMap, $depth = 0): string

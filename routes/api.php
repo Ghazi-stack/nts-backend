@@ -448,12 +448,11 @@ Route::prefix('web')->group(function () {
 
 // ===================== SITEMAP ROUTES (Clean Version) =====================
 Route::prefix('sitemap')->group(function () {
-
     Route::get('/xmlsitemap', [SitemapController::class, 'index']);
 
     Route::get('/pages',       [SitemapController::class, 'pagesXml']);
     Route::get('/products/{page?}', [SitemapController::class, 'productsXml'])
-        ->where('page', '[0-9]+');
+         ->where('page', '[0-9]+');
 
     Route::get('/categories',  [SitemapController::class, 'categoriesXml']);
     Route::get('/brands',      [SitemapController::class, 'brandsXml']);
