@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 
 class SitemapController extends Controller
 {
-    private const ITEMS_PER_PAGE = 20;   // ← Yeh change kiya hai (20 items per page)
+    private const ITEMS_PER_PAGE = 20;   // ← 20 items per page (aapki requirement)
     private const CACHE_TTL = 3600;
 
     private function siteUrl(): string
@@ -87,6 +87,38 @@ class SitemapController extends Controller
             Log::error('Sitemap index error: ' . $e->getMessage());
             return $this->xmlError($e->getMessage());
         }
+    }
+
+    // ===================== PAGES XML =====================
+    public function pagesXml(Request $request)
+    {
+        $siteUrl = $this->siteUrl();
+
+        $pages = [
+            '',
+            'disclaimer',
+            'terms-conditions',
+            'privacy-policy',
+            'shipping-policy',
+            'about-us',
+            'blog',
+            'warranty',
+            'return-refund-policy',
+            'contact-us'
+        ];
+
+        $urls = '';
+        foreach ($pages as $page) {
+            $loc = $page ? "{$siteUrl}/{$page}/" : "{$siteUrl}/";
+            $urls .= "  <url>\n    <loc>{$loc}</loc>\n  </url>\n";
+        }
+
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
+            . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n"
+            . $urls
+            . '</urlset>';
+
+        return $this->xmlResponse($xml);
     }
 
     // ===================== PRODUCTS XML (20 per page) =====================
@@ -237,7 +269,7 @@ class SitemapController extends Controller
         }
     }
 
-    // ===================== BUILD PRODUCT URL =====================
+    // ===================== HELPERS =====================
     private function buildProductUrl($product, int $storeId, string $siteUrl): string
     {
         if ($storeId == 10) {
@@ -248,7 +280,6 @@ class SitemapController extends Controller
         }
     }
 
-    // ===================== HELPERS =====================
     private function xmlResponse(string $xml)
     {
         return response($xml, 200, [
