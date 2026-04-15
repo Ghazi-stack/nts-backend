@@ -30,7 +30,7 @@ class SitemapController extends Controller
      *   /xmlsitemap?type=brands&page=1            → Brands
      *
      * Route (routes/web.php):
-     *   Route::get('/xmlsitemap', [XmlSitemapController::class, 'index']);
+     *   Route::get('/xmlsitemap', [SitemapController::class, 'index']);
      *
      * =============================================
      */
@@ -78,16 +78,6 @@ class SitemapController extends Controller
     // ─────────────────────────────────────────────
     // SITEMAP INDEX
     // ─────────────────────────────────────────────
-    // /xmlsitemap (no params)
-    //
-    // Browser mein dikhega:
-    // <sitemapindex>
-    //   <sitemap><loc>.../xmlsitemap?type=pages&page=1</loc></sitemap>
-    //   <sitemap><loc>.../xmlsitemap?type=products&page=1</loc></sitemap>
-    //   <sitemap><loc>.../xmlsitemap?type=products&page=2</loc></sitemap>
-    //   ...
-    // </sitemapindex>
-    // ─────────────────────────────────────────────
     private function sitemapIndex(Request $request)
     {
         try {
@@ -96,12 +86,12 @@ class SitemapController extends Controller
                 return $this->xmlError('Store not selected.');
             }
 
-            $baseUrl = $this->getBaseUrl($request);
+            // ✅ FIXED: Frontend URL use karo, backend URL nahi
+            $siteUrl = $this->siteUrl();
 
-            // Total product pages calculate karo
             $cacheKey = "xmlsitemap_index_store_{$storeId}";
 
-            $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $baseUrl) {
+            $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $siteUrl) {
 
                 $totalProducts = Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
@@ -112,19 +102,19 @@ class SitemapController extends Controller
                 // Build sitemap index XML
                 $sitemaps = '';
 
-                // Pages
-                $sitemaps .= "  <sitemap>\n    <loc>{$baseUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n  </sitemap>\n";
+                // Pages — ✅ siteUrl use ho raha hai
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n  </sitemap>\n";
 
-                // Products (paginated)
+                // Products (paginated) — ✅ siteUrl use ho raha hai
                 for ($i = 1; $i <= $totalProductPages; $i++) {
-                    $sitemaps .= "  <sitemap>\n    <loc>{$baseUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n  </sitemap>\n";
+                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n  </sitemap>\n";
                 }
 
-                // Categories
-                $sitemaps .= "  <sitemap>\n    <loc>{$baseUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n  </sitemap>\n";
+                // Categories — ✅ siteUrl use ho raha hai
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n  </sitemap>\n";
 
-                // Brands
-                $sitemaps .= "  <sitemap>\n    <loc>{$baseUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n  </sitemap>\n";
+                // Brands — ✅ siteUrl use ho raha hai
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n  </sitemap>\n";
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
                     . '<sitemapindex xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/siteindex.xsd">' . "\n"
@@ -141,15 +131,6 @@ class SitemapController extends Controller
 
     // ─────────────────────────────────────────────
     // PAGES XML
-    // ─────────────────────────────────────────────
-    // /xmlsitemap?type=pages&page=1
-    //
-    // Browser mein dikhega:
-    // <urlset>
-    //   <url><loc>https://server-blink.vercel.app/</loc></url>
-    //   <url><loc>https://server-blink.vercel.app/about-us/</loc></url>
-    //   ...
-    // </urlset>
     // ─────────────────────────────────────────────
     private function pagesXml(Request $request)
     {
@@ -184,17 +165,6 @@ class SitemapController extends Controller
 
     // ─────────────────────────────────────────────
     // PRODUCTS XML (Paginated)
-    // ─────────────────────────────────────────────
-    // /xmlsitemap?type=products&page=1
-    // /xmlsitemap?type=products&page=2
-    //
-    // Har page mein 1000 products.
-    // Browser mein dikhega:
-    // <urlset>
-    //   <url><loc>https://server-blink.vercel.app/BXG1/</loc></url>
-    //   <url><loc>https://server-blink.vercel.app/BXG2/</loc></url>
-    //   ...1000 products (URL = SKU, frontend SKU se fetch karta hai)...
-    // </urlset>
     // ─────────────────────────────────────────────
     private function productsXml(Request $request, int $page)
     {
@@ -239,14 +209,6 @@ class SitemapController extends Controller
     // ─────────────────────────────────────────────
     // CATEGORIES XML
     // ─────────────────────────────────────────────
-    // /xmlsitemap?type=categories&page=1
-    //
-    // Browser mein dikhega:
-    // <urlset>
-    //   <url><loc>https://server-blink.vercel.app/category/accessories/cables/</loc></url>
-    //   ...
-    // </urlset>
-    // ─────────────────────────────────────────────
     private function categoriesXml(Request $request)
     {
         try {
@@ -287,15 +249,6 @@ class SitemapController extends Controller
 
     // ─────────────────────────────────────────────
     // BRANDS XML
-    // ─────────────────────────────────────────────
-    // /xmlsitemap?type=brands&page=1
-    //
-    // Browser mein dikhega:
-    // <urlset>
-    //   <url><loc>https://server-blink.vercel.app/brand/dell/</loc></url>
-    //   <url><loc>https://server-blink.vercel.app/brand/hp/</loc></url>
-    //   ...
-    // </urlset>
     // ─────────────────────────────────────────────
     private function brandsXml(Request $request)
     {
@@ -341,9 +294,6 @@ class SitemapController extends Controller
     // HELPERS
     // ═══════════════════════════════════════════════
 
-    /**
-     * XML response with correct headers
-     */
     private function xmlResponse(string $xml)
     {
         return response($xml, 200, [
@@ -352,9 +302,6 @@ class SitemapController extends Controller
         ]);
     }
 
-    /**
-     * XML error response (empty urlset)
-     */
     private function xmlError(string $message = '')
     {
         $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
@@ -367,9 +314,6 @@ class SitemapController extends Controller
         ]);
     }
 
-    /**
-     * Get store ID
-     */
     private function getStoreId(): ?int
     {
         if (function_exists('current_store_id')) {
@@ -377,31 +321,20 @@ class SitemapController extends Controller
             if ($id) return $id;
         }
 
-        // Fallback: header se
         $headerId = (int) request()->header('store-id');
         if ($headerId) return $headerId;
 
-        // Fallback: query param se (for browser access)
         $queryId = (int) request()->query('store_id');
         if ($queryId) return $queryId;
 
-        // Default store ID — APNA DEFAULT STORE ID YAHAN DAALO
         return 10;
     }
 
-    /**
-     * Get base URL for sitemap index links
-     */
     private function getBaseUrl(Request $request): string
     {
-        // Yeh backend URL return karega
-        // jaise: https://backend.sparemicro.com
         return rtrim($request->getSchemeAndHttpHost(), '/');
     }
 
-    /**
-     * Build full category path: parent/child/grandchild
-     */
     private function buildCategoryPath($category, $categoryMap, $depth = 0): string
     {
         if ($depth > 5) return $category->slug;
