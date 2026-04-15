@@ -333,7 +333,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 // ===============================
 // 🌐 PUBLIC + WEB ROUTES
 // ===============================
-
+ 
 
 // 🔓 Public Routes (accessible without login)
 
@@ -447,12 +447,14 @@ Route::prefix('web')->group(function () {
 
 
 Route::prefix('sitemap')->group(function () {
-    Route::get('/info',        [SitemapController::class, 'info']);
-    Route::get('/pages',       [SitemapController::class, 'pages']);
-    Route::get('/products',    [SitemapController::class, 'products']);
-    Route::get('/categories',  [SitemapController::class, 'categories']);
-    Route::get('/brands',      [SitemapController::class, 'brands']);
+
+    // ── MAIN SITEMAP ENTRY POINT ──
+    // Yeh sabse important route hai
+    Route::get('/xmlsitemap', [SitemapController::class, 'index']);
+
+    // Clear Cache (Admin / Backend ke liye)
     Route::post('/clear-cache', [SitemapController::class, 'clearCache']);
+
 });
 Route::get('/test-s3', function () {
     $path = 'debug/tests.txt';
