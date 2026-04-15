@@ -65,7 +65,8 @@ class SitemapController extends Controller
             }
 
             // ✅ HARDCODED frontend URL — backend URL nahi
-            $siteUrl = $this->siteUrl();
+            //$siteUrl = $this->siteUrl();
+            $siteUrl = 'https://server-blink.vercel.app';
 
             $cacheKey = "xmlsitemap_index_store_{$storeId}";
 
