@@ -425,47 +425,30 @@ class ProductController extends Controller
             return response()->json(['status' => false, 'message' => 'Store not selected.'], 400);
         }
 
-        // Clean slug
         $slug = trim($slug, '/');
 
-        // Cache key
         $cacheKey = "product_by_url_store_{$storeId}_slug_" . md5($slug);
 
         try {
-            // Fast Cache (10 minutes tak cache rahega)
-            $product = Cache::remember($cacheKey, 600, function () use ($slug, $storeId) {
+            $product = Cache::remember($cacheKey, 300, function () use ($slug, $storeId) {
 
-                // Priority 1: Direct Slug ya product_url se (Fastest)
+                // Priority 1: Slug se dhoondo
                 $product = Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
                     ->where(function ($q) use ($slug) {
                         $q->where('slug', $slug)
-                            ->orWhereHas('seo', function ($sq) use ($slug) {
-                                $sq->where('product_url', $slug)
-                                    ->orWhere('product_url', '/' . $slug);
-                            });
+                            ->orWhereHas('seo', fn($sq) => $sq->where('product_url', $slug)
+                                ->orWhere('product_url', '/' . $slug));
                     })
-                    ->with([
-                        'brand:id,name,logo',
-                        'images:id,product_id,path,is_primary',
-                        'content',
-                        'identifiers',
-                        'seo'
-                    ])
+                    ->with(['brand:id,name,logo', 'images:id,product_id,path,is_primary', 'content', 'identifiers', 'seo'])
                     ->first();
 
-                // Priority 2: Agar slug se na mila to SKU se try (backup)
+                // Priority 2: Agar slug na mila to SKU se
                 if (!$product) {
                     $product = Product::where('store_id', $storeId)
                         ->where('visible_on_storefront', 1)
                         ->where('sku', $slug)
-                        ->with([
-                            'brand:id,name,logo',
-                            'images:id,product_id,path,is_primary',
-                            'content',
-                            'identifiers',
-                            'seo'
-                        ])
+                        ->with(['brand:id,name,logo', 'images:id,product_id,path,is_primary', 'content', 'identifiers', 'seo'])
                         ->first();
                 }
 
@@ -473,45 +456,27 @@ class ProductController extends Controller
             });
 
             if (!$product) {
-                return response()->json([
-                    'status' => false,
-                    'error'  => 'Product not found',
-                    'slug'   => $slug
-                ], 404);
+                return response()->json(['status' => false, 'error' => 'Product not found', 'slug' => $slug], 404);
             }
 
-            // Visible check
             if (!$product->visible_on_storefront) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Product is disabled.'
-                ], 403);
+                return response()->json(['status' => false, 'message' => 'Product is disabled.'], 403);
             }
 
-            // Reviews ko alag cache mein rakho (fast response ke liye)
-            $reviews = Cache::remember("product_reviews_{$product->id}", 600, function () use ($product) {
-                return $product->reviews()
-                    ->with('user:id,name')
-                    ->latest()
-                    ->limit(10)
-                    ->get();
+            $reviews = Cache::remember("product_reviews_{$product->id}", 300, function () use ($product) {
+                return $product->reviews()->with('user:id,name')->latest()->limit(10)->get();
             });
 
             $product->setRelation('reviews', $reviews);
 
             return response()->json([
-                'status'  => true,
+                'status' => true,
                 'message' => 'Product Retrieved',
-                'data'    => new ProductResource($product)
+                'data' => new ProductResource($product)
             ]);
         } catch (\Exception $e) {
-            Log::error('Product show by URL error: ' . $e->getMessage());
-
-            return response()->json([
-                'status' => false,
-                'error'  => 'Something went wrong',
-                'debug'  => $e->getMessage()
-            ], 500);
+            Log::error('Product show error: ' . $e->getMessage());
+            return response()->json(['status' => false, 'error' => 'Something went wrong'], 500);
         }
     }
 
