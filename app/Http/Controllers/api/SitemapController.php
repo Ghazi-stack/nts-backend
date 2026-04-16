@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 
 class SitemapController extends Controller
 {
-    private const ITEMS_PER_PAGE = 20;   // ← 20 items per page (aapki requirement)
+    private const ITEMS_PER_PAGE = 10000;   // ← 20 items per page (aapki requirement)
     private const CACHE_TTL = 3600;
 
     private function siteUrl(): string
