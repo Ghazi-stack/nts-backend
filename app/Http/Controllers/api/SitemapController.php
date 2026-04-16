@@ -45,7 +45,7 @@ class SitemapController extends Controller
         }
     }
 
-    // ===================== SITEMAP INDEX =====================
+    // ===================== SITEMAP INDEX - Old Style (jaise aap chahte ho) =====================
     private function sitemapIndex(Request $request)
     {
         try {
@@ -54,7 +54,8 @@ class SitemapController extends Controller
                 return $this->xmlError('Store not selected.');
             }
 
-            $siteUrl = $this->siteUrl();
+            $siteUrl = $this->siteUrl();   // https://server-blink.vercel.app
+
             $cacheKey = "xmlsitemap_index_store_{$storeId}";
 
             $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $siteUrl) {
@@ -67,14 +68,19 @@ class SitemapController extends Controller
 
                 $sitemaps = '';
 
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/sitemap/pages</loc>\n  </sitemap>\n";
+                // Pages
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&page=1</loc>\n  </sitemap>\n";
 
+                // Products with pagination
                 for ($i = 1; $i <= $totalProductPages; $i++) {
-                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/sitemap/products/{$i}</loc>\n  </sitemap>\n";
+                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&page={$i}</loc>\n  </sitemap>\n";
                 }
 
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/sitemap/categories/1</loc>\n  </sitemap>\n";
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/sitemap/brands/1</loc>\n  </sitemap>\n";
+                // Categories (page 1)
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&page=1</loc>\n  </sitemap>\n";
+
+                // Brands (page 1)
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&page=1</loc>\n  </sitemap>\n";
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
                     . '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n"
