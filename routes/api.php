@@ -41,6 +41,10 @@ use App\Http\Controllers\api\Web\{
 use App\Http\Controllers\api\AuthController;
 use App\Http\Controllers\api\SitemapController;
 use App\Http\Controllers\api\TwoFactorController;
+use App\Http\Controllers\api\FedEx\ShippingZoneController;
+use App\Http\Controllers\api\FedEx\ShippingMethodController;
+use App\Http\Controllers\api\FedEx\FedexConfigurationController;
+use App\Http\Controllers\api\FedEx\CheckoutShippingController;
 // ===============================
 // 🔐 AUTHENTICATED USER CHECK
 // ===============================
@@ -324,6 +328,35 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     // GET current settings
     Route::get('/url-settings/{entity}', [UrlSettingController::class, 'show']);
     // {entity} = product / category / webpage
+
+    // ── Shipping Zones ──
+    Route::prefix('shipping-zones')->controller(ShippingZoneController::class)->group(function () {
+        Route::get('/get-zones', 'index');
+        Route::post('/add-zone', 'store');
+        Route::get('/get-zone/{id}', 'show');
+        Route::put('/update-zone/{id}', 'update');
+        Route::delete('/delete-zone/{id}', 'destroy');
+    });
+
+    // ── Shipping Methods ──
+    Route::prefix('shipping-methods')->controller(ShippingMethodController::class)->group(function () {
+        Route::get('/get-methods/{zoneId}', 'index');
+        Route::post('/add-method/{zoneId}', 'store');
+        Route::put('/update-method/{id}', 'update');
+        Route::delete('/delete-method/{id}', 'destroy');
+        Route::patch('/toggle-method/{id}', 'toggle');
+    });
+
+    // ── FedEx Configuration ──
+    Route::prefix('fedex-config')->controller(FedexConfigurationController::class)->group(function () {
+        Route::get('/get-config/{methodId}', 'show');
+        Route::post('/save-config/{methodId}', 'storeOrUpdate');
+        Route::post('/test-connection/{methodId}', 'testConnection');
+        Route::post('/disconnect/{methodId}', 'disconnect');
+        Route::post('/get-quote/{methodId}', 'getQuote');
+        Route::get('/get-quote-logs/{methodId}', 'quoteLogs');
+        Route::get('/get-services', 'availableServices');
+    });
 });
 
 
@@ -443,6 +476,11 @@ Route::prefix('web')->group(function () {
 
     // 3️⃣ Webhook for Stripe event notifications
     Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
+
+    // ── Checkout Shipping Rates (public) ──
+    Route::prefix('checkout')->controller(CheckoutShippingController::class)->group(function () {
+        Route::post('/get-shipping-rates', 'getRates');
+    });
 });
 
 
