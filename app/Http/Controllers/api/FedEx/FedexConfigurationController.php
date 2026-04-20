@@ -26,13 +26,14 @@ class FedexConfigurationController extends Controller
     {
         $method = ShippingMethod::findOrFail($methodId);
         $config = $method->fedexConfiguration;
-        if (!$config) return response()->json(['success'=>true,'data'=>null,'message'=>'No FedEx configuration found.']);
+        if (!$config) return response()->json(['success' => true, 'data' => null, 'message' => 'No FedEx configuration found.']);
 
         return response()->json([
-            'success'=>true,'data'=>$config,
-            'all_services'=>FedexConfiguration::allServiceCodes(),
-            'pickup_types'=>FedexConfiguration::validPickupTypes(),
-            'enabled_services'=>$config->getEnabledServiceLabels(),
+            'success' => true,
+            'data' => $config,
+            'all_services' => FedexConfiguration::allServiceCodes(),
+            'pickup_types' => FedexConfiguration::validPickupTypes(),
+            'enabled_services' => $config->getEnabledServiceLabels(),
         ]);
     }
 
@@ -40,29 +41,36 @@ class FedexConfigurationController extends Controller
     {
         $method = ShippingMethod::findOrFail($methodId);
         $validated = $request->validate([
-            'client_id'=>'sometimes|required|string|max:255','client_secret'=>'sometimes|required|string|max:255',
-            'account_number'=>'sometimes|required|string|max:50','api_base_url'=>'sometimes|string|url|max:255',
-            'ws_key'=>'sometimes|nullable|string|max:255','ws_password'=>'sometimes|nullable|string|max:255',
-            'meter_number'=>'sometimes|nullable|string|max:50','display_name'=>'sometimes|string|max:255',
-            'dropoff_type'=>'sometimes|string|in:USE_SCHEDULED_PICKUP,CONTACT_FEDEX_TO_SCHEDULE,DROPOFF_AT_FEDEX_LOCATION',
-            'packaging_type'=>'sometimes|string','packing_method'=>'sometimes|string|in:ALL_IN_ONE,INDIVIDUAL',
-            'rate_type'=>'sometimes|string|in:LIST,ACCOUNT,PREFERRED','include_package_value'=>'sometimes|boolean',
-            'destination_type'=>'sometimes|string|in:COMMERCIAL,RESIDENTIAL',
-            'enabled_services'=>'sometimes|array','enabled_services.*'=>'string',
+            'client_id' => 'sometimes|required|string|max:255',
+            'client_secret' => 'sometimes|required|string|max:255',
+            'account_number' => 'sometimes|required|string|max:50',
+            'api_base_url' => 'sometimes|string|url|max:255',
+            'ws_key' => 'sometimes|nullable|string|max:255',
+            'ws_password' => 'sometimes|nullable|string|max:255',
+            'meter_number' => 'sometimes|nullable|string|max:50',
+            'display_name' => 'sometimes|string|max:255',
+            'dropoff_type' => 'sometimes|string|max:255',
+            'packaging_type' => 'sometimes|string',
+            'packing_method' => 'sometimes|string|in:ALL_IN_ONE,INDIVIDUAL',
+            'rate_type' => 'sometimes|string|in:LIST,ACCOUNT,PREFERRED',
+            'include_package_value' => 'sometimes|boolean',
+            'destination_type' => 'sometimes|string|in:COMMERCIAL,RESIDENTIAL',
+            'enabled_services' => 'sometimes|array',
+            'enabled_services.*' => 'string',
         ]);
-        $config = FedexConfiguration::updateOrCreate(['shipping_method_id'=>$method->id], $validated);
-        return response()->json(['success'=>true,'message'=>'FedEx configuration saved successfully.','data'=>$config->fresh()]);
+        $config = FedexConfiguration::updateOrCreate(['shipping_method_id' => $method->id], $validated);
+        return response()->json(['success' => true, 'message' => 'FedEx configuration saved successfully.', 'data' => $config->fresh()]);
     }
 
     public function testConnection(int $methodId): JsonResponse
     {
         $method = ShippingMethod::findOrFail($methodId);
         $config = $method->fedexConfiguration;
-        if (!$config) return response()->json(['success'=>false,'message'=>'No FedEx configuration found.'], 400);
+        if (!$config) return response()->json(['success' => false, 'message' => 'No FedEx configuration found.'], 400);
 
         $this->authService->clearToken($config);
         $result = $this->rateService->testConnection($config);
-        $config->update(['is_connected'=>$result['success']]);
+        $config->update(['is_connected' => $result['success']]);
         return response()->json($result);
     }
 
@@ -70,8 +78,11 @@ class FedexConfigurationController extends Controller
     {
         $method = ShippingMethod::findOrFail($methodId);
         $config = $method->fedexConfiguration;
-        if ($config) { $this->authService->clearToken($config); $config->update(['is_connected'=>false]); }
-        return response()->json(['success'=>true,'message'=>'FedEx disconnected successfully.']);
+        if ($config) {
+            $this->authService->clearToken($config);
+            $config->update(['is_connected' => false]);
+        }
+        return response()->json(['success' => true, 'message' => 'FedEx disconnected successfully.']);
     }
 
     /**
@@ -85,13 +96,17 @@ class FedexConfigurationController extends Controller
     {
         $method = ShippingMethod::findOrFail($methodId);
         $config = $method->fedexConfiguration;
-        if (!$config || !$config->is_connected) return response()->json(['success'=>false,'message'=>'FedEx is not connected.'], 400);
+        if (!$config || !$config->is_connected) return response()->json(['success' => false, 'message' => 'FedEx is not connected.'], 400);
 
         $validated = $request->validate([
-            'destination_country'=>'required|string|max:5','destination_state'=>'sometimes|string|max:5',
-            'destination_zip'=>'sometimes|string|max:20','package_weight'=>'required|numeric|min:0.01',
-            'package_value'=>'sometimes|numeric|min:0','package_length'=>'sometimes|numeric|min:0',
-            'package_width'=>'sometimes|numeric|min:0','package_height'=>'sometimes|numeric|min:0',
+            'destination_country' => 'required|string|max:5',
+            'destination_state' => 'sometimes|string|max:5',
+            'destination_zip' => 'sometimes|string|max:20',
+            'package_weight' => 'required|numeric|min:0.01',
+            'package_value' => 'sometimes|numeric|min:0',
+            'package_length' => 'sometimes|numeric|min:0',
+            'package_width' => 'sometimes|numeric|min:0',
+            'package_height' => 'sometimes|numeric|min:0',
         ]);
 
         // Origin from database pickup address
@@ -123,15 +138,15 @@ class FedexConfigurationController extends Controller
 
     public function availableServices(): JsonResponse
     {
-        return response()->json(['success'=>true,'services'=>FedexConfiguration::allServiceCodes(),'pickup_types'=>FedexConfiguration::validPickupTypes()]);
+        return response()->json(['success' => true, 'services' => FedexConfiguration::allServiceCodes(), 'pickup_types' => FedexConfiguration::validPickupTypes()]);
     }
 
     public function quoteLogs(Request $request, int $methodId): JsonResponse
     {
         $method = ShippingMethod::findOrFail($methodId);
         $config = $method->fedexConfiguration;
-        if (!$config) return response()->json(['success'=>true,'data'=>[]]);
-        $logs = $config->quoteLogs()->orderBy('created_at','desc')->limit($request->input('limit',20))->get();
-        return response()->json(['success'=>true,'data'=>$logs]);
+        if (!$config) return response()->json(['success' => true, 'data' => []]);
+        $logs = $config->quoteLogs()->orderBy('created_at', 'desc')->limit($request->input('limit', 20))->get();
+        return response()->json(['success' => true, 'data' => $logs]);
     }
 }
