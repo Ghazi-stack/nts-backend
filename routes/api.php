@@ -45,6 +45,8 @@ use App\Http\Controllers\api\FedEx\ShippingZoneController;
 use App\Http\Controllers\api\FedEx\ShippingMethodController;
 use App\Http\Controllers\api\FedEx\FedexConfigurationController;
 use App\Http\Controllers\api\FedEx\CheckoutShippingController;
+use App\Http\Controllers\api\FedEx\StoreShippingAddressController;
+
 // ===============================
 // 🔐 AUTHENTICATED USER CHECK
 // ===============================
@@ -329,6 +331,12 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::get('/url-settings/{entity}', [UrlSettingController::class, 'show']);
     // {entity} = product / category / webpage
 
+    // ── Store Pickup/Origin Address ──
+    Route::prefix('store-shipping-address')->controller(StoreShippingAddressController::class)->group(function () {
+        Route::get('/get-address', 'index');
+        Route::post('/save-address', 'store');
+    });
+
     // ── Shipping Zones ──
     Route::prefix('shipping-zones')->controller(ShippingZoneController::class)->group(function () {
         Route::get('/get-zones', 'index');
@@ -353,6 +361,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/save-config/{methodId}', 'storeOrUpdate');
         Route::post('/test-connection/{methodId}', 'testConnection');
         Route::post('/disconnect/{methodId}', 'disconnect');
+        Route::get('/get-quote/{methodId}', 'getQuote');
         Route::post('/get-quote/{methodId}', 'getQuote');
         Route::get('/get-quote-logs/{methodId}', 'quoteLogs');
         Route::get('/get-services', 'availableServices');
@@ -479,6 +488,7 @@ Route::prefix('web')->group(function () {
 
     // ── Checkout Shipping Rates (public) ──
     Route::prefix('checkout')->controller(CheckoutShippingController::class)->group(function () {
+        Route::get('/get-shipping-rates', 'getRates');
         Route::post('/get-shipping-rates', 'getRates');
     });
 });

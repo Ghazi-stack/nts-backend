@@ -13,11 +13,11 @@ return new class extends Migration
     {
         Schema::create('shipping_zones', function (Blueprint $table) {
             $table->id();
-            $table->string('name');                          // e.g. "United States", "Rest of the World"
-            $table->string('zone_type')->default('country'); // country, state, zip_range
-            $table->json('countries')->nullable();            // ["US"], ["CA","MX"], ["*"] for rest of world
-            $table->json('states')->nullable();               // ["CA","NY","TX"] - optional state-level filtering
-            $table->json('zip_ranges')->nullable();           // [{"from":"90001","to":"90099"}] - optional
+            $table->string('name');
+            $table->string('zone_type')->default('country');
+            $table->json('countries')->nullable();
+            $table->json('states')->nullable();
+            $table->json('zip_ranges')->nullable();
             $table->boolean('is_active')->default(true);
             $table->integer('sort_order')->default(0);
             $table->timestamps();

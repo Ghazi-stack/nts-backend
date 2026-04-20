@@ -6,17 +6,26 @@ use Illuminate\Database\Seeder;
 use App\Models\ShippingZone;
 use App\Models\ShippingMethod;
 use App\Models\FedexConfiguration;
+use App\Models\StoreShippingAddress;
 
 class ShippingSeeder extends Seeder
 {
-    /**
-     * Seed shipping zones and methods exactly like BigCommerce screenshots
-     */
     public function run(): void
     {
-        // ═══════════════════════════════════════════
-        // Zone 1: United States
-        // ═══════════════════════════════════════════
+        // ── Pickup/Origin Address ──
+        StoreShippingAddress::create([
+            'address_line_1' => '440 N Barranca Ave,',
+            'address_line_2' => 'Suite 1032',
+            'city'           => 'Covina',
+            'postal_code'    => '91723',
+            'country'        => 'United States',
+            'country_code'   => 'US',
+            'state'          => 'California',
+            'state_code'     => 'CA',
+            'is_active'      => true,
+        ]);
+
+        // ── Zone 1: United States ──
         $usZone = ShippingZone::create([
             'name'       => 'United States',
             'zone_type'  => 'country',
@@ -25,17 +34,15 @@ class ShippingSeeder extends Seeder
             'sort_order' => 1,
         ]);
 
-        // Method 1: Custom Label / Ship on own account ($0.00)
         ShippingMethod::create([
-            'shipping_zone_id' => $usZone->id,
-            'method_type'      => 'custom_label',
-            'display_name'     => 'Ship on my own/company shipping account (mention shipping account on order comments)',
-            'is_active'        => true,
-            'sort_order'       => 1,
+            'shipping_zone_id'   => $usZone->id,
+            'method_type'        => 'custom_label',
+            'display_name'       => 'Ship on my own/company shipping account (mention shipping account on order comments)',
+            'is_active'          => true,
+            'sort_order'         => 1,
             'custom_description' => 'I will provide the shipping label/others (Mentions the details on below comments box)',
         ]);
 
-        // Method 2: Flat Rate for under 10 LBS ($10.00)
         ShippingMethod::create([
             'shipping_zone_id'   => $usZone->id,
             'method_type'        => 'flat_rate_weight',
@@ -46,8 +53,7 @@ class ShippingSeeder extends Seeder
             'weight_rate_amount' => 10.00,
         ]);
 
-        // Method 3: FedEx Real-time Rates
-        $usFedexMethod = ShippingMethod::create([
+        $usFedex = ShippingMethod::create([
             'shipping_zone_id' => $usZone->id,
             'method_type'      => 'fedex_realtime',
             'display_name'     => 'FedEx',
@@ -55,43 +61,32 @@ class ShippingSeeder extends Seeder
             'sort_order'       => 3,
         ]);
 
-        // FedEx Configuration for US zone
         FedexConfiguration::create([
-            'shipping_method_id'  => $usFedexMethod->id,
-            'client_id'           => 'l7a19309358e7b4b44aff3d164473392ff',
-            'client_secret'       => '9e226d83d051430387fa960eeb996fcd',
-            'account_number'      => '740561073',
-            'api_base_url'        => 'https://apis-sandbox.fedex.com',
-            'display_name'        => 'FedEx',
-            'dropoff_type'        => 'DROP_BOX',
-            'packaging_type'      => 'YOUR_PACKAGING',
-            'packing_method'      => 'ALL_IN_ONE',
-            'rate_type'           => 'LIST',
+            'shipping_method_id'    => $usFedex->id,
+            'client_id'             => 'l7a19309358e7b4b44aff3d164473392ff',
+            'client_secret'         => '9e226d83d051430387fa960eeb996fcd',
+            'account_number'        => '740561073',
+            'api_base_url'          => 'https://apis-sandbox.fedex.com',
+            'display_name'          => 'FedEx',
+            'dropoff_type'          => 'DROPOFF_AT_FEDEX_LOCATION',
+            'packaging_type'        => 'YOUR_PACKAGING',
+            'packing_method'        => 'ALL_IN_ONE',
+            'rate_type'             => 'LIST',
             'include_package_value' => true,
-            'destination_type'    => 'COMMERCIAL',
-            'enabled_services'    => [
-                'FEDEX_2_DAY',
-                'FEDEX_EXPRESS_SAVER',
-                'FEDEX_GROUND',
-                'FIRST_OVERNIGHT',
-                'STANDARD_OVERNIGHT',
-                'PRIORITY_OVERNIGHT',
-            ],
-            'is_connected'        => true,
+            'destination_type'      => 'COMMERCIAL',
+            'enabled_services'      => ['FEDEX_2_DAY','FEDEX_EXPRESS_SAVER','FEDEX_GROUND','FIRST_OVERNIGHT','STANDARD_OVERNIGHT','PRIORITY_OVERNIGHT'],
+            'is_connected'          => true,
         ]);
 
-        // ═══════════════════════════════════════════
-        // Zone 2: Rest of the World
-        // ═══════════════════════════════════════════
+        // ── Zone 2: Rest of the World ──
         $rowZone = ShippingZone::create([
             'name'       => 'Rest of the World',
             'zone_type'  => 'country',
-            'countries'  => ['*'],  // wildcard = all countries
+            'countries'  => ['*'],
             'is_active'  => true,
             'sort_order' => 2,
         ]);
 
-        // Method: Custom Label (for international — customer provides label)
         ShippingMethod::create([
             'shipping_zone_id'   => $rowZone->id,
             'method_type'        => 'custom_label',
@@ -101,6 +96,6 @@ class ShippingSeeder extends Seeder
             'custom_description' => 'I will provide the shipping label/others (Mentions the details on below comments box)',
         ]);
 
-        $this->command->info('✅ Shipping zones, methods, and FedEx configuration seeded successfully!');
+        $this->command->info('✅ Pickup address + Shipping zones + Methods + FedEx config seeded!');
     }
 }

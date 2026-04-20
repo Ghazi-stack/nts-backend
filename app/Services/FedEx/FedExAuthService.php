@@ -54,6 +54,7 @@ class FedExAuthService
             ]);
 
             return null;
+
         } catch (\Exception $e) {
             Log::error('FedEx OAuth token exception', [
                 'config_id' => $config->id,

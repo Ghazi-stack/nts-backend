@@ -9,26 +9,9 @@ class ShippingZone extends Model
 {
     use HasFactory;
 
-    protected $fillable = [
-        'name',
-        'zone_type',
-        'countries',
-        'states',
-        'zip_ranges',
-        'is_active',
-        'sort_order',
-    ];
+    protected $fillable = ['name','zone_type','countries','states','zip_ranges','is_active','sort_order'];
 
-    protected $casts = [
-        'countries'  => 'array',
-        'states'     => 'array',
-        'zip_ranges' => 'array',
-        'is_active'  => 'boolean',
-    ];
-
-    // ───────────────────────────────────────
-    // Relationships
-    // ───────────────────────────────────────
+    protected $casts = ['countries'=>'array','states'=>'array','zip_ranges'=>'array','is_active'=>'boolean'];
 
     public function shippingMethods()
     {
@@ -40,46 +23,15 @@ class ShippingZone extends Model
         return $this->hasMany(ShippingMethod::class)->where('is_active', true)->orderBy('sort_order');
     }
 
-    // ───────────────────────────────────────
-    // Scopes
-    // ───────────────────────────────────────
+    public function scopeActive($query) { return $query->where('is_active', true); }
 
-    public function scopeActive($query)
-    {
-        return $query->where('is_active', true);
-    }
-
-    // ───────────────────────────────────────
-    // Helper: Check if a country belongs to this zone
-    // ───────────────────────────────────────
-
-    /**
-     * Check if destination country/state matches this zone
-     *
-     * @param string $countryCode  e.g. "US"
-     * @param string|null $stateCode  e.g. "CA"
-     * @return bool
-     */
     public function matchesDestination(string $countryCode, ?string $stateCode = null): bool
     {
         $countries = $this->countries ?? [];
-
-        // "Rest of the World" zone — matches everything
-        if (in_array('*', $countries)) {
-            return true;
-        }
-
-        // Check country match
-        if (!in_array($countryCode, $countries)) {
-            return false;
-        }
-
-        // If states are specified, check state match
+        if (in_array('*', $countries)) return true;
+        if (!in_array($countryCode, $countries)) return false;
         $states = $this->states ?? [];
-        if (!empty($states) && $stateCode) {
-            return in_array($stateCode, $states);
-        }
-
+        if (!empty($states) && $stateCode) return in_array($stateCode, $states);
         return true;
     }
 }

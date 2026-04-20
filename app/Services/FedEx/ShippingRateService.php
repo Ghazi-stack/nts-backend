@@ -3,8 +3,7 @@
 namespace App\Services\FedEx;
 
 use App\Models\ShippingZone;
-use App\Models\ShippingMethod;
-use App\Models\FedexConfiguration;
+use App\Models\StoreShippingAddress;
 use Illuminate\Support\Facades\Log;
 
 class ShippingRateService
@@ -17,58 +16,43 @@ class ShippingRateService
     }
 
     /**
-     * Get all available shipping rates for a checkout destination
-     * This is the main method called at checkout — exactly like the BigCommerce screenshot
+     * Get all available shipping rates for checkout
+     * Combines static methods (Free, Flat Rate) + FedEx real-time rates
      *
-     * @param array $destination [
-     *     'country_code' => 'US',
-     *     'state'        => 'FL',
-     *     'city'         => 'Miami Beach',
-     *     'postal_code'  => '33139',
-     * ]
-     * @param array $packageInfo [
-     *     'total_weight'    => 5.0,
-     *     'weight_unit'     => 'LB',
-     *     'package_length'  => 12,
-     *     'package_width'   => 8,
-     *     'package_height'  => 6,
-     *     'dimension_unit'  => 'IN',
-     *     'order_total'     => 150.00,
-     *     'item_count'      => 3,
-     *     'package_value'   => 150.00,
-     * ]
-     * @param array|null $origin  Override store origin (optional, defaults from .env)
-     * @return array
+     * Origin address ab database se aata hai (store_shipping_address table)
+     * Agar database mein nahi hai to .env fallback use hoga
      */
     public function getCheckoutShippingRates(array $destination, array $packageInfo, ?array $origin = null): array
     {
         $allRates = [];
 
-        // Default origin from .env (store's warehouse/origin address)
-        $origin = $origin ?? [
-            'postal_code'  => config('shipping.origin_postal_code', '33139'),
-            'country_code' => config('shipping.origin_country_code', 'US'),
-            'state'        => config('shipping.origin_state', 'FL'),
-            'city'         => config('shipping.origin_city', 'Miami Beach'),
-        ];
+        // Origin address: Database se lo, nahi mila to .env fallback
+        if (!$origin) {
+            $storeAddress = StoreShippingAddress::getActive();
 
-        // 1. Find matching shipping zone for the destination
+            if ($storeAddress) {
+                $origin = $storeAddress->toOriginArray();
+            } else {
+                // Fallback to .env config
+                $origin = [
+                    'postal_code'  => config('shipping.origin_postal_code', '33139'),
+                    'country_code' => config('shipping.origin_country_code', 'US'),
+                    'state'        => config('shipping.origin_state', 'FL'),
+                    'city'         => config('shipping.origin_city', 'Miami Beach'),
+                ];
+            }
+        }
+
         $zone = $this->findMatchingZone($destination['country_code'], $destination['state'] ?? null);
 
         if (!$zone) {
-            return [
-                'success' => false,
-                'error'   => 'No shipping zone configured for this destination.',
-                'rates'   => [],
-            ];
+            return ['success' => false, 'error' => 'No shipping zone configured for this destination.', 'rates' => []];
         }
 
-        // 2. Get all active shipping methods for this zone
         $methods = $zone->activeShippingMethods()->with('fedexConfiguration')->get();
 
         foreach ($methods as $method) {
-
-            // ── Static methods (Free, Flat Rate, Weight-based, Custom Label) ──
+            // Static methods
             if (!$method->isFedexRealtime()) {
                 $staticRate = $method->calculateStaticRate(
                     (float) ($packageInfo['order_total'] ?? 0),
@@ -89,14 +73,13 @@ class ShippingRateService
                         'is_fedex'      => false,
                     ];
                 }
-
                 continue;
             }
 
-            // ── FedEx Real-time Rates ──
+            // FedEx Real-time Rates
             $fedexConfig = $method->fedexConfiguration;
             if (!$fedexConfig || !$fedexConfig->is_connected) {
-                Log::warning('FedEx method found but not connected', ['method_id' => $method->id]);
+                Log::warning('FedEx method not connected', ['method_id' => $method->id]);
                 continue;
             }
 
@@ -129,16 +112,11 @@ class ShippingRateService
                     ]);
                 }
             } else {
-                Log::warning('FedEx rate fetch failed', [
-                    'method_id' => $method->id,
-                    'error'     => $fedexResult['error'],
-                ]);
+                Log::warning('FedEx rate fetch failed', ['method_id' => $method->id, 'error' => $fedexResult['error']]);
             }
         }
 
-        // 3. Sort: cheapest first, but keep static methods before FedEx
         usort($allRates, function ($a, $b) {
-            // Static methods first (custom_label at $0), then by price
             if (!$a['is_fedex'] && $b['is_fedex']) return -1;
             if ($a['is_fedex'] && !$b['is_fedex']) return 1;
             return $a['total_charge'] <=> $b['total_charge'];
@@ -146,18 +124,12 @@ class ShippingRateService
 
         return [
             'success' => true,
-            'zone'    => [
-                'id'   => $zone->id,
-                'name' => $zone->name,
-            ],
+            'zone'    => ['id' => $zone->id, 'name' => $zone->name],
+            'origin'  => $origin,
             'rates'   => $allRates,
         ];
     }
 
-    /**
-     * Find the best matching shipping zone for a destination
-     * More specific zones (country+state) take priority over wildcard zones
-     */
     protected function findMatchingZone(string $countryCode, ?string $stateCode = null): ?ShippingZone
     {
         $zones = ShippingZone::active()->orderBy('sort_order')->get();
@@ -166,19 +138,16 @@ class ShippingRateService
         $bestPriority = -1;
 
         foreach ($zones as $zone) {
-            if (!$zone->matchesDestination($countryCode, $stateCode)) {
-                continue;
-            }
+            if (!$zone->matchesDestination($countryCode, $stateCode)) continue;
 
             $countries = $zone->countries ?? [];
 
-            // Priority: specific country+state > specific country > wildcard
             if (in_array('*', $countries)) {
-                $priority = 0; // wildcard = lowest priority
+                $priority = 0;
             } elseif (!empty($zone->states)) {
-                $priority = 2; // country + state = highest
+                $priority = 2;
             } else {
-                $priority = 1; // specific country
+                $priority = 1;
             }
 
             if ($priority > $bestPriority) {
