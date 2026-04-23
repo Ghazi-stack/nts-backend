@@ -829,7 +829,7 @@ class ProductController extends Controller
                 'gtin' => 'nullable|string',
                 'bpn' => 'nullable|string',
                 'pageTitle' => 'nullable|string',
-                'productUrl' => 'required|string|unique:product_seo,product_url',
+                'productUrl' => 'nullable|string',
                 'metaDescription' => 'nullable|string',
                 'purchasabilityStatus' => 'nullable|string',
                 'minPurchaseQuantity' => 'nullable|integer',
