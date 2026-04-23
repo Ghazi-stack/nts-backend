@@ -568,7 +568,7 @@ class ProductController extends Controller
                 'bpn' => 'nullable|string',
 
                 'pageTitle' => 'nullable|string',
-                'productUrl' => 'nullable|string',
+                'productUrl' => 'required|string|unique:product_seos,product_url',
                 'metaDescription' => 'nullable|string',
 
                 'purchasabilityStatus' => 'nullable|string',
@@ -829,7 +829,7 @@ class ProductController extends Controller
                 'gtin' => 'nullable|string',
                 'bpn' => 'nullable|string',
                 'pageTitle' => 'nullable|string',
-                'productUrl' => 'nullable|string',
+                'productUrl' => 'required|string|unique:product_seos,product_url',
                 'metaDescription' => 'nullable|string',
                 'purchasabilityStatus' => 'nullable|string',
                 'minPurchaseQuantity' => 'nullable|integer',

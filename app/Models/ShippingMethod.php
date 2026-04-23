@@ -9,14 +9,26 @@ class ShippingMethod extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['shipping_zone_id','method_type','display_name','is_active','sort_order','flat_rate_amount','flat_rate_type','weight_threshold','weight_rate_amount','free_shipping_min_order','custom_description'];
+    protected $fillable = ['shipping_zone_id', 'method_type', 'display_name', 'is_active', 'sort_order', 'flat_rate_amount', 'flat_rate_type', 'weight_threshold', 'weight_rate_amount', 'free_shipping_min_order', 'custom_description'];
 
-    protected $casts = ['is_active'=>'boolean','flat_rate_amount'=>'decimal:2','weight_threshold'=>'decimal:2','weight_rate_amount'=>'decimal:2','free_shipping_min_order'=>'decimal:2'];
+    protected $casts = ['is_active' => 'boolean', 'flat_rate_amount' => 'decimal:2', 'weight_threshold' => 'decimal:2', 'weight_rate_amount' => 'decimal:2', 'free_shipping_min_order' => 'decimal:2'];
 
-    public function shippingZone() { return $this->belongsTo(ShippingZone::class); }
-    public function fedexConfiguration() { return $this->hasOne(FedexConfiguration::class); }
-    public function scopeActive($query) { return $query->where('is_active', true); }
-    public function isFedexRealtime(): bool { return $this->method_type === 'fedex_realtime'; }
+    public function shippingZone()
+    {
+        return $this->belongsTo(ShippingZone::class);
+    }
+    public function fedexConfiguration()
+    {
+        return $this->hasOne(FedexConfiguration::class);
+    }
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+    public function isFedexRealtime(): bool
+    {
+        return $this->method_type === 'fedex_realtime';
+    }
 
     public function calculateStaticRate(float $orderTotal, float $totalWeight, int $itemCount = 1): ?float
     {

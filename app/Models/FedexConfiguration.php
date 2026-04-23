@@ -13,7 +13,7 @@ class FedexConfiguration extends Model
     protected $fillable = ['shipping_method_id','client_id','client_secret','account_number','api_base_url','ws_key','ws_password','meter_number','display_name','dropoff_type','packaging_type','packing_method','rate_type','include_package_value','destination_type','enabled_services','is_connected'];
 
     protected $casts = ['enabled_services'=>'array','include_package_value'=>'boolean','is_connected'=>'boolean'];
-    protected $hidden = ['client_secret','ws_password'];
+    protected $hidden = ['ws_password'];
 
     public function setClientSecretAttribute($value) { $this->attributes['client_secret'] = Crypt::encryptString($value); }
     public function getClientSecretAttribute($value) { try { return Crypt::decryptString($value); } catch (\Exception $e) { return $value; } }
