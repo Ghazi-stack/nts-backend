@@ -1550,7 +1550,7 @@ class ProductController extends Controller
 
                         'identifiers:product_id,mpn,upc,gtin',
 
-                        'seo:product_id,page_title,meta_description'
+                        'seo:product_id,product_url,page_title,meta_description'
                     ])
                     ->get();
             });
