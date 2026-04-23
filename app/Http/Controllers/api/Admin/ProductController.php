@@ -431,7 +431,7 @@ class ProductController extends Controller
 
         try {
             // Fast Cache - 10 minutes
-            $product = Cache::remember($cacheKey, 600, function () use ($slug, $storeId) {
+            $product = Cache::remember($cacheKey, 5, function () use ($slug, $storeId) {
 
                 // === Fastest First Try: Direct SKU (jaise purana code tha) ===
                 $product = Product::where('store_id', $storeId)
@@ -486,7 +486,7 @@ class ProductController extends Controller
             }
 
             // Reviews ko alag cache mein rakho (response fast rahe)
-            $reviews = Cache::remember("product_reviews_{$product->id}", 600, function () use ($product) {
+            $reviews = Cache::remember("product_reviews_{$product->id}", 5, function () use ($product) {
                 return $product->reviews()
                     ->with('user:id,name')
                     ->latest()
