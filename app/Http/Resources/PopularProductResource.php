@@ -18,7 +18,9 @@ class PopularProductResource extends JsonResource
 
             // Only primary image
             'image' => ProductImageResource::collection($this->whenLoaded('images')),
-
+            'pageTitle' => $this->seo->page_title ?? null,
+            'productUrl' => $this->seo->product_url ?? null,
+            'metaDescription' => $this->seo->meta_description ?? null,
         ];
     }
 }

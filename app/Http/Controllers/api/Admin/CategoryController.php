@@ -757,6 +757,7 @@ class CategoryController extends Controller
                     'brand:id,name',
                     'categories:id,name',
                     'images:id,product_id,path,is_primary',
+                    'seo:product_id,product_url,page_title,meta_description'
                 ]);
 
             // ✅ CATEGORY FILTER
