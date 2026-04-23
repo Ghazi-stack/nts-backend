@@ -1916,7 +1916,7 @@ class ProductController extends Controller
                         // identifiers
                         'identifiers:product_id,mpn,upc,gtin',
                         // seo
-                        'seo:product_id,page_title,meta_description'
+                        'seo:product_id,product_url,page_title,meta_description'
                     ])
                     ->orderByDesc('id')
                     ->paginate($perPage);
