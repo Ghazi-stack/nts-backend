@@ -250,22 +250,13 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             // Try to get product_url from sheet
             $productUrl = $this->getField($data, ['product url', 'product_url']);
 
-            if (!$productUrl) {
-                // Sheet does not have product_url → generate from SKU
-                $productUrl = $baseUrl . '/' . Str::slug($sku);
-            } else {
-                // If sheet has URL, ensure it starts with base URL
-                if (!preg_match('/^https?:\/\//', $productUrl)) {
-                    $productUrl = $baseUrl . '/' . Str::slug($productUrl);
-                }
-            }
             ProductSeo::updateOrCreate(
                 ['product_id' => $product->id, 'store_id' => $this->storeId],
                 [
                     'page_title'       => $this->getField($data, ['page title', 'meta title']) ?? $productName,
                     'meta_description' => $this->getField($data, ['meta description', 'meta_description']) ?? '',
                     'meta_keywords'    => $this->getField($data, ['meta keywords', 'meta_keywords']) ?? '',
-                    'product_url'      => $productUrl,
+                    'product_url'      => $productUrl ?? null,
                 ]
             );
 
@@ -294,10 +285,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
             foreach ($data as $rawKey => $val) {
 
-            // Log::channel('single')->info("[$traceId] IMAGE LOOP ITERATION", [
-            //     'raw_key' => $rawKey,
-            //     'raw_value' => $val,
-            // ]);
+                // Log::channel('single')->info("[$traceId] IMAGE LOOP ITERATION", [
+                //     'raw_key' => $rawKey,
+                //     'raw_value' => $val,
+                // ]);
 
                 if (!$val) continue;
 
@@ -324,16 +315,16 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                     try {
                         $response = Http::timeout(20)
-                        ->retry(3, 500)
-                        ->withHeaders([
-                            'User-Agent' => 'Mozilla/5.0',
-                            'Accept' => 'image/*,*/*',
-                        ])
-                        ->withOptions([
-                            'verify' => false,
-                            'allow_redirects' => true,
-                        ])
-                        ->get($imageValue);
+                            ->retry(3, 500)
+                            ->withHeaders([
+                                'User-Agent' => 'Mozilla/5.0',
+                                'Accept' => 'image/*,*/*',
+                            ])
+                            ->withOptions([
+                                'verify' => false,
+                                'allow_redirects' => true,
+                            ])
+                            ->get($imageValue);
 
                         // logger()->info('IMAGE FETCH RESULT', [
                         //     'url' => $imageValue,
@@ -370,7 +361,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                         $savedPath = "product_images/{$product->id}/{$fileName}";
                         $uploaded  = false;
-                        
+
                         // Log::info("[$traceId] IMAGE SIZE", [
                         //     'bytes' => strlen($response->body()),
                         // ]);
@@ -418,8 +409,6 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
 
                         @unlink($tmpPath);
-
-
                     } catch (\Throwable $e) {
                         // Log::error("[$traceId] IMAGE UPLOAD FAILED", [
                         //     'message' => $e->getMessage(),
