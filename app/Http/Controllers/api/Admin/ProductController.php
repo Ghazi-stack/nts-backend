@@ -1047,12 +1047,6 @@ class ProductController extends Controller
             // If images are sent → delete old + re-add (same behavior as add)
             if (!empty($validated['image'])) {
 
-                // Delete old images from S3
-                foreach ($product->images as $oldImage) {
-                    Storage::disk('s3')->delete($oldImage->path);
-                    $oldImage->delete();
-                }
-
                 // Add new images using SAME logic as add
                 $this->processImagesFromAdd(
                     $product,
@@ -1351,12 +1345,6 @@ class ProductController extends Controller
                     // }
 
                     if (!empty($fields['image'])) {
-
-                        // delete old images
-                        foreach ($product->images as $oldImage) {
-                            Storage::disk('s3')->delete($oldImage->path);
-                            $oldImage->delete();
-                        }
 
                         // add new images (same as add)
                         $this->processImagesFromAdd(
@@ -2509,12 +2497,27 @@ class ProductController extends Controller
     {
         if (empty($images)) return;
 
+        $existingImages = $product->images;
+        $existingPaths = $existingImages->pluck('path')->toArray();
+
+        $keepPaths = [];
+
         foreach ($images as $img) {
 
             $path = null;
 
-            // ✅ FILE IMAGE (SAME AS ADD)
-            if (!empty($img['file']) && $img['file'] instanceof \Illuminate\Http\UploadedFile) {
+            // ---------------- ✅ EXISTING IMAGE (IMPORTANT FIX)
+            if (!empty($img['url'])) {
+
+                $parsedPath = ltrim(parse_url($img['url'], PHP_URL_PATH), '/');
+
+                if (in_array($parsedPath, $existingPaths)) {
+                    $path = $parsedPath; // keep existing
+                }
+            }
+
+            // ---------------- ✅ FILE IMAGE
+            if (!$path && !empty($img['file']) && $img['file'] instanceof \Illuminate\Http\UploadedFile) {
 
                 $file = $img['file'];
 
@@ -2523,7 +2526,7 @@ class ProductController extends Controller
                 );
 
                 $extension = $file->getClientOriginalExtension();
-                $fileName = $name . '.' . $extension;
+                $fileName = $name . '-' . time() . '.' . $extension;
 
                 $path = Storage::disk('s3')->putFileAs(
                     "product_images/{$product->id}",
@@ -2532,38 +2535,60 @@ class ProductController extends Controller
                 );
             }
 
-            // ✅ URL IMAGE (SAME AS ADD)
-            elseif (!empty($img['url'])) {
+            // ---------------- ✅ NEW URL (download only if NOT existing)
+            elseif (!$path && !empty($img['url'])) {
 
-                $response = Http::timeout(10)->get($img['url']);
-                if (!$response->successful()) continue;
+                try {
+                    $response = Http::timeout(10)->get($img['url']);
+                    if (!$response->successful()) continue;
 
-                $originalName = pathinfo(
-                    parse_url($img['url'], PHP_URL_PATH),
-                    PATHINFO_FILENAME
-                );
+                    $originalName = pathinfo(
+                        parse_url($img['url'], PHP_URL_PATH),
+                        PATHINFO_FILENAME
+                    );
 
-                $extension = pathinfo(
-                    parse_url($img['url'], PHP_URL_PATH),
-                    PATHINFO_EXTENSION
-                ) ?: 'jpg';
+                    $extension = pathinfo(
+                        parse_url($img['url'], PHP_URL_PATH),
+                        PATHINFO_EXTENSION
+                    ) ?: 'jpg';
 
-                $fileName = Str::slug($originalName) . '.' . $extension;
+                    $fileName = Str::slug($originalName) . '-' . time() . '.' . $extension;
 
-                $path = "product_images/{$product->id}/{$fileName}";
+                    $path = "product_images/{$product->id}/{$fileName}";
 
-                Storage::disk('s3')->put($path, $response->body());
+                    Storage::disk('s3')->put($path, $response->body());
+
+                } catch (\Exception $e) {
+                    continue;
+                }
             }
 
             if (!$path) continue;
 
-            ProductImage::create([
-                'store_id'   => $storeId,
-                'product_id' => $product->id,
-                'path'       => $path,
-                'is_primary' => !empty($img['isPrimary']) ? 1 : 0,
-                'alt_text'   => $img['description'] ?? $productName ?? null,
-            ]);
+            $keepPaths[] = $path;
+
+            ProductImage::updateOrCreate(
+                [
+                    'product_id' => $product->id,
+                    'path' => $path
+                ],
+                [
+                    'store_id'   => $storeId,
+                    'is_primary' => !empty($img['isPrimary']) ? 1 : 0,
+                    'alt_text'   => $img['description'] ?? $productName ?? null,
+                ]
+            );
+        }
+
+        // ---------------- ❌ DELETE ONLY REMOVED IMAGES
+        $toDelete = array_diff($existingPaths, $keepPaths);
+
+        foreach ($toDelete as $oldPath) {
+            Storage::disk('s3')->delete($oldPath);
+
+            $product->images()
+                ->where('path', $oldPath)
+                ->delete();
         }
     }
 }
