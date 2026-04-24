@@ -918,130 +918,148 @@ class ProductController extends Controller
             // Sync many-to-many categories
             $product->categories()->sync($validated['categoryIds']);
 
-            // Remove old images only if new ones are provided
+            // // Remove old images only if new ones are provided
+            // if (!empty($validated['image'])) {
+            //     foreach ($product->images as $oldImage) {
+            //         $imagePath = public_path($oldImage->path);
+            //         if (file_exists($imagePath)) {
+            //             @unlink($imagePath);
+            //         }
+            //         $oldImage->delete();
+            //     }
+            // }
+
+            // // Process new images
+            // $images = [];
+
+            // if (!empty($validated['image'])) {
+            //     foreach ($validated['image'] as $img) {
+            //         // Handle string input as URL
+            //         if (is_string($img)) {
+            //             $img = ['url' => $img];
+            //         }
+
+            //         if (is_array($img)) {
+            //             $imageEntry = [
+            //                 'type' => null,
+            //                 'value' => null,
+            //                 'is_primary' => $img['isThumbnail'] ?? false,
+            //                 'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
+            //                 'description' => $img['description'] ?? null,
+            //             ];
+
+            //             // Handle URL input
+            //             if (!empty($img['url']) && is_string($img['url'])) {
+            //                 $imageEntry['type'] = 'url';
+            //                 $imageEntry['value'] = $img['url'];
+            //                 $images[] = $imageEntry;
+            //             }
+
+            //             // Handle uploaded file
+            //             if (
+            //                 isset($img['file']) &&
+            //                 $img['file'] instanceof \Illuminate\Http\UploadedFile
+            //             ) {
+            //                 $imageEntry['type'] = 'file';
+            //                 $imageEntry['value'] = $img['file'];
+            //                 $images[] = $imageEntry;
+            //             }
+            //         }
+            //     }
+            // }
+
+            // foreach ($images as $index => $img) {
+            //     $path = null;
+
+            //     if ($img['type'] === 'url') {
+            //         $url = $img['value'];
+
+            //         if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            //             continue;
+            //         }
+
+            //         $parsedUrl = parse_url($url);
+            //         $host = $parsedUrl['host'] ?? '';
+
+            //         // Check if it's a self-hosted image already in product_images/
+            //         if (Str::contains($url, url('/product_images'))) {
+            //             $path = str_replace(url('/'), '', $url);
+            //             $path = ltrim($path, '/');
+            //         }
+            //         // If internal copy from same host
+            //         elseif (Str::contains($host, 'ecom.brokercell.com')) {
+            //             $relativePath = $parsedUrl['path'] ?? null;
+            //             $sourcePath = public_path($relativePath);
+
+            //             if (file_exists($sourcePath)) {
+            //                 $extension = pathinfo($sourcePath, PATHINFO_EXTENSION);
+            //                 $imageName = time() . '_' . $index . '.' . $extension;
+            //                 $destinationPath = public_path('product_images/' . $imageName);
+            //                 copy($sourcePath, $destinationPath);
+            //                 $path = 'product_images/' . $imageName;
+            //             } else {
+            //                 continue;
+            //             }
+            //         }
+            //         // External image (e.g., ubuy URL)
+            //         else {
+            //             try {
+            //                 $response = Http::timeout(5)->get($url);
+            //                 if ($response->ok()) {
+            //                     $imageContent = $response->body();
+
+            //                     $directory = public_path('product_images');
+            //                     if (!file_exists($directory)) {
+            //                         mkdir($directory, 0755, true);
+            //                     }
+
+            //                     $extension = pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION);
+            //                     $extension = in_array(strtolower($extension), ['jpg', 'jpeg', 'png', 'gif', 'webp']) ? $extension : 'jpg';
+
+            //                     $imageName = time() . '_' . $index . '.' . $extension;
+            //                     $filePath = public_path('product_images/' . $imageName);
+            //                     file_put_contents($filePath, $imageContent);
+            //                     $path = 'product_images/' . $imageName;
+            //                 }
+            //             } catch (\Exception $e) {
+            //                 continue;
+            //             }
+            //         }
+            //     } elseif ($img['type'] === 'file') {
+            //         $file = $img['value'];
+            //         $imageName = time() . '_' . $index . '.' . $file->getClientOriginalExtension();
+            //         $file->move(public_path('product_images'), $imageName);
+            //         $path = "product_images/{$imageName}";
+            //     }
+
+            //     if (!$path) continue;
+
+            //     ProductImage::create([
+            //         'store_id' => $storeId,
+            //         'product_id' => $product->id,
+            //         'path' => $path,
+            //         'is_primary' => $img['is_primary'] ?? ($index === 0),
+            //         'alt_text' => $img['alt_text'] ?? null,
+            //         'description' => $img['description'] ?? null,
+            //     ]);
+            // }
+
+            // If images are sent → delete old + re-add (same behavior as add)
             if (!empty($validated['image'])) {
+
+                // Delete old images from S3
                 foreach ($product->images as $oldImage) {
-                    $imagePath = public_path($oldImage->path);
-                    if (file_exists($imagePath)) {
-                        @unlink($imagePath);
-                    }
+                    Storage::disk('s3')->delete($oldImage->path);
                     $oldImage->delete();
                 }
-            }
 
-            // Process new images
-            $images = [];
-
-            if (!empty($validated['image'])) {
-                foreach ($validated['image'] as $img) {
-                    // Handle string input as URL
-                    if (is_string($img)) {
-                        $img = ['url' => $img];
-                    }
-
-                    if (is_array($img)) {
-                        $imageEntry = [
-                            'type' => null,
-                            'value' => null,
-                            'is_primary' => $img['isThumbnail'] ?? false,
-                            'alt_text' => $img['alt_text'] ?? $validated['name'] ?? null,
-                            'description' => $img['description'] ?? null,
-                        ];
-
-                        // Handle URL input
-                        if (!empty($img['url']) && is_string($img['url'])) {
-                            $imageEntry['type'] = 'url';
-                            $imageEntry['value'] = $img['url'];
-                            $images[] = $imageEntry;
-                        }
-
-                        // Handle uploaded file
-                        if (
-                            isset($img['file']) &&
-                            $img['file'] instanceof \Illuminate\Http\UploadedFile
-                        ) {
-                            $imageEntry['type'] = 'file';
-                            $imageEntry['value'] = $img['file'];
-                            $images[] = $imageEntry;
-                        }
-                    }
-                }
-            }
-
-            foreach ($images as $index => $img) {
-                $path = null;
-
-                if ($img['type'] === 'url') {
-                    $url = $img['value'];
-
-                    if (!filter_var($url, FILTER_VALIDATE_URL)) {
-                        continue;
-                    }
-
-                    $parsedUrl = parse_url($url);
-                    $host = $parsedUrl['host'] ?? '';
-
-                    // Check if it's a self-hosted image already in product_images/
-                    if (Str::contains($url, url('/product_images'))) {
-                        $path = str_replace(url('/'), '', $url);
-                        $path = ltrim($path, '/');
-                    }
-                    // If internal copy from same host
-                    elseif (Str::contains($host, 'ecom.brokercell.com')) {
-                        $relativePath = $parsedUrl['path'] ?? null;
-                        $sourcePath = public_path($relativePath);
-
-                        if (file_exists($sourcePath)) {
-                            $extension = pathinfo($sourcePath, PATHINFO_EXTENSION);
-                            $imageName = time() . '_' . $index . '.' . $extension;
-                            $destinationPath = public_path('product_images/' . $imageName);
-                            copy($sourcePath, $destinationPath);
-                            $path = 'product_images/' . $imageName;
-                        } else {
-                            continue;
-                        }
-                    }
-                    // External image (e.g., ubuy URL)
-                    else {
-                        try {
-                            $response = Http::timeout(5)->get($url);
-                            if ($response->ok()) {
-                                $imageContent = $response->body();
-
-                                $directory = public_path('product_images');
-                                if (!file_exists($directory)) {
-                                    mkdir($directory, 0755, true);
-                                }
-
-                                $extension = pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION);
-                                $extension = in_array(strtolower($extension), ['jpg', 'jpeg', 'png', 'gif', 'webp']) ? $extension : 'jpg';
-
-                                $imageName = time() . '_' . $index . '.' . $extension;
-                                $filePath = public_path('product_images/' . $imageName);
-                                file_put_contents($filePath, $imageContent);
-                                $path = 'product_images/' . $imageName;
-                            }
-                        } catch (\Exception $e) {
-                            continue;
-                        }
-                    }
-                } elseif ($img['type'] === 'file') {
-                    $file = $img['value'];
-                    $imageName = time() . '_' . $index . '.' . $file->getClientOriginalExtension();
-                    $file->move(public_path('product_images'), $imageName);
-                    $path = "product_images/{$imageName}";
-                }
-
-                if (!$path) continue;
-
-                ProductImage::create([
-                    'store_id' => $storeId,
-                    'product_id' => $product->id,
-                    'path' => $path,
-                    'is_primary' => $img['is_primary'] ?? ($index === 0),
-                    'alt_text' => $img['alt_text'] ?? null,
-                    'description' => $img['description'] ?? null,
-                ]);
+                // Add new images using SAME logic as add
+                $this->processImagesFromAdd(
+                    $product,
+                    $validated['image'],
+                    $storeId,
+                    $validated['name'] ?? $product->name
+                );
             }
 
             // Update content
@@ -1215,121 +1233,138 @@ class ProductController extends Controller
                         ])->save();
                     }
 
-                    if (
-                        array_key_exists('image', $fields) ||
-                        array_key_exists('image_url', $fields)
-                    ) {
+                    // if (
+                    //     array_key_exists('image', $fields) ||
+                    //     array_key_exists('image_url', $fields)
+                    // ) {
 
-                        $existingPaths = $product->images->pluck('path')->toArray();
-                        $keepPaths = [];
-                        $hasPrimary = false;
+                    //     $existingPaths = $product->images->pluck('path')->toArray();
+                    //     $keepPaths = [];
+                    //     $hasPrimary = false;
 
-                        // ---------------- FILES (WIN OVER URL) ----------------
-                        if (!empty($fields['image']) && is_array($fields['image'])) {
+                    //     // ---------------- FILES (WIN OVER URL) ----------------
+                    //     if (!empty($fields['image']) && is_array($fields['image'])) {
 
-                            foreach ($fields['image'] as $img) {
+                    //         foreach ($fields['image'] as $img) {
 
-                                $path = null;
+                    //             $path = null;
 
-                                // EXISTING IMAGE (KEEP)
-                                if (!empty($img['path']) && in_array($img['path'], $existingPaths)) {
-                                    $path = $img['path'];
-                                }
+                    //             // EXISTING IMAGE (KEEP)
+                    //             if (!empty($img['path']) && in_array($img['path'], $existingPaths)) {
+                    //                 $path = $img['path'];
+                    //             }
 
-                                // NEW FILE
-                                elseif (
-                                    isset($img['file']) &&
-                                    $img['file'] instanceof \Illuminate\Http\UploadedFile
-                                ) {
+                    //             // NEW FILE
+                    //             elseif (
+                    //                 isset($img['file']) &&
+                    //                 $img['file'] instanceof \Illuminate\Http\UploadedFile
+                    //             ) {
 
-                                    $name = Str::slug(
-                                        pathinfo($img['file']->getClientOriginalName(), PATHINFO_FILENAME)
-                                    );
-                                    $ext = $img['file']->getClientOriginalExtension();
-                                    $fileName = $name . '.' . $ext;
+                    //                 $name = Str::slug(
+                    //                     pathinfo($img['file']->getClientOriginalName(), PATHINFO_FILENAME)
+                    //                 );
+                    //                 $ext = $img['file']->getClientOriginalExtension();
+                    //                 $fileName = $name . '.' . $ext;
 
-                                    $path = Storage::disk('s3')->putFileAs(
-                                        "product_images/{$product->id}",
-                                        $img['file'],
-                                        $fileName
-                                    );
-                                }
+                    //                 $path = Storage::disk('s3')->putFileAs(
+                    //                     "product_images/{$product->id}",
+                    //                     $img['file'],
+                    //                     $fileName
+                    //                 );
+                    //             }
 
-                                if (!$path) continue;
+                    //             if (!$path) continue;
 
-                                $keepPaths[] = $path;
+                    //             $keepPaths[] = $path;
 
-                                $product->images()->firstOrCreate(
-                                    ['path' => $path],
-                                    [
-                                        'store_id'   => $storeId,
-                                        'is_primary' => $hasPrimary ? 0 : 1,
-                                        'alt_text'   => $img['alt_text'] ?? $product->name,
-                                        'description' => $img['description'] ?? null,
-                                    ]
-                                );
+                    //             $product->images()->firstOrCreate(
+                    //                 ['path' => $path],
+                    //                 [
+                    //                     'store_id'   => $storeId,
+                    //                     'is_primary' => $hasPrimary ? 0 : 1,
+                    //                     'alt_text'   => $img['alt_text'] ?? $product->name,
+                    //                     'description' => $img['description'] ?? null,
+                    //                 ]
+                    //             );
 
-                                $hasPrimary = true;
-                            }
+                    //             $hasPrimary = true;
+                    //         }
+                    //     }
+
+                    //     // ---------------- URLS (ONLY IF NO FILES) ----------------
+                    //     elseif (!empty($fields['image_url']) && is_array($fields['image_url'])) {
+
+                    //         foreach ($fields['image_url'] as $url) {
+
+                    //             $path = null;
+
+                    //             // EXISTING IMAGE (KEEP)
+                    //             $parsedPath = ltrim(parse_url($url, PHP_URL_PATH), '/');
+                    //             if (in_array($parsedPath, $existingPaths)) {
+                    //                 $path = $parsedPath;
+                    //             }
+
+                    //             // NEW URL → DOWNLOAD → UPLOAD
+                    //             else {
+                    //                 try {
+                    //                     $response = Http::timeout(8)->get($url);
+                    //                     if (!$response->ok()) continue;
+
+                    //                     $name = Str::slug(
+                    //                         pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_FILENAME)
+                    //                     );
+                    //                     $ext = pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+
+                    //                     $fileName = $name . '.' . $ext;
+                    //                     $path = "product_images/{$product->id}/{$fileName}";
+
+                    //                     Storage::disk('s3')->put($path, $response->body());
+                    //                 } catch (\Exception $e) {
+                    //                     continue;
+                    //                 }
+                    //             }
+
+                    //             if (!$path) continue;
+
+                    //             $keepPaths[] = $path;
+
+                    //             $product->images()->firstOrCreate(
+                    //                 ['path' => $path],
+                    //                 [
+                    //                     'store_id'   => $storeId,
+                    //                     'is_primary' => $hasPrimary ? 0 : 1,
+                    //                     'alt_text'   => $product->name,
+                    //                 ]
+                    //             );
+
+                    //             $hasPrimary = true;
+                    //         }
+                    //     }
+
+                    //     // ---------------- DELETE REMOVED IMAGES ----------------
+                    //     $toDelete = array_diff($existingPaths, $keepPaths);
+
+                    //     foreach ($toDelete as $oldPath) {
+                    //         Storage::disk('s3')->delete($oldPath);
+                    //         $product->images()->where('path', $oldPath)->delete();
+                    //     }
+                    // }
+
+                    if (!empty($fields['image'])) {
+
+                        // delete old images
+                        foreach ($product->images as $oldImage) {
+                            Storage::disk('s3')->delete($oldImage->path);
+                            $oldImage->delete();
                         }
 
-                        // ---------------- URLS (ONLY IF NO FILES) ----------------
-                        elseif (!empty($fields['image_url']) && is_array($fields['image_url'])) {
-
-                            foreach ($fields['image_url'] as $url) {
-
-                                $path = null;
-
-                                // EXISTING IMAGE (KEEP)
-                                $parsedPath = ltrim(parse_url($url, PHP_URL_PATH), '/');
-                                if (in_array($parsedPath, $existingPaths)) {
-                                    $path = $parsedPath;
-                                }
-
-                                // NEW URL → DOWNLOAD → UPLOAD
-                                else {
-                                    try {
-                                        $response = Http::timeout(8)->get($url);
-                                        if (!$response->ok()) continue;
-
-                                        $name = Str::slug(
-                                            pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_FILENAME)
-                                        );
-                                        $ext = pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
-
-                                        $fileName = $name . '.' . $ext;
-                                        $path = "product_images/{$product->id}/{$fileName}";
-
-                                        Storage::disk('s3')->put($path, $response->body());
-                                    } catch (\Exception $e) {
-                                        continue;
-                                    }
-                                }
-
-                                if (!$path) continue;
-
-                                $keepPaths[] = $path;
-
-                                $product->images()->firstOrCreate(
-                                    ['path' => $path],
-                                    [
-                                        'store_id'   => $storeId,
-                                        'is_primary' => $hasPrimary ? 0 : 1,
-                                        'alt_text'   => $product->name,
-                                    ]
-                                );
-
-                                $hasPrimary = true;
-                            }
-                        }
-
-                        // ---------------- DELETE REMOVED IMAGES ----------------
-                        $toDelete = array_diff($existingPaths, $keepPaths);
-
-                        foreach ($toDelete as $oldPath) {
-                            Storage::disk('s3')->delete($oldPath);
-                            $product->images()->where('path', $oldPath)->delete();
-                        }
+                        // add new images (same as add)
+                        $this->processImagesFromAdd(
+                            $product,
+                            $fields['image'],
+                            $storeId,
+                            $fields['name'] ?? $product->name
+                        );
                     }
 
                     // ✅ Add to response
@@ -2467,6 +2502,68 @@ class ProductController extends Controller
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    private function processImagesFromAdd($product, $images, $storeId, $productName = null)
+    {
+        if (empty($images)) return;
+
+        foreach ($images as $img) {
+
+            $path = null;
+
+            // ✅ FILE IMAGE (SAME AS ADD)
+            if (!empty($img['file']) && $img['file'] instanceof \Illuminate\Http\UploadedFile) {
+
+                $file = $img['file'];
+
+                $name = Str::slug(
+                    pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)
+                );
+
+                $extension = $file->getClientOriginalExtension();
+                $fileName = $name . '.' . $extension;
+
+                $path = Storage::disk('s3')->putFileAs(
+                    "product_images/{$product->id}",
+                    $file,
+                    $fileName
+                );
+            }
+
+            // ✅ URL IMAGE (SAME AS ADD)
+            elseif (!empty($img['url'])) {
+
+                $response = Http::timeout(10)->get($img['url']);
+                if (!$response->successful()) continue;
+
+                $originalName = pathinfo(
+                    parse_url($img['url'], PHP_URL_PATH),
+                    PATHINFO_FILENAME
+                );
+
+                $extension = pathinfo(
+                    parse_url($img['url'], PHP_URL_PATH),
+                    PATHINFO_EXTENSION
+                ) ?: 'jpg';
+
+                $fileName = Str::slug($originalName) . '.' . $extension;
+
+                $path = "product_images/{$product->id}/{$fileName}";
+
+                Storage::disk('s3')->put($path, $response->body());
+            }
+
+            if (!$path) continue;
+
+            ProductImage::create([
+                'store_id'   => $storeId,
+                'product_id' => $product->id,
+                'path'       => $path,
+                'is_primary' => !empty($img['isPrimary']) ? 1 : 0,
+                'alt_text'   => $img['description'] ?? $productName ?? null,
+            ]);
         }
     }
 }
