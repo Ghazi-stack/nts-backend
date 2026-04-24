@@ -31,6 +31,9 @@ class ProductListResource extends JsonResource
             'currentStock' => $this->current_stock,
             'isFeatured'   => $this->is_featured,
             'isVisible'    => $this->visible_on_storefront,
+            'pageTitle' => optional($this->seo)->page_title,
+            'productUrl' => optional($this->seo)->product_url,
+            'metaDescription' => optional($this->seo)->meta_description,
         ];
     }
 }
