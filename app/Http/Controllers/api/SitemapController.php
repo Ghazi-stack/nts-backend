@@ -78,13 +78,12 @@ class SitemapController extends Controller
                 // Pages
                 $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&page=1</loc>\n  </sitemap>\n";
 
+                  // Brands (page 1)
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&page=1</loc>\n  </sitemap>\n";
                 
                 // Categories (page 1)
                 $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&page=1</loc>\n  </sitemap>\n";
 
-                // Brands (page 1)
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&page=1</loc>\n  </sitemap>\n";
-                
                 // Products with pagination
                 for ($i = 1; $i <= $totalProductPages; $i++) {
                     $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&page={$i}</loc>\n  </sitemap>\n";
