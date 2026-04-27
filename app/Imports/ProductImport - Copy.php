@@ -247,8 +247,47 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             // --- SEO ----------------------------------------------------------
             $baseUrl = rtrim(config('app.url'), '/'); // get live APP_URL from .env
 
-            // Try to get product_url from sheet
+            // Try to get product_url from sheet first
             $productUrl = $this->getField($data, ['product url', 'product_url']);
+
+            // If sheet doesn't have product_url, generate from url_settings custom_format
+            if (!$productUrl) {
+                $urlSetting = \App\Models\UrlSetting::where('store_id', $this->storeId)
+                    ->where('entity_type', 'product')
+                    ->first();
+
+                if ($urlSetting && $urlSetting->custom_format) {
+                    $customFormat = $urlSetting->custom_format;
+
+                    // Load category name for placeholder
+                    $categoryName = '';
+                    if ($categoryId) {
+                        $category = \App\Models\Category::find($categoryId);
+                        $categoryName = $category ? $category->name : '';
+                    }
+
+                    // Build a map of all possible placeholders to their actual values
+                    $placeholders = [
+                        '%brand%'         => Str::slug($brandName),
+                        '%sku%'           => Str::slug($sku),
+                        '%name%'          => Str::slug($productName),
+                        '%product_name%'  => Str::slug($productName),
+                        '%category%'      => Str::slug($categoryName),
+                        '%id%'            => $product->id,
+                        '%slug%'          => $product->slug,
+                        '%price%'         => $price,
+                        '%mpn%'           => Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
+                        '%upc%'           => Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
+                    ];
+
+                    // Replace all placeholders in custom_format
+                    $productUrl = str_replace(
+                        array_keys($placeholders),
+                        array_values($placeholders),
+                        $customFormat
+                    );
+                }
+            }
 
             ProductSeo::updateOrCreate(
                 ['product_id' => $product->id, 'store_id' => $this->storeId],
