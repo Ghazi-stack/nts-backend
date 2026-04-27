@@ -125,10 +125,9 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 //     'name' => $productName,
                 // ]);
 
-                // if ($rowIndex % 20 === 0) {
-
-                // }
-                $this->updateProgress();
+                if ($rowIndex % 20 === 0) {
+                    $this->updateProgress();
+                }
                 return;
             }
 
@@ -248,8 +247,44 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             // --- SEO ----------------------------------------------------------
             $baseUrl = rtrim(config('app.url'), '/'); // get live APP_URL from .env
 
-            // Try to get product_url from sheet
-            $productUrl = $this->getField($data, ['product url', 'product_url']);
+            // ALWAYS generate product_url from url_settings custom_format
+            $productUrl = null;
+
+            $urlSetting = \App\Models\UrlSetting::where('store_id', $this->storeId)
+                ->where('entity_type', 'product')
+                ->first();
+
+            if ($urlSetting && $urlSetting->custom_format) {
+                $customFormat = $urlSetting->custom_format;
+
+                // Load category name for placeholder
+                $categoryName = '';
+                if ($categoryId) {
+                    $category = \App\Models\Category::find($categoryId);
+                    $categoryName = $category ? $category->name : '';
+                }
+
+                // Build a map of all possible placeholders to their actual values
+                $placeholders = [
+                    '%brand%'         => Str::slug($brandName),
+                    '%sku%'           => Str::slug($sku),
+                    '%name%'          => Str::slug($productName),
+                    '%product_name%'  => Str::slug($productName),
+                    '%category%'      => Str::slug($categoryName),
+                    '%id%'            => $product->id,
+                    '%slug%'          => $product->slug,
+                    '%price%'         => $price,
+                    '%mpn%'           => Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
+                    '%upc%'           => Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
+                ];
+
+                // Replace all placeholders in custom_format
+                $productUrl = str_replace(
+                    array_keys($placeholders),
+                    array_values($placeholders),
+                    $customFormat
+                );
+            }
 
             ProductSeo::updateOrCreate(
                 ['product_id' => $product->id, 'store_id' => $this->storeId],
@@ -257,7 +292,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'page_title'       => $this->getField($data, ['page title', 'meta title']) ?? $productName,
                     'meta_description' => $this->getField($data, ['meta description', 'meta_description']) ?? '',
                     'meta_keywords'    => $this->getField($data, ['meta keywords', 'meta_keywords']) ?? '',
-                    'product_url'      => $productUrl ?? null,
+                    'product_url'      => $productUrl,
                 ]
             );
 
@@ -271,28 +306,234 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             // ]);
 
 
-            $image = $this->getField($data, [
+            $imageKeyOptions = [
                 'product image file - 1',
                 'product image file 1',
                 'product_image_file_1',
                 'product image file-1',
                 'product_image_file - 1',
-            ]);
+            ];
 
-            if ($image) {
-                ProcessProductImage::dispatch(
-                    $product->id,
-                    $image,
-                    $this->storeId,
-                    $productName,
-                    $product->slug
-                )->onQueue('images');
+            // Normalize all candidate keys
+            $normalizedTargets = array_map(function ($h) {
+                return $this->normalizeKey($h);
+            }, $imageKeyOptions);
+
+            foreach ($data as $rawKey => $val) {
+
+                // Log::channel('single')->info("[$traceId] IMAGE LOOP ITERATION", [
+                //     'raw_key' => $rawKey,
+                //     'raw_value' => $val,
+                // ]);
+
+                if (!$val) continue;
+
+                // Normalize the incoming CSV header
+                $keyNorm = $this->normalizeKey($rawKey);
+
+                // Process ONLY if it matches expected image headers
+                if (!in_array($keyNorm, $normalizedTargets)) {
+                    // Log::channel('single')->warning("[$traceId] IMAGE HEADER SKIPPED", [
+                    //     'normalized_key' => $keyNorm,
+                    //     'targets' => $normalizedTargets,
+                    // ]);
+                    continue;
+                }
+
+                $imageValue = trim($val);
+                $savedPath  = null;
+                $uploaded = false;
+
+                /* =====================================================
+       (A) URL IMAGE → DIRECT S3 UPLOAD
+    ===================================================== */
+                if (filter_var($imageValue, FILTER_VALIDATE_URL)) {
+
+                    try {
+                        $response = Http::timeout(20)
+                            ->retry(3, 500)
+                            ->withHeaders([
+                                'User-Agent' => 'Mozilla/5.0',
+                                'Accept' => 'image/*,*/*',
+                            ])
+                            ->withOptions([
+                                'verify' => false,
+                                'allow_redirects' => true,
+                            ])
+                            ->get($imageValue);
+
+                        // logger()->info('IMAGE FETCH RESULT', [
+                        //     'url' => $imageValue,
+                        //     'status' => optional($response)->status(),
+                        //     'ok' => optional($response)->successful(),
+                        // ]);
+                        if (
+                            !$response->successful() ||
+                            !str_starts_with(
+                                $response->header('Content-Type'),
+                                'image/'
+                            )
+                        ) {
+                            // Log::warning('IMAGE SKIPPED (INVALID RESPONSE)', [
+                            //     'url' => $imageValue,
+                            //     'status' => $response->status(),
+                            //     'content_type' => $response->header('Content-Type'),
+                            // ]);
+                            continue;
+                        }
+
+                        $originalName = pathinfo(
+                            parse_url($imageValue, PHP_URL_PATH),
+                            PATHINFO_FILENAME
+                        );
+
+                        $extension = pathinfo(
+                            parse_url($imageValue, PHP_URL_PATH),
+                            PATHINFO_EXTENSION
+                        ) ?: 'jpg';
+
+                        $fileName = Str::slug($originalName)
+                            . '-' . time() . '-' . uniqid() . '.' . $extension;
+
+                        $savedPath = "product_images/{$product->id}/{$fileName}";
+                        $uploaded  = false;
+
+                        // Log::info("[$traceId] IMAGE SIZE", [
+                        //     'bytes' => strlen($response->body()),
+                        // ]);
+
+                        // Storage::disk('s3')->put(
+                        //     $savedPath,
+                        //     $response->body(),
+                        //     [
+                        //         'visibility' => 'public',
+                        //         'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
+                        //     ]
+                        // );
+
+                        // $tmpDir = storage_path('app/tmp');
+
+                        // if (!is_dir($tmpDir)) {
+                        //     mkdir($tmpDir, 0755, true);
+                        // }
+
+                        // $tmpPath = $tmpDir . '/' . uniqid('img_');
+
+                        $tmpPath = $this->tmpDir . '/' . uniqid('img_');
+
+                        file_put_contents($tmpPath, $response->body());
+
+                        $stream = fopen($tmpPath, 'r');
+
+                        $uploaded = Storage::disk('s3')->put(
+                            $savedPath,
+                            $stream,
+                            [
+                                'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
+                            ]
+                        );
+
+                        fclose($stream);
+
+
+                        // Log::info("[$traceId] S3 PUT RESULT", [
+                        //     'path' => $savedPath,
+                        //     'result' => $uploaded,
+                        //     'bucket' => config('filesystems.disks.s3.bucket'),
+                        //     'region' => config('filesystems.disks.s3.region'),
+                        // ]);
+
+
+                        @unlink($tmpPath);
+                    } catch (\Throwable $e) {
+                        // Log::error("[$traceId] IMAGE UPLOAD FAILED", [
+                        //     'message' => $e->getMessage(),
+                        // ]);
+                        continue;
+                    }
+                }
+
+                /* =====================================================
+       (B) LOCAL FILENAME (LEGACY) → MOVE TO S3
+    ===================================================== */ else {
+
+                    // existing local image (old imports)
+                    $localPath = public_path('product_images/' . $imageValue);
+
+                    if (file_exists($localPath)) {
+
+                        $extension = pathinfo($imageValue, PATHINFO_EXTENSION) ?: 'jpg';
+
+                        $fileName = Str::slug(
+                            pathinfo($imageValue, PATHINFO_FILENAME)
+                        ) . '-' . time() . '-' . uniqid() . '.' . $extension;
+
+                        $savedPath = "product_images/{$product->id}/{$fileName}";
+
+                        // Log::info("[$traceId] IMAGE SIZE", [
+                        //     'bytes' => strlen($response->body()),
+                        // ]);
+
+                        // Storage::disk('s3')->put(
+                        //     $savedPath,
+                        //     file_get_contents($localPath),
+                        //     [
+                        //         'visibility' => 'public',
+                        //         'ContentType' => mime_content_type($localPath) ?: 'image/jpeg',
+                        //     ]
+                        // );
+
+                        $tmpDir = storage_path('app/tmp');
+
+                        if (!is_dir($tmpDir)) {
+                            mkdir($tmpDir, 0755, true);
+                        }
+
+                        $tmpPath = $tmpDir . '/' . uniqid('img_');
+
+                        file_put_contents($tmpPath, $response->body());
+
+                        $uploaded = Storage::disk('s3')->put(
+                            $savedPath,
+                            fopen($tmpPath, 'r'),
+                            [
+                                'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
+                            ]
+                        );
+
+                        // Log::info("[$traceId] S3 PUT RESULT", [
+                        //     'path' => $savedPath,
+                        //     'result' => $uploaded,
+                        //     'bucket' => config('filesystems.disks.s3.bucket'),
+                        //     'region' => config('filesystems.disks.s3.region'),
+                        // ]);
+
+
+                        @unlink($tmpPath);
+                    }
+                }
+
+                /* =====================================================
+       (C) SAVE IMAGE RECORD (UNCHANGED LOGIC)
+    ===================================================== */
+                if ($uploaded === true) {
+
+                    ProductImage::updateOrCreate(
+                        [
+                            'product_id' => $product->id,
+                            'path'       => $savedPath,
+                            'url'       => $savedPath,
+                        ],
+                        [
+                            'store_id'   => $this->storeId,
+                            'alt_text'   => $productName,
+                            'is_primary' => 1,
+                        ]
+                    );
+                }
             }
 
             // --- Progress update for successful row ---------------------------
-            // if ($rowIndex % 20 === 0) {
-            //     $this->updateProgress();
-            // }
             $this->updateProgress();
         } catch (\Throwable $e) {
             // Do not stop the whole job if one row fails
@@ -302,12 +543,12 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             ]);
 
             // Still move progress forward
-            // if ($rowIndex % 20 === 0) {
-            //     $this->updateProgress();
-            // }
-            $this->updateProgress();
+            if ($rowIndex % 20 === 0) {
+                $this->updateProgress();
+            }
         }
     }
+
 
     /**
      * Centralized progress update.
