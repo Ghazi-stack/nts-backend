@@ -13,12 +13,19 @@ use Illuminate\Support\Str;
 
 class SitemapController extends Controller
 {
-    private const ITEMS_PER_PAGE = 10000;   // ← 20 items per page (aapki requirement)
+    private const ITEMS_PER_PAGE = 10000;
     private const CACHE_TTL = 3600;
 
     private function siteUrl(): string
     {
-        return 'https://server-blink.vercel.app';
+        $storeId = $this->getStoreId();
+
+        $storeUrls = [
+            4  => 'https://new-town-spares.vercel.app',
+            10 => 'https://server-blink.vercel.app',
+        ];
+
+        return $storeUrls[$storeId] ?? 'https://server-blink.vercel.app';
     }
 
     // ===================== MAIN ENTRY POINT =====================
@@ -45,7 +52,7 @@ class SitemapController extends Controller
         }
     }
 
-    // ===================== SITEMAP INDEX - Old Style (jaise aap chahte ho) =====================
+    // ===================== SITEMAP INDEX =====================
     private function sitemapIndex(Request $request)
     {
         try {
@@ -54,7 +61,7 @@ class SitemapController extends Controller
                 return $this->xmlError('Store not selected.');
             }
 
-            $siteUrl = $this->siteUrl();   // https://server-blink.vercel.app
+            $siteUrl = $this->siteUrl();
 
             $cacheKey = "xmlsitemap_index_store_{$storeId}";
 
@@ -127,7 +134,7 @@ class SitemapController extends Controller
         return $this->xmlResponse($xml);
     }
 
-    // ===================== PRODUCTS XML (20 per page) =====================
+    // ===================== PRODUCTS XML =====================
     public function productsXml(Request $request, $page = 1)
     {
         $page = (int) $page;
@@ -170,7 +177,7 @@ class SitemapController extends Controller
         }
     }
 
-    // ===================== CATEGORIES XML (20 per page) =====================
+    // ===================== CATEGORIES XML =====================
     public function categoriesXml(Request $request, $page = 1)
     {
         $page = (int) $page;
@@ -212,7 +219,7 @@ class SitemapController extends Controller
         }
     }
 
-    // ===================== BRANDS XML (20 per page) =====================
+    // ===================== BRANDS XML =====================
     public function brandsXml(Request $request, $page = 1)
     {
         $page = (int) $page;
