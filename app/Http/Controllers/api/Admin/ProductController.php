@@ -1396,23 +1396,45 @@ class ProductController extends Controller
             // Cache key with query + page
             $cacheKey = "product_search_store_{$storeId}_query_" . md5($queryStr) . "_page_{$page}_size_{$pageSize}";
 
-            // Cache results for 5 minutes (300 seconds)
+            // Cache results for 30 seconds
             $products = Cache::remember($cacheKey, 30, function () use ($queryStr, $storeId, $page, $pageSize) {
-                return Product::where('store_id', $storeId)
+
+                // Escape special LIKE characters to prevent SQL issues
+                $escapedQuery = str_replace(['%', '_'], ['\\%', '\\_'], $queryStr);
+                $likeQuery = "%{$escapedQuery}%";
+                $startsWithQuery = "{$escapedQuery}%";
+
+                // Step 1: Get matching category IDs separately (faster than orWhereHas subquery)
+                $matchingCategoryIds = Category::where('store_id', $storeId)
+                    ->where('name', 'like', $likeQuery)
+                    ->pluck('id');
+
+                // Step 2: Get matching brand IDs separately
+                $matchingBrandIds = Brand::where('store_id', $storeId)
+                    ->where('name', 'like', $likeQuery)
+                    ->pluck('id');
+
+                $query = Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
-                    ->where(function ($q) use ($queryStr) {
-                        $q->where('name', 'like', "%$queryStr%")
-                            ->orWhere('sku', 'like', "%$queryStr%")
-                            ->orWhere('slug', 'like', "%$queryStr%")
-                            ->orWhere('price', 'like', "%$queryStr%")
-                            ->orWhere('search_keywords', 'like', "%$queryStr%")
-                            ->orWhereHas('categories', fn($q2) => $q2->where('name', 'like', "%$queryStr%"))
-                            ->orWhereHas('brand', fn($q3) => $q3->where('name', 'like', "%$queryStr%"));
+                    ->where(function ($q) use ($likeQuery, $matchingCategoryIds, $matchingBrandIds) {
+                        $q->where('name', 'like', $likeQuery)
+                            ->orWhere('sku', 'like', $likeQuery)
+                            ->orWhere('slug', 'like', $likeQuery)
+                            ->orWhere('search_keywords', 'like', $likeQuery);
+
+                        // Use whereIn instead of orWhereHas (avoids correlated subquery)
+                        if ($matchingBrandIds->isNotEmpty()) {
+                            $q->orWhereIn('brand_id', $matchingBrandIds);
+                        }
+
+                        if ($matchingCategoryIds->isNotEmpty()) {
+                            $q->orWhereHas('categories', fn($q2) => $q2->whereIn('categories.id', $matchingCategoryIds));
+                        }
                     })
-                    ->select('id', 'name', 'sku', 'price', 'slug', 'brand_id') // Only essential columns
+                    ->select('id', 'name', 'sku', 'price', 'slug', 'brand_id')
                     ->with([
-                        'categories:id,name',  // Only id and name
-                        'brand:id,name,logo'   // Only id, name, logo
+                        'categories:id,name',
+                        'brand:id,name,logo'
                     ])
                     ->orderByRaw("
                     CASE
@@ -1421,16 +1443,16 @@ class ProductController extends Controller
                         WHEN name LIKE ? THEN 2
                         ELSE 3
                     END
-                ", [$queryStr, "$queryStr%", "%$queryStr%"])
-                    ->orderBy('name', 'asc')
-                    ->paginate($pageSize, ['*'], 'page', $page);
+                ", [$queryStr, $startsWithQuery, $likeQuery])
+                    ->orderBy('name', 'asc');
+
+                return $query->paginate($pageSize, ['*'], 'page', $page);
             });
 
             // Background mein search count update (non-blocking)
             if ($products->isNotEmpty()) {
                 $productIds = $products->pluck('id')->toArray();
 
-                // Bulk update in single query (fast)
                 dispatch(function () use ($productIds, $storeId) {
                     if (empty($productIds)) return;
 
@@ -1439,7 +1461,7 @@ class ProductController extends Controller
                         $productIds
                     ));
 
-                    \DB::statement("
+                    DB::statement("
                     INSERT INTO product_searches (product_id, store_id, search_count, created_at, updated_at)
                     VALUES {$values}
                     ON DUPLICATE KEY UPDATE 
@@ -2557,7 +2579,6 @@ class ProductController extends Controller
                     $path = "product_images/{$product->id}/{$fileName}";
 
                     Storage::disk('s3')->put($path, $response->body());
-
                 } catch (\Exception $e) {
                     continue;
                 }
