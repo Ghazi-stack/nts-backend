@@ -165,7 +165,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             $width  = (float)($this->getField($data, ['width', 'product width', 'product_width']) ?? 0);
             $height = (float)($this->getField($data, ['height', 'product height', 'product_height']) ?? 0);
             $depth  = (float)($this->getField($data, ['depth', 'product depth', 'product_depth']) ?? 0);
-            $retailPrice = (float)($this->getField($data, ['retail price', 'retail_price']) ?? 0);
+            $retailPrice = (float)($this->getField($data, ['retail price', 'msrp']) ?? 0);
             // $msrp = max(0, $retailPrice - $price); // ensures saving is not negative
             // --- Product ------------------------------------------------------
             $product = Product::updateOrCreate(
