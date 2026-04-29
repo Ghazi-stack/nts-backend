@@ -166,7 +166,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             $height = (float)($this->getField($data, ['height', 'product height', 'product_height']) ?? 0);
             $depth  = (float)($this->getField($data, ['depth', 'product depth', 'product_depth']) ?? 0);
             $retailPrice = (float)($this->getField($data, ['retail price', 'retail_price']) ?? 0);
-            $msrp = max(0, $retailPrice - $price); // ensures saving is not negative
+            // $msrp = max(0, $retailPrice - $price); // ensures saving is not negative
             // --- Product ------------------------------------------------------
             $product = Product::updateOrCreate(
                 [
@@ -182,7 +182,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'sale_price'           => $salePrice,
                     'cost_price'           => $costPrice,
                     'fixed_shipping_cost'  => $fixedShipping,
-                    'msrp'                 => $msrp,
+                    'msrp'                 => $retailPrice,
                     'dimensions'           => json_encode([
                         'weight' => $weight,
                         'width'  => $width,
@@ -194,7 +194,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'current_stock'        => (int)($this->getField($data, ['current stock level', 'stock', 'quantity']) ?? 0),
                     'low_stock'            => (int)($this->getField($data, ['low stock level', 'low stock']) ?? 0),
                     'item_type'            => $this->getField($data, ['item type', 'item_type']) ?? null,
-                    'product_type'         => $this->getField($data, ['product type', 'product_type']) ?? null,
+                    // 'product_type'         => $this->getField($data, ['product type', 'product_type']) ?? null,
                     'option_set'           => $this->getField($data, ['option set', 'option_set']) ?? null,
                     'option_set_align'     => $this->getField($data, ['option set align', 'option_set_align']) ?? null,
                     'visible_on_storefront' => $this->toBool($this->getField($data, ['product visible?', 'visible']) ?? 'Yes'),
