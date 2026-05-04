@@ -653,23 +653,22 @@ class OrderController extends Controller
                 $user = User::where('email', $validated['email'])->first();
             }
 
-            // Customer Create (Fixed for Multi Address)
             if (!$customer) {
-                $firstDest = $validated['isMultiAddress'] ? $validated['destinations'][0] : $validated;
+                $primary = $validated['isMultiAddress'] ? $validated['destinations'][0] : $validated;
 
                 $customer = Customer::create([
                     'store_id'       => $storeId,
-                    'first_name'     => $firstDest['firstName'] ?? '',
-                    'last_name'      => $firstDest['lastName'] ?? '',
+                    'first_name'     => $primary['firstName'] ?? '',
+                    'last_name'      => $primary['lastName'] ?? '',
                     'email'          => $validated['email'],
-                    'phone'          => $firstDest['phone'] ?? ($validated['phone'] ?? null),
-                    'company_name'   => $firstDest['companyName'] ?? ($validated['companyName'] ?? null),
-                    'address'        => $firstDest['addressLine1'] ?? '',
-                    'address_line_2' => $firstDest['addressLine2'] ?? null,
-                    'city'           => $firstDest['city'] ?? null,
-                    'state'          => $firstDest['state'] ?? null,
-                    'zip'            => $firstDest['zip'] ?? null,
-                    'country'        => $firstDest['country'] ?? null,
+                    'phone'          => $primary['phone'] ?? null,
+                    'company_name'   => $primary['companyName'] ?? null,
+                    'address'        => $primary['addressLine1'] ?? '',
+                    'address_line_2' => $primary['addressLine2'] ?? null,
+                    'city'           => $primary['city'] ?? null,
+                    'state'          => $primary['state'] ?? null,
+                    'zip'            => $primary['zip'] ?? null,
+                    'country'        => $primary['country'] ?? null,
                 ]);
 
                 if ($user) {
@@ -678,11 +677,8 @@ class OrderController extends Controller
                 }
             }
 
-            // New User Creation
             if (!$user) {
-                $firstName = $customer->first_name;
                 $plainPassword = Str::random(10);
-
                 $user = User::create([
                     'name'      => trim($customer->first_name . ' ' . $customer->last_name),
                     'email'     => $validated['email'],
@@ -695,7 +691,7 @@ class OrderController extends Controller
                 $user->save();
 
                 Mail::raw(
-                    "Hello {$firstName},\n\nYour account has been created successfully.\n\nLogin Email: {$validated['email']}\nPassword: {$plainPassword}\n\nThanks,\nTeam",
+                    "Hello {$customer->first_name},\n\nYour account has been created successfully.\n\nLogin Email: {$validated['email']}\nPassword: {$plainPassword}\n\nThanks,\nTeam",
                     function ($message) use ($validated) {
                         $message->to($validated['email'])->subject('Your Login Details');
                     }
@@ -709,7 +705,7 @@ class OrderController extends Controller
             $isMulti = $validated['isMultiAddress'];
 
             if (!$isMulti) {
-                // Single Address
+                // Single Address Logic (same)
                 $cartTotal = 0;
                 foreach ($validated['products'] as $item) {
                     $product = Product::find($item['product_id']);
@@ -767,7 +763,7 @@ class OrderController extends Controller
                 $orders[] = $order;
                 $totalOrderAmount = $totalAmount;
             } else {
-                // Multi Address
+                // Multi Address Logic
                 foreach ($validated['destinations'] as $dest) {
                     $cartTotal = 0;
                     foreach ($dest['products'] as $item) {
@@ -828,7 +824,7 @@ class OrderController extends Controller
                 }
             }
 
-            // Payment
+            // ===================== PAYMENT =====================
             Payment::create([
                 'order_id'           => $orders[0]->id,
                 'stripe_session_id'  => $validated['paymentIntentId'],
@@ -837,14 +833,15 @@ class OrderController extends Controller
                 'payment_status'     => 'completed',
             ]);
 
-            // Response with proper loading
-            $ordersCollection = collect($orders);
-            $ordersCollection->load('items.product.images', 'billingInformation', 'customer');
+            // ===================== RESPONSE with Eager Loading =====================
+            foreach ($orders as $order) {
+                $order->load('items.product.images', 'billingInformation', 'customer');
+            }
 
             return response()->json([
                 'status'  => true,
                 'message' => 'Order placed successfully.',
-                'data'    => OrderResource::collection($ordersCollection),
+                'data'    => OrderResource::collection($orders),
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -854,7 +851,6 @@ class OrderController extends Controller
             ], 500);
         }
     }
-
 
     /**
      * Update an existing order
