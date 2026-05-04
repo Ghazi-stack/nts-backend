@@ -589,226 +589,262 @@ class OrderController extends Controller
         try {
 
             $validated = $request->validate([
-                'firstName'      => 'required|string|max:255',
-                'lastName'       => 'required|string|max:255',
+                'userType'       => 'nullable|string|max:100',
+                'deviceType'     => 'nullable|string|max:1000',
+                'firstName'      => 'required_if:isMultiAddress,false|string|max:255',
+                'lastName'       => 'required_if:isMultiAddress,false|string|max:255',
                 'companyName'    => 'nullable|string|max:255',
                 'email'          => 'required|email',
                 'phone'          => 'nullable|string|max:20',
-                'addressLine1'   => 'required|string|max:255',
+                'addressLine1'   => 'required_if:isMultiAddress,false|string|max:255',
                 'addressLine2'   => 'nullable|string|max:255',
                 'city'           => 'nullable|string|max:100',
                 'state'          => 'nullable|string|max:100',
                 'zip'            => 'nullable|string|max:20',
                 'country'        => 'nullable|string|max:100',
                 'paymentMethod'  => 'required|string|max:100',
-                'shippingMethod' => 'required|string|max:100',
-                'shippingCost'   => 'required|numeric',
+                'shippingMethod' => 'required_if:isMultiAddress,false|string|max:100',
+                'shippingCost'   => 'required_if:isMultiAddress,false|numeric',
                 'comments'       => 'nullable|string|max:1000',
-                'deviceType'       => 'nullable|string|max:1000',
-                'userType'       => 'nullable|string|max:1000',
                 'discountAmount' => 'nullable|numeric',
-                'products'       => 'required|array|min:1',
+                'paymentIntentId' => 'required|string',
+                'isMultiAddress' => 'boolean|required',
+
+                // Multi Address
+                'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
+                'destinations.*.firstName'      => 'required|string|max:255',
+                'destinations.*.lastName'       => 'required|string|max:255',
+                'destinations.*.companyName'    => 'nullable|string|max:255',
+                'destinations.*.phone'          => 'nullable|string|max:20',
+                'destinations.*.addressLine1'   => 'required|string|max:255',
+                'destinations.*.addressLine2'   => 'nullable|string|max:255',
+                'destinations.*.city'           => 'required|string|max:100',
+                'destinations.*.state'          => 'required|string|max:100',
+                'destinations.*.zip'            => 'required|string|max:20',
+                'destinations.*.country'        => 'required|string|max:100',
+                'destinations.*.shippingMethod' => 'required|string|max:100',
+                'destinations.*.shippingCost'   => 'required|numeric',
+                'destinations.*.products'       => 'required|array|min:1',
+                'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
+                'destinations.*.products.*.quantity'   => 'required|integer|min:1',
+
+                // Single
+                'products'       => 'required_if:isMultiAddress,false|array|min:1',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
-                'paymentIntentId' => 'required|string',
             ]);
 
             $storeId = current_store_id();
             if (!$storeId) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Store not selected'
-                ], 400);
+                return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
             }
 
-            /**
-             * 🔴 CHECK: paymentIntentId already used
-             */
             if (Payment::where('stripe_session_id', $validated['paymentIntentId'])->exists()) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'This payment has already been processed.'
-                ], 409);
+                return response()->json(['status' => false, 'message' => 'This payment has already been processed.'], 409);
             }
 
-            /**
-             * 🔴 AUTH / GUEST HANDLING
-             */
+            // ===================== USER & CUSTOMER =====================
             $user = auth('sanctum')->user();
             $customer = null;
 
             if ($user) {
-                // ✅ Token aya
                 $customer = $user->customer;
             } else {
-
-                // 🔎 EMAIL CHECK (USER TABLE)
                 $user = User::where('email', $validated['email'])->first();
+            }
+
+            // Customer create if not exists
+            if (!$customer) {
+                $customer = Customer::create([
+                    'store_id'       => $storeId,
+                    'first_name'     => $validated['firstName'] ?? '',
+                    'last_name'      => $validated['lastName'] ?? '',
+                    'email'          => $validated['email'],
+                    'phone'          => $validated['phone'] ?? null,
+                    'company_name'   => $validated['companyName'] ?? null,
+                    'address'        => $validated['addressLine1'] ?? '',
+                    'address_line_2' => $validated['addressLine2'] ?? null,
+                    'city'           => $validated['city'] ?? null,
+                    'state'          => $validated['state'] ?? null,
+                    'zip'            => $validated['zip'] ?? null,
+                    'country'        => $validated['country'] ?? null,
+                ]);
 
                 if ($user) {
-                    // ✅ User exists → reuse
-                    $customer = $user->customer;
-
-                    // agar kisi wajah se customer missing ho
-                    if (!$customer) {
-                        $customer = Customer::create([
-                            'store_id'      => $storeId,
-                            'first_name'    => $validated['firstName'],
-                            'last_name'     => $validated['lastName'],
-                            'email'         => $validated['email'],
-                            'phone'         => $validated['phone'] ?? null,
-                            'company_name'  => $validated['companyName'] ?? null,
-                            'address'       => $validated['addressLine1'],
-                            'address_line_2' => $validated['addressLine2'] ?? null,
-                            'city'          => $validated['city'] ?? null,
-                            'state'         => $validated['state'] ?? null,
-                            'zip'           => $validated['zip'] ?? null,
-                            'country'       => $validated['country'] ?? null,
-                        ]);
-
-                        $user->customer_id = $customer->id;
-                        $user->save();
-                    }
-                } else {
-                    // ❌ User does NOT exist → CREATE NEW
-
-                    $plainPassword = Str::random(10);
-
-                    $user = User::create([
-                        'name'     => $validated['firstName'] . ' ' . $validated['lastName'],
-                        'email'    => $validated['email'],
-                        'password' => Hash::make($plainPassword),
-                        'userRole' => 2,
-                        'store_id' => $storeId,
-                    ]);
-
-                    $customer = Customer::create([
-                        'store_id'      => $storeId,
-                        'first_name'    => $validated['firstName'],
-                        'last_name'     => $validated['lastName'],
-                        'email'         => $validated['email'],
-                        'phone'         => $validated['phone'] ?? null,
-                        'company_name'  => $validated['companyName'] ?? null,
-                        'address'       => $validated['addressLine1'],
-                        'address_line_2' => $validated['addressLine2'] ?? null,
-                        'city'          => $validated['city'] ?? null,
-                        'state'         => $validated['state'] ?? null,
-                        'zip'           => $validated['zip'] ?? null,
-                        'country'       => $validated['country'] ?? null,
-                    ]);
-
                     $user->customer_id = $customer->id;
                     $user->save();
-
-                    // 📧 SEND LOGIN EMAIL
-                    Mail::raw(
-                        "Hello {$validated['firstName']},
-
-Your account has been created successfully.
-
-Login Email: {$validated['email']}
-Password: {$plainPassword}
-
-You can login anytime using these credentials.
-
-Thanks,
-Team",
-                        function ($message) use ($validated) {
-                            $message->to($validated['email'])
-                                ->subject('Your Login Details');
-                        }
-                    );
                 }
             }
 
-            /**
-             * 🔢 CART TOTAL
-             */
-            $cartTotal = 0;
-            foreach ($validated['products'] as $item) {
-                $product = Product::find($item['product_id']);
-                if ($product) {
-                    $cartTotal += $product->price * $item['quantity'];
-                }
+            // New User Creation
+            if (!$user) {
+                $plainPassword = Str::random(10);
+                $user = User::create([
+                    'name'      => trim(($validated['firstName'] ?? '') . ' ' . ($validated['lastName'] ?? '')),
+                    'email'     => $validated['email'],
+                    'password'  => Hash::make($plainPassword),
+                    'userRole'  => 2,
+                    'store_id'  => $storeId,
+                ]);
+
+                $user->customer_id = $customer->id;
+                $user->save();
+
+                Mail::raw(
+                    "Hello " . ($validated['firstName'] ?? 'Customer') . ",\n\nYour account has been created.\nEmail: {$validated['email']}\nPassword: {$plainPassword}\n\nThanks",
+                    fn($m) => $m->to($validated['email'])->subject('Your Login Details')
+                );
             }
 
-            $shippingCost = $validated['shippingCost'];
+            // ===================== ORDERS =====================
+            $orders = [];
+            $totalOrderAmount = 0;
             $discount = $validated['discountAmount'] ?? 0;
-            $totalAmount = ($cartTotal + $shippingCost) - $discount;
+            $isMulti = $validated['isMultiAddress'];
 
-            /**
-             * 💳 BILLING
-             */
-            $billing = $this->saveBillingInformation([
-                'first_name'      => $validated['firstName'],
-                'last_name'       => $validated['lastName'],
-                'customer_id'     => $customer?->id,
-                'company_name'    => $validated['companyName'] ?? null,
-                'email'           => $validated['email'],
-                'phone'           => $validated['phone'] ?? null,
-                'address_line_1'  => $validated['addressLine1'],
-                'address_line_2'  => $validated['addressLine2'] ?? null,
-                'city'            => $validated['city'] ?? null,
-                'state'           => $validated['state'] ?? null,
-                'zip'             => $validated['zip'] ?? null,
-                'country'         => $validated['country'] ?? null,
-                'payment_method'  => $validated['paymentMethod'],
-                'shipping_method' => $validated['shippingMethod'],
-            ], $user);
+            if (!$isMulti) {
+                // Single Address
+                $cartTotal = 0;
+                foreach ($validated['products'] as $item) {
+                    $product = Product::find($item['product_id']);
+                    if ($product) $cartTotal += $product->price * $item['quantity'];
+                }
 
-            /**
-             * 🧾 ORDER
-             */
-            $order = Order::create([
-                'store_id'     => $storeId,
-                'user_id'      => $user->id,
-                'customer_id'  => $customer?->id,
-                'order_number' => 'ORD-' . strtoupper(Str::random(8)),
-                'billing_information_id' => $billing->id,
-                'status'       => 'Pending',
-                'shipping_cost' => $shippingCost,
-                'comments'     => $validated['comments'] ?? null,
-                'device_type'     => $validated['deviceType'] ?? null,
-                'user_type'     => $validated['userType'] ?? null,
-                'total_amount' => $totalAmount,
-                'discountAmount' => $discount,
-            ]);
+                $totalAmount = $cartTotal + $validated['shippingCost'] - $discount;
 
-            foreach ($validated['products'] as $item) {
-                $product = Product::find($item['product_id']);
-                if ($product) {
-                    $order->items()->create([
-                        'store_id'   => $storeId,
-                        'product_id' => $product->id,
-                        'quantity'   => $item['quantity'],
-                        'price'      => $product->price,
+                $billing = BillingInformation::create([
+                    'first_name'      => $validated['firstName'],
+                    'last_name'       => $validated['lastName'],
+                    'customer_id'     => $customer->id,
+                    'company_name'    => $validated['companyName'] ?? null,
+                    'email'           => $validated['email'],
+                    'phone'           => $validated['phone'] ?? null,
+                    'address_line_1'  => $validated['addressLine1'],
+                    'address_line_2'  => $validated['addressLine2'] ?? null,
+                    'city'            => $validated['city'] ?? null,
+                    'state'           => $validated['state'] ?? null,
+                    'zip'             => $validated['zip'] ?? null,
+                    'country'         => $validated['country'] ?? null,
+                    'payment_method'  => $validated['paymentMethod'],
+                    'shipping_method' => $validated['shippingMethod'],
+                ]);
+
+                $order = Order::create([
+                    'store_id'               => $storeId,
+                    'user_id'                => $user->id,
+                    'customer_id'            => $customer->id,
+                    'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
+                    'billing_information_id' => $billing->id,
+                    'status'                 => 'Pending',
+                    'shipping_cost'          => $validated['shippingCost'],
+                    'comments'               => $validated['comments'] ?? null,
+                    'device_type'            => $validated['deviceType'] ?? null,
+                    'user_type'              => $validated['userType'] ?? null,
+                    'total_amount'           => $totalAmount,
+                    'discountAmount'         => $discount,
+                    'is_multi_address'       => false,
+                ]);
+
+                foreach ($validated['products'] as $item) {
+                    $product = Product::find($item['product_id']);
+                    if ($product) {
+                        $order->items()->create([
+                            'store_id'   => $storeId,
+                            'product_id' => $product->id,
+                            'quantity'   => $item['quantity'],
+                            'price'      => $product->price,
+                        ]);
+                    }
+                }
+
+                $orders[] = $order;
+                $totalOrderAmount = $totalAmount;
+            } else {
+                // Multi Address
+                foreach ($validated['destinations'] as $dest) {
+                    $cartTotal = 0;
+                    foreach ($dest['products'] as $item) {
+                        $product = Product::find($item['product_id']);
+                        if ($product) $cartTotal += $product->price * $item['quantity'];
+                    }
+
+                    $totalAmount = $cartTotal + $dest['shippingCost'] - $discount;
+
+                    $billing = BillingInformation::create([
+                        'first_name'      => $dest['firstName'],
+                        'last_name'       => $dest['lastName'],
+                        'customer_id'     => $customer->id,
+                        'company_name'    => $dest['companyName'] ?? null,
+                        'email'           => $validated['email'],
+                        'phone'           => $dest['phone'] ?? null,
+                        'address_line_1'  => $dest['addressLine1'],
+                        'address_line_2'  => $dest['addressLine2'] ?? null,
+                        'city'            => $dest['city'],
+                        'state'           => $dest['state'],
+                        'zip'             => $dest['zip'],
+                        'country'         => $dest['country'],
+                        'payment_method'  => $validated['paymentMethod'],
+                        'shipping_method' => $dest['shippingMethod'],
                     ]);
+
+                    $order = Order::create([
+                        'store_id'               => $storeId,
+                        'user_id'                => $user->id,
+                        'customer_id'            => $customer->id,
+                        'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
+                        'billing_information_id' => $billing->id,
+                        'status'                 => 'Pending',
+                        'shipping_cost'          => $dest['shippingCost'],
+                        'comments'               => $validated['comments'] ?? null,
+                        'device_type'            => $validated['deviceType'] ?? null,
+                        'user_type'              => $validated['userType'] ?? null,
+                        'total_amount'           => $totalAmount,
+                        'discountAmount'         => $discount,
+                        'is_multi_address'       => true,
+                    ]);
+
+                    foreach ($dest['products'] as $item) {
+                        $product = Product::find($item['product_id']);
+                        if ($product) {
+                            $order->items()->create([
+                                'store_id'   => $storeId,
+                                'product_id' => $product->id,
+                                'quantity'   => $item['quantity'],
+                                'price'      => $product->price,
+                            ]);
+                        }
+                    }
+
+                    $orders[] = $order;
+                    $totalOrderAmount += $totalAmount;
                 }
             }
 
+            // Payment
             Payment::create([
-                'order_id' => $order->id,
-                'stripe_session_id' => $validated['paymentIntentId'],
-                'amount' => $totalAmount,
-                'discountAmount' => $discount,
-                'payment_status' => 'completed',
+                'order_id'           => $orders[0]->id,
+                'stripe_session_id'  => $validated['paymentIntentId'],
+                'amount'             => $totalOrderAmount,
+                'discountAmount'     => $discount,
+                'payment_status'     => 'completed',
             ]);
 
             return response()->json([
-                'status' => true,
+                'status'  => true,
                 'message' => 'Order placed successfully.',
-                'data' => new OrderResource(
-                    $order->load('items.product.images', 'billingInformation', 'customer')
+                'data'    => OrderResource::collection(
+                    collect($orders)->load('items.product.images', 'billingInformation', 'customer')
                 ),
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Order creation failed',
-                'error' => $e->getMessage(),
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
+
     /**
      * Update an existing order
      */
