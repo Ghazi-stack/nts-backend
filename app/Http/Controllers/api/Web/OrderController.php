@@ -653,7 +653,6 @@ class OrderController extends Controller
                 $user = User::where('email', $validated['email'])->first();
             }
 
-            // Customer Create
             if (!$customer) {
                 $firstName = $validated['isMultiAddress']
                     ? $validated['destinations'][0]['firstName']
@@ -686,7 +685,6 @@ class OrderController extends Controller
                 }
             }
 
-            // New User Creation
             if (!$user) {
                 $plainPassword = Str::random(10);
                 $user = User::create([
@@ -715,19 +713,17 @@ class OrderController extends Controller
             $isMulti = $validated['isMultiAddress'];
 
             if (!$isMulti) {
-                // ==================== SINGLE ADDRESS ====================
+                // Single Address
                 $cartTotal = 0;
                 foreach ($validated['products'] as $item) {
                     $product = Product::find($item['product_id']);
-                    if ($product) {
-                        $cartTotal += $product->price * $item['quantity'];
-                    }
+                    if ($product) $cartTotal += $product->price * $item['quantity'];
                 }
 
                 $totalAmount = $cartTotal + $validated['shippingCost'] - $discount;
 
                 $billing = BillingInformation::create([
-                    'store_id'        => $storeId,                    // ← Added
+                    'store_id'        => $storeId,
                     'first_name'      => $validated['firstName'],
                     'last_name'       => $validated['lastName'],
                     'customer_id'     => $customer->id,
@@ -775,20 +771,18 @@ class OrderController extends Controller
                 $orders[] = $order;
                 $totalOrderAmount = $totalAmount;
             } else {
-                // ==================== MULTI ADDRESS ====================
+                // Multi Address
                 foreach ($validated['destinations'] as $dest) {
                     $cartTotal = 0;
                     foreach ($dest['products'] as $item) {
                         $product = Product::find($item['product_id']);
-                        if ($product) {
-                            $cartTotal += $product->price * $item['quantity'];
-                        }
+                        if ($product) $cartTotal += $product->price * $item['quantity'];
                     }
 
                     $totalAmount = $cartTotal + $dest['shippingCost'] - $discount;
 
                     $billing = BillingInformation::create([
-                        'store_id'        => $storeId,                    // ← Added
+                        'store_id'        => $storeId,
                         'first_name'      => $dest['firstName'],
                         'last_name'       => $dest['lastName'],
                         'customer_id'     => $customer->id,
@@ -838,6 +832,12 @@ class OrderController extends Controller
                 }
             }
 
+            // Eager Loading Fix
+            $ordersCollection = collect($orders);
+            if ($ordersCollection->isNotEmpty()) {
+                $ordersCollection->load('items.product.images', 'billingInformation', 'customer');
+            }
+
             // ===================== PAYMENT =====================
             Payment::create([
                 'order_id'           => $orders[0]->id,
@@ -850,9 +850,7 @@ class OrderController extends Controller
             return response()->json([
                 'status'  => true,
                 'message' => 'Order placed successfully.',
-                'data'    => OrderResource::collection(
-                    collect($orders)->load('items.product.images', 'billingInformation', 'customer')
-                ),
+                'data'    => OrderResource::collection($ordersCollection),
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -863,6 +861,7 @@ class OrderController extends Controller
         }
     }
 
+    
     /**
      * Update an existing order
      */
