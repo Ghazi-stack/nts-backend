@@ -602,15 +602,19 @@ class OrderController extends Controller
                 'state'          => 'nullable|string|max:100',
                 'zip'            => 'nullable|string|max:20',
                 'country'        => 'nullable|string|max:100',
+
                 'paymentMethod'  => 'required|string|max:100',
-                'shippingMethod' => 'required_if:isMultiAddress,false|string|max:100',
-                'shippingCost'   => 'required_if:isMultiAddress,false|numeric',
+
+                // Single Address - Ab optional
+                'shippingMethod' => 'nullable|string|max:100',
+                'shippingCost'   => 'nullable|numeric',
+
                 'comments'       => 'nullable|string|max:1000',
                 'discountAmount' => 'nullable|numeric',
                 'paymentIntentId' => 'required|string',
                 'isMultiAddress' => 'required|boolean',
 
-                // Multi Address
+                // ===================== MULTI ADDRESS =====================
                 'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
                 'destinations.*.firstName'      => 'required|string|max:255',
                 'destinations.*.lastName'       => 'required|string|max:255',
@@ -622,13 +626,16 @@ class OrderController extends Controller
                 'destinations.*.state'          => 'required|string|max:100',
                 'destinations.*.zip'            => 'required|string|max:20',
                 'destinations.*.country'        => 'required|string|max:100',
+
+                // Multi Address mein shipping REQUIRED
                 'destinations.*.shippingMethod' => 'required|string|max:100',
                 'destinations.*.shippingCost'   => 'required|numeric',
+
                 'destinations.*.products'       => 'required|array|min:1',
                 'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
                 'destinations.*.products.*.quantity'   => 'required|integer|min:1',
 
-                // Single Address
+                // Single Address Products
                 'products'       => 'required_if:isMultiAddress,false|array|min:1',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
