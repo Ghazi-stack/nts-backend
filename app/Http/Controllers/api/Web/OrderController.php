@@ -653,30 +653,23 @@ class OrderController extends Controller
                 $user = User::where('email', $validated['email'])->first();
             }
 
+            // Customer Create (Fixed for Multi Address)
             if (!$customer) {
-                $firstName = $validated['isMultiAddress']
-                    ? $validated['destinations'][0]['firstName']
-                    : ($validated['firstName'] ?? '');
-
-                $lastName = $validated['isMultiAddress']
-                    ? $validated['destinations'][0]['lastName']
-                    : ($validated['lastName'] ?? '');
+                $firstDest = $validated['isMultiAddress'] ? $validated['destinations'][0] : $validated;
 
                 $customer = Customer::create([
                     'store_id'       => $storeId,
-                    'first_name'     => $firstName,
-                    'last_name'      => $lastName,
+                    'first_name'     => $firstDest['firstName'] ?? '',
+                    'last_name'      => $firstDest['lastName'] ?? '',
                     'email'          => $validated['email'],
-                    'phone'          => $validated['phone'] ?? null,
-                    'company_name'   => $validated['companyName'] ?? null,
-                    'address'        => $validated['isMultiAddress']
-                        ? $validated['destinations'][0]['addressLine1']
-                        : ($validated['addressLine1'] ?? ''),
-                    'address_line_2' => $validated['addressLine2'] ?? null,
-                    'city'           => $validated['city'] ?? null,
-                    'state'          => $validated['state'] ?? null,
-                    'zip'            => $validated['zip'] ?? null,
-                    'country'        => $validated['country'] ?? null,
+                    'phone'          => $firstDest['phone'] ?? ($validated['phone'] ?? null),
+                    'company_name'   => $firstDest['companyName'] ?? ($validated['companyName'] ?? null),
+                    'address'        => $firstDest['addressLine1'] ?? '',
+                    'address_line_2' => $firstDest['addressLine2'] ?? null,
+                    'city'           => $firstDest['city'] ?? null,
+                    'state'          => $firstDest['state'] ?? null,
+                    'zip'            => $firstDest['zip'] ?? null,
+                    'country'        => $firstDest['country'] ?? null,
                 ]);
 
                 if ($user) {
@@ -685,10 +678,13 @@ class OrderController extends Controller
                 }
             }
 
+            // New User Creation
             if (!$user) {
+                $firstName = $customer->first_name;
                 $plainPassword = Str::random(10);
+
                 $user = User::create([
-                    'name'      => trim($firstName . ' ' . $lastName),
+                    'name'      => trim($customer->first_name . ' ' . $customer->last_name),
                     'email'     => $validated['email'],
                     'password'  => Hash::make($plainPassword),
                     'userRole'  => 2,
@@ -832,13 +828,7 @@ class OrderController extends Controller
                 }
             }
 
-            // Eager Loading Fix
-            $ordersCollection = collect($orders);
-            if ($ordersCollection->isNotEmpty()) {
-                $ordersCollection->load('items.product.images', 'billingInformation', 'customer');
-            }
-
-            // ===================== PAYMENT =====================
+            // Payment
             Payment::create([
                 'order_id'           => $orders[0]->id,
                 'stripe_session_id'  => $validated['paymentIntentId'],
@@ -846,6 +836,10 @@ class OrderController extends Controller
                 'discountAmount'     => $discount,
                 'payment_status'     => 'completed',
             ]);
+
+            // Response with proper loading
+            $ordersCollection = collect($orders);
+            $ordersCollection->load('items.product.images', 'billingInformation', 'customer');
 
             return response()->json([
                 'status'  => true,
@@ -861,7 +855,7 @@ class OrderController extends Controller
         }
     }
 
-    
+
     /**
      * Update an existing order
      */
