@@ -639,8 +639,27 @@ class OrderController extends Controller
                 return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
             }
 
-            if (Payment::where('stripe_session_id', $validated['paymentIntentId'])->exists()) {
-                return response()->json(['status' => false, 'message' => 'This payment has already been processed.'], 409);
+            // ===================== IMPROVED PAYMENT CHECK =====================
+            $existingPayment = Payment::where('stripe_session_id', $validated['paymentIntentId'])->first();
+
+            if ($existingPayment) {
+                if ($existingPayment->payment_status === 'completed') {
+                    // Already completed → return existing order
+                    $order = Order::with('items.product.images', 'billingInformation', 'customer')
+                        ->find($existingPayment->order_id);
+
+                    return response()->json([
+                        'status'  => true,
+                        'message' => 'Order already placed successfully.',
+                        'data'    => new OrderResource($order),
+                    ]);
+                } else {
+                    // Pending or failed → block
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'This payment is already being processed.'
+                    ], 409);
+                }
             }
 
             // ===================== USER & CUSTOMER =====================
@@ -705,7 +724,7 @@ class OrderController extends Controller
             $isMulti = $validated['isMultiAddress'];
 
             if (!$isMulti) {
-                // Single Address Logic (same)
+                // Single Address
                 $cartTotal = 0;
                 foreach ($validated['products'] as $item) {
                     $product = Product::find($item['product_id']);
@@ -763,7 +782,7 @@ class OrderController extends Controller
                 $orders[] = $order;
                 $totalOrderAmount = $totalAmount;
             } else {
-                // Multi Address Logic
+                // Multi Address
                 foreach ($validated['destinations'] as $dest) {
                     $cartTotal = 0;
                     foreach ($dest['products'] as $item) {
@@ -833,7 +852,7 @@ class OrderController extends Controller
                 'payment_status'     => 'completed',
             ]);
 
-            // ===================== RESPONSE with Eager Loading =====================
+            // Response
             foreach ($orders as $order) {
                 $order->load('items.product.images', 'billingInformation', 'customer');
             }
