@@ -182,7 +182,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'sale_price'           => $salePrice,
                     'cost_price'           => $costPrice,
                     'fixed_shipping_cost'  => $fixedShipping,
-                   // 'msrp'                 => $retailPrice,
+                    // 'msrp'                 => $retailPrice,
                     'dimensions'           => json_encode([
                         'weight' => $weight,
                         'width'  => $width,
@@ -196,7 +196,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'current_stock'        => (int)($this->getField($data, ['current stock level', 'stock', 'quantity']) ?? 0),
                     'low_stock'            => (int)($this->getField($data, ['low stock level', 'low stock']) ?? 0),
                     'item_type'            => $this->getField($data, ['item type', 'item_type']) ?? null,
-                    // 'product_type'         => $this->getField($data, ['product type', 'product_type']) ?? null,
+                    'product_type'         => 'Physical',
                     'option_set'           => $this->getField($data, ['option set', 'option_set']) ?? null,
                     'option_set_align'     => $this->getField($data, ['option set align', 'option_set_align']) ?? null,
                     'visible_on_storefront' => $this->toBool($this->getField($data, ['product visible?', 'visible']) ?? 'Yes'),
@@ -246,7 +246,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 ]
             );
 
-          // --- SEO ----------------------------------------------------------
+            // --- SEO ----------------------------------------------------------
             $baseUrl = rtrim(config('app.url'), '/'); // get live APP_URL from .env
 
             // ALWAYS generate product_url from url_settings custom_format
