@@ -268,14 +268,14 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                 // Build a map of all possible placeholders to their actual values
                 $placeholders = [
-                    '%title%'         => Str::slug($productName),
+                   // '%title%'         => Str::slug($productName),
                     '%brand%'         => Str::slug($brandName),
                     '%sku%'           => Str::slug($sku),
                     '%name%'          => Str::slug($productName),
                     '%product_name%'  => Str::slug($productName),
                     '%category%'      => Str::slug($categoryName),
                     '%id%'            => $product->id,
-                    '%slug%'          => $product->slug,
+                    '%title%'          => $product->slug,
                     '%price%'         => $price,
                     '%mpn%'           => Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
                     '%upc%'           => Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
