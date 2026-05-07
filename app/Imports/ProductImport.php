@@ -266,7 +266,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 }
 
                 // Pre-generate slugged title
-                $sluggedTitle = \Illuminate\Support\Str::slug($productName);
+               $sluggedTitle = Str::slug(str_replace('.', '-', $productName));
 
                 // Build a map of all possible placeholders to their actual values
                 $placeholders = [
