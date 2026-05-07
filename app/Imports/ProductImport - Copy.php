@@ -246,8 +246,8 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 ]
             );
 
-            // --- SEO ----------------------------------------------------------
-            $baseUrl = rtrim(config('app.url'), '/'); // get live APP_URL from .env
+          // --- SEO ----------------------------------------------------------
+            $baseUrl = rtrim(config('app.url'), '/');
 
             // ALWAYS generate product_url from url_settings custom_format
             $productUrl = null;
@@ -268,13 +268,14 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                 // Build a map of all possible placeholders to their actual values
                 $placeholders = [
+                    '%title%'         => Str::slug($productName),
                     '%brand%'         => Str::slug($brandName),
                     '%sku%'           => Str::slug($sku),
                     '%name%'          => Str::slug($productName),
                     '%product_name%'  => Str::slug($productName),
                     '%category%'      => Str::slug($categoryName),
                     '%id%'            => $product->id,
-                    '%title%'          => $product->slug,
+                    '%slug%'          => $product->slug,
                     '%price%'         => $price,
                     '%mpn%'           => Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
                     '%upc%'           => Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
