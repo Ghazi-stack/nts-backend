@@ -246,7 +246,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 ]
             );
 
-        // --- SEO ----------------------------------------------------------
+            // --- SEO ----------------------------------------------------------
             $baseUrl = rtrim(config('app.url'), '/');
 
             // ALWAYS generate product_url from url_settings custom_format
@@ -266,8 +266,9 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     $categoryName = $category ? $category->name : '';
                 }
 
-                // Pre-generate slugged title
-                $sluggedTitle = Str::slug(str_replace('.', '-', $productName));
+                // Pre-generate slugged title — special characters ko pehle dash mein convert karo
+                $cleanName = str_replace(['.', '/', '\\', ',', '(', ')', '&', '+', '#', '@', '!', '?', ';', ':', "'", '"'], '-', $productName);
+                $sluggedTitle = Str::slug($cleanName);
 
                 // Build a map of all possible placeholders to their actual values
                 $placeholders = [
