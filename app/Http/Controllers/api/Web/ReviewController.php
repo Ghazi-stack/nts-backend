@@ -16,9 +16,7 @@ class ReviewController extends Controller
         $perPage = $request->query('perPage', 20);
 
         $reviews = Review::where('product_id', $productId)
-            ->whereHas('product', function ($q) {
-                $q->where('store_id', current_store_id());
-            })
+            ->where('store_id', current_store_id())
             ->with('user')
             ->latest()
             ->paginate($perPage);
@@ -43,15 +41,34 @@ class ReviewController extends Controller
         $request->validate([
             'productId' => 'required|exists:products,id',
             'rating'    => 'required|integer|min:1|max:5',
+            'name'      => 'required|string|max:255',
+            'email'     => 'required|email|max:255',
+            'subject'   => 'required|string|max:255',
             'comment'   => 'nullable|string'
         ]);
 
+        $userId = null;
+
+        // Agar logged in hai to uska id use karo
+        if (Auth::guard('sanctum')->check()) {
+            $userId = Auth::guard('sanctum')->user()->id;
+        } else {
+            // Guest — email se existing user dhundo
+            $existingUser = \App\Models\User::where('email', $request->email)->first();
+            if ($existingUser) {
+                $userId = $existingUser->id;
+            }
+        }
+
         $review = Review::create([
-            'user_id'    => $request->user()->id,
+            'user_id'    => $userId,
             'product_id' => $request->productId,
             'rating'     => $request->rating,
+            'name'       => $request->name,
+            'email'      => $request->email,
+            'subject'    => $request->subject,
             'comment'    => $request->comment,
-            'store_id'   => current_store_id(), // ✅ Important for filtering by store
+            'store_id'   => current_store_id(),
         ]);
 
         return response()->json([
@@ -74,6 +91,9 @@ class ReviewController extends Controller
         if ($keyword) {
             $query->where(function ($q) use ($keyword) {
                 $q->where('comment', 'like', "%{$keyword}%")
+                    ->orWhere('name', 'like', "%{$keyword}%")
+                    ->orWhere('email', 'like', "%{$keyword}%")
+                    ->orWhere('subject', 'like', "%{$keyword}%")
                     ->orWhereHas('user', fn($u) => $u->where('name', 'like', "%{$keyword}%"))
                     ->orWhereHas('product', fn($p) => $p->where('name', 'like', "%{$keyword}%"));
             });

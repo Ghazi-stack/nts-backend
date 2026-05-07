@@ -12,17 +12,21 @@ return new class extends Migration
     public function up(): void
     {
         if (!Schema::hasTable('reviews')) {
-        Schema::create('reviews', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->foreignId('product_id')->constrained()->onDelete('cascade');
-
-            $table->unsignedTinyInteger('rating'); // Usually 1 to 5
-            $table->text('comment')->nullable();
-            $table->timestamps();
-        });
+            Schema::create('reviews', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('user_id')->nullable()->constrained()->onDelete('cascade');
+                $table->foreignId('product_id')->constrained()->onDelete('cascade');
+                $table->unsignedBigInteger('store_id')->nullable();
+                $table->string('name')->nullable();
+                $table->string('email')->nullable();
+                $table->string('subject')->nullable();
+                $table->unsignedTinyInteger('rating'); // Usually 1 to 5
+                $table->text('comment')->nullable();
+                $table->boolean('approved')->default(false);
+                $table->timestamps();
+            });
+        }
     }
-}
 
     /**
      * Reverse the migrations.
@@ -30,7 +34,7 @@ return new class extends Migration
     public function down(): void
     {
         if (!Schema::hasTable('reviews')) {
-        Schema::dropIfExists('reviews');
+            Schema::dropIfExists('reviews');
+        }
     }
-}
 };

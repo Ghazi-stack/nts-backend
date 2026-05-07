@@ -449,8 +449,17 @@ Route::prefix('web')->group(function () {
     });
     // ⭐ Reviews
     Route::prefix('reviews')->controller(ReviewController::class)->group(function () {
-        Route::get('/product/{productId}', 'index'); // ✅ public
-        Route::middleware('auth:sanctum')->post('/add', 'store'); // 🔐 secure
+        // Web (public)
+        Route::get('/product/{productId}', 'index');
+        Route::post('/add', 'store');
+
+        // Admin
+        Route::middleware('auth:sanctum')->group(function () {
+            Route::get('/admin', 'adminIndex');
+            Route::post('/approve', 'approveSelected');
+            Route::post('/disapprove', 'disapproveSelected');
+            Route::post('/delete', 'deleteSelected');
+        });
     });
 
     Route::prefix('carousels')->controller(CarouselController::class)->group(function () {
