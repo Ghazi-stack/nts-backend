@@ -245,8 +245,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'bpn'  => $this->getField($data, ['bin picking number', 'bpn']) ?? '',
                 ]
             );
-
-            // --- SEO ----------------------------------------------------------
+// --- SEO ----------------------------------------------------------
             $baseUrl = rtrim(config('app.url'), '/');
 
             // ALWAYS generate product_url from url_settings custom_format
@@ -266,19 +265,22 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     $categoryName = $category ? $category->name : '';
                 }
 
+                // Pre-generate slugged title
+                $sluggedTitle = \Illuminate\Support\Str::slug($productName);
+
                 // Build a map of all possible placeholders to their actual values
                 $placeholders = [
-                   // '%title%'         => Str::slug($productName),
-                    '%brand%'         => Str::slug($brandName),
-                    '%sku%'           => Str::slug($sku),
-                    '%name%'          => Str::slug($productName),
-                    '%product_name%'  => Str::slug($productName),
-                    '%category%'      => Str::slug($categoryName),
+                    '%title%'         => $sluggedTitle,
+                    '%brand%'         => \Illuminate\Support\Str::slug($brandName),
+                    '%sku%'           => \Illuminate\Support\Str::slug($sku),
+                    '%name%'          => $sluggedTitle,
+                    '%product_name%'  => $sluggedTitle,
+                    '%category%'      => \Illuminate\Support\Str::slug($categoryName),
                     '%id%'            => $product->id,
-                    '%title%'         => Str::slug($product->name),
+                    '%slug%'          => $product->slug,
                     '%price%'         => $price,
-                    '%mpn%'           => Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
-                    '%upc%'           => Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
+                    '%mpn%'           => \Illuminate\Support\Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
+                    '%upc%'           => \Illuminate\Support\Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
                 ];
 
                 // Replace all placeholders in custom_format
