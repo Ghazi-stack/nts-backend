@@ -275,7 +275,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     '%product_name%'  => Str::slug($productName),
                     '%category%'      => Str::slug($categoryName),
                     '%id%'            => $product->id,
-                    '%title%'          => $product->slug,
+                    '%title%'         => Str::slug($product->name),
                     '%price%'         => $price,
                     '%mpn%'           => Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
                     '%upc%'           => Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
