@@ -62,7 +62,7 @@ class CategoryController extends Controller
         // ⚡ Load categories WITHOUT products to avoid huge payloads
         $categories = Category::with(['childrenRecursive'])
             ->withCount('products') // direct product count
-            ->where('store_id',"=", $storeId)
+            ->where('store_id', "=", $storeId)
             ->whereNull('parent_id')
             ->get();
 
@@ -77,7 +77,6 @@ class CategoryController extends Controller
             'data' => $data
         ]);
     }
-
 
     private function formatCategorySafe($category)
     {
@@ -94,6 +93,14 @@ class CategoryController extends Controller
             'description' => $category->description,
             'is_visible' => $category->is_visible,
             'parent_id' => $category->parent_id,
+
+            // SEO fields
+            'seo' => [
+                'page_title'       => $category->seo_home_title,
+                'meta_keywords'    => $category->seo_meta_keywords,
+                'meta_description' => $category->seo_meta_description,
+                'search_keywords'  => $category->seo_search_keywords,
+            ],
 
             // ✔ Load counts directly (MUCH faster than loading products)
             'direct_products' => $category->products_count ?? 0,

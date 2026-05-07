@@ -65,4 +65,9 @@ class Category extends Model
     {
         return $this->belongsTo(Store::class);
     }
+
+        public function seo()
+    {
+        return $this->hasOne(ProductSeo::class);
+    }
 }
