@@ -246,6 +246,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 ]
             );
             // --- SEO ----------------------------------------------------------
+        
             $baseUrl = rtrim(config('app.url'), '/');
 
             // ALWAYS generate product_url from url_settings custom_format
@@ -290,6 +291,9 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     array_values($placeholders),
                     $customFormat
                 );
+
+                // Remove trailing slash to match Reset button behavior
+                $productUrl = rtrim($productUrl, '/');
             }
 
             ProductSeo::updateOrCreate(
@@ -301,7 +305,6 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'product_url'      => $productUrl,
                 ]
             );
-
             // --- Images (primary from "product image file - 1") ---------------
             // ----------------------------------------
             // IMAGE IMPORT (Product Image File - 1)
