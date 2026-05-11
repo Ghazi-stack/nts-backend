@@ -26,8 +26,8 @@ class OrderResource extends JsonResource
             'comments'           => $this->comments,
             'staffNotes'         => $this->staff_notes,
             'isDraft'            => (bool) $this->is_draft,
-            'deviceType'         =>$this->device_type,
-            'userType'         =>$this->user_type,
+            'deviceType'         => $this->device_type,
+            'userType'         => $this->user_type,
             'totalAmount'        => $this->total_amount,
             'discountAmount'        => $this->discountAmount,
             'newsletter'        => $this->newsletter,
@@ -59,7 +59,9 @@ class OrderResource extends JsonResource
             }),
 
             // 'items'    => OrderItemResource::collection($this->whenLoaded('items')),
-            'customer' => new CustomerResource($this->whenLoaded('customer')),
+            'customer' => $this->whenLoaded('customer', function () {
+                return $this->customer ? new CustomerResource($this->customer) : null;
+            }),
             'shippingDestinations' => ShippingDestinationResource::collection($this->whenLoaded('shippingDestinations')),
             'createdAt' => $this->created_at?->toDateTimeString(),
             'updatedAt' => $this->updated_at?->toDateTimeString(),
