@@ -491,8 +491,9 @@ Route::prefix('web')->group(function () {
 
     // 💳 Stripe
     Route::post('/stripe/pay', [StripePaymentController::class, 'pay']);
+    Route::post('/stripe/capture', [StripePaymentController::class, 'capturePayment']);
 
-    // 3️⃣ Webhook for Stripe event notifications
+    // Webhook
     Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
 
     // ── Checkout Shipping Rates (public) ──

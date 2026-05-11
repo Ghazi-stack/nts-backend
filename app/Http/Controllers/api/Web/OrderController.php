@@ -859,7 +859,7 @@ class OrderController extends Controller
                 'stripe_session_id'  => $validated['paymentIntentId'],
                 'amount'             => $totalOrderAmount,
                 'discountAmount'     => $discount,
-                'payment_status'     => 'completed',
+                'payment_status'     => 'authorized', // ← Changed from 'completed' to 'authorized'
             ]);
 
             // Response
