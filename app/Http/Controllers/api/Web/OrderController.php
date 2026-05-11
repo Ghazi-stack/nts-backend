@@ -680,6 +680,10 @@ class OrderController extends Controller
                 $user = User::where('email', $validated['email'])->first();
             }
 
+            if ($user && !$customer) {
+                $customer = $user->customer;
+            }
+
             if (!$customer) {
                 $primary = $validated['isMultiAddress'] ? $validated['destinations'][0] : $validated;
 
@@ -712,10 +716,8 @@ class OrderController extends Controller
                     'password'  => Hash::make($plainPassword),
                     'userRole'  => 2,
                     'store_id'  => $storeId,
+                    'customer_id' => $customer->id,
                 ]);
-
-                $user->customer_id = $customer->id;
-                $user->save();
 
                 Mail::raw(
                     "Hello {$customer->first_name},\n\nYour account has been created successfully.\n\nLogin Email: {$validated['email']}\nPassword: {$plainPassword}\n\nThanks,\nTeam",
