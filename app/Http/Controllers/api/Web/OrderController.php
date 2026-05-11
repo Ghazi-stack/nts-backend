@@ -878,6 +878,8 @@ class OrderController extends Controller
                 'status'  => false,
                 'message' => 'Order creation failed',
                 'error'   => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
             ], 500);
         }
     }
