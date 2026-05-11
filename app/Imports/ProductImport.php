@@ -200,7 +200,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'option_set'           => $this->getField($data, ['option set', 'option_set']) ?? null,
                     'option_set_align'     => $this->getField($data, ['option set align', 'option_set_align']) ?? null,
                     'visible_on_storefront' => $this->toBool($this->getField($data, ['product visible?', 'visible']) ?? 'Yes'),
-                    'show_shipping'        => $this->toBool($this->getField($data, ['free shipping', 'show_shipping']) ?? 'N'),
+                    'free_shipping'        => $this->toBool($this->getField($data, ['free shipping', 'free_shipping']) ?? 'N'),
                     'search_keywords'      => $this->getField($data, ['search keywords', 'keywords']) ?? null,
                 ]
             );
