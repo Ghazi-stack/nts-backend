@@ -17,20 +17,30 @@ class StripePaymentController extends Controller
 {
     /**
      * 💳 Pay - Authorize only (hold), do NOT capture yet
+     * Guest ya logged-in user dono use kar sakte hain (token optional)
      */
     public function pay(Request $request)
     {
+        // \Log::info('Stripe Secret:', ['stripe_secret' => env('STRIPE_SECRET')]);
         $request->validate([
             'payment_method_id' => 'required|string',
-            'amount'            => 'required',
-            'products'          => 'required|array|min:1',
+            'amount'         => 'required',
+            'products'         => 'required|array|min:1',
             'products.*.product_id' => 'required|integer|exists:products,id',
             'products.*.quantity'   => 'required|integer|min:1',
         ]);
 
         $user = auth('sanctum')->user();
         $cartItems = $request->products;
+
+        // $totalAmount = 0;
+        // foreach ($cartItems as $item) {
+        //     $product = Product::find($item['product_id']);
+        //     $totalAmount += $product->price * $item['quantity'];
+        // }
         $currency = 'usd';
+
+        // 2️⃣ Generate order number
         $orderNumber = 'ORD-' . strtoupper(Str::random(8));
 
         Stripe::setApiKey(config('services.stripe.secret'));
@@ -38,35 +48,35 @@ class StripePaymentController extends Controller
         try {
             DB::beginTransaction();
 
+
             $intent = PaymentIntent::create([
-                'amount'                => $request->amount,
-                'currency'              => $currency,
-                'payment_method'        => $request->payment_method_id,
-                'confirmation_method'   => 'manual',
-                'payment_method_types'  => ['card'],
-                'confirm'               => true,
-                'capture_method'        => 'manual', // ← HOLD payment, don't capture
-                'metadata'              => [
-                    'user_id'      => $user?->id,
+                'amount' => $request->amount,
+                'currency' => $currency,
+                'payment_method' => $request->payment_method_id,
+                'confirmation_method' => 'manual',
+                'payment_method_types' => ['card'],
+                'confirm' => true,
+                'capture_method' => 'manual', // ← HOLD payment, don't capture yet
+                'metadata' => [
+                    'user_id' => $user?->id,
                     'order_number' => $orderNumber,
-                    'products'     => json_encode($cartItems),
+                    'products' => json_encode($cartItems),
                 ],
             ], [
                 'idempotency_key' => uniqid('payment_', true)
             ]);
 
-            // 3D Secure / extra authentication required
+            // 4️⃣ Handle 3D Secure / extra authentication
             if (in_array($intent->status, ['requires_action', 'requires_source_action'])) {
                 DB::commit();
                 return response()->json([
-                    'status'                       => 'requires_action',
-                    'payment_intent_client_secret'  => $intent->client_secret,
+                    'status' => 'requires_action',
+                    'payment_intent_client_secret' => $intent->client_secret
                 ]);
             }
+            // dd($intent);
 
-            // Card declined or insufficient funds → Stripe throws CardException above
-            // If we reach here, status should be 'requires_capture' (hold successful)
-
+            // Payment hold successful → status should be 'requires_capture'
             if ($intent->status !== 'requires_capture') {
                 DB::rollBack();
                 return response()->json([
@@ -75,44 +85,70 @@ class StripePaymentController extends Controller
                 ], 400);
             }
 
+            // 5️⃣ Payment succeeded → create order
+            // $order = Order::create([
+            //     'user_id' => $user?->id,
+            //     'order_number' => $orderNumber,
+            //     'status' => 'paid',
+            //     'total_amount' => $totalAmount,
+            // ]);
+
+            // // 6️⃣ Create order items
+            // foreach ($cartItems as $item) {
+            //     $product = Product::find($item['product_id']);
+            //     $order->items()->create([
+            //         'product_id' => $product->id,
+            //         'quantity' => $item['quantity'],
+            //         'price' => $product->price,
+            //     ]);
+            // }
+
+            // // 7️⃣ Store payment record
+            // Payment::create([
+            //     'order_id' => $order->id,
+            //     'stripe_session_id' => $intent->id,
+            //     'amount' => $totalAmount,
+            //     'payment_status' => 'completed',
+            // ]);
+
             DB::commit();
 
             return response()->json([
-                'status'             => 'authorized',
-                'message'            => 'Payment authorized (on hold). Capture pending.',
-                'amount'             => $intent->amount,
-                'payment_intent_id'  => $intent->id,
-                'payment_status'     => $intent->status, // requires_capture
+                'status' => 'authorized',
+                'message' => 'Payment authorized (on hold). Capture pending.',
+                'amount' => $intent->amount,
+                'payment_intent_id' => $intent->id,
+                'payment_status' => $intent->status
             ]);
         } catch (\Stripe\Exception\CardException $e) {
             DB::rollBack();
             return response()->json([
-                'status'  => 'error',
-                'message' => $e->getError()->message,
+                'status' => 'error',
+                'message' => $e->getError()->message
             ], 402);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
-                'status'  => 'error',
-                'message' => $e->getMessage(),
+                'status' => 'error',
+                'message' => $e->getMessage()
             ], 500);
         }
     }
 
     /**
      * 💰 Capture - Actually charge the held payment
+     * ADMIN ONLY - route middleware se protect hoga
      */
     public function capturePayment(Request $request)
     {
         $request->validate([
             'payment_intent_id' => 'required|string',
-            'amount_to_capture' => 'nullable|integer', // optional: partial capture (in cents)
+            'amount_to_capture' => 'nullable|integer',
         ]);
 
         Stripe::setApiKey(config('services.stripe.secret'));
 
         try {
-            // Find payment record in our DB
             $payment = Payment::where('stripe_session_id', $request->payment_intent_id)->first();
 
             if (!$payment) {
@@ -129,7 +165,6 @@ class StripePaymentController extends Controller
                 ], 409);
             }
 
-            // Retrieve intent from Stripe to verify status
             $intent = PaymentIntent::retrieve($request->payment_intent_id);
 
             if ($intent->status !== 'requires_capture') {
@@ -139,7 +174,6 @@ class StripePaymentController extends Controller
                 ], 400);
             }
 
-            // Capture (full or partial)
             $captureParams = [];
             if ($request->has('amount_to_capture') && $request->amount_to_capture > 0) {
                 $captureParams['amount_to_capture'] = $request->amount_to_capture;
@@ -147,12 +181,10 @@ class StripePaymentController extends Controller
 
             $captured = $intent->capture($captureParams);
 
-            // Update our DB
             $payment->update([
                 'payment_status' => 'completed',
             ]);
 
-            // Update order status
             $order = $payment->order;
             if ($order) {
                 $order->update(['status' => 'Paid']);
@@ -162,7 +194,8 @@ class StripePaymentController extends Controller
                 'status'          => true,
                 'message'         => 'Payment captured successfully.',
                 'amount_captured' => $captured->amount_received,
-                'payment_status'  => $captured->status, // succeeded
+                'payment_status'  => $captured->status,
+                'order_id'        => $payment->order_id,
             ]);
         } catch (\Stripe\Exception\CardException $e) {
             return response()->json([
@@ -211,7 +244,6 @@ class StripePaymentController extends Controller
             }
         }
 
-        // Handle authorization expiry (uncaptured payments auto-cancel after 7 days)
         if ($event->type === 'payment_intent.canceled') {
             $intent = $event->data->object;
 

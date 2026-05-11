@@ -859,9 +859,8 @@ class OrderController extends Controller
                 'stripe_session_id'  => $validated['paymentIntentId'],
                 'amount'             => $totalOrderAmount,
                 'discountAmount'     => $discount,
-                'payment_status'     => 'authorized', // ← Changed from 'completed' to 'authorized'
+                'payment_status'     => 'authorized',  // ← CHANGE: 'completed' se 'authorized'
             ]);
-
             // Response
             foreach ($orders as $order) {
                 $order->load('items.product.images', 'billingInformation', 'customer');

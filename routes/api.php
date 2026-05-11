@@ -366,6 +366,9 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/get-quote-logs/{methodId}', 'quoteLogs');
         Route::get('/get-services', 'availableServices');
     });
+
+    // 💰 stripe Capture 
+    Route::post('/stripe/capture', [StripePaymentController::class, 'capturePayment']);
 });
 
 
@@ -489,11 +492,11 @@ Route::prefix('web')->group(function () {
         Route::get('/get-couponcode', 'showWebCouponCode');
     });
 
-    // 💳 Stripe
+    
+    // 💳 Stripe - User/Guest (token optional)
     Route::post('/stripe/pay', [StripePaymentController::class, 'pay']);
-    Route::post('/stripe/capture', [StripePaymentController::class, 'capturePayment']);
 
-    // Webhook
+    // 📩 Webhook (no auth)
     Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
 
     // ── Checkout Shipping Rates (public) ──
