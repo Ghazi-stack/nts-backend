@@ -602,6 +602,7 @@ class OrderController extends Controller
                 'state'          => 'nullable|string|max:100',
                 'zip'            => 'nullable|string|max:20',
                 'country'        => 'nullable|string|max:100',
+                'newsletter'     => 'nullable|boolean',
 
                 'paymentMethod'  => 'required|string|max:100',
 
@@ -772,6 +773,7 @@ class OrderController extends Controller
                     'total_amount'           => $totalAmount,
                     'discountAmount'         => $discount,
                     'is_multi_address'       => false,
+                    'newsletter'             => $validated['newsletter'] ?? false,
                 ]);
 
                 foreach ($validated['products'] as $item) {
@@ -831,6 +833,7 @@ class OrderController extends Controller
                         'total_amount'           => $totalAmount,
                         'discountAmount'         => $discount,
                         'is_multi_address'       => true,
+                        'newsletter'             => $validated['newsletter'] ?? false,
                     ]);
 
                     foreach ($dest['products'] as $item) {

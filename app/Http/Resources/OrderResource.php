@@ -30,6 +30,7 @@ class OrderResource extends JsonResource
             'userType'         =>$this->user_type,
             'totalAmount'        => $this->total_amount,
             'discountAmount'        => $this->discountAmount,
+            'newsletter'        => $this->newsletter,
 
             'trackingNumber'     => $this->tracking_number,
             'carrierCode'        => $this->tracking_carrier_code,

@@ -43,11 +43,13 @@ class Order extends Model
         'tracking_carrier_name',
         'shipped_at',
         'customer_id',
-        'staff_notes'
+        'staff_notes',
+        'newsletter'
     ];
     protected $casts = [
         'is_draft'   => 'boolean',
         'shipped_at' => 'datetime',
+        'newsletter' => 'boolean'
     ];
     public function items()
     {
