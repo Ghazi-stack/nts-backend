@@ -827,7 +827,7 @@ class OrderController extends Controller
                         'customer_id'            => $customer->id,
                         'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
                         'billing_information_id' => $billing->id,
-                        'status'                 => 'Pending',
+                        'status'                 => 'Awaiting Payment',
                         'shipping_cost'          => $dest['shippingCost'],
                         'comments'               => $validated['comments'] ?? null,
                         'device_type'            => $validated['deviceType'] ?? null,
