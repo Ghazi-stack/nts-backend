@@ -475,12 +475,15 @@ Route::prefix('web')->group(function () {
         Route::get('/get-logos', 'index');          // Paginated list
         Route::get('/get-logo/{id}', 'showById');   // Get single logo by ID
     });
+
+    //Contact Us
     Route::prefix('contact-requests')->controller(ContactRequestController::class)->group(function () {
-        Route::post('/submit', 'store');          // Submit contact request
+
+        Route::post('/submit', 'store');           // POST - Form Submit
+        Route::get('/', 'index');                  // GET  - All Requests
+        Route::get('/{contactRequest}', 'show');   // GET  - Single Request
     });
-    Route::prefix('contact-requests')->controller(ContactRequestController::class)->group(function () {
-        Route::post('/submit', 'store');          // Submit contact request
-    });
+
     Route::prefix('bulk-inquiries')->controller(BulkInquiryController::class)->group(function () {
         Route::post('/submit', 'store');          // Submit bulk inquiry
     });
@@ -496,7 +499,7 @@ Route::prefix('web')->group(function () {
     //Newsletters
 
     Route::apiResource('newsletters', NewsletterController::class);
-    
+
     // 💳 Stripe - User/Guest (token optional)
     Route::post('/stripe/pay', [StripePaymentController::class, 'pay']);
 

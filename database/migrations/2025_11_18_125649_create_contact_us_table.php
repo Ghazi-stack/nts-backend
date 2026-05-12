@@ -13,15 +13,25 @@ return new class extends Migration
     {
         Schema::create('contact_requests', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('store_id'); // store id
-            $table->string('company');
-            $table->string('email');
+
+            $table->unsignedBigInteger('store_id');
+
+            // Form Fields
             $table->string('full_name');
-            $table->string('part_number');
             $table->string('phone_number');
-            $table->integer('required_qty'); 
+            $table->string('email');
+            $table->string('order_number')->nullable();
+            $table->string('company_name')->nullable();
+            $table->string('rma_number')->nullable();
+            $table->text('comments')->nullable();
+
             $table->timestamps();
-            $table->foreign('store_id')->references('id')->on('stores')->onDelete('cascade'); // optional if you have stores table
+
+            // Foreign Key
+            $table->foreign('store_id')
+                ->references('id')
+                ->on('stores')
+                ->onDelete('cascade');
         });
     }
 

@@ -9,12 +9,13 @@ class ContactRequest extends Model
 {
     protected $fillable = [
         'store_id',
-        'company',
-        'email',
         'full_name',
-        'part_number',
         'phone_number',
-        'required_qty',
+        'email',
+        'order_number',
+        'company_name',
+        'rma_number',
+        'comments',
     ];
 
     public function store()

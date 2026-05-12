@@ -2,19 +2,52 @@
 
 namespace App\Http\Controllers\api\Web;
 
-use Illuminate\Http\Request;
 use App\Models\ContactRequest;
 use App\Mail\ContactRequestMail;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Mail;
 use App\Http\Resources\ContactRequestResource;
 
 class ContactRequestController extends Controller
 {
-     public function store(Request $request)
+    /**
+     * Display a listing of contact requests (GET)
+     */
+    public function index(): JsonResponse
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+
+        $requests = ContactRequest::where('store_id', $storeId)
+            ->latest()
+            ->paginate(15);
+
+        return response()->json([
+            'status' => true,
+            'data' => ContactRequestResource::collection($requests),
+            'pagination' => [
+                'total' => $requests->total(),
+                'per_page' => $requests->perPage(),
+                'current_page' => $requests->currentPage(),
+            ]
+        ]);
+    }
+
+    /**
+     * Store a newly created contact request (POST)
+     */
+    public function store(Request $request): JsonResponse
     {
         try {
-            $storeId = current_store_id(); // function to get current store
+            $storeId = current_store_id();
             if (!$storeId) {
                 return response()->json([
                     'status' => false,
@@ -22,38 +55,59 @@ class ContactRequestController extends Controller
                 ], 400);
             }
 
+            // ✅ Updated Validation (Form ke hisaab se)
             $validated = $request->validate([
-                'company' => 'required|string|max:255',
-                'email' => 'required|email|max:255',
-                'fullName' => 'required|string|max:255',
-                'partNumber' => 'required|string|max:100',
-                'phoneNumber' => 'required|string|max:20',
-                'requiredQty' => 'required|integer|min:1',
+                'full_name'     => 'required|string|max:255',
+                'phone_number'  => 'required|string|max:20',
+                'email'         => 'required|email|max:255',
+                'order_number'  => 'nullable|string|max:100',
+                'company_name'  => 'nullable|string|max:255',
+                'rma_number'    => 'nullable|string|max:100',
+                'comments'      => 'nullable|string',
             ]);
 
             $contactRequest = ContactRequest::create([
-                'store_id' => $storeId,
-                'company' => $validated['company'],
-                'email' => $validated['email'],
-                'full_name' => $validated['fullName'],
-                'part_number' => $validated['partNumber'],
-                'phone_number' => $validated['phoneNumber'],
-                'required_qty' => $validated['requiredQty'],
+                'store_id'      => $storeId,
+                'full_name'     => $validated['full_name'],
+                'phone_number'  => $validated['phone_number'],
+                'email'         => $validated['email'],
+                'order_number'  => $validated['order_number'] ?? null,
+                'company_name'  => $validated['company_name'] ?? null,
+                'rma_number'    => $validated['rma_number'] ?? null,
+                'comments'      => $validated['comments'] ?? null,
             ]);
-             
-            $adminEmail = config('mail.from.address'); // Using .env MAIL_FROM_ADDRESS
-            Mail::to($adminEmail)->send(new ContactRequestMail($contactRequest));
-            return response()->json([
-                'status' => true,
-                'message' => 'Contact request submitted successfully!',
-                'data' => new ContactRequestResource($contactRequest)
-            ], 201);
 
-        } catch (\Exception $e) {
+            // Send Email
+            $adminEmail = config('mail.from.address');
+            Mail::to($adminEmail)->send(new ContactRequestMail($contactRequest));
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Contact request submitted successfully!',
+                'data'    => new ContactRequestResource($contactRequest)
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'status' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
                 'message' => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Show single contact request
+     */
+    public function show(ContactRequest $contactRequest): JsonResponse
+    {
+        return response()->json([
+            'status' => true,
+            'data'   => new ContactRequestResource($contactRequest)
+        ]);
     }
 }
