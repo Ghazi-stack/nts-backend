@@ -32,6 +32,7 @@ use App\Http\Controllers\api\Web\{
     ReviewController,
     WishlistController,
     StripePaymentController,
+    NewsletterController,
     StripeWebhookController,
     OrderItemController,
     ShipmentController,
@@ -492,6 +493,9 @@ Route::prefix('web')->group(function () {
         Route::get('/get-couponcode', 'showWebCouponCode');
     });
 
+    //Newsletters
+
+    Route::apiResource('newsletters', NewsletterController::class);
     
     // 💳 Stripe - User/Guest (token optional)
     Route::post('/stripe/pay', [StripePaymentController::class, 'pay']);
