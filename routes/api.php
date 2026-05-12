@@ -33,6 +33,7 @@ use App\Http\Controllers\api\Web\{
     WishlistController,
     StripePaymentController,
     NewsletterController,
+    SearchController,
     StripeWebhookController,
     OrderItemController,
     ShipmentController,
@@ -497,8 +498,10 @@ Route::prefix('web')->group(function () {
     });
 
     //Newsletters
-
     Route::apiResource('newsletters', NewsletterController::class);
+
+    //globalSearch
+    Route::get('/search', [SearchController::class, 'globalSearch']);
 
     // 💳 Stripe - User/Guest (token optional)
     Route::post('/stripe/pay', [StripePaymentController::class, 'pay']);
