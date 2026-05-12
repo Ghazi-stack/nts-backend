@@ -56,7 +56,7 @@ class OrderController extends Controller
                 ], 403);
             }
 
-            $orders = Order::with(['items.product.images', 'customer', 'billingInformation', 'notes'])
+            $orders = Order::with(['items.product.images', 'customer', 'billingInformation', 'notes', 'payment'])
                 ->where('store_id', $storeId)
                 ->where('is_draft', 0)
                 ->when($status, function ($q) use ($status) {
