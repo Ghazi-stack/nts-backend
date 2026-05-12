@@ -187,7 +187,7 @@ class StripePaymentController extends Controller
 
             $order = $payment->order;
             if ($order) {
-                $order->update(['status' => 'Paid']);
+                $order->update(['status' => 'Awaiting Fulfillment']);
             }
 
             return response()->json([
@@ -239,7 +239,7 @@ class StripePaymentController extends Controller
 
                 $order = $payment->order;
                 if ($order) {
-                    $order->update(['status' => 'Paid']);
+                    $order->update(['status' => 'Awaiting Fulfillment']);
                 }
             }
         }

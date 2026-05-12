@@ -43,7 +43,7 @@ class StripeWebhookController extends Controller
         $payment = \App\Models\Payment::where('stripe_session_id', $session->id)->first();
 
         if ($payment) {
-            $payment->update(['payment_status' => 'paid']);
+            $payment->update(['payment_status' => 'Awaiting Fulfillment']);
 
             // Find related order using session_id
             $order = \App\Models\Order::where('session_id', $session->id)->first();
