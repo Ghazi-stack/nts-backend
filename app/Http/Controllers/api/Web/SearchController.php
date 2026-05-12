@@ -30,23 +30,29 @@ class SearchController extends Controller
             ]);
         }
 
-        $storeId = current_store_id();
+        // ================== Store ID (Optional bana diya) ==================
+        $storeId = current_store_id();   // agar null bhi aaye toh proceed karega
 
         // ====================== PRODUCTS ======================
-        $products = Product::with([
+        $productsQuery = Product::with([
             'brand:id,name',
             'categories:id,name',
             'images:id,product_id,path,is_primary',
             'seo'
         ])
-            ->where('store_id', $storeId)
-            ->where('visible_on_storefront', 1)
-            ->where(function ($q) use ($query) {
-                $q->where('name', 'LIKE', "%{$query}%")
-                    ->orWhere('sku', 'LIKE', "%{$query}%")
-                    ->orWhere('search_keywords', 'LIKE', "%{$query}%")
-                    ->orWhereHas('brand', fn($b) => $b->where('name', 'LIKE', "%{$query}%"));
-            })
+            ->where('visible_on_storefront', 1);
+
+        // Agar store_id mila toh filter karo, warna sab stores se dhoondo
+        if ($storeId) {
+            $productsQuery->where('store_id', $storeId);
+        }
+
+        $products = $productsQuery->where(function ($q) use ($query) {
+            $q->where('name', 'LIKE', "%{$query}%")
+                ->orWhere('sku', 'LIKE', "%{$query}%")
+                ->orWhere('search_keywords', 'LIKE', "%{$query}%")
+                ->orWhereHas('brand', fn($b) => $b->where('name', 'LIKE', "%{$query}%"));
+        })
             ->select([
                 'id',
                 'name',
@@ -57,24 +63,27 @@ class SearchController extends Controller
                 'brand_id',
                 'current_stock',
                 'is_featured',
-                'visible_on_storefront',
-                'store_id'
+                'visible_on_storefront'
             ])
-            ->limit(15)                    // Fast response ke liye limit
+            ->limit(15)
             ->get();
 
         // ====================== CATEGORIES ======================
-        $this->visited = []; // Reset for safety
+        $this->visited = [];
 
-        $categories = Category::with(['childrenRecursive'])
+        $categoriesQuery = Category::with(['childrenRecursive'])
             ->withCount('products')
-            ->where('store_id', $storeId)
-            ->where('is_visible', true)
-            ->where(function ($q) use ($query) {
-                $q->where('name', 'LIKE', "%{$query}%")
-                    ->orWhere('seo_search_keywords', 'LIKE', "%{$query}%");
-            })
-            ->whereNull('parent_id')           // Top level categories
+            ->where('is_visible', true);
+
+        if ($storeId) {
+            $categoriesQuery->where('store_id', $storeId);
+        }
+
+        $categories = $categoriesQuery->where(function ($q) use ($query) {
+            $q->where('name', 'LIKE', "%{$query}%")
+                ->orWhere('seo_search_keywords', 'LIKE', "%{$query}%");
+        })
+            ->whereNull('parent_id')
             ->get();
 
         $formattedCategories = $categories->map(function ($cat) {
@@ -82,20 +91,23 @@ class SearchController extends Controller
         })->filter()->values();
 
         // ====================== BRANDS ======================
-        $brands = Brand::where('store_id', $storeId)
-            ->where('name', 'LIKE', "%{$query}%")
-            ->withCount('products')
-            ->select([
-                'id',
-                'name',
-                'logo',
-                'page_title',
-                'meta_keywords',
-                'meta_description',
-                'search_keywords',
-                'brand_url',
-                'template_layout'
-            ])
+        $brandsQuery = Brand::withCount('products')
+            ->where('name', 'LIKE', "%{$query}%");
+
+        if ($storeId) {
+            $brandsQuery->where('store_id', $storeId);
+        }
+
+        $brands = $brandsQuery->select([
+            'id',
+            'name',
+            'logo',
+            'page_title',
+            'meta_keywords',
+            'meta_description',
+            'search_keywords',
+            'brand_url'
+        ])
             ->limit(10)
             ->get();
 
@@ -118,9 +130,6 @@ class SearchController extends Controller
         ]);
     }
 
-    /**
-     * Same format as your existing category API
-     */
     private function formatCategorySafe($category)
     {
         if (isset($this->visited[$category->id])) {
@@ -143,9 +152,8 @@ class SearchController extends Controller
                 'search_keywords'  => $category->seo_search_keywords,
             ],
 
-            'direct_products'   => $category->products_count ?? 0,
-            'total_products'    => $category->products_count + ($category->subtree_products_count ?? 0),
-            'in_subcategories'  => $category->subtree_products_count ?? 0,
+            'direct_products'  => $category->products_count ?? 0,
+            'total_products'   => $category->products_count + ($category->subtree_products_count ?? 0),
 
             'subcategories' => $category->childrenRecursive
                 ->map(fn($child) => $this->formatCategorySafe($child))
