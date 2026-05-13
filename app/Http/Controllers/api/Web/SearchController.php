@@ -195,7 +195,7 @@ class SearchController extends Controller
         if (!$storeId) {
             return response()->json([
                 'status' => false,
-                'message' => 'Store ID not found in header. Please send valid store.'
+                'message' => 'Store ID not found in header.'
             ], 400);
         }
 
@@ -211,18 +211,18 @@ class SearchController extends Controller
         $perPage = (int)$request->get('perPage', 20);
         $page    = (int)$request->get('page', 1);
 
-        $query = Product::with([
+        // ====================== PRODUCTS ======================
+        $productsQuery = Product::with([
             'brand:id,name',
             'categories:id,name',
             'images:id,product_id,path,is_primary',
             'seo'
         ])
-            ->where('store_id', $storeId)                    // ← Store ID Strict Filter
+            ->where('store_id', $storeId)
             ->where('visible_on_storefront', 1);
 
-        // Keyword Search
         if (!empty($keyword)) {
-            $query->where(function ($q) use ($keyword) {
+            $productsQuery->where(function ($q) use ($keyword) {
                 $q->where('name', 'LIKE', "%{$keyword}%")
                     ->orWhere('sku', 'LIKE', "%{$keyword}%")
                     ->orWhere('search_keywords', 'LIKE', "%{$keyword}%")
@@ -230,58 +230,86 @@ class SearchController extends Controller
             });
         }
 
-        // Brand Filter
         if (count($brandIds) > 0) {
-            $query->whereIn('brand_id', $brandIds);
+            $productsQuery->whereIn('brand_id', $brandIds);
         }
 
-        // Category Filter (with Subcategories)
         if (count($categoryIds) > 0) {
             if ($searchSubcats) {
                 $allCatIds = $this->getAllCategoryIds($categoryIds);
-                $query->whereHas('categories', fn($q) => $q->whereIn('category_id', $allCatIds));
+                $productsQuery->whereHas('categories', fn($q) => $q->whereIn('category_id', $allCatIds));
             } else {
-                $query->whereHas('categories', fn($q) => $q->whereIn('category_id', $categoryIds));
+                $productsQuery->whereHas('categories', fn($q) => $q->whereIn('category_id', $categoryIds));
             }
         }
 
-        // Featured Filter
-        if ($featured === 'only_featured') {
-            $query->where('is_featured', 1);
-        } elseif ($featured === 'only_non_featured') {
-            $query->where('is_featured', 0);
+        if ($featured === 'only_featured') $productsQuery->where('is_featured', 1);
+        if ($featured === 'only_non_featured') $productsQuery->where('is_featured', 0);
+
+        if ($freeShipping === 'only_free') $productsQuery->where('free_shipping', 1);
+        if ($freeShipping === 'only_paid') $productsQuery->where('free_shipping', 0);
+
+        if ($priceFrom) $productsQuery->where('price', '>=', (float)$priceFrom);
+        if ($priceTo) $productsQuery->where('price', '<=', (float)$priceTo);
+
+        $totalProducts = $productsQuery->count();
+        $products = $productsQuery->paginate($perPage, ['*'], 'page', $page);
+
+        // ====================== CATEGORIES ======================
+        $this->visited = [];
+        $categoriesQuery = Category::with(['childrenRecursive'])
+            ->withCount('products')
+            ->where('store_id', $storeId)
+            ->where('is_visible', true);
+
+        if (!empty($keyword)) {
+            $categoriesQuery->where(function ($q) use ($keyword) {
+                $q->where('name', 'LIKE', "%{$keyword}%")
+                    ->orWhere('seo_search_keywords', 'LIKE', "%{$keyword}%")
+                    ->orWhere('description', 'LIKE', "%{$keyword}%");
+            });
         }
 
-        // Free Shipping Filter
-        if ($freeShipping === 'only_free') {
-            $query->where('free_shipping', 1);
-        } elseif ($freeShipping === 'only_paid') {
-            $query->where('free_shipping', 0);
+        if (count($categoryIds) > 0) {
+            $categoriesQuery->whereIn('id', $categoryIds);
         }
 
-        // Price Range
-        if ($priceFrom !== null && $priceFrom !== '') {
-            $query->where('price', '>=', (float)$priceFrom);
-        }
-        if ($priceTo !== null && $priceTo !== '') {
-            $query->where('price', '<=', (float)$priceTo);
+        $categories = $categoriesQuery->get();
+        $formattedCategories = $categories->map(fn($cat) => $this->formatCategorySafe($cat))
+            ->filter()->values();
+
+        // ====================== BRANDS ======================
+        $brandsQuery = Brand::withCount('products')
+            ->where('store_id', $storeId);
+
+        if (count($brandIds) > 0) {
+            $brandsQuery->whereIn('id', $brandIds);
+        } elseif (!empty($keyword)) {
+            $brandsQuery->where('name', 'LIKE', "%{$keyword}%");
         }
 
-        $total = $query->count();
-        $products = $query->paginate($perPage, ['*'], 'page', $page);
+        $brands = $brandsQuery->get()->unique('name')->values();
 
         return response()->json([
             'status' => true,
             'data' => [
                 'products' => [
-                    'count'       => $total,
+                    'count'       => $totalProducts,
                     'items'       => ProductListResource::collection($products),
                     'pagination'  => [
-                        'total'       => $total,
+                        'total'       => $totalProducts,
                         'perPage'     => $perPage,
                         'currentPage' => $products->currentPage(),
                         'lastPage'    => $products->lastPage(),
                     ]
+                ],
+                'categories' => [
+                    'count' => $formattedCategories->count(),
+                    'items' => $formattedCategories
+                ],
+                'brands' => [
+                    'count' => $brands->count(),
+                    'items' => BrandResource::collection($brands)
                 ]
             ]
         ]);
