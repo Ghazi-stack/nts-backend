@@ -30,18 +30,17 @@ class SearchController extends Controller
             ]);
         }
 
-        // ================== Store ID from Header (Strict) ==================
-        $storeId = current_store_id();   // Yeh function header se store_id leta hai
-
+        $storeId = current_store_id();
         if (!$storeId) {
             return response()->json([
                 'status' => false,
-                'message' => 'Store ID not found in header. Please send valid store.'
+                'message' => 'Store ID not found in header.'
             ], 400);
         }
 
         $perPage = (int) $request->get('perPage', 20);
         $page    = (int) $request->get('page', 1);
+        $sortBy  = strtoupper($request->get('sortBy', 'RELEVANCE'));
 
         // ====================== PRODUCTS ======================
         $productsQuery = Product::with([
@@ -59,12 +58,59 @@ class SearchController extends Controller
                     ->orWhereHas('brand', fn($b) => $b->where('name', 'LIKE', "%{$query}%"));
             });
 
+        // ================== SORTING LOGIC ==================
+        switch ($sortBy) {
+            case 'FEATURED':
+                $productsQuery->where('is_featured', 1)->orderBy('id', 'desc');
+                break;
+
+            case 'NEWEST':
+            case 'NEWEST ITEMS':
+                $productsQuery->orderBy('created_at', 'desc');
+                break;
+
+            case 'BEST SELLING':
+                $productsQuery->orderBy('sold_count', 'desc')->orderBy('id', 'desc');
+                break;
+
+            case 'A TO Z':
+                $productsQuery->orderBy('name', 'asc');
+                break;
+
+            case 'Z TO A':
+                $productsQuery->orderBy('name', 'desc');
+                break;
+
+            case 'PRICE ASC':
+            case 'PRICE ASCENDING':
+                $productsQuery->orderBy('price', 'asc');
+                break;
+
+            case 'PRICE DESC':
+            case 'PRICE DESCENDING':
+                $productsQuery->orderBy('price', 'desc');
+                break;
+
+            case 'BY REVIEW':
+                $productsQuery->orderBy('reviews_count', 'desc')->orderBy('id', 'desc'); // agar reviews_count relation hai
+                break;
+
+            default: // RELEVANCE (Default)
+                $productsQuery->orderByRaw("
+                    CASE 
+                        WHEN name LIKE ? THEN 1 
+                        WHEN name LIKE ? THEN 2 
+                        ELSE 3 
+                    END", ["{$query}%", "%{$query}%"])
+                    ->orderBy('id', 'desc');
+                break;
+        }
+
         $totalProducts = $productsQuery->count();
         $products = $productsQuery->paginate($perPage, ['*'], 'page', $page);
 
-        // ====================== CATEGORIES ======================
+        // Categories & Brands (Same as before)
         $this->visited = [];
-
         $categories = Category::with(['childrenRecursive'])
             ->withCount('products')
             ->where('store_id', $storeId)
@@ -77,10 +123,8 @@ class SearchController extends Controller
             ->get();
 
         $formattedCategories = $categories->map(fn($cat) => $this->formatCategorySafe($cat))
-            ->filter()
-            ->values();
+            ->filter()->values();
 
-        // ====================== BRANDS ======================
         $brands = Brand::withCount('products')
             ->where('store_id', $storeId)
             ->where('name', 'LIKE', "%{$query}%")
@@ -119,22 +163,20 @@ class SearchController extends Controller
         $this->visited[$category->id] = true;
 
         return [
-            'id'                => $category->id,
-            'name'              => $category->name,
-            'slug'              => $category->slug,
-            'description'       => $category->description,
-            'is_visible'        => $category->is_visible,
-            'parent_id'         => $category->parent_id,
-
+            'id' => $category->id,
+            'name' => $category->name,
+            'slug' => $category->slug,
+            'description' => $category->description,
+            'is_visible' => $category->is_visible,
+            'parent_id' => $category->parent_id,
             'seo' => [
                 'page_title'       => $category->seo_home_title,
                 'meta_keywords'    => $category->seo_meta_keywords,
                 'meta_description' => $category->seo_meta_description,
                 'search_keywords'  => $category->seo_search_keywords,
             ],
-
             'direct_products' => $category->products_count ?? 0,
-            'subcategories'   => $category->childrenRecursive
+            'subcategories' => $category->childrenRecursive
                 ->map(fn($child) => $this->formatCategorySafe($child))
                 ->filter()
                 ->values(),
