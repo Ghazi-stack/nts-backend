@@ -191,24 +191,25 @@ class SearchController extends Controller
     public function advancedSearch(Request $request): JsonResponse
     {
         $storeId = current_store_id();
+
         if (!$storeId) {
             return response()->json([
                 'status' => false,
-                'message' => 'Store ID not found in header.'
+                'message' => 'Store ID not found in header. Please send valid store.'
             ], 400);
         }
 
         $keyword          = trim($request->get('keyword', ''));
-        $brandIds         = $request->get('brands') ? (array) $request->get('brands') : [];
-        $categoryIds      = $request->get('categories') ? (array) $request->get('categories') : [];
+        $brandIds         = $request->get('brands') ? (array)$request->get('brands') : [];
+        $categoryIds      = $request->get('categories') ? (array)$request->get('categories') : [];
         $searchSubcats    = $request->boolean('search_subcategories', true);
-        $featured         = $request->get('featured');           // "only_featured" | "only_non_featured" | null
-        $freeShipping     = $request->get('free_shipping');      // "only_free" | "only_paid" | null
+        $featured         = $request->get('featured');
+        $freeShipping     = $request->get('free_shipping');
         $priceFrom        = $request->get('price_from');
         $priceTo          = $request->get('price_to');
 
-        $perPage = (int) $request->get('perPage', 20);
-        $page    = (int) $request->get('page', 1);
+        $perPage = (int)$request->get('perPage', 20);
+        $page    = (int)$request->get('page', 1);
 
         $query = Product::with([
             'brand:id,name',
@@ -216,11 +217,11 @@ class SearchController extends Controller
             'images:id,product_id,path,is_primary',
             'seo'
         ])
-            ->where('store_id', $storeId)
+            ->where('store_id', $storeId)                    // ← Store ID Strict Filter
             ->where('visible_on_storefront', 1);
 
-        // ================== KEYWORD SEARCH ==================
-        if ($keyword !== '') {
+        // Keyword Search
+        if (!empty($keyword)) {
             $query->where(function ($q) use ($keyword) {
                 $q->where('name', 'LIKE', "%{$keyword}%")
                     ->orWhere('sku', 'LIKE', "%{$keyword}%")
@@ -229,41 +230,36 @@ class SearchController extends Controller
             });
         }
 
-        // ================== BRAND FILTER ==================
+        // Brand Filter
         if (count($brandIds) > 0) {
             $query->whereIn('brand_id', $brandIds);
         }
 
-        // ================== CATEGORY FILTER (with Subcategories) ==================
+        // Category Filter (with Subcategories)
         if (count($categoryIds) > 0) {
             if ($searchSubcats) {
-                // Sab child categories bhi include karo
-                $allCategoryIds = $this->getAllCategoryIds($categoryIds);
-                $query->whereHas('categories', function ($q) use ($allCategoryIds) {
-                    $q->whereIn('category_id', $allCategoryIds);
-                });
+                $allCatIds = $this->getAllCategoryIds($categoryIds);
+                $query->whereHas('categories', fn($q) => $q->whereIn('category_id', $allCatIds));
             } else {
-                $query->whereHas('categories', function ($q) use ($categoryIds) {
-                    $q->whereIn('category_id', $categoryIds);
-                });
+                $query->whereHas('categories', fn($q) => $q->whereIn('category_id', $categoryIds));
             }
         }
 
-        // ================== FEATURED FILTER ==================
+        // Featured Filter
         if ($featured === 'only_featured') {
             $query->where('is_featured', 1);
         } elseif ($featured === 'only_non_featured') {
             $query->where('is_featured', 0);
         }
 
-        // ================== FREE SHIPPING FILTER ==================
+        // Free Shipping Filter
         if ($freeShipping === 'only_free') {
             $query->where('free_shipping', 1);
         } elseif ($freeShipping === 'only_paid') {
             $query->where('free_shipping', 0);
         }
 
-        // ================== PRICE RANGE ==================
+        // Price Range
         if ($priceFrom !== null && $priceFrom !== '') {
             $query->where('price', '>=', (float)$priceFrom);
         }
@@ -271,7 +267,6 @@ class SearchController extends Controller
             $query->where('price', '<=', (float)$priceTo);
         }
 
-        // ================== PAGINATION ==================
         $total = $query->count();
         $products = $query->paginate($perPage, ['*'], 'page', $page);
 
