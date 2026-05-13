@@ -183,4 +183,127 @@ class SearchController extends Controller
                 ->values(),
         ];
     }
+
+
+    /**
+     * NEW ADVANCED SEARCH API
+     */
+    public function advancedSearch(Request $request): JsonResponse
+    {
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store ID not found in header.'
+            ], 400);
+        }
+
+        $keyword          = trim($request->get('keyword', ''));
+        $brandIds         = $request->get('brands') ? (array) $request->get('brands') : [];
+        $categoryIds      = $request->get('categories') ? (array) $request->get('categories') : [];
+        $searchSubcats    = $request->boolean('search_subcategories', true);
+        $featured         = $request->get('featured');           // "only_featured" | "only_non_featured" | null
+        $freeShipping     = $request->get('free_shipping');      // "only_free" | "only_paid" | null
+        $priceFrom        = $request->get('price_from');
+        $priceTo          = $request->get('price_to');
+
+        $perPage = (int) $request->get('perPage', 20);
+        $page    = (int) $request->get('page', 1);
+
+        $query = Product::with([
+            'brand:id,name',
+            'categories:id,name',
+            'images:id,product_id,path,is_primary',
+            'seo'
+        ])
+            ->where('store_id', $storeId)
+            ->where('visible_on_storefront', 1);
+
+        // ================== KEYWORD SEARCH ==================
+        if ($keyword !== '') {
+            $query->where(function ($q) use ($keyword) {
+                $q->where('name', 'LIKE', "%{$keyword}%")
+                    ->orWhere('sku', 'LIKE', "%{$keyword}%")
+                    ->orWhere('search_keywords', 'LIKE', "%{$keyword}%")
+                    ->orWhereHas('brand', fn($b) => $b->where('name', 'LIKE', "%{$keyword}%"));
+            });
+        }
+
+        // ================== BRAND FILTER ==================
+        if (count($brandIds) > 0) {
+            $query->whereIn('brand_id', $brandIds);
+        }
+
+        // ================== CATEGORY FILTER (with Subcategories) ==================
+        if (count($categoryIds) > 0) {
+            if ($searchSubcats) {
+                // Sab child categories bhi include karo
+                $allCategoryIds = $this->getAllCategoryIds($categoryIds);
+                $query->whereHas('categories', function ($q) use ($allCategoryIds) {
+                    $q->whereIn('category_id', $allCategoryIds);
+                });
+            } else {
+                $query->whereHas('categories', function ($q) use ($categoryIds) {
+                    $q->whereIn('category_id', $categoryIds);
+                });
+            }
+        }
+
+        // ================== FEATURED FILTER ==================
+        if ($featured === 'only_featured') {
+            $query->where('is_featured', 1);
+        } elseif ($featured === 'only_non_featured') {
+            $query->where('is_featured', 0);
+        }
+
+        // ================== FREE SHIPPING FILTER ==================
+        if ($freeShipping === 'only_free') {
+            $query->where('free_shipping', 1);
+        } elseif ($freeShipping === 'only_paid') {
+            $query->where('free_shipping', 0);
+        }
+
+        // ================== PRICE RANGE ==================
+        if ($priceFrom !== null && $priceFrom !== '') {
+            $query->where('price', '>=', (float)$priceFrom);
+        }
+        if ($priceTo !== null && $priceTo !== '') {
+            $query->where('price', '<=', (float)$priceTo);
+        }
+
+        // ================== PAGINATION ==================
+        $total = $query->count();
+        $products = $query->paginate($perPage, ['*'], 'page', $page);
+
+        return response()->json([
+            'status' => true,
+            'data' => [
+                'products' => [
+                    'count'       => $total,
+                    'items'       => ProductListResource::collection($products),
+                    'pagination'  => [
+                        'total'       => $total,
+                        'perPage'     => $perPage,
+                        'currentPage' => $products->currentPage(),
+                        'lastPage'    => $products->lastPage(),
+                    ]
+                ]
+            ]
+        ]);
+    }
+
+    /**
+     * Helper: All child categories ke IDs nikalne ke liye
+     */
+    private function getAllCategoryIds(array $categoryIds): array
+    {
+        $allIds = $categoryIds;
+
+        $children = Category::whereIn('parent_id', $categoryIds)
+            ->orWhereIn('id', $categoryIds)
+            ->pluck('id')
+            ->toArray();
+
+        return array_unique(array_merge($allIds, $children));
+    }
 }
