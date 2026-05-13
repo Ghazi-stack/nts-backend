@@ -13,6 +13,7 @@ use App\Http\Resources\BrandResource;
 
 class SearchController extends Controller
 {
+    private $visited = [];
 
     public function globalSearch(Request $request): JsonResponse
     {
@@ -25,10 +26,24 @@ class SearchController extends Controller
             ], 400);
         }
 
-        // ================== Basic & Advanced Parameters ==================
+        // ================== Parameters ==================
         $keyword          = trim($request->get('q') ?? $request->get('search') ?? $request->get('keyword', ''));
+
+        // Brand IDs
         $brandIds         = $request->get('brands') ? (array)$request->get('brands') : [];
-        $categoryIds      = $request->get('categories') ? (array)$request->get('categories') : [];
+
+        // Category IDs (Support both: categories[]=123&categories[]=456  AND  categories=123,456,789)
+        $categoryIds = [];
+        if ($request->has('categories')) {
+            $catInput = $request->get('categories');
+            if (is_string($catInput)) {
+                $categoryIds = array_map('trim', explode(',', $catInput));
+            } else {
+                $categoryIds = (array) $catInput;
+            }
+        }
+        $categoryIds = array_filter(array_map('intval', $categoryIds)); // clean
+
         $searchSubcats    = $request->boolean('search_subcategories', true);
         $featured         = $request->get('featured');
         $freeShipping     = $request->get('free_shipping');
@@ -50,7 +65,7 @@ class SearchController extends Controller
             ]);
         }
 
-        // ====================== PRODUCTS QUERY ======================
+        // ====================== PRODUCTS ======================
         $productsQuery = Product::with([
             'brand:id,name',
             'categories:id,name',
@@ -60,7 +75,6 @@ class SearchController extends Controller
             ->where('store_id', $storeId)
             ->where('visible_on_storefront', 1);
 
-        // Keyword Search
         if (!empty($keyword)) {
             $productsQuery->where(function ($q) use ($keyword) {
                 $q->where('name', 'LIKE', "%{$keyword}%")
@@ -70,12 +84,10 @@ class SearchController extends Controller
             });
         }
 
-        // Brand Filter
         if (count($brandIds) > 0) {
             $productsQuery->whereIn('brand_id', $brandIds);
         }
 
-        // Category Filter
         if (count($categoryIds) > 0) {
             if ($searchSubcats) {
                 $allCatIds = $this->getAllCategoryIds($categoryIds);
@@ -85,18 +97,16 @@ class SearchController extends Controller
             }
         }
 
-        // Featured & Shipping Filter
         if ($featured === 'only_featured') $productsQuery->where('is_featured', 1);
         if ($featured === 'only_non_featured') $productsQuery->where('is_featured', 0);
 
         if ($freeShipping === 'only_free') $productsQuery->where('free_shipping', 1);
         if ($freeShipping === 'only_paid') $productsQuery->where('free_shipping', 0);
 
-        // Price Range
         if ($priceFrom) $productsQuery->where('price', '>=', (float)$priceFrom);
         if ($priceTo) $productsQuery->where('price', '<=', (float)$priceTo);
 
-        // ================== SORTING ==================
+        // Sorting
         switch ($sortBy) {
             case 'FEATURED':
                 $productsQuery->where('is_featured', 1)->orderBy('id', 'desc');
@@ -152,6 +162,7 @@ class SearchController extends Controller
                     ->orWhere('description', 'LIKE', "%{$keyword}%");
             });
         }
+
         if (count($categoryIds) > 0) {
             $categoriesQuery->whereIn('id', $categoryIds);
         }
@@ -197,19 +208,12 @@ class SearchController extends Controller
         ]);
     }
 
-
-    /**
-     * Get all category IDs including subcategories
-     */
+    // ================== HELPER FUNCTIONS ==================
     private function getAllCategoryIds(array $categoryIds): array
     {
-        if (empty($categoryIds)) {
-            return [];
-        }
-
+        if (empty($categoryIds)) return [];
         $allIds = $categoryIds;
 
-        // Get all child categories
         $children = Category::whereIn('parent_id', $categoryIds)
             ->pluck('id')
             ->toArray();
@@ -217,15 +221,9 @@ class SearchController extends Controller
         return array_unique(array_merge($allIds, $children));
     }
 
-    /**
-     * Format Category with recursive subcategories
-     */
     private function formatCategorySafe($category)
     {
-        if (isset($this->visited[$category->id])) {
-            return null;
-        }
-
+        if (isset($this->visited[$category->id])) return null;
         $this->visited[$category->id] = true;
 
         return [
@@ -235,16 +233,13 @@ class SearchController extends Controller
             'description'     => $category->description,
             'is_visible'      => $category->is_visible,
             'parent_id'       => $category->parent_id,
-
             'seo' => [
                 'page_title'       => $category->seo_home_title,
                 'meta_keywords'    => $category->seo_meta_keywords,
                 'meta_description' => $category->seo_meta_description,
                 'search_keywords'  => $category->seo_search_keywords,
             ],
-
             'direct_products' => $category->products_count ?? 0,
-
             'subcategories' => $category->childrenRecursive
                 ->map(fn($child) => $this->formatCategorySafe($child))
                 ->filter()
