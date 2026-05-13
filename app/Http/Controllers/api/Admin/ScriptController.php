@@ -45,9 +45,11 @@ class ScriptController extends Controller
             // ✅ force store_id from header
             $data['store_id'] = $storeId;
 
-            // ✅ If script_type is url, save script_url value into script_content
+            // ✅ Map frontend field names to database field
             if (isset($data['script_type']) && $data['script_type'] === 'url' && !empty($data['script_url'])) {
                 $data['script_content'] = $data['script_url'];
+            } elseif (!empty($data['script_contents'])) {
+                $data['script_content'] = $data['script_contents'];
             }
 
             $script = Script::create($data);
@@ -146,9 +148,11 @@ class ScriptController extends Controller
             // ❌ store_id overwrite prevent
             unset($data['store_id']);
 
-            // ✅ If script_type is url, save script_url value into script_content
+            // ✅ Map frontend field names to database field
             if (isset($data['script_type']) && $data['script_type'] === 'url' && !empty($data['script_url'])) {
                 $data['script_content'] = $data['script_url'];
+            } elseif (!empty($data['script_contents'])) {
+                $data['script_content'] = $data['script_contents'];
             }
 
             $script->update($data);
