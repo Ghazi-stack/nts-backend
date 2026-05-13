@@ -507,7 +507,6 @@ Route::prefix('web')->group(function () {
 
     //globalSearch
     Route::get('/search', [SearchController::class, 'globalSearch']);
-    Route::get('/web/advanced-search', [SearchController::class, 'advancedSearch']);
 
     // 💳 Stripe - User/Guest (token optional)
     Route::post('/stripe/pay', [StripePaymentController::class, 'pay']);
