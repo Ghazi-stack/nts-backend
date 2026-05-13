@@ -80,8 +80,10 @@ class ScriptController extends Controller
                 return $this->formatScriptOutput($script);
             });
 
-            return response($scripts->toJson(JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 200)
-                ->header('Content-Type', 'application/json');
+            return response()->json([
+                'status' => true,
+                'script' => $scripts
+            ]);
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
@@ -90,6 +92,7 @@ class ScriptController extends Controller
             ], 500);
         }
     }
+
     public function show($id)
     {
         try {
