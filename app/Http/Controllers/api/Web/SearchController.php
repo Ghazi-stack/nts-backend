@@ -23,21 +23,35 @@ class SearchController extends Controller
             return response()->json([
                 'status' => true,
                 'data' => [
-                    'products' => ['count' => 0, 'items' => [], 'pagination' => null],
+                    'products'   => ['count' => 0, 'items' => [], 'pagination' => null],
                     'categories' => ['count' => 0, 'items' => []],
-                    'brands' => ['count' => 0, 'items' => []],
+                    'brands'     => ['count' => 0, 'items' => []],
                 ]
             ]);
         }
 
-        $storeId = current_store_id();
-        $perPage = (int) $request->get('perPage', 20);
-        $page = (int) $request->get('page', 1);
+        // ================== Store ID from Header (Strict) ==================
+        $storeId = current_store_id();   // Yeh function header se store_id leta hai
 
-        // ====================== PRODUCTS (With Pagination) ======================
-        $productsQuery = Product::with(['brand:id,name', 'categories:id,name', 'images:id,product_id,path,is_primary', 'seo'])
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store ID not found in header. Please send valid store.'
+            ], 400);
+        }
+
+        $perPage = (int) $request->get('perPage', 20);
+        $page    = (int) $request->get('page', 1);
+
+        // ====================== PRODUCTS ======================
+        $productsQuery = Product::with([
+            'brand:id,name',
+            'categories:id,name',
+            'images:id,product_id,path,is_primary',
+            'seo'
+        ])
+            ->where('store_id', $storeId)
             ->where('visible_on_storefront', 1)
-            ->when($storeId, fn($q) => $q->where('store_id', $storeId))
             ->where(function ($q) use ($query) {
                 $q->where('name', 'LIKE', "%{$query}%")
                     ->orWhere('sku', 'LIKE', "%{$query}%")
@@ -53,7 +67,7 @@ class SearchController extends Controller
 
         $categories = Category::with(['childrenRecursive'])
             ->withCount('products')
-            ->when($storeId, fn($q) => $q->where('store_id', $storeId))
+            ->where('store_id', $storeId)
             ->where('is_visible', true)
             ->where(function ($q) use ($query) {
                 $q->where('name', 'LIKE', "%{$query}%")
@@ -66,26 +80,25 @@ class SearchController extends Controller
             ->filter()
             ->values();
 
-        // ====================== BRANDS (Duplicate Fixed) ======================
+        // ====================== BRANDS ======================
         $brands = Brand::withCount('products')
-            ->when($storeId, fn($q) => $q->where('store_id', $storeId))
+            ->where('store_id', $storeId)
             ->where('name', 'LIKE', "%{$query}%")
             ->get()
-            ->unique('name')           // Duplicate HP remove
+            ->unique('name')
             ->values();
 
         return response()->json([
             'status' => true,
             'data' => [
                 'products' => [
-                    'count' => $totalProducts,
-                    'items' => ProductListResource::collection($products),
-                    'pagination' => [
-                        'total'        => $totalProducts,
-                        'perPage'      => $perPage,
-                        'currentPage'  => $products->currentPage(),
-                        'lastPage'     => $products->lastPage(),
-                        'totalPages'   => $products->lastPage(),
+                    'count'       => $totalProducts,
+                    'items'       => ProductListResource::collection($products),
+                    'pagination'  => [
+                        'total'       => $totalProducts,
+                        'perPage'     => $perPage,
+                        'currentPage' => $products->currentPage(),
+                        'lastPage'    => $products->lastPage(),
                     ]
                 ],
                 'categories' => [
