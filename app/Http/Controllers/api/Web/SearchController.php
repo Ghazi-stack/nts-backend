@@ -95,13 +95,14 @@ class SearchController extends Controller
                 $productsQuery->orderBy('reviews_count', 'desc')->orderBy('id', 'desc'); // agar reviews_count relation hai
                 break;
 
-            default: // RELEVANCE (Default)
+            default: // RELEVANCE
                 $productsQuery->orderByRaw("
-                    CASE 
-                        WHEN name LIKE ? THEN 1 
-                        WHEN name LIKE ? THEN 2 
-                        ELSE 3 
-                    END", ["{$query}%", "%{$query}%"])
+        CASE 
+            WHEN name LIKE ? THEN 1 
+            WHEN name LIKE ? THEN 2 
+            WHEN sku LIKE ? THEN 3
+            ELSE 4 
+        END", ["{$query}%", "%{$query}%", "%{$query}%"])
                     ->orderBy('id', 'desc');
                 break;
         }
