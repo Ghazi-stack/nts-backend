@@ -9,7 +9,7 @@ use Exception;
 
 class ScriptController extends Controller
 {
-  
+
     private function getStoreId()
     {
         $storeId = current_store_id();
@@ -22,6 +22,17 @@ class ScriptController extends Controller
         }
 
         return $storeId;
+    }
+
+    /**
+     * Format script_content as <script src="..."></script> when script_type is "url"
+     */
+    private function formatScriptOutput($script)
+    {
+        if ($script->script_type === 'url' && !empty($script->script_content)) {
+            $script->script_content = '<script src="' . $script->script_content . '"></script>';
+        }
+        return $script;
     }
 
     public function store(Request $request)
@@ -41,7 +52,6 @@ class ScriptController extends Controller
                 'message' => 'Script added successfully',
                 'data' => $script
             ], 201);
-
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
@@ -50,6 +60,7 @@ class ScriptController extends Controller
             ], 500);
         }
     }
+
     public function index()
     {
         try {
@@ -59,11 +70,15 @@ class ScriptController extends Controller
                 ->orderBy('id', 'desc')
                 ->get();
 
+            // ✅ Format script_content for url type scripts
+            $scripts->transform(function ($script) {
+                return $this->formatScriptOutput($script);
+            });
+
             return response()->json([
                 'status' => true,
                 'script' => $scripts
             ]);
-
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
@@ -89,11 +104,13 @@ class ScriptController extends Controller
                 ], 404);
             }
 
+            // ✅ Format script_content for url type
+            $this->formatScriptOutput($script);
+
             return response()->json([
                 'status' => true,
                 'data' => $script
             ]);
-
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
@@ -131,7 +148,6 @@ class ScriptController extends Controller
                 'message' => 'Script updated successfully',
                 'data' => $script
             ]);
-
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
@@ -140,6 +156,7 @@ class ScriptController extends Controller
             ], 500);
         }
     }
+
     public function destroy($id)
     {
         try {
@@ -162,7 +179,6 @@ class ScriptController extends Controller
                 'status' => true,
                 'message' => 'Script deleted successfully'
             ]);
-
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
@@ -172,4 +188,3 @@ class ScriptController extends Controller
         }
     }
 }
-
