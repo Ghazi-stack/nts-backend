@@ -497,6 +497,11 @@ Route::prefix('web')->group(function () {
         Route::get('/get-couponcode', 'showWebCouponCode');
     });
 
+     Route::prefix('scripts')->controller(ScriptController::class)->group(function () {
+        Route::get('/get-script', 'index');          // Paginated list
+        Route::get('/get-script/{id}', 'show');   // Get single logo by ID
+    });
+
     //Newsletters
     Route::apiResource('newsletters', NewsletterController::class);
 
