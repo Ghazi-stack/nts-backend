@@ -150,24 +150,40 @@ class SearchController extends Controller
         $totalProducts = (clone $baseQuery)->count();
         $products = $productsQuery->paginate($perPage, ['*'], 'page', $page);
 
-        // ====================== CATEGORIES (from ALL matching products) ======================
+      
+        // ====================== CATEGORIES (combined: keyword search + product-based) ======================
         $this->visited = [];
+
+        // 1. Keyword based categories (purana approach - nested subcategories ke saath)
+        $keywordCategoryIds = collect();
+        if (!empty($keyword)) {
+            $keywordCategoryIds = Category::where('store_id', $storeId)
+                ->where(function ($q) use ($keyword) {
+                    $q->where('name', 'LIKE', "%{$keyword}%")
+                        ->orWhere('seo_search_keywords', 'LIKE', "%{$keyword}%")
+                        ->orWhere('description', 'LIKE', "%{$keyword}%");
+                })
+                ->pluck('id');
+        }
+
+        // 2. Product-based categories (naya approach - ALL matching products ki categories)
+        $productBasedCategoryIds = DB::table('category_product')
+            ->whereIn('product_id', $allMatchingProductIds)
+            ->pluck('category_id')
+            ->unique();
+
+        // 3. Merge both - no duplicates
+        $allCombinedCategoryIds = $keywordCategoryIds->merge($productBasedCategoryIds)->unique()->values();
+
+        // 4. Filter by categoryIds if provided
+        if (count($categoryIds) > 0) {
+            $allCombinedCategoryIds = $allCombinedCategoryIds->intersect($categoryIds)->values();
+        }
+
         $categoriesQuery = Category::with(['childrenRecursive'])
             ->withCount('products')
             ->where('store_id', $storeId)
-            ->where('is_visible', true);
-
-        if (!empty($keyword)) {
-            $categoriesQuery->where(function ($q) use ($keyword) {
-                $q->where('name', 'LIKE', "%{$keyword}%")
-                    ->orWhere('seo_search_keywords', 'LIKE', "%{$keyword}%")
-                    ->orWhere('description', 'LIKE', "%{$keyword}%");
-            });
-        }
-
-        if (count($categoryIds) > 0) {
-            $categoriesQuery->whereIn('id', $categoryIds);
-        }
+            ->whereIn('id', $allCombinedCategoryIds);
 
         $categories = $categoriesQuery->get();
         $formattedCategories = $categories->map(fn($cat) => $this->formatCategorySafe($cat))
