@@ -1434,6 +1434,7 @@ class ProductController extends Controller
                     ->select('id', 'name', 'sku', 'price', 'slug', 'brand_id')
                     ->with([
                         'categories:id,name',
+                        'images:id,product_id,path,is_primary',
                         'brand:id,name,logo'
                     ])
                     ->orderByRaw("
