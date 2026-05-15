@@ -162,7 +162,7 @@ class SearchController extends Controller
 
         $categories = $categoriesQuery->get();
         $formattedCategories = $categories->map(fn($cat) => $this->formatCategorySafe($cat))
-            ->filter()->unique('name')->values();
+            ->filter()->values();
 
         // ====================== BRANDS (from ALL matching products) ======================
         $brands = Brand::withCount('products')
