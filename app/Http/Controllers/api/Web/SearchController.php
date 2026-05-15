@@ -10,7 +10,6 @@ use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProductListResource;
 use App\Http\Resources\BrandResource;
-use Illuminate\Support\Facades\DB;
 
 class SearchController extends Controller
 {
@@ -30,11 +29,16 @@ class SearchController extends Controller
         $keyword          = trim($request->get('q') ?? $request->get('search') ?? $request->get('keyword', ''));
 
         $brandIds         = $request->get('brands') ? (array)$request->get('brands') : [];
-        $categoryIds      = $request->get('categories') ? (array)$request->get('categories') : [];
 
-        // Category comma support
-        if (is_string($request->get('categories'))) {
-            $categoryIds = array_map('trim', explode(',', $request->get('categories')));
+        // Category IDs (comma support)
+        $categoryIds = [];
+        if ($request->has('categories')) {
+            $catInput = $request->get('categories');
+            if (is_string($catInput)) {
+                $categoryIds = array_map('trim', explode(',', $catInput));
+            } else {
+                $categoryIds = (array) $catInput;
+            }
         }
         $categoryIds = array_filter(array_map('intval', $categoryIds));
 
@@ -62,7 +66,7 @@ class SearchController extends Controller
         // ====================== PRODUCTS ======================
         $productsQuery = Product::with([
             'brand:id,name',
-            'categories:id,name',
+            'categories:id,name',           // Important: categories load kar rahe hain
             'images:id,product_id,path,is_primary',
             'seo'
         ])
@@ -133,38 +137,45 @@ class SearchController extends Controller
         $totalProducts = $productsQuery->count();
         $products = $productsQuery->paginate($perPage, ['*'], 'page', $page);
 
-        // ====================== CATEGORIES (Direct + Related) ======================
+        // ====================== CATEGORIES (From returned products + direct search) ======================
         $this->visited = [];
+
+        $productCategoryIds = $products->pluck('categories.*.id')->flatten()->unique()->values();
+
         $categoriesQuery = Category::with(['childrenRecursive'])
             ->withCount('products')
             ->where('store_id', $storeId)
-            ->where('is_visible', true);
-
-        if (!empty($keyword)) {
-            $categoriesQuery->where(function ($q) use ($keyword) {
-                $q->where('name', 'LIKE', "%{$keyword}%")
-                    ->orWhere('seo_search_keywords', 'LIKE', "%{$keyword}%")
-                    ->orWhere('description', 'LIKE', "%{$keyword}%");
+            ->where('is_visible', true)
+            ->where(function ($q) use ($keyword, $categoryIds, $productCategoryIds) {
+                $q->whereIn('id', $productCategoryIds);           // Products se related
+                if (!empty($keyword)) {
+                    $q->orWhere('name', 'LIKE', "%{$keyword}%")
+                        ->orWhere('seo_search_keywords', 'LIKE', "%{$keyword}%");
+                }
+                if (count($categoryIds) > 0) {
+                    $q->orWhereIn('id', $categoryIds);
+                }
             });
-        }
-
-        if (count($categoryIds) > 0) {
-            $categoriesQuery->whereIn('id', $categoryIds);
-        }
 
         $categories = $categoriesQuery->get();
         $formattedCategories = $categories->map(fn($cat) => $this->formatCategorySafe($cat))
             ->filter()->values();
 
-        // ====================== BRANDS (Direct + Related) ======================
-        $brandsQuery = Brand::withCount('products')
-            ->where('store_id', $storeId);
+        // ====================== BRANDS ======================
+        $productBrandIds = $products->pluck('brand_id')->unique()->values();
 
-        if (count($brandIds) > 0) {
-            $brandsQuery->whereIn('id', $brandIds);
-        } elseif (!empty($keyword)) {
-            $brandsQuery->where('name', 'LIKE', "%{$keyword}%");
-        }
+        $brandsQuery = Brand::withCount('products')
+            ->where('store_id', $storeId)
+            ->where(function ($q) use ($brandIds, $productBrandIds, $keyword) {
+                if (count($brandIds) > 0) {
+                    $q->whereIn('id', $brandIds);
+                } else {
+                    $q->whereIn('id', $productBrandIds);
+                }
+                if (!empty($keyword)) {
+                    $q->orWhere('name', 'LIKE', "%{$keyword}%");
+                }
+            });
 
         $brands = $brandsQuery->get()->unique('name')->values();
 
@@ -193,7 +204,7 @@ class SearchController extends Controller
         ]);
     }
 
-    // ================== Helper Functions ==================
+    // ================== Helper Functions (Same as before) ==================
     private function getAllCategoryIds(array $categoryIds): array
     {
         if (empty($categoryIds)) return [];
