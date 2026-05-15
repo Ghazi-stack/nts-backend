@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProductListResource;
 use App\Http\Resources\BrandResource;
+use Illuminate\Support\Facades\DB;
 
 class SearchController extends Controller
 {
@@ -62,18 +63,12 @@ class SearchController extends Controller
             ]);
         }
 
-        // ====================== PRODUCTS ======================
-        $productsQuery = Product::with([
-            'brand:id,name',
-            'categories:id,name',           // Important
-            'images:id,product_id,path,is_primary',
-            'seo'
-        ])
-            ->where('store_id', $storeId)
+        // ====================== BASE QUERY (reusable for products, categories, brands) ======================
+        $baseQuery = Product::where('store_id', $storeId)
             ->where('visible_on_storefront', 1);
 
         if (!empty($keyword)) {
-            $productsQuery->where(function ($q) use ($keyword) {
+            $baseQuery->where(function ($q) use ($keyword) {
                 $q->where('name', 'LIKE', "%{$keyword}%")
                     ->orWhere('sku', 'LIKE', "%{$keyword}%")
                     ->orWhere('search_keywords', 'LIKE', "%{$keyword}%")
@@ -81,23 +76,42 @@ class SearchController extends Controller
             });
         }
 
-        if (count($brandIds) > 0) $productsQuery->whereIn('brand_id', $brandIds);
+        if (count($brandIds) > 0) $baseQuery->whereIn('brand_id', $brandIds);
         if (count($categoryIds) > 0) {
             if ($searchSubcats) {
                 $allCatIds = $this->getAllCategoryIds($categoryIds);
-                $productsQuery->whereHas('categories', fn($q) => $q->whereIn('category_id', $allCatIds));
+                $baseQuery->whereHas('categories', fn($q) => $q->whereIn('category_id', $allCatIds));
             } else {
-                $productsQuery->whereHas('categories', fn($q) => $q->whereIn('category_id', $categoryIds));
+                $baseQuery->whereHas('categories', fn($q) => $q->whereIn('category_id', $categoryIds));
             }
         }
 
-        if ($featured === 'only_featured') $productsQuery->where('is_featured', 1);
-        if ($featured === 'only_non_featured') $productsQuery->where('is_featured', 0);
-        if ($freeShipping === 'only_free') $productsQuery->where('free_shipping', 1);
-        if ($freeShipping === 'only_paid') $productsQuery->where('free_shipping', 0);
+        if ($featured === 'only_featured') $baseQuery->where('is_featured', 1);
+        if ($featured === 'only_non_featured') $baseQuery->where('is_featured', 0);
+        if ($freeShipping === 'only_free') $baseQuery->where('free_shipping', 1);
+        if ($freeShipping === 'only_paid') $baseQuery->where('free_shipping', 0);
 
-        if ($priceFrom) $productsQuery->where('price', '>=', (float)$priceFrom);
-        if ($priceTo) $productsQuery->where('price', '<=', (float)$priceTo);
+        if ($priceFrom) $baseQuery->where('price', '>=', (float)$priceFrom);
+        if ($priceTo) $baseQuery->where('price', '<=', (float)$priceTo);
+
+        // ====================== ALL MATCHING PRODUCT IDS (for categories & brands) ======================
+        $allMatchingProductIds = (clone $baseQuery)->pluck('id');
+        $allMatchingBrandIds = (clone $baseQuery)->pluck('brand_id')->unique()->filter()->values();
+
+        // All category IDs from ALL matching products (not just paginated 20)
+        $allMatchingCategoryIds = DB::table('category_product')
+            ->whereIn('product_id', $allMatchingProductIds)
+            ->pluck('category_id')
+            ->unique()
+            ->values();
+
+        // ====================== PRODUCTS (paginated with eager loading) ======================
+        $productsQuery = (clone $baseQuery)->with([
+            'brand:id,name',
+            'categories:id,name',
+            'images:id,product_id,path,is_primary',
+            'seo'
+        ]);
 
         // Sorting
         switch ($sortBy) {
@@ -133,31 +147,28 @@ class SearchController extends Controller
                 break;
         }
 
-        $totalProducts = $productsQuery->count();
+        $totalProducts = (clone $baseQuery)->count();
         $products = $productsQuery->paginate($perPage, ['*'], 'page', $page);
 
-        // ====================== RELATED CATEGORIES & BRANDS (From Products) ======================
+        // ====================== CATEGORIES (from ALL matching products) ======================
         $this->visited = [];
 
-        // Products se related unique category aur brand IDs
-        $productBrandIds = $products->pluck('brand_id')->unique()->values();
-        $productCategoryIds = $products->pluck('categories.*.id')->flatten()->unique()->values();
-
-        // ====================== CATEGORIES ======================
         $categoriesQuery = Category::with(['childrenRecursive'])
             ->withCount('products')
             ->where('store_id', $storeId)
             ->where('is_visible', true)
-            ->whereIn('id', $productCategoryIds);   // ← Important Change
+            ->whereIn('id', $allMatchingCategoryIds)
+            ->orderByDesc('products_count');
 
         $categories = $categoriesQuery->get();
         $formattedCategories = $categories->map(fn($cat) => $this->formatCategorySafe($cat))
             ->filter()->values();
 
-        // ====================== BRANDS ======================
+        // ====================== BRANDS (from ALL matching products) ======================
         $brands = Brand::withCount('products')
             ->where('store_id', $storeId)
-            ->whereIn('id', $productBrandIds)
+            ->whereIn('id', $allMatchingBrandIds)
+            ->orderByDesc('products_count')
             ->get()
             ->unique('name')
             ->values();
