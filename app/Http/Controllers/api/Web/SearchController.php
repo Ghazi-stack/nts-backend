@@ -151,6 +151,7 @@ class SearchController extends Controller
         $products = $productsQuery->paginate($perPage, ['*'], 'page', $page);
 
         // ====================== CATEGORIES (from ALL matching products) ======================
+        // ====================== CATEGORIES (from ALL matching products) ======================
         $this->visited = [];
 
         $categoriesQuery = Category::with(['childrenRecursive'])
@@ -161,7 +162,13 @@ class SearchController extends Controller
             ->orderByDesc('products_count');
 
         $categories = $categoriesQuery->get();
-        $formattedCategories = $categories->map(fn($cat) => $this->formatCategorySafe($cat))
+
+        // ✅ Sirf top-level categories rakhein (jinke parent matching results mein nahi hain)
+        $topLevelCategories = $categories->filter(function ($cat) use ($allMatchingCategoryIds) {
+            return !$allMatchingCategoryIds->contains($cat->parent_id);
+        });
+
+        $formattedCategories = $topLevelCategories->map(fn($cat) => $this->formatCategorySafe($cat))
             ->filter()->values();
 
         // ====================== BRANDS (from ALL matching products) ======================
