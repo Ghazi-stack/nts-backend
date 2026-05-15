@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProductListResource;
 use App\Http\Resources\BrandResource;
+use Illuminate\Support\Facades\DB;
 
 class SearchController extends Controller
 {
@@ -26,23 +27,16 @@ class SearchController extends Controller
             ], 400);
         }
 
-        // ================== Parameters ==================
         $keyword          = trim($request->get('q') ?? $request->get('search') ?? $request->get('keyword', ''));
 
-        // Brand IDs
         $brandIds         = $request->get('brands') ? (array)$request->get('brands') : [];
+        $categoryIds      = $request->get('categories') ? (array)$request->get('categories') : [];
 
-        // Category IDs (Support both: categories[]=123&categories[]=456  AND  categories=123,456,789)
-        $categoryIds = [];
-        if ($request->has('categories')) {
-            $catInput = $request->get('categories');
-            if (is_string($catInput)) {
-                $categoryIds = array_map('trim', explode(',', $catInput));
-            } else {
-                $categoryIds = (array) $catInput;
-            }
+        // Category comma support
+        if (is_string($request->get('categories'))) {
+            $categoryIds = array_map('trim', explode(',', $request->get('categories')));
         }
-        $categoryIds = array_filter(array_map('intval', $categoryIds)); // clean
+        $categoryIds = array_filter(array_map('intval', $categoryIds));
 
         $searchSubcats    = $request->boolean('search_subcategories', true);
         $featured         = $request->get('featured');
@@ -84,10 +78,7 @@ class SearchController extends Controller
             });
         }
 
-        if (count($brandIds) > 0) {
-            $productsQuery->whereIn('brand_id', $brandIds);
-        }
-
+        if (count($brandIds) > 0) $productsQuery->whereIn('brand_id', $brandIds);
         if (count($categoryIds) > 0) {
             if ($searchSubcats) {
                 $allCatIds = $this->getAllCategoryIds($categoryIds);
@@ -99,7 +90,6 @@ class SearchController extends Controller
 
         if ($featured === 'only_featured') $productsQuery->where('is_featured', 1);
         if ($featured === 'only_non_featured') $productsQuery->where('is_featured', 0);
-
         if ($freeShipping === 'only_free') $productsQuery->where('free_shipping', 1);
         if ($freeShipping === 'only_paid') $productsQuery->where('free_shipping', 0);
 
@@ -132,14 +122,9 @@ class SearchController extends Controller
             case 'PRICE DESCENDING':
                 $productsQuery->orderBy('price', 'desc');
                 break;
-            default: // RELEVANCE
+            default:
                 if (!empty($keyword)) {
-                    $productsQuery->orderByRaw("
-                        CASE 
-                            WHEN name LIKE ? THEN 1 
-                            WHEN name LIKE ? THEN 2 
-                            ELSE 3 
-                        END", ["{$keyword}%", "%{$keyword}%"]);
+                    $productsQuery->orderByRaw("CASE WHEN name LIKE ? THEN 1 WHEN name LIKE ? THEN 2 ELSE 3 END", ["{$keyword}%", "%{$keyword}%"]);
                 }
                 $productsQuery->orderBy('id', 'desc');
                 break;
@@ -148,7 +133,7 @@ class SearchController extends Controller
         $totalProducts = $productsQuery->count();
         $products = $productsQuery->paginate($perPage, ['*'], 'page', $page);
 
-        // ====================== CATEGORIES ======================
+        // ====================== CATEGORIES (Direct + Related) ======================
         $this->visited = [];
         $categoriesQuery = Category::with(['childrenRecursive'])
             ->withCount('products')
@@ -171,7 +156,7 @@ class SearchController extends Controller
         $formattedCategories = $categories->map(fn($cat) => $this->formatCategorySafe($cat))
             ->filter()->values();
 
-        // ====================== BRANDS ======================
+        // ====================== BRANDS (Direct + Related) ======================
         $brandsQuery = Brand::withCount('products')
             ->where('store_id', $storeId);
 
@@ -208,7 +193,7 @@ class SearchController extends Controller
         ]);
     }
 
-    // ================== HELPER FUNCTIONS ==================
+    // ================== Helper Functions ==================
     private function getAllCategoryIds(array $categoryIds): array
     {
         if (empty($categoryIds)) return [];
