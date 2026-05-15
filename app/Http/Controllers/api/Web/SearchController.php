@@ -30,7 +30,6 @@ class SearchController extends Controller
 
         $brandIds         = $request->get('brands') ? (array)$request->get('brands') : [];
 
-        // Category IDs (comma support)
         $categoryIds = [];
         if ($request->has('categories')) {
             $catInput = $request->get('categories');
@@ -66,7 +65,7 @@ class SearchController extends Controller
         // ====================== PRODUCTS ======================
         $productsQuery = Product::with([
             'brand:id,name',
-            'categories:id,name',           // Important: categories load kar rahe hain
+            'categories:id,name',           // Important
             'images:id,product_id,path,is_primary',
             'seo'
         ])
@@ -137,47 +136,31 @@ class SearchController extends Controller
         $totalProducts = $productsQuery->count();
         $products = $productsQuery->paginate($perPage, ['*'], 'page', $page);
 
-        // ====================== CATEGORIES (From returned products + direct search) ======================
+        // ====================== RELATED CATEGORIES & BRANDS (From Products) ======================
         $this->visited = [];
 
+        // Products se related unique category aur brand IDs
+        $productBrandIds = $products->pluck('brand_id')->unique()->values();
         $productCategoryIds = $products->pluck('categories.*.id')->flatten()->unique()->values();
 
+        // ====================== CATEGORIES ======================
         $categoriesQuery = Category::with(['childrenRecursive'])
             ->withCount('products')
             ->where('store_id', $storeId)
             ->where('is_visible', true)
-            ->where(function ($q) use ($keyword, $categoryIds, $productCategoryIds) {
-                $q->whereIn('id', $productCategoryIds);           // Products se related
-                if (!empty($keyword)) {
-                    $q->orWhere('name', 'LIKE', "%{$keyword}%")
-                        ->orWhere('seo_search_keywords', 'LIKE', "%{$keyword}%");
-                }
-                if (count($categoryIds) > 0) {
-                    $q->orWhereIn('id', $categoryIds);
-                }
-            });
+            ->whereIn('id', $productCategoryIds);   // ← Important Change
 
         $categories = $categoriesQuery->get();
         $formattedCategories = $categories->map(fn($cat) => $this->formatCategorySafe($cat))
             ->filter()->values();
 
         // ====================== BRANDS ======================
-        $productBrandIds = $products->pluck('brand_id')->unique()->values();
-
-        $brandsQuery = Brand::withCount('products')
+        $brands = Brand::withCount('products')
             ->where('store_id', $storeId)
-            ->where(function ($q) use ($brandIds, $productBrandIds, $keyword) {
-                if (count($brandIds) > 0) {
-                    $q->whereIn('id', $brandIds);
-                } else {
-                    $q->whereIn('id', $productBrandIds);
-                }
-                if (!empty($keyword)) {
-                    $q->orWhere('name', 'LIKE', "%{$keyword}%");
-                }
-            });
-
-        $brands = $brandsQuery->get()->unique('name')->values();
+            ->whereIn('id', $productBrandIds)
+            ->get()
+            ->unique('name')
+            ->values();
 
         return response()->json([
             'status' => true,
@@ -204,7 +187,7 @@ class SearchController extends Controller
         ]);
     }
 
-    // ================== Helper Functions (Same as before) ==================
+    // ================== Helper Functions ==================
     private function getAllCategoryIds(array $categoryIds): array
     {
         if (empty($categoryIds)) return [];
