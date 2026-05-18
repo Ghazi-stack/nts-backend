@@ -29,6 +29,7 @@ class ProductListResource extends JsonResource
 
             // Stock & visibility
             'currentStock' => $this->current_stock,
+            'callPricing' => $this->call_pricing,
             'isFeatured'   => $this->is_featured,
             'isVisible'    => $this->visible_on_storefront,
             'pageTitle' => optional($this->seo)->page_title,
