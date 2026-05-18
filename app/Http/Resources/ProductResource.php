@@ -61,6 +61,7 @@ class ProductResource extends JsonResource
             'quantity' => $this->additional['quantity'] ?? $this->quantity,
             'trackInventory' => $this->track_inventory,
             'currentStock' => $this->current_stock,
+            'call_pricing' => $this->call_pricing,
             'lowStock' => $this->low_stock,
             'isFeatured' => $this->is_featured,
             'isVisible' => $this->visible_on_storefront,

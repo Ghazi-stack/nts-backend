@@ -601,6 +601,8 @@ class ProductController extends Controller
                 'dontUse' => 'nullable|boolean',
                 'manageCustoms' => 'nullable|boolean',
 
+                'callForPricing' => 'nullable|boolean',
+
                 'commodityDescription' => 'nullable|string',
                 'countryOfOrigin' => 'nullable|string',
 
@@ -658,6 +660,8 @@ class ProductController extends Controller
                 'use_thumbnail' => $validated['useThumbnail'] ?? false,
                 'dont_use' => $validated['dontUse'] ?? false,
                 'manage_customs' => $validated['manageCustoms'] ?? false,
+
+                'call_pricing' => $validated['callForPricing'] ?? false,
 
                 'commodity_description' => $validated['commodityDescription'] ?? null,
                 'country_of_origin' => $validated['countryOfOrigin'] ?? null,
@@ -855,6 +859,8 @@ class ProductController extends Controller
                 'dontUse' => 'nullable|boolean',
                 'manageCustoms' => 'nullable|boolean',
 
+                'callForPricing' => 'nullable|boolean',
+
                 'commodityDescription' => 'nullable|string',
                 'countryOfOrigin' => 'nullable|string',
 
@@ -908,6 +914,8 @@ class ProductController extends Controller
                 'use_thumbnail' => $validated['useThumbnail'] ?? false,
                 'dont_use' => $validated['dontUse'] ?? false,
                 'manage_customs' => $validated['manageCustoms'] ?? false,
+
+                'call_pricing' => $validated['callForPricing'] ?? false,
 
                 'commodity_description' => $validated['commodityDescription'] ?? null,
                 'country_of_origin' => $validated['countryOfOrigin'] ?? null,

@@ -57,6 +57,7 @@ class Product extends Model
         'item_type',
         'store_id',
         'msrp',
+        'call_pricing',
         'purchasability_status',
         'min_purchase_quantity',
         'max_purchase_quantity',
