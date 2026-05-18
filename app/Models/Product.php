@@ -82,6 +82,7 @@ class Product extends Model
         'custom_fields' => 'array',
         'bulk_pricing_tiers' => 'array',
         'visible_on_storefront' => 'boolean',
+        'call_pricing' => 'boolean',
         'is_featured' => 'boolean',
         'track_inventory' => 'boolean',
         'show_condition' => 'boolean',
