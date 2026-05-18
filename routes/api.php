@@ -169,6 +169,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::prefix('shipments')->controller(ShipmentController::class)->group(function () {
         Route::get('/list-shipment', 'index');              // List all shipments (paginated)
         Route::get('/get-shipment/{id}', 'show');           // Get one shipment
+        Route::get('/shipment-by-order', 'getShipmentByOrderId');           // getShipmentByOrderIdshipment
         Route::post('/add-shipment', 'store');             // Create shipment (optional tracking number)
         Route::put('/update-shipment/{id}', 'update');         // Update shipped_to, date, or tracking
         Route::delete('/destroy-shipment', 'destroy');     // Delete shipment

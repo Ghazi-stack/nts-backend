@@ -66,6 +66,34 @@ class ShipmentController extends Controller
         ]);
     }
 
+
+    public function getShipmentByOrderId(Request $request)
+    {
+        $storeId = current_store_id();
+
+        $request->validate([
+            'order_id' => 'required|exists:orders,id',
+        ]);
+
+        $shipment = Shipment::with(['order.items.product'])
+            ->where('store_id', $storeId)
+            ->where('order_id', $request->order_id)
+            ->first();
+
+        if (!$shipment) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Shipment not found against this order id.',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Shipment details fetched.',
+            'data' => new ShipmentResource($shipment)
+        ]);
+    }
+
     /**
      * Create a new shipment for an order (if not already shipped).
      */
