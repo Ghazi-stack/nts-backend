@@ -84,24 +84,35 @@ class SitemapController extends Controller
                 $latestBrandDate = Brand::where('store_id', $storeId)
                     ->max('updated_at');
 
-                $now = now()->toW3cString();
-
                 $sitemaps = '';
 
-                // Pages
+                // Pages - no lastmod since static pages have no date
                 $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n  </sitemap>\n";
-                // Brands (page 1)
-                $brandLastmod = $latestBrandDate ? \Carbon\Carbon::parse($latestBrandDate)->toW3cString() : $now;
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n    <lastmod>{$brandLastmod}</lastmod>\n  </sitemap>\n";
 
-                // Categories (page 1)
-                $categoryLastmod = $latestCategoryDate ? \Carbon\Carbon::parse($latestCategoryDate)->toW3cString() : $now;
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n    <lastmod>{$categoryLastmod}</lastmod>\n  </sitemap>\n";
+                // Brands
+                $brandLastmod = $latestBrandDate ? \Carbon\Carbon::parse($latestBrandDate)->toW3cString() : '';
+                if ($brandLastmod) {
+                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n    <lastmod>{$brandLastmod}</lastmod>\n  </sitemap>\n";
+                } else {
+                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n  </sitemap>\n";
+                }
+
+                // Categories
+                $categoryLastmod = $latestCategoryDate ? \Carbon\Carbon::parse($latestCategoryDate)->toW3cString() : '';
+                if ($categoryLastmod) {
+                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n    <lastmod>{$categoryLastmod}</lastmod>\n  </sitemap>\n";
+                } else {
+                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n  </sitemap>\n";
+                }
 
                 // Products with pagination
-                $productLastmod = $latestProductDate ? \Carbon\Carbon::parse($latestProductDate)->toW3cString() : $now;
+                $productLastmod = $latestProductDate ? \Carbon\Carbon::parse($latestProductDate)->toW3cString() : '';
                 for ($i = 1; $i <= $totalProductPages; $i++) {
-                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n    <lastmod>{$productLastmod}</lastmod>\n  </sitemap>\n";
+                    if ($productLastmod) {
+                        $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n    <lastmod>{$productLastmod}</lastmod>\n  </sitemap>\n";
+                    } else {
+                        $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n  </sitemap>\n";
+                    }
                 }
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
@@ -116,7 +127,6 @@ class SitemapController extends Controller
             return $this->xmlError($e->getMessage());
         }
     }
-
 
     // ===================== PAGES XML =====================
     public function pagesXml(Request $request)
