@@ -202,9 +202,9 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'visible_on_storefront' => $this->toBool($this->getField($data, ['product visible?', 'visible']) ?? 'Yes'),
                     'free_shipping'        => $this->toBool($this->getField($data, ['free shipping', 'free_shipping']) ?? 'N'),
                     'show_shipping'        => $this->toBool($this->getField($data, ['free shipping', 'free_shipping']) ?? 'N'),
-                    'related_products_enabled' => true,
-                    'use_product_name'         => true,
-                    'graph_description'        => true,
+                    'related_products_enabled' => 'Yes',
+                    'use_product_name'         => 'Yes',
+                    'graph_description'        => 'Yes',
                     'purchasability_status' => 'available',
                     'search_keywords'      => $this->getField($data, ['search keywords', 'keywords']) ?? null,
                 ]

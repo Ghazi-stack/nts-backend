@@ -189,7 +189,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                         'height' => $height,
                         'depth'  => $depth,
                     ]),
-                   'allow_purchase'       => $this->toBool($this->getField($data, ['allow purchases?', 'allow purchase', 'allow_purchase']) ?? 'Yes'),
+                    'allow_purchase'       => $this->toBool($this->getField($data, ['allow purchases?', 'allow purchase', 'allow_purchase']) ?? 'Yes'),
                     'track_inventory'      => $this->toBool($this->getField($data, ['track inventory', 'track_inventory']) ?? 'No'),
                     'msrp'                 => (int)($this->getField($data, ['retail price', 'msrp']) ?? 0),
                     'retail_price'         => (int)($this->getField($data, ['retail price', 'retail_price']) ?? 0),
@@ -202,9 +202,9 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'visible_on_storefront' => $this->toBool($this->getField($data, ['product visible?', 'visible']) ?? 'Yes'),
                     'free_shipping'        => $this->toBool($this->getField($data, ['free shipping', 'free_shipping']) ?? 'N'),
                     'show_shipping'        => $this->toBool($this->getField($data, ['free shipping', 'free_shipping']) ?? 'N'),
-                    'related_products_enabled' => true,
-                    'use_product_name'         => true,
-                    'graph_description'        => true,
+                    'related_products_enabled' => 'Yes',
+                    'use_product_name'         => 'Yes',
+                    'graph_description'        => 'Yes',
                     'purchasability_status' => 'available',
                     'search_keywords'      => $this->getField($data, ['search keywords', 'keywords']) ?? null,
                 ]
@@ -251,7 +251,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 ]
             );
             // --- SEO ----------------------------------------------------------
-        
+
             $baseUrl = rtrim(config('app.url'), '/');
 
             // ALWAYS generate product_url from url_settings custom_format
