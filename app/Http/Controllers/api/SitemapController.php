@@ -73,22 +73,37 @@ class SitemapController extends Controller
 
                 $totalProductPages = (int) ceil($totalProducts / self::ITEMS_PER_PAGE);
 
+                // Get latest updated_at for each type to show in sitemap index
+                $latestProductDate = Product::where('store_id', $storeId)
+                    ->where('visible_on_storefront', 1)
+                    ->max('updated_at');
+
+                $latestCategoryDate = Category::where('store_id', $storeId)
+                    ->max('updated_at');
+
+                $latestBrandDate = Brand::where('store_id', $storeId)
+                    ->max('updated_at');
+
+                $now = now()->toW3cString();
+
                 $sitemaps = '';
 
                 // Pages
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&page=1</loc>\n  </sitemap>\n";
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n    <lastmod>{$now}</lastmod>\n  </sitemap>\n";
 
-                  // Brands (page 1)
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&page=1</loc>\n  </sitemap>\n";
-                
+                // Brands (page 1)
+                $brandLastmod = $latestBrandDate ? \Carbon\Carbon::parse($latestBrandDate)->toW3cString() : $now;
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n    <lastmod>{$brandLastmod}</lastmod>\n  </sitemap>\n";
+
                 // Categories (page 1)
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&page=1</loc>\n  </sitemap>\n";
+                $categoryLastmod = $latestCategoryDate ? \Carbon\Carbon::parse($latestCategoryDate)->toW3cString() : $now;
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n    <lastmod>{$categoryLastmod}</lastmod>\n  </sitemap>\n";
 
                 // Products with pagination
+                $productLastmod = $latestProductDate ? \Carbon\Carbon::parse($latestProductDate)->toW3cString() : $now;
                 for ($i = 1; $i <= $totalProductPages; $i++) {
-                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&page={$i}</loc>\n  </sitemap>\n";
+                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n    <lastmod>{$productLastmod}</lastmod>\n  </sitemap>\n";
                 }
-
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
                     . '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n"
@@ -121,10 +136,11 @@ class SitemapController extends Controller
             'contact-us'
         ];
 
+        $now = now()->toW3cString();
         $urls = '';
         foreach ($pages as $page) {
             $loc = $page ? "{$siteUrl}/{$page}/" : "{$siteUrl}/";
-            $urls .= "  <url>\n    <loc>{$loc}</loc>\n  </url>\n";
+            $urls .= "  <url>\n    <loc>{$loc}</loc>\n    <lastmod>{$now}</lastmod>\n  </url>\n";
         }
 
         $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
@@ -153,7 +169,7 @@ class SitemapController extends Controller
 
                 $products = Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
-                    ->select('sku', 'name', 'slug')
+                    ->select('sku', 'name', 'slug', 'created_at', 'updated_at')
                     ->orderBy('id')
                     ->offset(($page - 1) * self::ITEMS_PER_PAGE)
                     ->limit(self::ITEMS_PER_PAGE)
@@ -162,7 +178,9 @@ class SitemapController extends Controller
                 $urls = '';
                 foreach ($products as $product) {
                     $productUrl = $this->buildProductUrl($product, $storeId, $siteUrl);
-                    $urls .= "  <url>\n    <loc>{$productUrl}</loc>\n  </url>\n";
+                    $lastmod = ($product->updated_at ?? $product->created_at)?->toW3cString();
+                    $lastmodTag = $lastmod ? "\n    <lastmod>{$lastmod}</lastmod>" : '';
+                    $urls .= "  <url>\n    <loc>{$productUrl}</loc>{$lastmodTag}\n  </url>\n";
                 }
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
@@ -193,7 +211,7 @@ class SitemapController extends Controller
             $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $page, $siteUrl) {
 
                 $categories = Category::where('store_id', $storeId)
-                    ->select('id', 'slug', 'parent_id')
+                    ->select('id', 'slug', 'parent_id', 'created_at', 'updated_at')
                     ->orderBy('id')
                     ->offset(($page - 1) * self::ITEMS_PER_PAGE)
                     ->limit(self::ITEMS_PER_PAGE)
@@ -204,7 +222,9 @@ class SitemapController extends Controller
 
                 foreach ($categories as $cat) {
                     $fullSlug = $this->buildCategoryPath($cat, $categoryMap);
-                    $urls .= "  <url>\n    <loc>{$siteUrl}/category/{$fullSlug}/</loc>\n  </url>\n";
+                    $lastmod = ($cat->updated_at ?? $cat->created_at)?->toW3cString();
+                    $lastmodTag = $lastmod ? "\n    <lastmod>{$lastmod}</lastmod>" : '';
+                    $urls .= "  <url>\n    <loc>{$siteUrl}/category/{$fullSlug}/</loc>{$lastmodTag}\n  </url>\n";
                 }
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
@@ -235,7 +255,7 @@ class SitemapController extends Controller
             $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $page, $siteUrl) {
 
                 $brands = Brand::where('store_id', $storeId)
-                    ->select('name')
+                    ->select('name', 'created_at', 'updated_at')
                     ->orderBy('name')
                     ->offset(($page - 1) * self::ITEMS_PER_PAGE)
                     ->limit(self::ITEMS_PER_PAGE)
@@ -246,7 +266,9 @@ class SitemapController extends Controller
                 foreach ($brands as $brand) {
                     $slug = Str::slug($brand->name);
                     if ($slug) {
-                        $urls .= "  <url>\n    <loc>{$siteUrl}/brand/{$slug}/</loc>\n  </url>\n";
+                        $lastmod = ($brand->updated_at ?? $brand->created_at)?->toW3cString();
+                        $lastmodTag = $lastmod ? "\n    <lastmod>{$lastmod}</lastmod>" : '';
+                        $urls .= "  <url>\n    <loc>{$siteUrl}/brand/{$slug}/</loc>{$lastmodTag}\n  </url>\n";
                     }
                 }
 
