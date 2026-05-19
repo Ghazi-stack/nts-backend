@@ -196,12 +196,15 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'current_stock'        => (int)($this->getField($data, ['current stock level', 'stock', 'quantity']) ?? 0),
                     'low_stock'            => (int)($this->getField($data, ['low stock level', 'low stock']) ?? 0),
                     'item_type'            => $this->getField($data, ['item type', 'item_type']) ?? null,
-                    'product_type'         => 'Physical',
+                    'product_type'         => 'physical',
                     'option_set'           => $this->getField($data, ['option set', 'option_set']) ?? null,
                     'option_set_align'     => $this->getField($data, ['option set align', 'option_set_align']) ?? null,
                     'visible_on_storefront' => $this->toBool($this->getField($data, ['product visible?', 'visible']) ?? 'Yes'),
                     'free_shipping'        => $this->toBool($this->getField($data, ['free shipping', 'free_shipping']) ?? 'N'),
                     'show_shipping'        => $this->toBool($this->getField($data, ['free shipping', 'free_shipping']) ?? 'N'),
+                    'related_products_enabled' => $this->toBool($this->getField($data, ['related_products_enabled']) ?? 'Yes'),
+                    'use_product_name' => $this->toBool($this->getField($data, ['use_product_name']) ?? 'Yes'),
+                    'graph_description' => $this->toBool($this->getField($data, ['graph_description']) ?? 'Yes'),
                     'search_keywords'      => $this->getField($data, ['search keywords', 'keywords']) ?? null,
                 ]
             );
@@ -247,7 +250,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 ]
             );
 
-         // --- SEO ----------------------------------------------------------
+            // --- SEO ----------------------------------------------------------
             $baseUrl = rtrim(config('app.url'), '/');
 
             // ALWAYS generate product_url from url_settings custom_format
@@ -650,7 +653,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
         return $parent;
     }
 
-     private function toBool($val)
+    private function toBool($val)
     {
         return in_array(strtolower(trim((string) $val)), ['yes', 'y', '1', 'true'], true);
     }
