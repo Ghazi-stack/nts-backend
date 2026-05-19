@@ -89,8 +89,7 @@ class SitemapController extends Controller
                 $sitemaps = '';
 
                 // Pages
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n    <lastmod>{$now}</lastmod>\n  </sitemap>\n";
-
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n  </sitemap>\n";
                 // Brands (page 1)
                 $brandLastmod = $latestBrandDate ? \Carbon\Carbon::parse($latestBrandDate)->toW3cString() : $now;
                 $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n    <lastmod>{$brandLastmod}</lastmod>\n  </sitemap>\n";
@@ -118,6 +117,7 @@ class SitemapController extends Controller
         }
     }
 
+
     // ===================== PAGES XML =====================
     public function pagesXml(Request $request)
     {
@@ -136,11 +136,10 @@ class SitemapController extends Controller
             'contact-us'
         ];
 
-        $now = now()->toW3cString();
         $urls = '';
         foreach ($pages as $page) {
             $loc = $page ? "{$siteUrl}/{$page}/" : "{$siteUrl}/";
-            $urls .= "  <url>\n    <loc>{$loc}</loc>\n    <lastmod>{$now}</lastmod>\n  </url>\n";
+            $urls .= "  <url>\n    <loc>{$loc}</loc>\n  </url>\n";
         }
 
         $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
