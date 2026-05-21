@@ -124,6 +124,7 @@ class ProductResource extends JsonResource
             $data[] = [
                 'id' => $category->id,
                 'name' => $category->name,
+                'slug' => $category->slug,
             ];
             $category = $category->parent;
         }
