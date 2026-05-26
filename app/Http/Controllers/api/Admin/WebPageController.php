@@ -104,8 +104,8 @@ class WebPageController extends Controller
             }
 
             $validated = $request->validate([
-                'pageName' => 'nullable|string|max:255',
-                'pageUrl' => 'nullable|string|max:255',
+                'pageName' => 'unique|string|max:255',
+                'pageUrl' => 'unique|string|max:255',
                 'pageTitle' => 'nullable|string|max:255',
                 'pageContent' => 'nullable|string',
                 'pageType' => 'nullable|string|max:100',
@@ -172,8 +172,8 @@ class WebPageController extends Controller
             $page = WebPage::where('store_id', $storeId)->findOrFail($id);
 
             $validated = $request->validate([
-                'pageName' => 'nullable|string|max:255',
-                'pageUrl' => 'nullable|string|max:255',
+                'pageName' => 'unique|string|max:255',
+                'pageUrl' => 'unique|string|max:255',
                 'pageTitle' => 'nullable|string|max:255',
                 'pageContent' => 'nullable|string',
                 'pageType' => 'nullable|string|max:100',
