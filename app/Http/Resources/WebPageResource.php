@@ -31,6 +31,11 @@ class WebPageResource extends JsonResource
             'sortOrder' => $this->sort_order,
             'parentPage' => $this->parent_page,
             'storeId' => $this->store_id,
+            'link' => $this->link,
+            'emailQuestionsTo' => $this->emailQuestionsTo,
+            'showTheseFields' => $this->showTheseFields,
+            'rawHtml' => $this->rawHtml,
+            'slugWithUrl' => $this->slugWithUrl,
         ];
     }
 }
