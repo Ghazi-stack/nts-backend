@@ -125,13 +125,14 @@ class WebPageController extends Controller
                 'rawHtml' => 'nullable|string',
             ]);
 
-            $slugWithUrl = $validated['pageUrl'];
+            $currentSlug = trim($validated['pageUrl'], '/');
+
             if (!empty($validated['parentPage'])) {
                 $parentPage = WebPage::find($validated['parentPage']);
 
-                if ($parentPage) {
-                    $slugWithUrl = trim($parentPage->page_url, '/') . '/' . trim($validated['pageUrl'], '/');
-                }
+                $slugWithUrl = '/' . trim($parentPage->page_url, '/') . '/' . $currentSlug;
+            } else {
+                $slugWithUrl = '/' . $currentSlug;
             }
 
             // Convert camelCase to snake_case for DB
@@ -241,13 +242,14 @@ class WebPageController extends Controller
             $pageUrl = $validated['pageUrl'] ?? $page->page_url;
             $parentPageId = $validated['parentPage'] ?? $page->parent_page;
 
-            $slugWithUrl = $validated['pageUrl'];
+            $currentSlug = trim($validated['pageUrl'], '/');
+
             if (!empty($validated['parentPage'])) {
                 $parentPage = WebPage::find($validated['parentPage']);
 
-                if ($parentPage) {
-                    $slugWithUrl = trim($parentPage->page_url, '/') . '/' . trim($validated['pageUrl'], '/');
-                }
+                $slugWithUrl = '/' . trim($parentPage->page_url, '/') . '/' . $currentSlug;
+            } else {
+                $slugWithUrl = '/' . $currentSlug;
             }
 
             $data = [
