@@ -28,6 +28,11 @@ class WebPage extends Model
         'show_in_navigation',
         'sort_order',
         'parent_page',
+        'link',
+        'emailQuestionsTo',
+        'showTheseFields',
+        'rawHtml',
+        'slugWithUrl',
     ];
 
     // ✅ Type casting for boolean fields
@@ -35,6 +40,7 @@ class WebPage extends Model
         'display_as_home_page' => 'boolean',
         'restrict_to_customers_only' => 'boolean',
         'show_in_navigation' => 'boolean',
+        'showTheseFields' => 'array'
     ];
 
     // ✅ Example relationship (if your stores are in a stores table)

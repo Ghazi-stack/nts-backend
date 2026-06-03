@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WebPageResource;
+use Illuminate\Validation\Rule;
 
 class WebPageController extends Controller
 {
@@ -104,11 +105,11 @@ class WebPageController extends Controller
             }
 
             $validated = $request->validate([
-                'pageName' => 'unique|string|max:255',
-                'pageUrl' => 'unique|string|max:255',
+                'pageName' => 'required|string|max:255|unique:web_pages,page_name',
+                'pageUrl' => 'nullable|string|max:255|unique:web_pages,page_url',
                 'pageTitle' => 'nullable|string|max:255',
                 'pageContent' => 'nullable|string',
-                'pageType' => 'nullable|string|max:100',
+                'pageType' => 'nullable',
                 'templateLayoutFile' => 'nullable|string|max:255',
                 'metaKeywords' => 'nullable|string|max:255',
                 'metaDescription' => 'nullable|string|max:1000',
@@ -117,8 +118,21 @@ class WebPageController extends Controller
                 'restrictToCustomersOnly' => 'boolean',
                 'showInNavigation' => 'boolean',
                 'sortOrder' => 'nullable',
-                'parentPage' => 'nullable',
+                'parentPage' => 'nullable|exists:web_pages,id',
+                'link' => 'nullable|string|max:255',
+                'emailQuestionsTo' => 'nullable|string|max:255',
+                'showTheseFields' => 'nullable|array',
+                'rawHtml' => 'nullable|string',
             ]);
+
+            $slugWithUrl = $validated['pageUrl'];
+            if (!empty($validated['parentPage'])) {
+                $parentPage = WebPage::find($validated['parentPage']);
+
+                if ($parentPage) {
+                    $slugWithUrl = trim($parentPage->page_url, '/') . '/' . trim($validated['pageUrl'], '/');
+                }
+            }
 
             // Convert camelCase to snake_case for DB
             $data = [
@@ -137,6 +151,11 @@ class WebPageController extends Controller
                 'show_in_navigation' => $validated['showInNavigation'] ?? false,
                 'sort_order' => $validated['sortOrder'] ?? null,
                 'parent_page' => $validated['parentPage'] ?? null,
+                'link' => $validated['link'] ?? null,
+                'emailQuestionsTo' => $validated['emailQuestionsTo'] ?? null,
+                'showTheseFields' => $validated['showTheseFields'] ?? null,
+                'rawHtml' => $validated['rawHtml'] ?? null,
+                'slugWithUrl' => $slugWithUrl,
             ];
 
             $page = WebPage::create($data);
@@ -171,9 +190,36 @@ class WebPageController extends Controller
 
             $page = WebPage::where('store_id', $storeId)->findOrFail($id);
 
+            // $validated = $request->validate([
+            //     'pageName' => 'nullable|string|max:255',
+            //     'pageUrl' => 'nullable|string|max:255',
+            //     'pageTitle' => 'nullable|string|max:255',
+            //     'pageContent' => 'nullable|string',
+            //     'pageType' => 'nullable|string|max:100',
+            //     'templateLayoutFile' => 'nullable|string|max:255',
+            //     'metaKeywords' => 'nullable|string|max:255',
+            //     'metaDescription' => 'nullable|string|max:1000',
+            //     'searchKeywords' => 'nullable|string|max:255',
+            //     'displayAsHomePage' => 'boolean',
+            //     'restrictToCustomersOnly' => 'boolean',
+            //     'showInNavigation' => 'boolean',
+            //     'sortOrder' => 'nullable',
+            //     'parentPage' => 'nullable',
+            // ]);
+
             $validated = $request->validate([
-                'pageName' => 'nullable|string|max:255',
-                'pageUrl' => 'nullable|string|max:255',
+                'pageName' => [
+                    'nullable',
+                    'string',
+                    'max:255',
+                    Rule::unique('web_pages', 'page_name')->ignore($page->id),
+                ],
+                'pageUrl' => [
+                    'nullable',
+                    'string',
+                    'max:255',
+                    Rule::unique('web_pages', 'page_url')->ignore($page->id),
+                ],
                 'pageTitle' => 'nullable|string|max:255',
                 'pageContent' => 'nullable|string',
                 'pageType' => 'nullable|string|max:100',
@@ -185,8 +231,24 @@ class WebPageController extends Controller
                 'restrictToCustomersOnly' => 'boolean',
                 'showInNavigation' => 'boolean',
                 'sortOrder' => 'nullable',
-                'parentPage' => 'nullable',
+                'parentPage' => 'nullable|exists:web_pages,id',
+                'link' => 'nullable|string|max:255',
+                'emailQuestionsTo' => 'nullable|string|max:255',
+                'showTheseFields' => 'nullable|array',
+                'rawHtml' => 'nullable|string',
             ]);
+
+            $pageUrl = $validated['pageUrl'] ?? $page->page_url;
+            $parentPageId = $validated['parentPage'] ?? $page->parent_page;
+
+            $slugWithUrl = $validated['pageUrl'];
+            if (!empty($validated['parentPage'])) {
+                $parentPage = WebPage::find($validated['parentPage']);
+
+                if ($parentPage) {
+                    $slugWithUrl = trim($parentPage->page_url, '/') . '/' . trim($validated['pageUrl'], '/');
+                }
+            }
 
             $data = [
                 'page_name' => $validated['pageName'] ?? $page->page_name,
@@ -203,6 +265,11 @@ class WebPageController extends Controller
                 'show_in_navigation' => $validated['showInNavigation'] ?? $page->show_in_navigation,
                 'sort_order' => $validated['sortOrder'] ?? $page->sort_order,
                 'parent_page' => $validated['parentPage'] ?? $page->parent_page,
+                'slugWithUrl' => $slugWithUrl,
+                'link' => $validated['link'] ?? null,
+                'emailQuestionsTo' => $validated['emailQuestionsTo'] ?? null,
+                'showTheseFields' => $validated['showTheseFields'] ?? null,
+                'rawHtml' => $validated['rawHtml'] ?? null,
             ];
 
             $page->update($data);
