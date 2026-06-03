@@ -252,6 +252,7 @@ class WebPageController extends Controller
                 $slugWithUrl = '/' . $currentSlug;
             }
 
+            
             $data = [
                 'page_name' => $validated['pageName'] ?? $page->page_name,
                 'page_url' => $validated['pageUrl'] ?? $page->page_url,
