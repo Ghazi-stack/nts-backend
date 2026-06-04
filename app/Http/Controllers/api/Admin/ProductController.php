@@ -1757,17 +1757,47 @@ class ProductController extends Controller
             ->pluck('product_id');
 
         // STEP 2: Load products (lightweight)
-        $products = Product::select('id', 'name', 'sku', 'price', 'brand_id')
-            ->whereIn('id', $productIds)
-            ->with([
-                'brand:id,name',
-                'categories:id,name',
-                'images' => function ($q) {
-                    $q->select('id', 'product_id', 'path')
-                        ->where('is_primary', 1);
-                }
-            ])
-            ->get();
+        // $products = Product::select('id', 'name', 'sku', 'price', 'brand_id')
+        //     ->whereIn('id', $productIds)
+        //     ->with([
+        //         'brand:id,name',
+        //         'categories:id,name',
+        //         'images' => function ($q) {
+        //             $q->select('id', 'product_id', 'path')
+        //                 ->where('is_primary', 1);
+        //         }
+        //     ])
+        //     ->get();
+
+        // If popular products exist
+        if ($productIds->isNotEmpty()) {
+            $products = Product::select('id', 'name', 'sku', 'price', 'brand_id')
+                ->whereIn('id', $productIds)
+                ->with([
+                    'brand:id,name',
+                    'categories:id,name',
+                    'images' => function ($q) {
+                        $q->select('id', 'product_id', 'path')
+                            ->where('is_primary', 1);
+                    }
+                ])
+                ->get();
+        } else {
+            // Fallback to latest products
+            $products = Product::select('id', 'name', 'sku', 'price', 'brand_id')
+                ->where('store_id', $storeId)
+                ->latest()
+                ->limit($limit)
+                ->with([
+                    'brand:id,name',
+                    'categories:id,name',
+                    'images' => function ($q) {
+                        $q->select('id', 'product_id', 'path')
+                            ->where('is_primary', 1);
+                    }
+                ])
+                ->get();
+        }
 
         return response()->json([
             'status' => true,
