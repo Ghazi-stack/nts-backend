@@ -136,7 +136,7 @@ class AuthController extends Controller
 
             // ✅ Send Email
             try {
-                Mail::to($user->email)->send(new UserRegistrationMail($user));
+                Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
             } catch (\Exception $mailException) {
                 Log::error('Mail sending failed: ' . $mailException->getMessage());
             }
