@@ -11,7 +11,7 @@
       <td align="center">
         <table width="600" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="margin-top: 20px; border: 1px solid #e0e0e0;">
           <!-- Top Banner with Visible Logo -->
-          <tr bgcolor="#ff3d1f">
+          <tr bgcolor="#777777">
             <td align="center" style="padding: 20px;">
               <div style="background-color: white; padding: 10px 20px; display: inline-block; border-radius: 8px;">
                 <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/images/stencil/250x70/nts-newlogo_nts_1682517516__50628.original.png" alt="{{ $store?->name }} Logo" width="180" style="display: block;" />
@@ -34,7 +34,7 @@
               </p>
 
               <div style="text-align: center; margin-top: 30px;">
-                <a href="https://www.newtownspares.com" style="background-color: #ff3d1f; color: #ffffff; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 4px;">Visit Our Store</a>
+                <a href="{{ $store?->base_url }}" style="background-color: #333333; color: #ffffff; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 4px;">Visit Our Store</a>
               </div>
             </td>
           </tr>
@@ -43,7 +43,7 @@
           <tr bgcolor="#f0f0f0">
             <td align="center" style="font-size: 13px; color: #777777; padding: 20px;">
               &copy; {{ date('Y') }} {{ $store?->name }}. All rights reserved.<br />
-              <a href="https://newtownspares.com/unsubscribe" style="color: #777777;">Unsubscribe</a>
+              <a href="{{ $store?->base_url }}" style="color: #777777;">Unsubscribe</a>
             </td>
           </tr>
 
