@@ -1808,6 +1808,68 @@ class ProductController extends Controller
 
 
     //last 7 days order products get
+    // public function lastWeekOrderedProducts()
+    // {
+    //     try {
+    //         $storeId = current_store_id();
+
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Store not selected'
+    //             ], 400);
+    //         }
+
+    //         // 🔹 Last 7 days orders
+    //         $orderIds = Order::where('store_id', $storeId)
+    //             ->whereBetween('created_at', [
+    //                 Carbon::now()->subWeek(),
+    //                 Carbon::now()
+    //             ])
+    //             ->pluck('id');
+
+    //         if ($orderIds->isEmpty()) {
+    //             return response()->json([
+    //                 'status' => true,
+    //                 'message' => 'No orders found for last week',
+    //                 'data' => []
+    //             ]);
+    //         }
+
+    //         // 🔹 Order items → product IDs
+    //         $productIds = OrderItem::whereIn('order_id', $orderIds)
+    //             ->pluck('product_id')
+    //             ->unique();
+
+    //         // 🔹 Products (same as featuredProducts)
+    //         $products = Product::where('store_id', $storeId)
+    //             ->whereIn('id', $productIds)
+    //             ->with([
+    //                 'categories',
+    //                 'brand',
+    //                 'images',
+    //                 'reviews.user',
+    //                 'content',
+    //                 'identifiers',
+    //                 'seo'
+    //             ])
+    //             ->latest()
+    //             ->get();
+
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Last week ordered products retrieved successfully',
+    //             'data' => ProductResource::collection($products)
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Something went wrong',
+    //             'error' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
     public function lastWeekOrderedProducts()
     {
         try {
@@ -1820,7 +1882,7 @@ class ProductController extends Controller
                 ], 400);
             }
 
-            // 🔹 Last 7 days orders
+            // Last 7 days orders
             $orderIds = Order::where('store_id', $storeId)
                 ->whereBetween('created_at', [
                     Carbon::now()->subWeek(),
@@ -1828,22 +1890,7 @@ class ProductController extends Controller
                 ])
                 ->pluck('id');
 
-            if ($orderIds->isEmpty()) {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'No orders found for last week',
-                    'data' => []
-                ]);
-            }
-
-            // 🔹 Order items → product IDs
-            $productIds = OrderItem::whereIn('order_id', $orderIds)
-                ->pluck('product_id')
-                ->unique();
-
-            // 🔹 Products (same as featuredProducts)
-            $products = Product::where('store_id', $storeId)
-                ->whereIn('id', $productIds)
+            $productsQuery = Product::where('store_id', $storeId)
                 ->with([
                     'categories',
                     'brand',
@@ -1852,13 +1899,34 @@ class ProductController extends Controller
                     'content',
                     'identifiers',
                     'seo'
-                ])
-                ->latest()
-                ->get();
+                ]);
+
+            if ($orderIds->isNotEmpty()) {
+                $productIds = OrderItem::whereIn('order_id', $orderIds)
+                    ->pluck('product_id')
+                    ->unique();
+
+                if ($productIds->isNotEmpty()) {
+                    $products = $productsQuery
+                        ->whereIn('id', $productIds)
+                        ->latest()
+                        ->get();
+                } else {
+                    $products = $productsQuery
+                        ->inRandomOrder()
+                        ->limit(10)
+                        ->get();
+                }
+            } else {
+                $products = $productsQuery
+                    ->inRandomOrder()
+                    ->limit(10)
+                    ->get();
+            }
 
             return response()->json([
                 'status' => true,
-                'message' => 'Last week ordered products retrieved successfully',
+                'message' => 'Products retrieved successfully',
                 'data' => ProductResource::collection($products)
             ]);
         } catch (\Exception $e) {

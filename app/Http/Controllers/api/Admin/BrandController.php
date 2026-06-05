@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BrandResource;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Storage;
 
 class BrandController extends Controller
 {
@@ -134,10 +135,27 @@ class BrandController extends Controller
                 'name' => $request->name,
             ];
 
+            // if ($request->hasFile('logo')) {
+            //     $imageName = time() . '_' . preg_replace('/[^A-Za-z0-9.\-_]/', '_', $request->file('logo')->getClientOriginalName());
+            //     $request->file('logo')->move(public_path('brand_logos'), $imageName);
+            //     $data['logo'] = 'brand_logos/' . $imageName;
+            // }
+
+            // $brand = Brand::create($data);
+
             if ($request->hasFile('logo')) {
-                $imageName = time() . '_' . preg_replace('/[^A-Za-z0-9.\-_]/', '_', $request->file('logo')->getClientOriginalName());
-                $request->file('logo')->move(public_path('brand_logos'), $imageName);
-                $data['logo'] = 'brand_logos/' . $imageName;
+
+                $file = $request->file('logo');
+
+                $name = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+
+                $path = Storage::disk('s3')->putFileAs(
+                    'brand_logos',
+                    $file,
+                    $name
+                );
+
+                $data['logo'] = Storage::disk('s3')->url($path);
             }
 
             $brand = Brand::create($data);
@@ -192,13 +210,36 @@ class BrandController extends Controller
             ]);
 
             // ✅ Handle logo upload
-            if ($request->hasFile('logo')) {
-                $this->deleteOldLogo($brand->logo);
+            // if ($request->hasFile('logo')) {
+            //     $this->deleteOldLogo($brand->logo);
 
-                $image = $request->file('logo');
-                $imageName = time() . '_' . preg_replace('/[^A-Za-z0-9.\-_]/', '_', $image->getClientOriginalName());
-                $image->move(public_path('brand_logos'), $imageName);
-                $brand->logo = 'brand_logos/' . $imageName;
+            //     $image = $request->file('logo');
+            //     $imageName = time() . '_' . preg_replace('/[^A-Za-z0-9.\-_]/', '_', $image->getClientOriginalName());
+            //     $image->move(public_path('brand_logos'), $imageName);
+            //     $brand->logo = 'brand_logos/' . $imageName;
+            // }
+
+            if ($request->hasFile('logo')) {
+
+            // Delete old logo
+            if ($brand->logo) {
+                    $oldPath = parse_url($brand->logo, PHP_URL_PATH);
+                    $oldPath = ltrim($oldPath, '/');
+
+                    Storage::disk('s3')->delete($oldPath);
+                }
+
+                $file = $request->file('logo');
+
+                $name = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+
+                $path = Storage::disk('s3')->putFileAs(
+                    'brand_logos',
+                    $file,
+                    $name
+                );
+
+                $data['logo'] = Storage::disk('s3')->url($path);
             }
 
             $brand->save();
