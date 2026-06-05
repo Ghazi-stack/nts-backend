@@ -1892,13 +1892,12 @@ class ProductController extends Controller
 
             $productsQuery = Product::where('store_id', $storeId)
                 ->with([
-                    'categories',
-                    'brand',
-                    'images',
-                    'reviews.user',
-                    'content',
-                    'identifiers',
-                    'seo'
+                    'brand:id,name',
+                    'categories:id,name',
+                    'images' => function ($q) {
+                        $q->select('id', 'product_id', 'path')
+                            ->where('is_primary', 1);
+                    }
                 ]);
 
             if ($orderIds->isNotEmpty()) {
