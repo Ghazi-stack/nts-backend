@@ -239,7 +239,7 @@ class BrandController extends Controller
                     $name
                 );
 
-                $data['logo'] = Storage::disk('s3')->url($path);
+                $brand['logo'] = Storage::disk('s3')->url($path);
             }
 
             $brand->save();
