@@ -21,6 +21,7 @@ use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
 use Exception;
 use App\Services\TwoFactorService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
@@ -59,45 +60,49 @@ class AuthController extends Controller
             DB::beginTransaction();
 
             if ($request->userRole == 1) {
-
-                // ✅ Create User first
+                // Store Owner Registration (Existing logic - thoda improve kiya)
                 $user = User::create([
                     'name'          => $request->firstName . ' ' . $request->lastName,
                     'email'         => $request->email,
                     'password'      => bcrypt($request->password),
                     'userRole'      => 1,
                     'store_name'    => $request->storeName,
-                    'base_url'    => $request->base_url,
+                    'base_url'      => $request->base_url,
                     'business_size' => $request->businessSize,
                     'region'        => $request->region,
-                    'store_id'      => null, // abhi null
+                    'store_id'      => null,
                     'customer_id'   => null,
                 ]);
 
-                // ✅ Create Store with user_id
                 $store = Store::create([
-                    'name'    => $request->storeName,
-                    'user_id' => $user->id,
+                    'name'     => $request->storeName,
+                    'user_id'  => $user->id,
                     'base_url' => $request->base_url,
                 ]);
 
-                // ✅ Update user with store_id
                 $user->store_id = $store->id;
                 $user->save();
 
                 DB::commit();
 
+                // Token Generate for Store Owner
+                $token = $user->createToken('auth_token')->plainTextToken;
+                $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s'); // 1 day expiry
+
                 return response()->json([
-                    'status'  => true,
-                    'message' => 'Store owner registered successfully',
-                    'user'    => new UserResource($user),
-                    'store'   => $store,
+                    'status'   => true,
+                    'message'  => 'Store owner registered successfully',
+                    'token'    => $token,
+                    'expireAt' => $expireAt,
+                    'user'     => new UserResource($user),
+                    'store'    => $store,
                 ], 201);
             }
 
+            // ===================== CUSTOMER REGISTRATION =====================
             $storeId = current_store_id();
 
-            // ✅ Create User
+            // Create User
             $user = User::create([
                 'name'          => $request->firstName . ' ' . $request->lastName,
                 'email'         => $request->email,
@@ -109,7 +114,7 @@ class AuthController extends Controller
                 'store_id'      => $storeId,
             ]);
 
-            // ✅ Create Customer
+            // Create Customer
             $customer = Customer::create([
                 'store_id'        => $storeId,
                 'first_name'      => $request->firstName,
@@ -128,28 +133,29 @@ class AuthController extends Controller
                 'force_password_reset'  => false,
             ]);
 
-            // ✅ Link User & Customer
+            // Link User & Customer
             $user->customer_id = $customer->id;
             $user->save();
 
             DB::commit();
 
-            // ✅ Send Email
-            try {
-                Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
-            } catch (\Exception $mailException) {
-                Log::error('Mail sending failed: ' . $mailException->getMessage());
-            }
+            // ===================== TOKEN GENERATE =====================
+            $token = $user->createToken('auth_token')->plainTextToken;
+            $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s'); // 1 din expiry (login jaisa)
 
+            // ===================== FINAL RESPONSE (Login jaisa) =====================
             return response()->json([
-                'status' => true,
-                'message' => 'Customer registered successfully',
-                'user' => new UserResource($user),
+                'status'   => true,
+                'message'  => 'Customer registered successfully',
+                'token'    => $token,
+                'expireAt' => $expireAt,
+                'store'    => Store::find($storeId),   // Full store info
+                'user'     => new UserResource($user),
                 'customer' => new CustomerResource($customer),
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Registration failed: ' . $e->getMessage());
+            Log::error('Registration failed: ' . $e->getMessage() . ' | Line: ' . $e->getLine());
 
             return response()->json([
                 'status' => false,
