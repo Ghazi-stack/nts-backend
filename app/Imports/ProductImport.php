@@ -192,6 +192,8 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'allow_purchase'       => $this->toBool($this->getField($data, ['allow purchases?', 'allow purchase', 'allow_purchase']) ?? 'Yes'),
                     'track_inventory'      => $this->toBool($this->getField($data, ['track inventory', 'track_inventory']) ?? 'No'),
                     'msrp'                 => (int)($this->getField($data, ['retail price', 'msrp']) ?? 0),
+                    'condition'            => $this->getField($data, ['Product Condition', 'condition']) ?? null,
+                    'custom_fields'        => $this->getField($data, ['Product Custom Fields', 'custom_fields']) ?? null,
                     'retail_price'         => (int)($this->getField($data, ['retail price', 'retail_price']) ?? 0),
                     'current_stock'        => (int)($this->getField($data, ['current stock level', 'stock', 'quantity']) ?? 0),
                     'low_stock'            => (int)($this->getField($data, ['low stock level', 'low stock']) ?? 0),
