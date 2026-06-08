@@ -9,7 +9,13 @@ class Newsletter extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['store_id','email'];
+    protected $fillable = [
+        'store_id',
+        'email'
+    ];
 
-    protected $hidden = ['created_at', 'updated_at']; // optional
+    protected $hidden = [
+        'created_at',
+        'updated_at'
+    ];
 }

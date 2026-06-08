@@ -13,8 +13,13 @@ return new class extends Migration
     {
         Schema::create('newsletters', function (Blueprint $table) {
             $table->id();
+
             $table->unsignedBigInteger('store_id');
-            $table->string('email')->unique();
+
+            $table->string('email');
+
+            $table->unique(['store_id', 'email']);
+
             $table->timestamps();
         });
     }

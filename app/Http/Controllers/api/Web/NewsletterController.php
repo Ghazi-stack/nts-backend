@@ -1,11 +1,12 @@
 <?php
 
-namespace App\Http\Controllers\api\Web;
+namespace App\Http\Controllers\Api\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Newsletter;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\Rule;
 
 class NewsletterController extends Controller
 {
@@ -14,7 +15,19 @@ class NewsletterController extends Controller
      */
     public function index(): JsonResponse
     {
-        $newsletters = Newsletter::latest()->paginate(15);
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected'
+            ], 400);
+        }
+
+        $newsletters = Newsletter::where('store_id', $storeId)
+            ->latest()
+            ->paginate(15);
+
         return response()->json($newsletters);
     }
 
@@ -33,7 +46,14 @@ class NewsletterController extends Controller
         }
 
         $request->validate([
-            'email' => 'required|email|unique:newsletters,email',
+            'email' => [
+                'required',
+                'email',
+                Rule::unique('newsletters')
+                    ->where(function ($query) use ($storeId) {
+                        return $query->where('store_id', $storeId);
+                    }),
+            ],
         ]);
 
         $newsletter = Newsletter::create([
@@ -53,6 +73,15 @@ class NewsletterController extends Controller
      */
     public function show(Newsletter $newsletter): JsonResponse
     {
+        $storeId = current_store_id();
+
+        if ($newsletter->store_id != $storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Newsletter not found'
+            ], 404);
+        }
+
         return response()->json($newsletter);
     }
 
@@ -61,15 +90,42 @@ class NewsletterController extends Controller
      */
     public function update(Request $request, Newsletter $newsletter): JsonResponse
     {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected'
+            ], 400);
+        }
+
+        if ($newsletter->store_id != $storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Newsletter not found'
+            ], 404);
+        }
+
         $request->validate([
-            'email' => 'required|email|unique:newsletters,email,' . $newsletter->id,
+            'email' => [
+                'required',
+                'email',
+                Rule::unique('newsletters')
+                    ->where(function ($query) use ($storeId) {
+                        return $query->where('store_id', $storeId);
+                    })
+                    ->ignore($newsletter->id),
+            ],
         ]);
 
-        $newsletter->update($request->only('email'));
+        $newsletter->update([
+            'email' => $request->email
+        ]);
 
         return response()->json([
+            'status' => true,
             'message' => 'Email updated successfully!',
-            'data'    => $newsletter
+            'data' => $newsletter
         ]);
     }
 
@@ -78,9 +134,26 @@ class NewsletterController extends Controller
      */
     public function destroy(Newsletter $newsletter): JsonResponse
     {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected'
+            ], 400);
+        }
+
+        if ($newsletter->store_id != $storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Newsletter not found'
+            ], 404);
+        }
+
         $newsletter->delete();
 
         return response()->json([
+            'status' => true,
             'message' => 'Email deleted successfully!'
         ]);
     }
