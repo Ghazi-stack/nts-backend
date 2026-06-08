@@ -192,8 +192,8 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'allow_purchase'       => $this->toBool($this->getField($data, ['allow purchases?', 'allow purchase', 'allow_purchase']) ?? 'Yes'),
                     'track_inventory'      => $this->toBool($this->getField($data, ['track inventory', 'track_inventory']) ?? 'No'),
                     'msrp'                 => (int)($this->getField($data, ['retail price', 'msrp']) ?? 0),
-                    'condition'            => $this->getField($data, ['Product Condition', 'condition', 'ProductCondition', 'Condition']) ?? null,
-                    'custom_fields'        => $this->getField($data, ['Product Custom Fields', 'custom_fields', 'Custom Fields', 'product custom fields']) ?? null,                 
+                    'condition'            => $this->getFieldDirect($data, ['product condition', 'product_condition', 'condition', 'productcondition']),
+                    'custom_fields'        => $this->getFieldDirect($data, ['product custom fields', 'product_custom_fields', 'custom_fields', 'custom fields', 'productcustomfields']),
                     'retail_price'         => (int)($this->getField($data, ['retail price', 'retail_price']) ?? 0),
                     'current_stock'        => (int)($this->getField($data, ['current stock level', 'stock', 'quantity']) ?? 0),
                     'low_stock'            => (int)($this->getField($data, ['low stock level', 'low stock']) ?? 0),
@@ -656,5 +656,32 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
     private function toBool($val)
     {
         return in_array(strtolower(trim((string) $val)), ['yes', 'y', '1', 'true'], true);
+    }
+
+    private function getFieldDirect(array $data, array $possibleKeys)
+    {
+        // Direct check - try all possible key formats
+        foreach ($possibleKeys as $key) {
+            if (isset($data[$key]) && $data[$key] !== '' && $data[$key] !== null) {
+                return $data[$key];
+            }
+        }
+
+        // Brute force - loop through all data keys and match
+        foreach ($data as $dataKey => $dataValue) {
+            if ($dataValue === '' || $dataValue === null) continue;
+
+            $normalizedDataKey = strtolower(trim(str_replace(['_', '-', '/', '\\'], ' ', $dataKey)));
+
+            foreach ($possibleKeys as $key) {
+                $normalizedKey = strtolower(trim(str_replace(['_', '-', '/', '\\'], ' ', $key)));
+
+                if ($normalizedDataKey === $normalizedKey) {
+                    return $dataValue;
+                }
+            }
+        }
+
+        return null;
     }
 }
