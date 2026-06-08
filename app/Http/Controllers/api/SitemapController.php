@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class SitemapController extends Controller
 {
@@ -52,7 +53,7 @@ class SitemapController extends Controller
         }
     }
 
-    // ===================== SITEMAP INDEX =====================
+    // ===================== SITEMAP INDEX (with lastmod) =====================
     private function sitemapIndex(Request $request)
     {
         try {
@@ -75,18 +76,37 @@ class SitemapController extends Controller
 
                 $sitemaps = '';
 
-                // Pages
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n  </sitemap>\n";
+                // Current time as fallback
+                $now = Carbon::now()->toW3cString();
 
-                // Brands
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n  </sitemap>\n";
+                // ===================== PAGES =====================
+                $pagesLastmod = $this->getPagesLastmod();
+                $sitemaps .= "  <sitemap>\n" .
+                    "    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n" .
+                    "    <lastmod>" . ($pagesLastmod ?? $now) . "</lastmod>\n" .
+                    "  </sitemap>\n";
 
-                // Categories
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n  </sitemap>\n";
+                // ===================== BRANDS =====================
+                $brandsLastmod = $this->getBrandsLastmod($storeId);
+                $sitemaps .= "  <sitemap>\n" .
+                    "    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n" .
+                    "    <lastmod>" . ($brandsLastmod ?? $now) . "</lastmod>\n" .
+                    "  </sitemap>\n";
 
-                // Products with pagination
+                // ===================== CATEGORIES =====================
+                $categoriesLastmod = $this->getCategoriesLastmod($storeId);
+                $sitemaps .= "  <sitemap>\n" .
+                    "    <loc>{$siteUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n" .
+                    "    <lastmod>" . ($categoriesLastmod ?? $now) . "</lastmod>\n" .
+                    "  </sitemap>\n";
+
+                // ===================== PRODUCTS (per page) =====================
                 for ($i = 1; $i <= $totalProductPages; $i++) {
-                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n  </sitemap>\n";
+                    $productsLastmod = $this->getProductsPageLastmod($storeId, $i);
+                    $sitemaps .= "  <sitemap>\n" .
+                        "    <loc>{$siteUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n" .
+                        "    <lastmod>" . ($productsLastmod ?? $now) . "</lastmod>\n" .
+                        "  </sitemap>\n";
                 }
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
@@ -102,7 +122,43 @@ class SitemapController extends Controller
         }
     }
 
-    // ===================== PAGES XML =====================
+    // ===================== HELPER METHODS FOR LASTMOD =====================
+
+    private function getPagesLastmod()
+    {
+        // Static pages ke liye current time ya aap kisi table se bhi le sakte ho
+        return Carbon::now()->toW3cString();
+    }
+
+    private function getBrandsLastmod(int $storeId)
+    {
+        return Brand::where('store_id', $storeId)
+            ->max('updated_at')
+            ?->toW3cString();
+    }
+
+    private function getCategoriesLastmod(int $storeId)
+    {
+        return Category::where('store_id', $storeId)
+            ->max('updated_at')
+            ?->toW3cString();
+    }
+
+    private function getProductsPageLastmod(int $storeId, int $page)
+    {
+        return Product::where('store_id', $storeId)
+            ->where('visible_on_storefront', 1)
+            ->select('updated_at')
+            ->orderBy('id')
+            ->offset(($page - 1) * self::ITEMS_PER_PAGE)
+            ->limit(self::ITEMS_PER_PAGE)
+            ->get()
+            ->max('updated_at')
+            ?->toW3cString();
+    }
+
+    // ===================== REST OF YOUR METHODS (unchanged) =====================
+
     public function pagesXml(Request $request)
     {
         $siteUrl = $this->siteUrl();
@@ -134,7 +190,6 @@ class SitemapController extends Controller
         return $this->xmlResponse($xml);
     }
 
-    // ===================== PRODUCTS XML =====================
     public function productsXml(Request $request, $page = 1)
     {
         $page = (int) $page;
@@ -179,7 +234,6 @@ class SitemapController extends Controller
         }
     }
 
-    // ===================== CATEGORIES XML =====================
     public function categoriesXml(Request $request, $page = 1)
     {
         $page = (int) $page;
@@ -223,7 +277,6 @@ class SitemapController extends Controller
         }
     }
 
-    // ===================== BRANDS XML =====================
     public function brandsXml(Request $request, $page = 1)
     {
         $page = (int) $page;
@@ -268,7 +321,6 @@ class SitemapController extends Controller
         }
     }
 
-    // ===================== CLEAR CACHE =====================
     public function clearCache(Request $request)
     {
         try {
