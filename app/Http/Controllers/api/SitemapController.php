@@ -73,20 +73,33 @@ class SitemapController extends Controller
 
                 $totalProductPages = (int) ceil($totalProducts / self::ITEMS_PER_PAGE);
 
+                // Get latest updated_at for each type
+                $latestBrandDate = Brand::where('store_id', $storeId)->max('updated_at');
+                $latestCategoryDate = Category::where('store_id', $storeId)->max('updated_at');
+                $latestProductDate = Product::where('store_id', $storeId)
+                    ->where('visible_on_storefront', 1)
+                    ->max('updated_at');
+
                 $sitemaps = '';
 
-                // Pages
+                // Pages - no lastmod
                 $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n  </sitemap>\n";
 
                 // Brands
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n  </sitemap>\n";
+                $brandLastmod = $latestBrandDate ? \Carbon\Carbon::parse($latestBrandDate)->toW3cString() : '';
+                $brandLastmodTag = $brandLastmod ? "\n    <lastmod>{$brandLastmod}</lastmod>" : '';
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>{$brandLastmodTag}\n  </sitemap>\n";
 
                 // Categories
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n  </sitemap>\n";
+                $categoryLastmod = $latestCategoryDate ? \Carbon\Carbon::parse($latestCategoryDate)->toW3cString() : '';
+                $categoryLastmodTag = $categoryLastmod ? "\n    <lastmod>{$categoryLastmod}</lastmod>" : '';
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=categories&amp;page=1</loc>{$categoryLastmodTag}\n  </sitemap>\n";
 
                 // Products with pagination
+                $productLastmod = $latestProductDate ? \Carbon\Carbon::parse($latestProductDate)->toW3cString() : '';
+                $productLastmodTag = $productLastmod ? "\n    <lastmod>{$productLastmod}</lastmod>" : '';
                 for ($i = 1; $i <= $totalProductPages; $i++) {
-                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n  </sitemap>\n";
+                    $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=products&amp;page={$i}</loc>{$productLastmodTag}\n  </sitemap>\n";
                 }
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
