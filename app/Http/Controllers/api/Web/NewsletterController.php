@@ -23,15 +23,28 @@ class NewsletterController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected'
+            ], 400);
+        }
+
         $request->validate([
             'email' => 'required|email|unique:newsletters,email',
         ]);
 
-        $newsletter = Newsletter::create($request->only('email'));
+        $newsletter = Newsletter::create([
+            'store_id' => $storeId,
+            'email' => $request->email,
+        ]);
 
         return response()->json([
+            'status' => true,
             'message' => 'Email successfully subscribed!',
-            'data'    => $newsletter
+            'data' => $newsletter
         ], 201);
     }
 
