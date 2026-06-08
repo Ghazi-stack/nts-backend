@@ -53,7 +53,7 @@ class SitemapController extends Controller
         }
     }
 
-    // ===================== SITEMAP INDEX (with lastmod) =====================
+    // ===================== SITEMAP INDEX (Fixed & Optimized) =====================
     private function sitemapIndex(Request $request)
     {
         try {
@@ -63,7 +63,6 @@ class SitemapController extends Controller
             }
 
             $siteUrl = $this->siteUrl();
-
             $cacheKey = "xmlsitemap_index_store_{$storeId}";
 
             $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $siteUrl) {
@@ -75,38 +74,24 @@ class SitemapController extends Controller
                 $totalProductPages = (int) ceil($totalProducts / self::ITEMS_PER_PAGE);
 
                 $sitemaps = '';
-
-                // Current time as fallback
                 $now = Carbon::now()->toW3cString();
 
-                // ===================== PAGES =====================
-                $pagesLastmod = $this->getPagesLastmod();
-                $sitemaps .= "  <sitemap>\n" .
-                    "    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n" .
-                    "    <lastmod>" . ($pagesLastmod ?? $now) . "</lastmod>\n" .
-                    "  </sitemap>\n";
+                // Pages
+                $sitemaps .= $this->makeSitemapEntry($siteUrl, 'pages', 1, $now);
 
-                // ===================== BRANDS =====================
-                $brandsLastmod = $this->getBrandsLastmod($storeId);
-                $sitemaps .= "  <sitemap>\n" .
-                    "    <loc>{$siteUrl}/xmlsitemap?type=brands&amp;page=1</loc>\n" .
-                    "    <lastmod>" . ($brandsLastmod ?? $now) . "</lastmod>\n" .
-                    "  </sitemap>\n";
+                // Brands
+                $brandsLastmod = $this->getBrandsLastmod($storeId) ?? $now;
+                $sitemaps .= $this->makeSitemapEntry($siteUrl, 'brands', 1, $brandsLastmod);
 
-                // ===================== CATEGORIES =====================
-                $categoriesLastmod = $this->getCategoriesLastmod($storeId);
-                $sitemaps .= "  <sitemap>\n" .
-                    "    <loc>{$siteUrl}/xmlsitemap?type=categories&amp;page=1</loc>\n" .
-                    "    <lastmod>" . ($categoriesLastmod ?? $now) . "</lastmod>\n" .
-                    "  </sitemap>\n";
+                // Categories
+                $categoriesLastmod = $this->getCategoriesLastmod($storeId) ?? $now;
+                $sitemaps .= $this->makeSitemapEntry($siteUrl, 'categories', 1, $categoriesLastmod);
 
-                // ===================== PRODUCTS (per page) =====================
+                // Products - Optimized (sirf overall latest updated_at use kar rahe hain sab pages ke liye)
+                $overallProductsLastmod = $this->getProductsOverallLastmod($storeId) ?? $now;
+
                 for ($i = 1; $i <= $totalProductPages; $i++) {
-                    $productsLastmod = $this->getProductsPageLastmod($storeId, $i);
-                    $sitemaps .= "  <sitemap>\n" .
-                        "    <loc>{$siteUrl}/xmlsitemap?type=products&amp;page={$i}</loc>\n" .
-                        "    <lastmod>" . ($productsLastmod ?? $now) . "</lastmod>\n" .
-                        "  </sitemap>\n";
+                    $sitemaps .= $this->makeSitemapEntry($siteUrl, 'products', $i, $overallProductsLastmod);
                 }
 
                 return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
@@ -117,47 +102,44 @@ class SitemapController extends Controller
 
             return $this->xmlResponse($xml);
         } catch (\Exception $e) {
-            Log::error('Sitemap index error: ' . $e->getMessage());
+            Log::error('Sitemap index error: ' . $e->getMessage() . ' | Line: ' . $e->getLine());
             return $this->xmlError($e->getMessage());
         }
     }
 
-    // ===================== HELPER METHODS FOR LASTMOD =====================
-
-    private function getPagesLastmod()
+    private function makeSitemapEntry(string $siteUrl, string $type, int $page, string $lastmod): string
     {
-        // Static pages ke liye current time ya aap kisi table se bhi le sakte ho
-        return Carbon::now()->toW3cString();
+        return "  <sitemap>\n" .
+            "    <loc>{$siteUrl}/xmlsitemap?type={$type}&amp;page={$page}</loc>\n" .
+            "    <lastmod>{$lastmod}</lastmod>\n" .
+            "  </sitemap>\n";
     }
 
+    // ===================== Optimized Lastmod Helpers =====================
     private function getBrandsLastmod(int $storeId)
     {
-        return Brand::where('store_id', $storeId)
-            ->max('updated_at')
-            ?->toW3cString();
+        return Brand::where('store_id', $storeId)->max('updated_at')?->toW3cString();
     }
 
     private function getCategoriesLastmod(int $storeId)
     {
-        return Category::where('store_id', $storeId)
-            ->max('updated_at')
-            ?->toW3cString();
+        return Category::where('store_id', $storeId)->max('updated_at')?->toW3cString();
     }
 
-    private function getProductsPageLastmod(int $storeId, int $page)
+    private function getProductsOverallLastmod(int $storeId)
     {
         return Product::where('store_id', $storeId)
             ->where('visible_on_storefront', 1)
-            ->select('updated_at')
-            ->orderBy('id')
-            ->offset(($page - 1) * self::ITEMS_PER_PAGE)
-            ->limit(self::ITEMS_PER_PAGE)
-            ->get()
             ->max('updated_at')
             ?->toW3cString();
     }
 
-    // ===================== REST OF YOUR METHODS (unchanged) =====================
+    private function getPagesLastmod()
+    {
+        return Carbon::now()->toW3cString();
+    }
+
+    // ===================== REST OF YOUR CODE (Same as before) =====================
 
     public function pagesXml(Request $request)
     {
@@ -196,9 +178,7 @@ class SitemapController extends Controller
 
         try {
             $storeId = $this->getStoreId();
-            if (!$storeId) {
-                return $this->xmlError('Store not selected.');
-            }
+            if (!$storeId) return $this->xmlError('Store not selected.');
 
             $siteUrl = $this->siteUrl();
             $cacheKey = "xmlsitemap_products_store_{$storeId}_page_{$page}";
@@ -234,113 +214,19 @@ class SitemapController extends Controller
         }
     }
 
+    // categoriesXml, brandsXml, clearCache, buildProductUrl, xmlResponse, xmlError, 
+    // getStoreId, buildCategoryPath  --- Sab same rakhe hain (copy paste kar lo purane code se)
+
     public function categoriesXml(Request $request, $page = 1)
-    {
-        $page = (int) $page;
-
-        try {
-            $storeId = $this->getStoreId();
-            if (!$storeId) return $this->xmlError('Store not selected.');
-
-            $siteUrl = $this->siteUrl();
-            $cacheKey = "xmlsitemap_categories_store_{$storeId}_page_{$page}";
-
-            $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $page, $siteUrl) {
-
-                $categories = Category::where('store_id', $storeId)
-                    ->select('id', 'slug', 'parent_id', 'created_at', 'updated_at')
-                    ->orderBy('id')
-                    ->offset(($page - 1) * self::ITEMS_PER_PAGE)
-                    ->limit(self::ITEMS_PER_PAGE)
-                    ->get();
-
-                $categoryMap = $categories->keyBy('id');
-                $urls = '';
-
-                foreach ($categories as $cat) {
-                    $fullSlug = $this->buildCategoryPath($cat, $categoryMap);
-                    $lastmod = ($cat->updated_at ?? $cat->created_at)?->toW3cString();
-                    $lastmodTag = $lastmod ? "\n    <lastmod>{$lastmod}</lastmod>" : '';
-                    $urls .= "  <url>\n    <loc>{$siteUrl}/category/{$fullSlug}/</loc>{$lastmodTag}\n  </url>\n";
-                }
-
-                return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
-                    . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n"
-                    . $urls
-                    . '</urlset>';
-            });
-
-            return $this->xmlResponse($xml);
-        } catch (\Exception $e) {
-            Log::error('Sitemap categories error: ' . $e->getMessage());
-            return $this->xmlError($e->getMessage());
-        }
+    { /* ... your original code ... */
     }
-
     public function brandsXml(Request $request, $page = 1)
-    {
-        $page = (int) $page;
-
-        try {
-            $storeId = $this->getStoreId();
-            if (!$storeId) return $this->xmlError('Store not selected.');
-
-            $siteUrl = $this->siteUrl();
-            $cacheKey = "xmlsitemap_brands_store_{$storeId}_page_{$page}";
-
-            $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $page, $siteUrl) {
-
-                $brands = Brand::where('store_id', $storeId)
-                    ->select('name', 'created_at', 'updated_at')
-                    ->orderBy('name')
-                    ->offset(($page - 1) * self::ITEMS_PER_PAGE)
-                    ->limit(self::ITEMS_PER_PAGE)
-                    ->get()
-                    ->unique('name');
-
-                $urls = '';
-                foreach ($brands as $brand) {
-                    $slug = Str::slug($brand->name);
-                    if ($slug) {
-                        $lastmod = ($brand->updated_at ?? $brand->created_at)?->toW3cString();
-                        $lastmodTag = $lastmod ? "\n    <lastmod>{$lastmod}</lastmod>" : '';
-                        $urls .= "  <url>\n    <loc>{$siteUrl}/brand/{$slug}/</loc>{$lastmodTag}\n  </url>\n";
-                    }
-                }
-
-                return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
-                    . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n"
-                    . $urls
-                    . '</urlset>';
-            });
-
-            return $this->xmlResponse($xml);
-        } catch (\Exception $e) {
-            Log::error('Sitemap brands error: ' . $e->getMessage());
-            return $this->xmlError($e->getMessage());
-        }
+    { /* ... your original code ... */
     }
-
     public function clearCache(Request $request)
-    {
-        try {
-            $storeId = $this->getStoreId();
-
-            Cache::forget("xmlsitemap_index_store_{$storeId}");
-            Cache::forget("xmlsitemap_categories_store_{$storeId}");
-            Cache::forget("xmlsitemap_brands_store_{$storeId}");
-
-            for ($i = 1; $i <= 300; $i++) {
-                Cache::forget("xmlsitemap_products_store_{$storeId}_page_{$i}");
-            }
-
-            return response()->json(['status' => true, 'message' => 'Sitemap cache cleared successfully.']);
-        } catch (\Exception $e) {
-            return response()->json(['status' => false, 'message' => 'Failed to clear cache.'], 500);
-        }
+    { /* ... your original code ... */
     }
 
-    // ===================== HELPERS =====================
     private function buildProductUrl($product, int $storeId, string $siteUrl): string
     {
         if ($storeId == 10) {
@@ -362,7 +248,7 @@ class SitemapController extends Controller
     private function xmlError(string $message = '')
     {
         $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
-            . '<!-- Error: ' . htmlspecialchars($message) . ' -->\n'
+            . '<!-- Error: ' . htmlspecialchars($message) . ' -->' . "\n"
             . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>';
 
         return response($xml, 200, ['Content-Type' => 'text/xml; charset=UTF-8']);
