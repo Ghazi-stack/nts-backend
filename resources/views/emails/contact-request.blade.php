@@ -54,12 +54,12 @@
           <!-- Footer -->
           <tr bgcolor="#f0f0f0">
             <td align="center" style="font-size: 13px; color: #777777; padding: 20px;">
-              &copy; 2025 Newtown Spares. All rights reserved.<br />
+              &copy; 2025 serverblink. All rights reserved.<br />
               <a href="https://newtownspares.com/unsubscribe" style="color: #777777;">Unsubscribe</a>
             </td>
           </tr>
 
-          
+
         </table>
       </td>
     </tr>
