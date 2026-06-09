@@ -1120,12 +1120,17 @@ class OrderController extends Controller
 
     public function listReturnRequestsForAdmin(Request $request)
     {
+        $user = auth()->user();
+
         $requests = ReturnRequest::with([
             'order.items.product.images',
             'user',
             'order.customer'
         ])
             ->where('store_id', current_store_id())
+            ->whereHas('order', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            })
             ->latest()
             ->paginate(20);
 
