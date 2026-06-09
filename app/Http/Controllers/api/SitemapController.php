@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\Brand;
+use App\Models\WebPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -74,6 +75,7 @@ class SitemapController extends Controller
                 $totalProductPages = (int) ceil($totalProducts / self::ITEMS_PER_PAGE);
 
                 // Get latest updated_at for each type
+                $latestPageDate = WebPage::where('store_id', $storeId)->max('updated_at');
                 $latestBrandDate = Brand::where('store_id', $storeId)->max('updated_at');
                 $latestCategoryDate = Category::where('store_id', $storeId)->max('updated_at');
                 $latestProductDate = Product::where('store_id', $storeId)
@@ -82,8 +84,10 @@ class SitemapController extends Controller
 
                 $sitemaps = '';
 
-                // Pages - no lastmod
-                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>\n  </sitemap>\n";
+                // Pages
+                $pageLastmod = $latestPageDate ? \Carbon\Carbon::parse($latestPageDate)->toW3cString() : '';
+                $pageLastmodTag = $pageLastmod ? "\n    <lastmod>{$pageLastmod}</lastmod>" : '';
+                $sitemaps .= "  <sitemap>\n    <loc>{$siteUrl}/xmlsitemap?type=pages&amp;page=1</loc>{$pageLastmodTag}\n  </sitemap>\n";
 
                 // Brands
                 $brandLastmod = $latestBrandDate ? \Carbon\Carbon::parse($latestBrandDate)->toW3cString() : '';
@@ -118,33 +122,48 @@ class SitemapController extends Controller
     // ===================== PAGES XML =====================
     public function pagesXml(Request $request)
     {
-        $siteUrl = $this->siteUrl();
+        try {
+            $storeId = $this->getStoreId();
+            if (!$storeId) {
+                return $this->xmlError('Store not selected.');
+            }
 
-        $pages = [
-            '',
-            'disclaimer',
-            'terms-conditions',
-            'privacy-policy',
-            'shipping-policy',
-            'about-us',
-            'blog',
-            'warranty',
-            'return-refund-policy',
-            'contact-us'
-        ];
+            $siteUrl = $this->siteUrl();
+            $cacheKey = "xmlsitemap_pages_store_{$storeId}";
 
-        $urls = '';
-        foreach ($pages as $page) {
-            $loc = $page ? "{$siteUrl}/{$page}/" : "{$siteUrl}/";
-            $urls .= "  <url>\n    <loc>{$loc}</loc>\n  </url>\n";
+            $xml = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($storeId, $siteUrl) {
+
+                $urls = '';
+
+                // Homepage
+                $urls .= "  <url>\n    <loc>{$siteUrl}/</loc>\n  </url>\n";
+
+                // Dynamic pages from WebPage table
+                $pages = WebPage::where('store_id', $storeId)
+                    ->select('page_url', 'created_at', 'updated_at')
+                    ->orderBy('id')
+                    ->get();
+
+                foreach ($pages as $page) {
+                    $pageUrl = trim($page->page_url, '/');
+                    if ($pageUrl) {
+                        $lastmod = ($page->updated_at ?? $page->created_at)?->toW3cString();
+                        $lastmodTag = $lastmod ? "\n    <lastmod>{$lastmod}</lastmod>" : '';
+                        $urls .= "  <url>\n    <loc>{$siteUrl}/{$pageUrl}/</loc>{$lastmodTag}\n  </url>\n";
+                    }
+                }
+
+                return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
+                    . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n"
+                    . $urls
+                    . '</urlset>';
+            });
+
+            return $this->xmlResponse($xml);
+        } catch (\Exception $e) {
+            Log::error('Sitemap pages error: ' . $e->getMessage());
+            return $this->xmlError($e->getMessage());
         }
-
-        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
-            . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n"
-            . $urls
-            . '</urlset>';
-
-        return $this->xmlResponse($xml);
     }
 
     // ===================== PRODUCTS XML =====================
@@ -288,6 +307,7 @@ class SitemapController extends Controller
             $storeId = $this->getStoreId();
 
             Cache::forget("xmlsitemap_index_store_{$storeId}");
+            Cache::forget("xmlsitemap_pages_store_{$storeId}");
             Cache::forget("xmlsitemap_categories_store_{$storeId}");
             Cache::forget("xmlsitemap_brands_store_{$storeId}");
 
