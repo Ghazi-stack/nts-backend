@@ -78,15 +78,8 @@ class ContactRequestController extends Controller
             ]);
 
             // Send Email
-            try {
-                $adminEmail = config('mail.from.address');
-                Mail::to($adminEmail)->send(new ContactRequestMail($contactRequest));
-            } catch (\Exception $mailError) {
-                Log::error('CONTACT EMAIL FAILED', [
-                    'error' => $mailError->getMessage(),
-                    'to' => $adminEmail ?? 'N/A',
-                ]);
-            }
+            $adminEmail = 'info@serverblink.uk';
+            Mail::to($adminEmail)->send(new ContactRequestMail($contactRequest));
 
             return response()->json([
                 'status'  => true,
