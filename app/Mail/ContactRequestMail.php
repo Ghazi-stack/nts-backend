@@ -20,10 +20,10 @@ class ContactRequestMail extends Mailable
 
     public function build()
     {
-        return $this->subject('New Contact Request')
-                    ->view('emails.contact-request')
-                    ->with([
-                        'contact' => $this->contactRequest,
-                    ]);
+        return $this->subject('New Contact Request from ' . $this->contactRequest->full_name)
+            ->view('emails.contact-request')
+            ->with([
+                'contact' => $this->contactRequest,
+            ]);
     }
 }

@@ -78,8 +78,15 @@ class ContactRequestController extends Controller
             ]);
 
             // Send Email
-            $adminEmail = config('mail.from.address');
-            Mail::to($adminEmail)->send(new ContactRequestMail($contactRequest));
+            try {
+                $adminEmail = config('mail.from.address');
+                Mail::to($adminEmail)->send(new ContactRequestMail($contactRequest));
+            } catch (\Exception $mailError) {
+                Log::error('CONTACT EMAIL FAILED', [
+                    'error' => $mailError->getMessage(),
+                    'to' => $adminEmail ?? 'N/A',
+                ]);
+            }
 
             return response()->json([
                 'status'  => true,
