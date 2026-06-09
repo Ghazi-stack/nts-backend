@@ -78,7 +78,7 @@ class ContactRequestController extends Controller
             ]);
 
             // Send Email
-            $adminEmail = 'aroz.ali@shiwantek.com';
+            $adminEmail = 'info@serverblink.uk';
             Mail::to($adminEmail)->send(new ContactRequestMail($contactRequest));
 
             return response()->json([

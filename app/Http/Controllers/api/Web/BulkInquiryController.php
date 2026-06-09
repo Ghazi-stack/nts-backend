@@ -41,7 +41,7 @@ class BulkInquiryController extends Controller
                 'sku' => $validated['sku'],
             ]);
 
-            $adminEmail = config('mail.from.address'); 
+            $adminEmail = 'info@serverblink.uk'; 
             Mail::to($adminEmail)->send(new BulkInquiryMail($bulkInquiry));
 
             return response()->json([
