@@ -1784,7 +1784,7 @@ class ProductController extends Controller
                 ->get();
         } else {
             // Fallback to latest products
-            $products = Product::select('id', 'name', 'sku', 'price', 'brand_id')
+            $products = Product::select('id', 'name', 'sku', 'price', 'brand_id','purchasability_status')
                 ->where('store_id', $storeId)
                 ->latest()
                 ->limit($limit)
