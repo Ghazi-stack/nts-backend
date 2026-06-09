@@ -1771,7 +1771,7 @@ class ProductController extends Controller
 
         // If popular products exist
         if ($productIds->isNotEmpty()) {
-            $products = Product::select('id', 'name', 'sku', 'price', 'brand_id')
+            $products = Product::select('id', 'name', 'sku', 'price', 'brand_id','purchasability_status')
                 ->whereIn('id', $productIds)
                 ->with([
                     'brand:id,name',
