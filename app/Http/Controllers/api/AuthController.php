@@ -60,7 +60,6 @@ class AuthController extends Controller
             DB::beginTransaction();
 
             if ($request->userRole == 1) {
-                // Store Owner Registration (Existing logic - thoda improve kiya)
                 $user = User::create([
                     'name'          => $request->firstName . ' ' . $request->lastName,
                     'email'         => $request->email,
@@ -85,9 +84,21 @@ class AuthController extends Controller
 
                 DB::commit();
 
-                // Token Generate for Store Owner
+                // Send Registration Email to Store Owner
+                try {
+                    Mail::to($user->email)->send(new UserRegistrationMail($user, $store->id));
+
+                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
+                    Mail::to($adminEmail)->send(new UserRegistrationMail($user, $store->id));
+                } catch (\Exception $mailError) {
+                    Log::error('REGISTRATION EMAIL FAILED', [
+                        'error' => $mailError->getMessage(),
+                        'user_email' => $user->email,
+                    ]);
+                }
+
                 $token = $user->createToken('auth_token')->plainTextToken;
-                $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s'); // 1 day expiry
+                $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
 
                 return response()->json([
                     'status'   => true,
@@ -102,7 +113,6 @@ class AuthController extends Controller
             // ===================== CUSTOMER REGISTRATION =====================
             $storeId = current_store_id();
 
-            // Create User
             $user = User::create([
                 'name'          => $request->firstName . ' ' . $request->lastName,
                 'email'         => $request->email,
@@ -114,7 +124,6 @@ class AuthController extends Controller
                 'store_id'      => $storeId,
             ]);
 
-            // Create Customer
             $customer = Customer::create([
                 'store_id'        => $storeId,
                 'first_name'      => $request->firstName,
@@ -133,23 +142,33 @@ class AuthController extends Controller
                 'force_password_reset'  => false,
             ]);
 
-            // Link User & Customer
             $user->customer_id = $customer->id;
             $user->save();
 
             DB::commit();
 
-            // ===================== TOKEN GENERATE =====================
-            $token = $user->createToken('auth_token')->plainTextToken;
-            $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s'); // 1 din expiry (login jaisa)
+            // Send Registration Email to Customer + Admin
+            try {
+                Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
 
-            // ===================== FINAL RESPONSE (Login jaisa) =====================
+                $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
+                Mail::to($adminEmail)->send(new UserRegistrationMail($user, $storeId));
+            } catch (\Exception $mailError) {
+                Log::error('REGISTRATION EMAIL FAILED', [
+                    'error' => $mailError->getMessage(),
+                    'user_email' => $user->email,
+                ]);
+            }
+
+            $token = $user->createToken('auth_token')->plainTextToken;
+            $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
             return response()->json([
                 'status'   => true,
                 'message'  => 'Customer registered successfully',
                 'token'    => $token,
                 'expireAt' => $expireAt,
-                'store'    => Store::find($storeId),   // Full store info
+                'store'    => Store::find($storeId),
                 'user'     => new UserResource($user),
                 'customer' => new CustomerResource($customer),
             ], 201);
