@@ -1,65 +1,552 @@
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Newtown Spares Email</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width">
+
+  <style type="text/css">
+    @media only screen {
+      html {
+        background: #fff;
+        min-height: 100%;
+      }
+    }
+
+    body,
+    table,
+    tr,
+    td,
+    th,
+    div,
+    h1,
+    p,
+    img {
+      Margin: 0;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      box-sizing: border-box;
+      min-width: 100%;
+      width: 100%;
+    }
+
+    table {
+      border-collapse: collapse;
+      border-spacing: 0;
+      width: 100%;
+    }
+
+    td,
+    th {
+      border-collapse: collapse;
+    }
+
+    h1,
+    p,
+    a,
+    span,
+    img {
+      color: #333;
+      font-family: Montserrat, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-size: 14px;
+      font-weight: 400;
+      line-height: 1.57143;
+      word-wrap: break-word;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 500;
+      line-height: 1.21429;
+    }
+
+    h1:not(:last-child),
+    p:not(:last-child) {
+      Margin: 0 0 32px;
+      margin: 0 0 32px;
+    }
+
+    a {
+      color: #2199e8;
+      display: inline-block;
+      text-decoration: none;
+    }
+
+    strong {
+      font-weight: 600;
+    }
+
+    img {
+      border: none;
+      display: block;
+      outline: 0;
+      text-align: center;
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    hr {
+      border: none;
+      border-bottom: 1px solid #d0d0d0;
+    }
+
+    .body {
+      background: #fff;
+      height: 100%;
+    }
+
+    .body>tr>td {
+      text-align: center;
+    }
+
+    .container,
+    .column {
+      Margin: 0 auto;
+      margin: 0 auto;
+      width: 544px;
+    }
+
+    .column td,
+    .column th {
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .column--md-9 {
+      width: 75%;
+    }
+
+    .column--md-3 {
+      width: 25%;
+    }
+
+    .expander {
+      padding: 0 !important;
+      visibility: hidden;
+      width: 0;
+    }
+
+    .spacer--16 td {
+      font-size: 16px;
+      height: 16px;
+      line-height: 16px;
+    }
+
+    .spacer--24 td {
+      font-size: 24px;
+      height: 24px;
+      line-height: 24px;
+    }
+
+    .spacer--32 td {
+      font-size: 32px;
+      height: 32px;
+      line-height: 32px;
+    }
+
+    .spacer--40 td {
+      font-size: 40px;
+      height: 40px;
+      line-height: 40px;
+    }
+
+    .delimiter th {
+      vertical-align: middle;
+    }
+
+    .delimiter__image,
+    .delimiter__image-block {
+      width: 48px;
+    }
+
+    .logo td {
+      padding: 24px 0;
+    }
+
+    .logo a {
+      color: #333;
+      display: block;
+      text-align: center;
+    }
+
+    .logo img {
+      color: #333;
+      text-decoration: none;
+      margin: 0 auto;
+    }
+
+    .logo span {
+      color: #333;
+      font-size: 36px;
+      font-weight: 600;
+    }
+
+    h2 {
+      Margin: 0 0 4px;
+      margin: 0 0 4px;
+      color: #333;
+      font-family: Montserrat, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-size: 21px;
+      font-weight: 500;
+      line-height: 1.57143;
+    }
+
+    .details {
+      border-top: 1px solid #e5e5e5;
+    }
+
+    .details>tr>th {
+      padding-top: 16px;
+    }
+
+    .details__content {
+      width: auto;
+    }
+
+    .details__content tr:not(:last-child) th {
+      padding-bottom: 8px;
+    }
+
+    .store p {
+      Margin: 0;
+      margin: 0;
+    }
+
+    .store a {
+      color: #777;
+      font-size: 12px;
+    }
+
+    .store-button a {
+      border: 1px solid #999;
+      border-radius: 4px;
+      box-sizing: border-box;
+      color: #777;
+      padding: 3px 15px;
+      text-align: center;
+      white-space: nowrap;
+      width: 100%;
+    }
+
+    @media only screen and (max-width: 599px) {
+      img {
+        height: auto !important;
+        width: auto !important;
+      }
+
+      .container {
+        width: 100% !important;
+      }
+
+      .column {
+        box-sizing: border-box;
+        height: auto !important;
+        padding-left: 15px !important;
+        padding-right: 15px !important;
+      }
+
+      .column--xs-12 {
+        display: inline-block !important;
+        width: 100% !important;
+      }
+
+      .details__content th {
+        width: 100% !important;
+        display: block !important;
+      }
+
+      .store th {
+        padding-bottom: 16px !important;
+      }
+
+      .store p {
+        text-align: center !important;
+      }
+
+      .store-button a {
+        margin-left: auto !important;
+        margin-right: auto !important;
+      }
+    }
+  </style>
 </head>
 
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f9f9f9;">
-  <table width="100%" cellspacing="0" cellpadding="0" bgcolor="#f9f9f9">
+<body>
+  <table class="body">
     <tr>
-      <td align="center">
-        <table width="600" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="margin-top: 20px; border: 1px solid #e0e0e0;">
-
-          <!-- Top Banner with Logo -->
-          <tr bgcolor="#ff3d1f">
-            <td align="center" style="padding: 20px;">
-              <div style="background-color: white; padding: 10px 20px; display: inline-block; border-radius: 8px;">
-                <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/images/stencil/250x70/nts-newlogo_nts_1682517516__50628.original.png" alt="Newtown Spares Logo" width="180" style="display: block;" />
-              </div>
-            </td>
-          </tr>
-
-          <!-- Email Body -->
+      <td>
+        <table class="spacer spacer--16">
           <tr>
-            <td style="padding: 30px;">
-              <h2 style="color: #333333;">Hello Store Admin,</h2>
-              <p style="color: #555555; font-size: 16px;">
-                A new contact request has been submitted by <strong>{{ $contact->full_name }}</strong>@if($contact->company_name) from <strong>{{ $contact->company_name }}</strong>@endif.
-              </p>
+            <td>&nbsp;</td>
+          </tr>
+        </table>
 
-              <h3 style="color: #333333;">Request Details:</h3>
-              <ul style="color: #555555; font-size: 16px;">
-                <li><strong>Name:</strong> {{ $contact->full_name }}</li>
-                <li><strong>Email:</strong> {{ $contact->email }}</li>
-                <li><strong>Phone:</strong> {{ $contact->phone_number }}</li>
-                <li><strong>Company:</strong> {{ $contact->company_name ?? 'N/A' }}</li>
-                <li><strong>Order #:</strong> {{ $contact->order_number ?? 'N/A' }}</li>
-                <li><strong>RMA #:</strong> {{ $contact->rma_number ?? 'N/A' }}</li>
-                <li><strong>Comments:</strong> {{ $contact->comments ?? 'N/A' }}</li>
-              </ul>
+        <!-- Logo + Delimiter -->
+        <table class="container">
+          <tr>
+            <td>
+              <table class="row">
+                <tr>
+                  <th class="column">
+                    <table class="logo">
+                      <tr>
+                        <th style="text-align: center;">
+                          <a href="{{ $storePath }}" target="_blank">
+                            @if($logoUrl)
+                            <img src="{{ $logoUrl }}" alt="{{ $store?->name ?? 'Store' }} Logo" width="300" height="150" style="display: block; margin: 0 auto; max-width: 300px; max-height: 150px; width: auto; height: auto;">
+                            @else
+                            <span>{{ $store?->name ?? 'Our Store' }}</span>
+                            @endif
+                          </a>
+                        </th>
+                        <th class="expander"></th>
+                      </tr>
+                    </table>
+                  </th>
+                </tr>
+              </table>
 
-              <p style="color: #555555; font-size: 16px;">
-                Please follow up with the customer as soon as possible.
-              </p>
-
-              <div style="text-align: center; margin-top: 30px;">
-                <a href="https://newtownspares.com" style="background-color: #ff3d1f; color: #ffffff; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 4px;">Visit Store</a>
-              </div>
+              <table class="row">
+                <tr>
+                  <th class="column">
+                    <table>
+                      <tr>
+                        <th>
+                          <table class="delimiter">
+                            <tr>
+                              <th>
+                                <hr>
+                              </th>
+                              <th class="delimiter__image-block">
+                                <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/img/emails/cart.png" alt="Cart" class="delimiter__image">
+                              </th>
+                              <th>
+                                <hr>
+                              </th>
+                            </tr>
+                          </table>
+                        </th>
+                        <th class="expander"></th>
+                      </tr>
+                    </table>
+                  </th>
+                </tr>
+              </table>
             </td>
           </tr>
+        </table>
 
-          <!-- Footer -->
-          <tr bgcolor="#f0f0f0">
-            <td align="center" style="font-size: 13px; color: #777777; padding: 20px;">
-              &copy; 2025 serverblink. All rights reserved.<br />
-              <a href="https://newtownspares.com/unsubscribe" style="color: #777777;">Unsubscribe</a>
+        <table class="spacer spacer--40">
+          <tr>
+            <td>&nbsp;</td>
+          </tr>
+        </table>
+
+        <!-- Main Content -->
+        <table class="container">
+          <tr>
+            <td>
+              <table class="row">
+                <tr>
+                  <th class="column">
+                    <table>
+                      <tr>
+                        <th>
+                          <h1>New Contact Request</h1>
+
+                          <p>
+                            Hello Store Admin,
+                            <br />
+                            A new contact request has been submitted by <strong>{{ $contact->full_name }}</strong>@if($contact->company_name) from <strong>{{ $contact->company_name }}</strong>@endif. Please follow up with the customer as soon as possible.
+                          </p>
+                        </th>
+                        <th class="expander"></th>
+                      </tr>
+                    </table>
+                  </th>
+                </tr>
+              </table>
+
+              <table class="spacer spacer--32">
+                <tr>
+                  <td>&nbsp;</td>
+                </tr>
+              </table>
+
+              <!-- Contact Details -->
+              <table class="row">
+                <tr>
+                  <th class="column">
+                    <table>
+                      <tr>
+                        <th>
+                          <h2>Request Details</h2>
+
+                          <table class="details">
+                            <tr>
+                              <th>
+                                <table class="details__content">
+                                  <tr>
+                                    <th style="width: 120px; padding-right: 30px;">
+                                      <p>Name:</p>
+                                    </th>
+                                    <th>
+                                      <p><strong>{{ $contact->full_name }}</strong></p>
+                                    </th>
+                                  </tr>
+
+                                  <tr>
+                                    <th style="width: 120px; padding-right: 30px;">
+                                      <p>Email:</p>
+                                    </th>
+                                    <th>
+                                      <a href="mailto:{{ $contact->email }}" target="_blank">
+                                        <strong>{{ $contact->email }}</strong>
+                                      </a>
+                                    </th>
+                                  </tr>
+
+                                  <tr>
+                                    <th style="width: 120px; padding-right: 30px;">
+                                      <p>Phone:</p>
+                                    </th>
+                                    <th>
+                                      <p><strong>{{ $contact->phone_number }}</strong></p>
+                                    </th>
+                                  </tr>
+
+                                  <tr>
+                                    <th style="width: 120px; padding-right: 30px;">
+                                      <p>Company:</p>
+                                    </th>
+                                    <th>
+                                      <p><strong>{{ $contact->company_name ?? 'N/A' }}</strong></p>
+                                    </th>
+                                  </tr>
+
+                                  <tr>
+                                    <th style="width: 120px; padding-right: 30px;">
+                                      <p>Order #:</p>
+                                    </th>
+                                    <th>
+                                      <p><strong>{{ $contact->order_number ?? 'N/A' }}</strong></p>
+                                    </th>
+                                  </tr>
+
+                                  <tr>
+                                    <th style="width: 120px; padding-right: 30px;">
+                                      <p>RMA #:</p>
+                                    </th>
+                                    <th>
+                                      <p><strong>{{ $contact->rma_number ?? 'N/A' }}</strong></p>
+                                    </th>
+                                  </tr>
+
+                                  @if($contact->comments)
+                                  <tr>
+                                    <th style="width: 120px; padding-right: 30px;">
+                                      <p>Comments:</p>
+                                    </th>
+                                    <th>
+                                      <p><strong>{{ $contact->comments }}</strong></p>
+                                    </th>
+                                  </tr>
+                                  @endif
+                                </table>
+                              </th>
+                            </tr>
+                          </table>
+                        </th>
+                        <th class="expander"></th>
+                      </tr>
+                    </table>
+                  </th>
+                </tr>
+              </table>
             </td>
           </tr>
+        </table>
 
+        <table class="spacer spacer--40">
+          <tr>
+            <td>&nbsp;</td>
+          </tr>
+        </table>
 
+        <!-- Footer -->
+        <table class="container">
+          <tr>
+            <td>
+              <table class="row">
+                <tr>
+                  <th class="column">
+                    <table>
+                      <tr>
+                        <th>
+                          <table class="delimiter">
+                            <tr>
+                              <th>
+                                <hr>
+                              </th>
+                              <th class="delimiter__image-block">
+                                <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/img/emails/shop.png" alt="Shop" class="delimiter__image">
+                              </th>
+                              <th>
+                                <hr>
+                              </th>
+                            </tr>
+                          </table>
+                        </th>
+                        <th class="expander"></th>
+                      </tr>
+                    </table>
+                  </th>
+                </tr>
+              </table>
+
+              <table class="spacer spacer--24">
+                <tr>
+                  <td>&nbsp;</td>
+                </tr>
+              </table>
+
+              <table class="row">
+                <tr>
+                  <th class="column column--md-9 column--xs-12">
+                    <table class="store">
+                      <tr>
+                        <th>
+                          <p><strong>{{ $store?->name ?? 'Our Store' }}</strong></p>
+                          <p><a href="{{ $storePath }}" target="_blank">{{ str_replace(['https://', 'http://'], '', $storePath) }}</a></p>
+                        </th>
+                        <th class="expander"></th>
+                      </tr>
+                    </table>
+                  </th>
+
+                  <th class="column column--md-3 column--xs-12">
+                    <table class="store-button">
+                      <tr>
+                        <th>
+                          <a href="{{ $storePath }}"><strong>Go shopping</strong></a>
+                        </th>
+                        <th class="expander"></th>
+                      </tr>
+                    </table>
+                  </th>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <table class="spacer spacer--16">
+          <tr>
+            <td>&nbsp;</td>
+          </tr>
         </table>
       </td>
     </tr>
