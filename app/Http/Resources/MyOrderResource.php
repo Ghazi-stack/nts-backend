@@ -33,9 +33,8 @@ class MyOrderResource extends JsonResource
                     'id'       => $item->product->id,
                     'name'     => $item->product->name,
                     'quantity' => $item->quantity,
-                    'images'   => $item->product->images
-                        ->map(fn($img) => url($img->path))
-                        ->toArray(),
+                    'price'    => $item->price,
+                    'image'    => ProductImageResource::collection($item->product->images),
                 ];
             }),
         ];
