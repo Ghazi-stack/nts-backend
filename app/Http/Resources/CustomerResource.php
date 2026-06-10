@@ -30,6 +30,8 @@ class CustomerResource extends JsonResource
             'forcePasswordReset'  => (bool) $this->force_password_reset,
             'taxExemptCode'       => $this->tax_exempt_code,
             'country'             => $this->country,
+            'addressLine1'             => $this->address,
+            'addressLine2'             => $this->address_line_2,
             'state'               => $this->state,
             'createdAt'               => $this->created_at,
             'updatedAt'               => $this->updated_at,
