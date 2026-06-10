@@ -244,7 +244,7 @@
       -moz-box-sizing: border-box;
       -webkit-box-sizing: border-box;
       box-sizing: border-box;
-      color: #777;
+      color: #777 !important;
       display: inline-block;
       font-weight: 600;
       padding: 4px 15px;
@@ -417,7 +417,7 @@
                       <tr>
                         <th>
                           <h1>Thanks for registering at {{ $store?->name ?? 'Our Store' }}</h1>
-
+                          <br><br>
                           <p>
                             Hello {{ $user->name }},
                             <br />
@@ -446,7 +446,7 @@
                       <tr>
                         <th>
                           <h2>Account details</h2>
-
+                          <br>
                           <table class="details">
                             <tr>
                               <th>
@@ -461,7 +461,7 @@
                                       </a>
                                     </th>
                                   </tr>
-
+                                  <br>
                                   <tr>
                                     <th class="details__first-column" style="width: 120px; padding-right: 30px;">
                                       <p>Password:</p>
