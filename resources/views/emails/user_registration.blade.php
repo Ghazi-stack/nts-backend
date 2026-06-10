@@ -54,9 +54,12 @@
     span,
     img {
       color: #333;
-      font-family: Montserrat, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: Montserrat, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
       font-size: 14px;
       font-weight: 400;
+      -moz-hyphens: auto;
+      -webkit-hyphens: auto;
+      hyphens: auto;
       line-height: 1.57143;
       word-wrap: break-word;
     }
@@ -97,12 +100,28 @@
       border-bottom: 1px solid #d0d0d0;
     }
 
-    .container {
-      Margin: 0 auto;
-      margin: 0 auto;
-      width: 544px;
+    .preheader {
+      display: none;
+      font-size: 1px;
+      line-height: 1px;
+      max-height: 0;
+      max-width: 0;
+      mso-hide: all;
+      opacity: 0;
+      overflow: hidden;
+      visibility: hidden;
     }
 
+    .body {
+      background: #fff;
+      height: 100%;
+    }
+
+    .body>tr>td {
+      text-align: center;
+    }
+
+    .container,
     .column {
       Margin: 0 auto;
       margin: 0 auto;
@@ -113,6 +132,14 @@
     .column th {
       text-align: left;
       vertical-align: top;
+    }
+
+    .column--md-9 {
+      width: 75%;
+    }
+
+    .column--md-3 {
+      width: 25%;
     }
 
     .expander {
@@ -179,9 +206,12 @@
     h2 {
       Margin: 0 0 4px;
       color: #333;
-      font-family: Montserrat, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: Montserrat, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
       font-size: 21px;
       font-weight: 500;
+      -moz-hyphens: auto;
+      -webkit-hyphens: auto;
+      hyphens: auto;
       line-height: 1.57143;
       margin: 0 0 4px;
       word-wrap: break-word;
@@ -210,6 +240,8 @@
     .sigh-in {
       border: 1px solid #999;
       border-radius: 4px;
+      -moz-box-sizing: border-box;
+      -webkit-box-sizing: border-box;
       box-sizing: border-box;
       color: #777;
       display: inline-block;
@@ -232,6 +264,8 @@
     .store-button a {
       border: 1px solid #999;
       border-radius: 4px;
+      -moz-box-sizing: border-box;
+      -webkit-box-sizing: border-box;
       box-sizing: border-box;
       color: #777;
       padding: 3px 15px;
@@ -251,19 +285,54 @@
       }
 
       .column {
+        -moz-box-sizing: border-box;
+        -webkit-box-sizing: border-box;
         box-sizing: border-box;
         height: auto !important;
         padding-left: 15px !important;
         padding-right: 15px !important;
+      }
+
+      .column--xs-12 {
+        display: inline-block !important;
+        width: 100% !important;
+      }
+
+      .delimiter__image {
+        width: 48px !important;
+      }
+
+      .details__content th {
+        width: 100% !important;
+        display: block !important;
+      }
+
+      .details__first-column {
+        padding-bottom: 0 !important;
+      }
+
+      .store th {
+        padding-bottom: 16px !important;
+      }
+
+      .store p {
+        text-align: center !important;
+      }
+
+      .store-button a {
+        margin-left: auto !important;
+        margin-right: auto !important;
       }
     }
   </style>
 </head>
 
 <body>
-  <table class="body" style="background: #fff; height: 100%; width: 100%;">
+  <span class="preheader"></span>
+
+  <table class="body">
     <tr>
-      <td style="text-align: center;">
+      <td>
         <table class="spacer spacer--16">
           <tr>
             <td>&nbsp;</td>
@@ -280,14 +349,15 @@
                     <table class="logo">
                       <tr>
                         <th style="text-align: center;">
-                          <a href="{{ $store?->base_url ?? '#' }}" target="_blank">
-                            @if($logo && $logo->logo_url)
-                            <img src="{{ $logo->logo_url }}" alt="{{ $store?->name }} Logo" width="200" style="display: block; margin: 0 auto;">
+                          <a href="{{ $storePath }}" target="_blank">
+                            @if($logoUrl)
+                            <img src="{{ $logoUrl }}" alt="{{ $store?->name ?? 'Store' }} Logo" width="300" height="150" style="display: block; margin: 0 auto; max-width: 300px; max-height: 150px; width: auto; height: auto;">
                             @else
-                            <span style="font-size: 36px; font-weight: 600; color: #333;">{{ $store?->name ?? 'Our Store' }}</span>
+                            <span>{{ $store?->name ?? 'Our Store' }}</span>
                             @endif
                           </a>
                         </th>
+
                         <th class="expander"></th>
                       </tr>
                     </table>
@@ -295,15 +365,30 @@
                 </tr>
               </table>
 
-              <!-- Delimiter -->
+              <!-- Cart Delimiter -->
               <table class="row">
                 <tr>
                   <th class="column">
                     <table>
                       <tr>
                         <th>
-                          <hr style="border: none; border-bottom: 1px solid #d0d0d0;">
+                          <table class="delimiter">
+                            <tr>
+                              <th>
+                                <hr>
+                              </th>
+
+                              <th class="delimiter__image-block">
+                                <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/img/emails/cart.png" alt="Cart image" class="delimiter__image">
+                              </th>
+
+                              <th>
+                                <hr>
+                              </th>
+                            </tr>
+                          </table>
                         </th>
+
                         <th class="expander"></th>
                       </tr>
                     </table>
@@ -323,20 +408,22 @@
         <table class="container">
           <tr>
             <td>
-              <!-- Welcome Message -->
+              <!-- Welcome Heading -->
               <table class="row">
                 <tr>
                   <th class="column">
                     <table>
                       <tr>
                         <th>
-                          <h1>Welcome to {{ $store?->name ?? 'Our Store' }}!</h1>
+                          <h1>Thanks for registering at {{ $store?->name ?? 'Our Store' }}</h1>
+
                           <p>
-                            Hi {{ $user->name }},
+                            Hello {{ $user->name }},
                             <br />
-                            Thanks for creating an account with {{ $store?->name ?? 'our store' }}. We're excited to have you on board!
+                            Thank you for creating your account at {{ $store?->name ?? 'Our Store' }}.
                           </p>
                         </th>
+
                         <th class="expander"></th>
                       </tr>
                     </table>
@@ -357,7 +444,7 @@
                     <table>
                       <tr>
                         <th>
-                          <h2>Your Account Details</h2>
+                          <h2>Account details</h2>
 
                           <table class="details">
                             <tr>
@@ -365,21 +452,24 @@
                                 <table class="details__content">
                                   <tr>
                                     <th class="details__first-column">
-                                      <p>Email</p>
+                                      <p>Email Address:</p>
                                     </th>
+
                                     <th>
                                       <a href="mailto:{{ $user->email }}" target="_blank">
                                         <strong>{{ $user->email }}</strong>
                                       </a>
                                     </th>
                                   </tr>
+
                                   <tr>
                                     <th class="details__first-column">
-                                      <p>Password</p>
+                                      <p>Password:</p>
                                     </th>
+
                                     <th>
                                       <p>
-                                        <strong>The password you provided during registration</strong>
+                                        <strong>[The password you specified]</strong>
                                       </p>
                                     </th>
                                   </tr>
@@ -388,6 +478,7 @@
                             </tr>
                           </table>
                         </th>
+
                         <th class="expander"></th>
                       </tr>
                     </table>
@@ -408,8 +499,9 @@
                     <table>
                       <tr>
                         <th>
-                          <a href="{{ $store?->base_url ?? '#' }}" class="sigh-in">Sign In</a>
+                          <a href="{{ $storePath }}" class="sigh-in">Sign in to account</a>
                         </th>
+
                         <th class="expander"></th>
                       </tr>
                     </table>
@@ -430,8 +522,9 @@
                     <table>
                       <tr>
                         <th>
-                          <p>If you have any questions or need help, feel free to contact our support team. We're here to help!</p>
+                          <p>If you have any questions regarding your account, click 'Reply' in your email client and we'll be only too happy to help.</p>
                         </th>
+
                         <th class="expander"></th>
                       </tr>
                     </table>
@@ -458,8 +551,23 @@
                     <table>
                       <tr>
                         <th>
-                          <hr style="border: none; border-bottom: 1px solid #d0d0d0;">
+                          <table class="delimiter">
+                            <tr>
+                              <th>
+                                <hr>
+                              </th>
+
+                              <th class="delimiter__image-block">
+                                <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/img/emails/shop.png" alt="Shop image" class="delimiter__image">
+                              </th>
+
+                              <th>
+                                <hr>
+                              </th>
+                            </tr>
+                          </table>
                         </th>
+
                         <th class="expander"></th>
                       </tr>
                     </table>
@@ -475,16 +583,33 @@
 
               <table class="row">
                 <tr>
-                  <th class="column" style="text-align: center;">
-                    <table>
+                  <th class="column column--md-9 column--xs-12">
+                    <table class="store">
                       <tr>
-                        <th style="text-align: center;">
-                          <p style="margin: 0;"><strong>{{ $store?->name ?? 'Our Store' }}</strong></p>
-                          <p style="margin: 0;">
-                            <a href="{{ $store?->base_url ?? '#' }}" target="_blank" style="color: #777; font-size: 12px;">{{ $store?->base_url ?? '' }}</a>
+                        <th>
+                          <p>
+                            <strong>{{ $store?->name ?? 'Our Store' }}</strong>
                           </p>
-                          <p style="margin-top: 10px; color: #999; font-size: 12px;">&copy; {{ date('Y') }} {{ $store?->name ?? 'Our Store' }}. All rights reserved.</p>
+
+                          <p>
+                            <a href="{{ $storePath }}" target="_blank">{{ str_replace(['https://', 'http://'], '', $storePath) }}</a>
+                          </p>
                         </th>
+
+                        <th class="expander"></th>
+                      </tr>
+                    </table>
+                  </th>
+
+                  <th class="column column--md-3 column--xs-12">
+                    <table class="store-button">
+                      <tr>
+                        <th>
+                          <a href="{{ $storePath }}">
+                            <strong>Go shopping</strong>
+                          </a>
+                        </th>
+
                         <th class="expander"></th>
                       </tr>
                     </table>
