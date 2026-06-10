@@ -868,6 +868,24 @@ class OrderController extends Controller
                 $order->load('items.product.images', 'billingInformation', 'customer');
             }
 
+            // ===================== SEND ORDER EMAIL (NEW) =====================
+            try {
+                foreach ($orders as $ord) {
+                    $ord->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
+
+                    // Email to customer
+                    Mail::to($validated['email'])->send(new OrderPlacedMail($ord, $customer, $storeId));
+
+                    // Email to admin
+                    $adminEmail = env('MAIL_ADMIN_ADDRESS', 'info@serverblink.uk');
+                    Mail::to($adminEmail)->send(new OrderPlacedMail($ord, $customer, $storeId));
+                }
+            } catch (\Exception $mailError) {
+                Log::error('ORDER EMAIL FAILED', [
+                    'error' => $mailError->getMessage(),
+                ]);
+            }
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Order placed successfully.',
