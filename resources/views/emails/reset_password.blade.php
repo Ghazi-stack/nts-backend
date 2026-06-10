@@ -347,6 +347,7 @@
                           <p>
                             To change your customer account password at {{ $store?->name ?? 'Our Store' }} please click this link or copy and paste it into your browser:
                             <br />
+                            <br />
                             <a href="{{ $resetUrl }}" target="_blank">{{ $resetUrl }}</a>
                           </p>
                         </th>
