@@ -8,7 +8,7 @@ use App\Models\Store;
 use App\Models\Customer;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
-use App\Notifications\CustomResetPassword;
+use App\Notifications\CustomResetPasswordNotification;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 
@@ -71,9 +71,8 @@ class User extends Authenticatable
 
     public function sendPasswordResetNotification($token)
     {
-        $this->notify(new CustomResetPassword($token));
+        $this->notify(new CustomResetPasswordNotification($token));
     }
-
     public function orders()
     {
         return $this->hasMany(Order::class);
