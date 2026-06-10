@@ -235,6 +235,7 @@
 
     .details__content th:first-child {
       padding-right: 30px;
+      width: 120px;
     }
 
     .sigh-in {
@@ -451,10 +452,9 @@
                               <th>
                                 <table class="details__content">
                                   <tr>
-                                    <th class="details__first-column">
+                                    <th class="details__first-column" style="width: 120px; padding-right: 30px;">
                                       <p>Email Address:</p>
                                     </th>
-
                                     <th>
                                       <a href="mailto:{{ $user->email }}" target="_blank">
                                         <strong>{{ $user->email }}</strong>
@@ -463,7 +463,7 @@
                                   </tr>
 
                                   <tr>
-                                    <th class="details__first-column">
+                                    <th class="details__first-column" style="width: 120px; padding-right: 30px;">
                                       <p>Password:</p>
                                     </th>
 
