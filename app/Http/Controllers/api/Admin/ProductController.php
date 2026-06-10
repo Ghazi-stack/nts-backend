@@ -1756,53 +1756,42 @@ class ProductController extends Controller
             ->limit($limit)
             ->pluck('product_id');
 
-        // STEP 2: Load products (lightweight)
-        // $products = Product::select('id', 'name', 'sku', 'price', 'brand_id')
-        //     ->whereIn('id', $productIds)
-        //     ->with([
-        //         'brand:id,name',
-        //         'categories:id,name',
-        //         'images' => function ($q) {
-        //             $q->select('id', 'product_id', 'path')
-        //                 ->where('is_primary', 1);
-        //         }
-        //     ])
-        //     ->get();
-
         // If popular products exist
         if ($productIds->isNotEmpty()) {
-            $products = Product::select('id', 'name', 'sku', 'price', 'brand_id','purchasability_status')
-                ->whereIn('id', $productIds)
+            $products = Product::whereIn('id', $productIds)
+                ->where('visible_on_storefront', 1)
                 ->with([
-                    'brand:id,name',
-                    'categories:id,name',
-                    'images' => function ($q) {
-                        $q->select('id', 'product_id', 'path')
-                            ->where('is_primary', 1);
-                    }
+                    'categories',
+                    'brand',
+                    'images',
+                    'reviews.user',
+                    'content',
+                    'identifiers',
+                    'seo'
                 ])
                 ->get();
         } else {
             // Fallback to latest products
-            $products = Product::select('id', 'name', 'sku', 'price', 'brand_id','purchasability_status')
-                ->where('store_id', $storeId)
+            $products = Product::where('store_id', $storeId)
+                ->where('visible_on_storefront', 1)
+                ->with([
+                    'categories',
+                    'brand',
+                    'images',
+                    'reviews.user',
+                    'content',
+                    'identifiers',
+                    'seo'
+                ])
                 ->latest()
                 ->limit($limit)
-                ->with([
-                    'brand:id,name',
-                    'categories:id,name',
-                    'images' => function ($q) {
-                        $q->select('id', 'product_id', 'path')
-                            ->where('is_primary', 1);
-                    }
-                ])
                 ->get();
         }
 
         return response()->json([
             'status' => true,
             'message' => 'Popular products retrieved.',
-            'data' => PopularProductResource::collection($products)
+            'data' => ProductResource::collection($products)
         ]);
     }
 
