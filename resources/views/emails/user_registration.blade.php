@@ -446,8 +446,8 @@
                       <tr>
                         <th>
                           <h2>Account details</h2>
-                          <br>
                           <table class="details">
+                            <br>
                             <tr>
                               <th>
                                 <table class="details__content">
