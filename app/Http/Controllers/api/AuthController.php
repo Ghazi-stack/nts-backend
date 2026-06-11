@@ -573,20 +573,26 @@ class AuthController extends Controller
                     $user->forceFill([
                         'password' => Hash::make($password),
                     ])->save();
-
-                    try {
-                        Mail::to($user->email)->send(new PasswordResetSuccessMail($user));
-                    } catch (Exception $mailEx) {
-                        Log::error('Password reset mail failed: ' . $mailEx->getMessage());
-                    }
                 }
             );
+
+            // Password reset success hone ke baad email bhejo
+            if ($status === Password::PASSWORD_RESET) {
+                try {
+                    $user = \App\Models\User::where('email', $request->email)->first();
+                    if ($user) {
+                        Mail::to($user->email)->send(new PasswordResetSuccessMail($user));
+                    }
+                } catch (\Exception $mailEx) {
+                    Log::error('Password reset mail failed: ' . $mailEx->getMessage());
+                }
+            }
 
             return response()->json([
                 'status' => $status === Password::PASSWORD_RESET,
                 'message' => __($status),
             ], $status === Password::PASSWORD_RESET ? 200 : 400);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Reset password failed: ' . $e->getMessage());
 
             return response()->json([
