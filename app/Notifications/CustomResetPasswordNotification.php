@@ -33,7 +33,7 @@ class CustomResetPasswordNotification extends Notification
         ];
         $storePath = $storeUrls[$storeId] ?? ($store?->base_url ?? '#');
 
-        $resetUrl = $storePath . '/reset-password?token=' . $this->token . '&email=' . urlencode($notifiable->email);
+        $resetUrl = $storePath . '/auth/reset-password?token=' . $this->token . '&email=' . urlencode($notifiable->email);
 
         return (new MailMessage)
             ->subject('Change your password for ' . ($store?->name ?? 'Our Store'))
