@@ -567,6 +567,11 @@ class AuthController extends Controller
                 'token' => 'required'
             ]);
 
+            // password_confirmation auto set karo agar nahi aaya
+            $request->merge([
+                'password_confirmation' => $request->password
+            ]);
+
             $status = Password::reset(
                 $request->only('email', 'password', 'password_confirmation', 'token'),
                 function ($user, $password) {
