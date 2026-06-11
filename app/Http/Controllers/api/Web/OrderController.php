@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\api\Web;
 
+use App\Mail\WelcomeLoginMail;
 use Exception;
 use App\Models\Cart;
 use App\Models\User;
@@ -606,7 +607,6 @@ class OrderController extends Controller
 
                 'paymentMethod'  => 'required|string|max:100',
 
-                // Single Address - Ab optional
                 'shippingMethod' => 'nullable|string|max:100',
                 'shippingCost'   => 'nullable|numeric',
 
@@ -615,7 +615,6 @@ class OrderController extends Controller
                 'paymentIntentId' => 'required|string',
                 'isMultiAddress' => 'required|boolean',
 
-                // ===================== MULTI ADDRESS =====================
                 'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
                 'destinations.*.firstName'      => 'required|string|max:255',
                 'destinations.*.lastName'       => 'required|string|max:255',
@@ -628,7 +627,6 @@ class OrderController extends Controller
                 'destinations.*.zip'            => 'required|string|max:20',
                 'destinations.*.country'        => 'required|string|max:100',
 
-                // Multi Address mein shipping REQUIRED
                 'destinations.*.shippingMethod' => 'required|string|max:100',
                 'destinations.*.shippingCost'   => 'required|numeric',
 
@@ -636,7 +634,6 @@ class OrderController extends Controller
                 'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
                 'destinations.*.products.*.quantity'   => 'required|integer|min:1',
 
-                // Single Address Products
                 'products'       => 'required_if:isMultiAddress,false|array|min:1',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
@@ -652,7 +649,6 @@ class OrderController extends Controller
 
             if ($existingPayment) {
                 if ($existingPayment->payment_status === 'completed') {
-                    // Already completed → return existing order
                     $order = Order::with('items.product.images', 'billingInformation', 'customer')
                         ->find($existingPayment->order_id);
 
@@ -662,7 +658,6 @@ class OrderController extends Controller
                         'data'    => new OrderResource($order),
                     ]);
                 } else {
-                    // Pending or failed → block
                     return response()->json([
                         'status'  => false,
                         'message' => 'This payment is already being processed.'
@@ -708,7 +703,7 @@ class OrderController extends Controller
                 }
             }
 
-       if (!$user) {
+            if (!$user) {
                 $plainPassword = Str::random(10);
                 $user = User::create([
                     'name'      => trim($customer->first_name . ' ' . $customer->last_name),
@@ -729,12 +724,19 @@ class OrderController extends Controller
                 $frontendUrl = $storeUrls[$storeId] ?? 'https://server-blink.vercel.app';
                 $resetLink = $frontendUrl . '/reset-password?token=' . $token . '&email=' . urlencode($validated['email']);
 
-                Mail::raw(
-                    "Hello {$customer->first_name},\n\nYour account has been created successfully.\n\nLogin Email: {$validated['email']}\n\nPlease set your password by clicking the link below:\n{$resetLink}\n\nThanks,\nTeam",
-                    function ($message) use ($validated) {
-                        $message->to($validated['email'])->subject('Your Login Details - Set Your Password');
-                    }
-                );
+                try {
+                    Mail::to($validated['email'])->send(new WelcomeLoginMail(
+                        $customer->first_name,
+                        $validated['email'],
+                        $resetLink,
+                        $storeId
+                    ));
+                } catch (\Exception $mailEx) {
+                    Log::error('WELCOME LOGIN EMAIL FAILED', [
+                        'error' => $mailEx->getMessage(),
+                        'email' => $validated['email'],
+                    ]);
+                }
             }
 
             // ===================== ORDERS =====================
@@ -871,14 +873,15 @@ class OrderController extends Controller
                 'stripe_session_id'  => $validated['paymentIntentId'],
                 'amount'             => $totalOrderAmount,
                 'discountAmount'     => $discount,
-                'payment_status'     => 'authorized',  // ← CHANGE: 'completed' se 'authorized'
+                'payment_status'     => 'authorized',
             ]);
+
             // Response
             foreach ($orders as $order) {
                 $order->load('items.product.images', 'billingInformation', 'customer');
             }
 
-            // ===================== SEND ORDER EMAIL (NEW) =====================
+            // ===================== SEND ORDER EMAIL =====================
             try {
                 foreach ($orders as $ord) {
                     $ord->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
