@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Password;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
 use Exception;
+use App\Mail\PasswordResetSuccessMail;
 use App\Services\TwoFactorService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
