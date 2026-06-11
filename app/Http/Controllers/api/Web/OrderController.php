@@ -708,7 +708,7 @@ class OrderController extends Controller
                 }
             }
 
-            if (!$user) {
+       if (!$user) {
                 $plainPassword = Str::random(10);
                 $user = User::create([
                     'name'      => trim($customer->first_name . ' ' . $customer->last_name),
@@ -719,10 +719,20 @@ class OrderController extends Controller
                     'customer_id' => $customer->id,
                 ]);
 
+                // Generate password reset token
+                $token = app('auth.password.broker')->createToken($user);
+
+                $storeUrls = [
+                    4  => 'https://new-town-spares.vercel.app',
+                    10 => 'https://server-blink.vercel.app',
+                ];
+                $frontendUrl = $storeUrls[$storeId] ?? 'https://server-blink.vercel.app';
+                $resetLink = $frontendUrl . '/reset-password?token=' . $token . '&email=' . urlencode($validated['email']);
+
                 Mail::raw(
-                    "Hello {$customer->first_name},\n\nYour account has been created successfully.\n\nLogin Email: {$validated['email']}\nPassword: {$plainPassword}\n\nThanks,\nTeam",
+                    "Hello {$customer->first_name},\n\nYour account has been created successfully.\n\nLogin Email: {$validated['email']}\n\nPlease set your password by clicking the link below:\n{$resetLink}\n\nThanks,\nTeam",
                     function ($message) use ($validated) {
-                        $message->to($validated['email'])->subject('Your Login Details');
+                        $message->to($validated['email'])->subject('Your Login Details - Set Your Password');
                     }
                 );
             }
