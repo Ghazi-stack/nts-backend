@@ -563,18 +563,9 @@ class AuthController extends Controller
         try {
             $request->validate([
                 'email' => 'required|email|exists:users,email',
-                'password' => 'required|confirmed|min:8',
+                'password' => 'required|min:8',
                 'token' => 'required'
             ]);
-
-            $user = User::where('email', $request->email)->first();
-
-            if (Hash::check($request->password, $user->password)) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'New password cannot be the same as the old password.',
-                ], 400);
-            }
 
             $status = Password::reset(
                 $request->only('email', 'password', 'password_confirmation', 'token'),
@@ -604,7 +595,6 @@ class AuthController extends Controller
             ], 500);
         }
     }
-
     public function logout(Request $request)
     {
         try {
