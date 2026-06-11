@@ -567,7 +567,6 @@ class AuthController extends Controller
                 'token' => 'required'
             ]);
 
-            // password_confirmation auto set karo agar nahi aaya
             $request->merge([
                 'password_confirmation' => $request->password
             ]);
@@ -581,15 +580,10 @@ class AuthController extends Controller
                 }
             );
 
-            // Password reset success hone ke baad email bhejo
             if ($status === Password::PASSWORD_RESET) {
-                try {
-                    $user = \App\Models\User::where('email', $request->email)->first();
-                    if ($user) {
-                        Mail::to($user->email)->send(new PasswordResetSuccessMail($user));
-                    }
-                } catch (\Exception $mailEx) {
-                    Log::error('Password reset mail failed: ' . $mailEx->getMessage());
+                $user = \App\Models\User::where('email', $request->email)->first();
+                if ($user) {
+                    Mail::to($user->email)->send(new PasswordResetSuccessMail($user));
                 }
             }
 
@@ -598,11 +592,9 @@ class AuthController extends Controller
                 'message' => __($status),
             ], $status === Password::PASSWORD_RESET ? 200 : 400);
         } catch (\Exception $e) {
-            Log::error('Reset password failed: ' . $e->getMessage());
-
             return response()->json([
                 'status' => false,
-                'message' => 'Something went wrong while resetting the password.',
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
