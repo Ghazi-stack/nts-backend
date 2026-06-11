@@ -722,7 +722,7 @@ class OrderController extends Controller
                     10 => 'https://server-blink.vercel.app',
                 ];
                 $frontendUrl = $storeUrls[$storeId] ?? 'https://server-blink.vercel.app';
-                $resetLink = $frontendUrl . '/reset-password?token=' . $token . '&email=' . urlencode($validated['email']);
+                $resetLink = $frontendUrl . '/auth/reset-password?token=' . $token . '&email=' . urlencode($validated['email']);
 
                 try {
                     Mail::to($validated['email'])->send(new WelcomeLoginMail(
