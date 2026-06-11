@@ -3,17 +3,14 @@
 namespace App\Mail;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Content;
-use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use App\Models\User;
 
 class PasswordResetSuccessMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-   
     public $user;
 
     public function __construct(User $user)
@@ -24,10 +21,10 @@ class PasswordResetSuccessMail extends Mailable
     public function build()
     {
         return $this->subject('Your Password Was Successfully Reset')
-                    ->view('emails.password_reset_success')
-                    ->with([
-                        'name' => $this->user->name,
-                        'email' => $this->user->email,
-                    ]);
+            ->view('emails.password_reset_success')
+            ->with([
+                'name' => $this->user->name,
+                'email' => $this->user->email,
+            ]);
     }
 }
