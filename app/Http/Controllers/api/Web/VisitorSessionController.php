@@ -23,25 +23,23 @@ class VisitorSessionController extends Controller
             'sessionId' => 'required|string|max:255'
         ]);
 
-        $exists = VisitorSession::where('store_id', $storeId)
-            ->where('session_id', $request->sessionId)
-            ->exists();
+        // Purane records delete kar do
+        VisitorSession::where(
+            'created_at',
+            '<',
+            now()->subHours(24)
+        )->delete();
 
-        if ($exists) {
-            return response()->json([
-                'status' => true,
-                'message' => 'Session already exists.'
-            ]);
-        }
-
-        VisitorSession::create([
-            'store_id' => $storeId,
+        $session = VisitorSession::firstOrCreate([
+            'store_id'  => $storeId,
             'session_id' => $request->sessionId,
         ]);
 
         return response()->json([
             'status' => true,
-            'message' => 'Session stored successfully.'
+            'message' => $session->wasRecentlyCreated
+                ? 'Session stored successfully.'
+                : 'Session already exists.'
         ]);
     }
 }
