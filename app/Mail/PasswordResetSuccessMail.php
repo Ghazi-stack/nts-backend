@@ -38,7 +38,7 @@ class PasswordResetSuccessMail extends Mailable
     public function build()
     {
         return $this->subject('Your Password Was Successfully Reset')
-            ->view('emails.password_reset_success')
+            ->view('emails.reset_password_successful')
             ->with([
                 'name'      => $this->user->name,
                 'email'     => $this->user->email,
