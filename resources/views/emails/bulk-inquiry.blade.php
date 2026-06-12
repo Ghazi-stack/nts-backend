@@ -424,9 +424,28 @@
                                       <p>SKU:</p>
                                     </th>
                                     <th>
+                                      @if($productLink)
+                                      <a href="{{ $productLink }}" target="_blank">
+                                        <strong>{{ $inquiry->sku ?? 'N/A' }}</strong>
+                                      </a>
+                                      @else
                                       <p><strong>{{ $inquiry->sku ?? 'N/A' }}</strong></p>
+                                      @endif
                                     </th>
                                   </tr>
+
+                                  @if($productLink)
+                                  <tr>
+                                    <th style="width: 120px; padding-right: 30px;">
+                                      <p>Product Link:</p>
+                                    </th>
+                                    <th>
+                                      <a href="{{ $productLink }}" target="_blank">
+                                        <strong>{{ $productLink }}</strong>
+                                      </a>
+                                    </th>
+                                  </tr>
+                                  @endif
 
                                   <tr>
                                     <th style="width: 120px; padding-right: 30px;">
