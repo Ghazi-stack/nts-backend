@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\api\Web\VisitorSessionController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -505,6 +506,9 @@ Route::prefix('web')->group(function () {
 
     //Newsletters
     Route::apiResource('newsletters', NewsletterController::class);
+
+    //VisitorSession
+    Route::post('/visitor-session', [VisitorSessionController::class, 'store']);
 
     //globalSearch
     Route::get('/search', [SearchController::class, 'globalSearch']);
