@@ -118,6 +118,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
     // 📊 Dashboard
     Route::get('/store-performance', [HomeController::class, 'storePerformance']);
+    Route::get('/store-count', [HomeController::class, 'storeCount']);
     Route::post('/track-visit', [HomeController::class, 'track']);
     Route::get('/total-count', [HomeController::class, 'getStoreStats']);
 
