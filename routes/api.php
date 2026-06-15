@@ -331,6 +331,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/approve', 'approveSelected');
         Route::post('/disapprove', 'disapproveSelected');
         Route::post('/delete', 'deleteSelected');
+        Route::delete('/bulk-delete-review', 'bulkDelete');
     });
 
     // StoreSetting api endpoint

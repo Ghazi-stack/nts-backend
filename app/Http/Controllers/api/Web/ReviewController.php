@@ -236,4 +236,22 @@ class ReviewController extends Controller
 
         return response()->json(['status' => true, 'message' => 'Reviews deleted.']);
     }
+
+    public function bulkDelete(Request $request)
+    {
+        $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'exists:reviews,id',
+        ]);
+
+        $deleted = Review::whereIn('id', $request->ids)
+            ->where('store_id', current_store_id())
+            ->delete();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Reviews deleted successfully.',
+            'deleted_count' => $deleted
+        ]);
+    }
 }
