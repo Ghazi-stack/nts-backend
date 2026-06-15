@@ -320,6 +320,15 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::delete('/delete-couponcode/{id}', 'destroy');    // Delete coupon
 
     });
+
+    //Review dashboard
+    Route::prefix('reviews')->controller(ReviewController::class)->group(function () {
+        Route::get('/admin', 'adminIndex');
+        Route::post('/approve', 'approveSelected');
+        Route::post('/disapprove', 'disapproveSelected');
+        Route::post('/delete', 'deleteSelected');
+    });
+
     // StoreSetting api endpoint
     Route::prefix('store-setting')->controller(StoreSettingController::class)->group(function () {
         Route::get('/get-store-setting', 'index');
@@ -456,17 +465,8 @@ Route::prefix('web')->group(function () {
     });
     // ⭐ Reviews
     Route::prefix('reviews')->controller(ReviewController::class)->group(function () {
-        // Web (public)
         Route::get('/product/{productId}', 'index');
         Route::post('/add', 'store');
-
-        // Admin
-        Route::middleware('auth:sanctum')->group(function () {
-            Route::get('/admin', 'adminIndex');
-            Route::post('/approve', 'approveSelected');
-            Route::post('/disapprove', 'disapproveSelected');
-            Route::post('/delete', 'deleteSelected');
-        });
     });
 
     Route::prefix('carousels')->controller(CarouselController::class)->group(function () {
