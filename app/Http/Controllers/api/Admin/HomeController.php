@@ -36,9 +36,7 @@ class HomeController extends Controller
             $label = $date->format('D');
             $dateStr = $date->toDateString();
 
-            $visits = VisitSite::where('store_id', $storeId)
-                ->whereDate('visit_date', $dateStr)
-                ->sum('count');
+            $visits = VisitorSession::where('store_id', $storeId)->count();
 
             $orders = DB::table('orders')
                 ->where('store_id', $storeId)
@@ -50,7 +48,9 @@ class HomeController extends Controller
                 ->whereDate('created_at', $dateStr)
                 ->sum('total_amount');
 
-            $conversion = $visits > 0 ? round(($orders / $visits) * 100, 2) : 0;
+            $conversion = $visits > 0
+                ? round(($orders / $visits) * 100, 2)
+                : 0;
 
             $days->push([
                 'label' => $label,
@@ -71,7 +71,7 @@ class HomeController extends Controller
         ]);
     }
 
-      public function storeCount(Request $request)
+    public function storeCount(Request $request)
     {
         $storeId = current_store_id();
 
