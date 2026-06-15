@@ -164,6 +164,46 @@ class ReviewController extends Controller
         return response()->json(['status' => true, 'message' => 'Reviews disapproved.']);
     }
 
+    public function update(Request $request, $id)
+    {
+        $review = Review::where('store_id', current_store_id())
+            ->find($id);
+
+        if (!$review) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Review not found.'
+            ], 404);
+        }
+
+        $request->validate([
+            'productId' => 'required|exists:products,id',
+            'rating'    => 'required|integer|min:1|max:5',
+            'name'      => 'nullable|string|max:255',
+            'email'     => 'required|email|max:255',
+            'subject'   => 'required|string|max:255',
+            'comment'   => 'nullable|string',
+            'approved'  => 'nullable|boolean'
+        ]);
+
+        $review->update([
+            'product_id' => $request->productId,
+            'rating'     => $request->rating,
+            'name'       => $request->name,
+            'email'      => $request->email,
+            'subject'    => $request->subject,
+            'comment'    => $request->comment,
+            'approved'   => $request->has('approved')
+                ? $request->approved
+                : $review->approved,
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Review updated successfully.',
+            'data' => new ReviewResource($review->fresh()->load(['user', 'product']))
+        ]);
+    }
     // ✅ Admin: Delete reviews
     public function deleteSelected(Request $request)
     {
