@@ -164,6 +164,30 @@ class ReviewController extends Controller
         return response()->json(['status' => true, 'message' => 'Reviews disapproved.']);
     }
 
+    //bulkStatusUpdate
+    public function bulkStatusUpdate(Request $request)
+    {
+        $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'exists:reviews,id',
+            'status' => 'required|in:approved,disapproved',
+        ]);
+
+        $approved = $request->status === 'approved';
+
+        $updated = Review::whereIn('id', $request->ids)
+            ->where('store_id', current_store_id())
+            ->update([
+                'approved' => $approved
+            ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => "Reviews {$request->status} successfully.",
+            'updated_count' => $updated
+        ]);
+    }
+
     public function update(Request $request, $id)
     {
         $review = Review::where('store_id', current_store_id())

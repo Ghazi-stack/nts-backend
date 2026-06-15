@@ -327,6 +327,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/admin', 'adminIndex');
         Route::get('/get-by-id/{id}', 'show');
         Route::put('/update-review/{id}', 'update');
+        Route::put('/bulk-status-review', 'bulkStatusUpdate');
         Route::post('/approve', 'approveSelected');
         Route::post('/disapprove', 'disapproveSelected');
         Route::post('/delete', 'deleteSelected');
