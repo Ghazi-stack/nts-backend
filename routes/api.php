@@ -325,6 +325,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     //Review dashboard
     Route::prefix('reviews')->controller(ReviewController::class)->group(function () {
         Route::get('/admin', 'adminIndex');
+        Route::get('/get-by-id/{id}', 'show');
         Route::post('/approve', 'approveSelected');
         Route::post('/disapprove', 'disapproveSelected');
         Route::post('/delete', 'deleteSelected');

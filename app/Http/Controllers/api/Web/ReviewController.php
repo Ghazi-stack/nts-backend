@@ -35,6 +35,25 @@ class ReviewController extends Controller
         ], 200);
     }
 
+    public function show($id)
+    {
+        $review = Review::with(['user', 'product'])
+            ->where('store_id', current_store_id())
+            ->find($id);
+
+        if (!$review) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Review not found.'
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Review retrieved successfully.',
+            'data' => new ReviewResource($review)
+        ], 200);
+    }
     // ✍️ Submit review (Web)
     public function store(Request $request)
     {
