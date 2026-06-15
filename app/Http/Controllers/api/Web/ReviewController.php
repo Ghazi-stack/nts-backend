@@ -177,26 +177,20 @@ class ReviewController extends Controller
         }
 
         $request->validate([
-            // 'productId' => 'required|exists:products,id',
-            'rating'    => 'required|integer|min:1|max:5',
-            'name'      => 'nullable|string|max:255',
-            'email'     => 'required|email|max:255',
-            'subject'   => 'required|string|max:255',
-            'comment'   => 'nullable|string',
-            'approved'  => 'nullable|boolean'
+            'rating'   => 'sometimes|integer|min:1|max:5',
+            'name'     => 'sometimes|nullable|string|max:255',
+            'subject'  => 'sometimes|string|max:255',
+            'comment'  => 'sometimes|nullable|string',
+            'approved' => 'sometimes|boolean',
         ]);
 
-        $review->update([
-            // 'product_id' => $request->productId,
-            'rating'     => $request->rating,
-            'name'       => $request->name,
-            'email'      => $request->email,
-            'subject'    => $request->subject,
-            'comment'    => $request->comment,
-            'approved'   => $request->has('approved')
-                ? $request->approved
-                : $review->approved,
-        ]);
+        $review->update($request->only([
+            'rating',
+            'name',
+            'subject',
+            'comment',
+            'approved'
+        ]));
 
         return response()->json([
             'status' => true,
