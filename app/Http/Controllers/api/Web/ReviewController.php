@@ -177,7 +177,7 @@ class ReviewController extends Controller
         }
 
         $request->validate([
-            'productId' => 'required|exists:products,id',
+            // 'productId' => 'required|exists:products,id',
             'rating'    => 'required|integer|min:1|max:5',
             'name'      => 'nullable|string|max:255',
             'email'     => 'required|email|max:255',
@@ -187,7 +187,7 @@ class ReviewController extends Controller
         ]);
 
         $review->update([
-            'product_id' => $request->productId,
+            // 'product_id' => $request->productId,
             'rating'     => $request->rating,
             'name'       => $request->name,
             'email'      => $request->email,
