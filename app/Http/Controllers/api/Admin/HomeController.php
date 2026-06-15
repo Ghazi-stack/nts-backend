@@ -38,9 +38,9 @@ class HomeController extends Controller
             ->where('store_id', $storeId)
             ->sum('total_amount');
 
-        // $conversion = $visits > 0
-        //     ? round(($orders / $visits) * 100, 2)
-        //     : 0;
+        $conversion = $visits > 0
+            ? round(($orders / $visits) * 100, 2)
+            : 0;
 
         return response()->json([
             'status' => true,
@@ -49,7 +49,7 @@ class HomeController extends Controller
                 'visits' => $visits,
                 'orders' => $orders,
                 'revenue' => (float) $revenue,
-                'conversion' => $visits,
+                'conversion' => $conversion,
             ]
         ]);
     }
