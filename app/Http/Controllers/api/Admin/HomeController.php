@@ -28,53 +28,31 @@ class HomeController extends Controller
             ], 400);
         }
 
-        // VisitorSession ki sab dates nikal lo
-        $dates = VisitorSession::where('store_id', $storeId)
-            ->selectRaw('DATE(created_at) as date')
-            ->distinct()
-            ->orderBy('date')
-            ->pluck('date');
+        $visits = VisitorSession::where('store_id', $storeId)->count();
 
-        $data = collect();
+        $orders = DB::table('orders')
+            ->where('store_id', $storeId)
+            ->count();
 
-        foreach ($dates as $dateStr) {
+        $revenue = DB::table('orders')
+            ->where('store_id', $storeId)
+            ->sum('total_amount');
 
-            $visits = VisitorSession::where('store_id', $storeId)
-                ->whereDate('created_at', $dateStr)
-                ->count();
-
-            $orders = DB::table('orders')
-                ->where('store_id', $storeId)
-                ->whereDate('created_at', $dateStr)
-                ->count();
-
-            $revenue = DB::table('orders')
-                ->where('store_id', $storeId)
-                ->whereDate('created_at', $dateStr)
-                ->sum('total_amount');
-
-            $conversion = $visits > 0
-                ? round(($orders / $visits) * 100, 2)
-                : 0;
-
-            $data->push([
-                'label'      => Carbon::parse($dateStr)->format('D'),
-                'date'       => $dateStr,
-                'visits'     => $visits,
-                'orders'     => $orders,
-                'revenue'    => (float) $revenue,
-                'conversion' => $conversion,
-            ]);
-        }
+        // $conversion = $visits > 0
+        //     ? round(($orders / $visits) * 100, 2)
+        //     : 0;
 
         return response()->json([
-            'status'  => true,
+            'status' => true,
             'message' => 'Store performance data retrieved successfully',
-            'total_days' => $data->count(),
-            'data' => $data,
+            'data' => [
+                'visits' => $visits,
+                'orders' => $orders,
+                'revenue' => (float) $revenue,
+                'conversion' => $visits,
+            ]
         ]);
     }
-
     public function track(Request $request)
     {
         $today = now()->toDateString();
