@@ -28,7 +28,7 @@ class CheckoutShippingController extends Controller
             'destination'=>'required|array',
             'destination.country_code'=>'required|string|max:5',
             'destination.state'=>'sometimes|string|max:5',
-            'destination.city'=>'nullable|string|max:255',
+            'destination.city'=>'sometimes|string|max:255',
             'destination.postal_code'=>'required|string|max:20',
             'package'=>'required|array',
             'package.total_weight'=>'required|numeric|min:0.01',
