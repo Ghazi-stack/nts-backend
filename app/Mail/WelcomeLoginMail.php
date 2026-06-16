@@ -30,24 +30,24 @@ class WelcomeLoginMail extends Mailable
         $logo = Logo::where('store_id', $storeId)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;
 
-        $storeUrls = [
-            4  => 'https://new-town-spares.vercel.app',
-            10 => 'https://server-blink.vercel.app',
-        ];
-        $this->storePath = $storeUrls[$storeId] ?? ($this->store?->base_url ?? '#');
+        if (!$this->store || empty($this->store->base_url)) {
+            throw new \Exception('Store URL not found.');
+        }
+
+        $this->storePath = rtrim($this->store->base_url, '/');
     }
 
     public function build()
     {
         return $this->subject('Your Login Details - Set Your Password')
-                    ->view('emails.welcome_login')
-                    ->with([
-                        'userName'  => $this->userName,
-                        'userEmail' => $this->userEmail,
-                        'resetLink' => $this->resetLink,
-                        'logoUrl'   => $this->logoUrl,
-                        'storePath' => $this->storePath,
-                        'store'     => $this->store,
-                    ]);
+            ->view('emails.welcome_login')
+            ->with([
+                'userName'  => $this->userName,
+                'userEmail' => $this->userEmail,
+                'resetLink' => $this->resetLink,
+                'logoUrl'   => $this->logoUrl,
+                'storePath' => $this->storePath,
+                'store'     => $this->store,
+            ]);
     }
 }

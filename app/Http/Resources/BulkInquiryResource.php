@@ -5,34 +5,38 @@ namespace App\Http\Resources;
 use Illuminate\Http\Resources\Json\JsonResource;
 use App\Models\Product;
 use App\Models\ProductSeo;
+use App\Models\Store;
 
 class BulkInquiryResource extends JsonResource
 {
     public function toArray($request)
     {
-        // Frontend URL build karo product_seo se
         $productLink = null;
+
         if ($this->sku) {
+
             $product = Product::where('sku', $this->sku)
                 ->where('store_id', $this->store_id)
                 ->first();
 
             if ($product) {
+
                 $seo = ProductSeo::where('product_id', $product->id)
                     ->where('store_id', $this->store_id)
                     ->first();
 
-                $storeUrls = [
-                    4  => 'https://new-town-spares.vercel.app',
-                    10 => 'https://server-blink.vercel.app',
-                ];
+                $store = Store::find($this->store_id);
 
-                $baseUrl = $storeUrls[$this->store_id] ?? 'https://server-blink.vercel.app';
+                $baseUrl = ($store && $store->base_url)
+                    ? rtrim($store->base_url, '/')
+                    : null;
 
-                if ($seo && $seo->product_url) {
-                    $productLink = $baseUrl . '/' . ltrim($seo->product_url, '/');
-                } else {
-                    $productLink = $baseUrl . '/' . $product->slug;
+                if ($baseUrl) {
+                    if ($seo && $seo->product_url) {
+                        $productLink = $baseUrl . '/' . ltrim($seo->product_url, '/');
+                    } else {
+                        $productLink = $baseUrl . '/' . ltrim($product->slug, '/');
+                    }
                 }
             }
         }

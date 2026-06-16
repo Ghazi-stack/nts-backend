@@ -24,16 +24,20 @@ class CustomResetPasswordNotification extends Notification
     public function toMail($notifiable)
     {
         $storeId = $notifiable->store_id ?? 10;
+
         $store = Store::find($storeId);
+
         $logo = Logo::where('store_id', $storeId)->first();
 
-        $storeUrls = [
-            4  => 'https://new-town-spares.vercel.app',
-            10 => 'https://server-blink.vercel.app',
-        ];
-        $storePath = $storeUrls[$storeId] ?? ($store?->base_url ?? '#');
+        if (!$store || empty($store->base_url)) {
+            throw new \Exception('Store URL not found.');
+        }
 
-        $resetUrl = $storePath . '/auth/reset-password?token=' . $this->token . '&email=' . urlencode($notifiable->email);
+        $storePath = rtrim($store->base_url, '/');
+
+        $resetUrl = $storePath .
+            '/auth/reset-password?token=' . $this->token .
+            '&email=' . urlencode($notifiable->email);
 
         return (new MailMessage)
             ->subject('Change your password for ' . ($store?->name ?? 'Our Store'))

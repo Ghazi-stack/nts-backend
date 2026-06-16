@@ -33,6 +33,7 @@ use App\Http\Resources\ShipmentResource;
 use App\Http\Resources\OrderNoteResource;
 use App\Http\Resources\ReturnRequestResource;
 use App\Mail\OrderPlacedMail;
+use App\Models\Store;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
@@ -717,12 +718,18 @@ class OrderController extends Controller
                 // Generate password reset token
                 $token = app('auth.password.broker')->createToken($user);
 
-                $storeUrls = [
-                    4  => 'https://new-town-spares.vercel.app',
-                    10 => 'https://server-blink.vercel.app',
-                ];
-                $frontendUrl = $storeUrls[$storeId] ?? 'https://server-blink.vercel.app';
-                $resetLink = $frontendUrl . '/auth/reset-password?token=' . $token . '&email=' . urlencode($validated['email']);
+                $store = Store::find($storeId);
+
+                if (!$store || empty($store->base_url)) {
+                    throw new \Exception('Store URL not found.');
+                }
+
+                $frontendUrl = $store->base_url;
+
+                $resetLink = rtrim($frontendUrl, '/') .
+                    '/auth/reset-password?token=' . $token .
+                    '&email=' . urlencode($validated['email']);
+                //  $resetLink = $frontendUrl . '/auth/reset-password?token=' . $token . '&email=' . urlencode($validated['email']);
 
                 try {
                     Mail::to($validated['email'])->send(new WelcomeLoginMail(

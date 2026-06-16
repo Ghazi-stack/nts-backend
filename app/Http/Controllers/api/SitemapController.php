@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\Brand;
+use App\Models\Store;
 use App\Models\WebPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -21,12 +22,13 @@ class SitemapController extends Controller
     {
         $storeId = $this->getStoreId();
 
-        $storeUrls = [
-            4  => 'https://new-town-spares.vercel.app',
-            10 => 'https://server-blink.vercel.app',
-        ];
+        $store = Store::find($storeId);
 
-        return $storeUrls[$storeId] ?? 'https://server-blink.vercel.app';
+        if (!$store || empty($store->base_url)) {
+            throw new \Exception('Store URL not found.');
+        }
+
+        return rtrim($store->base_url, '/');
     }
 
     // ===================== MAIN ENTRY POINT =====================
