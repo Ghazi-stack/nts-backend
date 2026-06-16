@@ -26,33 +26,36 @@ class BulkInquiryMail extends Mailable
         $this->bulkInquiry = $bulkInquiry;
 
         $storeId = $bulkInquiry->store_id ?? 10;
+
+        // Store record get karo
         $this->store = Store::find($storeId);
 
+        // Logo
         $logo = Logo::where('store_id', $storeId)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;
 
-        $storeUrls = [
-            4  => 'https://new-town-spares.vercel.app',
-            10 => 'https://server-blink.vercel.app',
-        ];
-        $this->storePath = $storeUrls[$storeId] ?? ($this->store?->base_url ?? '#');
+        // Dynamic URL from stores table
+        $this->storePath = $this->store?->base_url ?? '#';
 
         // Generate product link
         $this->productLink = null;
+
         if ($bulkInquiry->sku) {
+
             $product = Product::where('sku', $bulkInquiry->sku)
                 ->where('store_id', $storeId)
                 ->first();
 
             if ($product) {
+
                 $seo = ProductSeo::where('product_id', $product->id)
                     ->where('store_id', $storeId)
                     ->first();
 
                 if ($seo && $seo->product_url) {
-                    $this->productLink = $this->storePath . '/' . ltrim($seo->product_url, '/');
+                    $this->productLink = rtrim($this->storePath, '/') . '/' . ltrim($seo->product_url, '/');
                 } else {
-                    $this->productLink = $this->storePath . '/' . $product->slug;
+                    $this->productLink = rtrim($this->storePath, '/') . '/' . ltrim($product->slug, '/');
                 }
             }
         }
