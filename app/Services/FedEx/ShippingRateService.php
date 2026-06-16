@@ -91,7 +91,7 @@ class ShippingRateService
                 'destination_postal_code'  => $destination['postal_code'],
                 'destination_country_code' => $destination['country_code'],
                 'destination_state'        => $destination['state'] ?? null,
-                //'destination_city'         => $destination['city'] ?? null,
+                'destination_city'         => $destination['city'] ?? null,
                 'total_weight'             => $packageInfo['total_weight'] ?? 1.0,
                 'weight_unit'              => $packageInfo['weight_unit'] ?? 'LB',
                 'package_length'           => $packageInfo['package_length'] ?? null,
