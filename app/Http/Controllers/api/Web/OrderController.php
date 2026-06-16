@@ -705,13 +705,15 @@ class OrderController extends Controller
             }
 
             if (!$user) {
+
                 $plainPassword = Str::random(10);
+
                 $user = User::create([
-                    'name'      => trim($customer->first_name . ' ' . $customer->last_name),
-                    'email'     => $validated['email'],
-                    'password'  => Hash::make($plainPassword),
-                    'userRole'  => 2,
-                    'store_id'  => $storeId,
+                    'name'        => trim($customer->first_name . ' ' . $customer->last_name),
+                    'email'       => $validated['email'],
+                    'password'    => Hash::make($plainPassword),
+                    'userRole'    => 2,
+                    'store_id'    => $storeId,
                     'customer_id' => $customer->id,
                 ]);
 
@@ -720,27 +722,29 @@ class OrderController extends Controller
 
                 $store = Store::find($storeId);
 
-                if (!$store || empty($store->base_url)) {
-                    throw new \Exception('Store URL not found.');
-                }
+                // Dynamic URL
+                $frontendUrl = rtrim($store?->base_url ?? '#', '/');
 
-                $frontendUrl = $store->base_url;
-
-                $resetLink = rtrim($frontendUrl, '/') .
+                $resetLink = $frontendUrl .
                     '/auth/reset-password?token=' . $token .
                     '&email=' . urlencode($validated['email']);
-                //  $resetLink = $frontendUrl . '/auth/reset-password?token=' . $token . '&email=' . urlencode($validated['email']);
 
                 try {
-                    Mail::to($validated['email'])->send(new WelcomeLoginMail(
-                        $customer->first_name,
-                        $validated['email'],
-                        $resetLink,
-                        $storeId
-                    ));
+
+                    Mail::to($validated['email'])->send(
+                        new WelcomeLoginMail(
+                            $customer->first_name,
+                            $validated['email'],
+                            $resetLink,
+                            $storeId
+                        )
+                    );
                 } catch (\Exception $mailEx) {
+
                     Log::error('WELCOME LOGIN EMAIL FAILED', [
                         'error' => $mailEx->getMessage(),
+                        'line'  => $mailEx->getLine(),
+                        'file'  => $mailEx->getFile(),
                         'email' => $validated['email'],
                     ]);
                 }

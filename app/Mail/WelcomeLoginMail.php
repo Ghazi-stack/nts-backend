@@ -30,11 +30,8 @@ class WelcomeLoginMail extends Mailable
         $logo = Logo::where('store_id', $storeId)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;
 
-        if (!$this->store || empty($this->store->base_url)) {
-            throw new \Exception('Store URL not found.');
-        }
-
-        $this->storePath = rtrim($this->store->base_url, '/');
+        // Dynamic URL from stores table
+        $this->storePath = rtrim($this->store?->base_url ?? '#', '/');
     }
 
     public function build()
