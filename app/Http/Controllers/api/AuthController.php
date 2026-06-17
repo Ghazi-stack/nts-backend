@@ -32,11 +32,11 @@ class AuthController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'firstName'     => 'nullable|string|max:100',
+                'firstName'     => 'required|string|max:100',
                 'lastName'      => 'nullable|string|max:100',
-                'email'         => 'nullable|email|unique:users,email',
+                'email'         => 'required|email|unique:users,email',
                 'phoneNumber'   => 'nullable|string|max:20|unique:customers,phone',
-                'password'      => 'nullable|string|min:6|confirmed',
+                'password'      => 'required|string|min:6',
                 'companyName'   => 'nullable|string|max:255',
                 'addressLine1'  => 'nullable|string|max:255',
                 'addressLine2'  => 'nullable|string|max:255',
