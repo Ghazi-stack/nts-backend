@@ -41,6 +41,23 @@ class CartController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Helper: Product ke sab relations jo ProductResource use karta hai
+    // ─────────────────────────────────────────────────────────────
+    private function productRelations(): array
+    {
+        return [
+            'product',
+            'product.brand',
+            'product.categories.parent',
+            'product.images',
+            'product.content',
+            'product.seo',
+            'product.identifiers',
+            'product.reviews.user',
+        ];
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // GET /web/cart/list
     // ─────────────────────────────────────────────────────────────
     public function index(Request $request)
@@ -65,7 +82,7 @@ class CartController extends Controller
 
             $perPage   = $request->query('perPage', 20);
             $cartItems = $this->cartQuery($user, $sessionId, $storeId)
-                ->with('product')
+                ->with($this->productRelations())
                 ->paginate($perPage);
 
             return response()->json([
@@ -139,7 +156,7 @@ class CartController extends Controller
             return response()->json([
                 'status'  => true,
                 'message' => 'Item added to cart successfully',
-                'data'    => new CartResource($cartItem->load('product')),
+                'data'    => new CartResource($cartItem->load($this->productRelations())),
             ], 201);
         } catch (ValidationException $e) {
             return response()->json([
@@ -192,7 +209,7 @@ class CartController extends Controller
             return response()->json([
                 'status'  => true,
                 'message' => 'Cart item updated successfully',
-                'data'    => new CartResource($cartItem->load('product')),
+                'data'    => new CartResource($cartItem->load($this->productRelations())),
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
@@ -316,7 +333,7 @@ class CartController extends Controller
                 $guestItem->delete();
             }
 
-            $updatedCart = Cart::with('product')
+            $updatedCart = Cart::with($this->productRelations())
                 ->where('store_id', $storeId)
                 ->where('user_id', $user->id)
                 ->get();
