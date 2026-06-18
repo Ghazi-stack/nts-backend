@@ -440,12 +440,18 @@ Route::prefix('web')->group(function () {
         Route::get('/last-week-orders', 'lastWeekOrderedProducts');
         Route::get('/last-week-product', 'lastWeekProducts');
     });
-    // 🛒 Cart
-    Route::prefix('cart')->controller(CartController::class)->group(function () {
-        Route::get('/list', 'index');
-        Route::post('/add-cart', 'storeCart');
-        Route::delete('/delete/{id}', 'destroyCart');
-    });
+    // 🛒 Cart (Guest + Auth dono)
+Route::prefix('cart')->controller(CartController::class)->group(function () {
+    Route::get('/list',           'index');       // GET   - Cart list dekho
+    Route::post('/add-cart',      'storeCart');   // POST  - Item add karo
+    Route::put('/update/{id}',    'updateCart');  // PUT   - Quantity set karo
+    Route::delete('/delete/{id}', 'destroyCart'); // DEL   - Item remove karo
+});
+
+// 🔀 Cart Transfer (auth required)
+Route::prefix('cart')->middleware('auth:sanctum')->controller(CartController::class)->group(function () {
+    Route::post('/transfer', 'transferGuestCartToUser');
+});
 
     // ❤️ Wishlist (auth required)
     Route::prefix('wishlist')->middleware('auth:sanctum')->controller(WishlistController::class)->group(function () {

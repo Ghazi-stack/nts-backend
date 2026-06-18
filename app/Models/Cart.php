@@ -10,19 +10,21 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Cart extends Model
 {
-    use SoftDeletes; // ✅ use trait here
+    use SoftDeletes;
     use HasFactory;
-    protected $fillable = [ 
-        'user_id', 
-        'session_id', 
-        'product_id', 
-        'quantity'
+
+    protected $fillable = [
+        'user_id',
+        'session_id',
+        'product_id',
+        'quantity',
     ];
 
     public function product()
     {
         return $this->belongsTo(Product::class);
     }
+
     public function store()
     {
         return $this->belongsTo(Store::class);
