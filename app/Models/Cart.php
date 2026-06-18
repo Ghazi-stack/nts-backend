@@ -14,6 +14,7 @@ class Cart extends Model
     use HasFactory;
 
     protected $fillable = [
+        'store_id',
         'user_id',
         'session_id',
         'product_id',

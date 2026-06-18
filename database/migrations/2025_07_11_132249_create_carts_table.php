@@ -12,19 +12,17 @@ return new class extends Migration
     public function up(): void
     {
         if (!Schema::hasTable('carts')) {
-        Schema::create('carts', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->nullable()->constrained()->onDelete('cascade');
-            $table->string('session_id')->nullable(); // for guests
-
-            $table->foreignId('product_id')->constrained()->onDelete('cascade');
-            $table->unsignedInteger('quantity')->default(1);
-
-            $table->timestamps();
-            $table->softDeletes();
-    
-        });
-    }
+            Schema::create('carts', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('store_id')->nullable()->constrained()->onDelete('cascade');
+                $table->foreignId('user_id')->nullable()->constrained()->onDelete('cascade');
+                $table->string('session_id')->nullable(); // for guests
+                $table->foreignId('product_id')->constrained()->onDelete('cascade');
+                $table->unsignedInteger('quantity')->default(1);
+                $table->timestamps();
+                $table->softDeletes();
+            });
+        }
     }
 
     /**
@@ -33,7 +31,7 @@ return new class extends Migration
     public function down(): void
     {
         if (Schema::hasTable('carts')) {
-        Schema::dropIfExists('carts');
+            Schema::dropIfExists('carts');
+        }
     }
-}
 };

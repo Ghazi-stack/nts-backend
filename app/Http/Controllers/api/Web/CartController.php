@@ -15,35 +15,45 @@ class CartController extends Controller
 {
     // ─────────────────────────────────────────────────────────────
     // Helper: user_id ya session_id resolve karna
-    // Auth token hai → user_id use karo, session_id null
-    // Guest hai → session_id use karo, user_id null
+    // Priority: Auth token FIRST → session_id second
+    // Agar dono aaye → token win karta hai, session_id ignore
     // ─────────────────────────────────────────────────────────────
     private function resolveIdentity(Request $request): array
     {
-        $user      = auth('sanctum')->user();
+        $user = auth('sanctum')->user();
+
+        // Token hai → user_id use karo, session_id bilkul ignore
+        // Token nahi → session_id use karo
         $sessionId = $user ? null : $request->header('X-Session-ID');
 
         return [$user, $sessionId];
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Helper: Cart query - user ya session ke hisaab se filter
+    // Helper: Cart query - user ya session + store ke hisaab se filter
     // ─────────────────────────────────────────────────────────────
-    private function cartQuery($user, ?string $sessionId)
+    private function cartQuery($user, ?string $sessionId, int $storeId)
     {
         return Cart::query()
+            ->where('store_id', $storeId)
             ->when($user,  fn($q) => $q->where('user_id', $user->id))
             ->when(!$user, fn($q) => $q->where('session_id', $sessionId)->whereNull('user_id'));
     }
 
     // ─────────────────────────────────────────────────────────────
     // GET /web/cart/list
-    // Guest: X-Session-ID header bhejo
-    // Auth:  Bearer token bhejo
     // ─────────────────────────────────────────────────────────────
     public function index(Request $request)
     {
         try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
             [$user, $sessionId] = $this->resolveIdentity($request);
 
             if (!$user && !$sessionId) {
@@ -54,7 +64,7 @@ class CartController extends Controller
             }
 
             $perPage   = $request->query('perPage', 20);
-            $cartItems = $this->cartQuery($user, $sessionId)
+            $cartItems = $this->cartQuery($user, $sessionId, $storeId)
                 ->with('product')
                 ->paginate($perPage);
 
@@ -81,13 +91,18 @@ class CartController extends Controller
 
     // ─────────────────────────────────────────────────────────────
     // POST /web/cart/add-cart
-    // Guest: X-Session-ID header bhejo
-    // Auth:  Bearer token bhejo
-    // Same product add karo → quantity increment hogi (overwrite nahi)
     // ─────────────────────────────────────────────────────────────
     public function storeCart(Request $request)
     {
         try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
             $validated = $request->validate([
                 'productId' => 'required|exists:products,id',
                 'quantity'  => 'required|integer|min:1',
@@ -102,17 +117,18 @@ class CartController extends Controller
                 ], 422);
             }
 
-            $existingCartItem = $this->cartQuery($user, $sessionId)
+            $existingCartItem = $this->cartQuery($user, $sessionId, $storeId)
                 ->where('product_id', $validated['productId'])
                 ->first();
 
             if ($existingCartItem) {
-                // Same product → quantity add karo
+                // Same product → quantity add karo (overwrite nahi)
                 $existingCartItem->increment('quantity', $validated['quantity']);
                 $cartItem = $existingCartItem->fresh();
             } else {
                 // Naya item
                 $cartItem = Cart::create([
+                    'store_id'   => $storeId,
                     'user_id'    => $user?->id,
                     'session_id' => $sessionId,
                     'product_id' => $validated['productId'],
@@ -142,13 +158,18 @@ class CartController extends Controller
 
     // ─────────────────────────────────────────────────────────────
     // PUT /web/cart/update/{id}
-    // Quantity directly set karo (replace) - cart page par use karo
-    // Guest: X-Session-ID header bhejo
-    // Auth:  Bearer token bhejo
     // ─────────────────────────────────────────────────────────────
     public function updateCart(Request $request, $id)
     {
         try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
             $validated = $request->validate([
                 'quantity' => 'required|integer|min:1',
             ]);
@@ -162,7 +183,7 @@ class CartController extends Controller
                 ], 422);
             }
 
-            $cartItem = $this->cartQuery($user, $sessionId)
+            $cartItem = $this->cartQuery($user, $sessionId, $storeId)
                 ->where('id', $id)
                 ->firstOrFail();
 
@@ -189,12 +210,18 @@ class CartController extends Controller
 
     // ─────────────────────────────────────────────────────────────
     // DELETE /web/cart/delete/{id}
-    // Guest: X-Session-ID header bhejo
-    // Auth:  Bearer token bhejo
     // ─────────────────────────────────────────────────────────────
     public function destroyCart(Request $request, $id)
     {
         try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
             [$user, $sessionId] = $this->resolveIdentity($request);
 
             if (!$user && !$sessionId) {
@@ -204,7 +231,7 @@ class CartController extends Controller
                 ], 422);
             }
 
-            $cartItem = $this->cartQuery($user, $sessionId)
+            $cartItem = $this->cartQuery($user, $sessionId, $storeId)
                 ->where('id', $id)
                 ->firstOrFail();
 
@@ -230,13 +257,19 @@ class CartController extends Controller
 
     // ─────────────────────────────────────────────────────────────
     // POST /web/cart/transfer
-    // Auth required - login ke baad call karo
-    // Guest cart → User cart mein move ho jata hai
-    // Same product hai → quantity add hoti hai
+    // Auth required - login ke baad guest cart user cart mein move
     // ─────────────────────────────────────────────────────────────
     public function transferGuestCartToUser(Request $request)
     {
         try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
             $user      = auth('sanctum')->user();
             $sessionId = $request->header('X-Session-ID');
 
@@ -247,7 +280,9 @@ class CartController extends Controller
                 ], 422);
             }
 
-            $guestCartItems = Cart::where('session_id', $sessionId)
+            // Guest cart items is store ke liye
+            $guestCartItems = Cart::where('store_id', $storeId)
+                ->where('session_id', $sessionId)
                 ->whereNull('user_id')
                 ->get();
 
@@ -259,7 +294,8 @@ class CartController extends Controller
             }
 
             foreach ($guestCartItems as $guestItem) {
-                $userItem = Cart::where('user_id', $user->id)
+                $userItem = Cart::where('store_id', $storeId)
+                    ->where('user_id', $user->id)
                     ->where('product_id', $guestItem->product_id)
                     ->first();
 
@@ -267,8 +303,9 @@ class CartController extends Controller
                     // Same product → quantity add karo
                     $userItem->increment('quantity', $guestItem->quantity);
                 } else {
-                    // Naya item user cart mein copy karo
+                    // User cart mein copy karo
                     Cart::create([
+                        'store_id'   => $storeId,
                         'user_id'    => $user->id,
                         'session_id' => null,
                         'product_id' => $guestItem->product_id,
@@ -276,11 +313,11 @@ class CartController extends Controller
                     ]);
                 }
 
-                // Guest item delete karo
                 $guestItem->delete();
             }
 
             $updatedCart = Cart::with('product')
+                ->where('store_id', $storeId)
                 ->where('user_id', $user->id)
                 ->get();
 
