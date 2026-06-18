@@ -1012,6 +1012,79 @@ class OrderController extends Controller
         }
     }
 
+    public function getCustomerWithOrders(Request $request, $customerId)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $customer = Customer::where('id', $customerId)
+                ->where('store_id', $storeId)
+                ->first();
+
+            if (!$customer) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Customer not found.'
+                ], 404);
+            }
+
+            $orders = Order::with(['items.product.images', 'customer', 'billingInformation', 'notes', 'payment'])
+                ->where('customer_id', $customerId)
+                ->where('store_id', $storeId)
+                ->where('is_draft', 0)
+                ->latest()
+                ->get();
+
+            $currentOrders = $orders->filter(function ($order) {
+                return !in_array($order->status, ['Completed', 'Cancelled', 'Refunded', 'Declined']);
+            })->values();
+
+            $pastOrders = $orders->filter(function ($order) {
+                return in_array($order->status, ['Completed', 'Cancelled', 'Refunded', 'Declined']);
+            })->values();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Customer details retrieved successfully.',
+                'data' => [
+                    'customer' => [
+                        'id'                   => $customer->id,
+                        'firstName'            => $customer->first_name,
+                        'lastName'             => $customer->last_name,
+                        'email'                => $customer->email,
+                        'phone'                => $customer->phone,
+                        'companyName'          => $customer->company_name,
+                        'address'              => $customer->address,
+                        'addressLine2'         => $customer->address_line_2,
+                        'city'                 => $customer->city,
+                        'state'                => $customer->state,
+                        'zip'                  => $customer->zip,
+                        'country'              => $customer->country,
+                        'customerGroup'        => $customer->customer_group ?? null,
+                        'storeCredit'          => $customer->store_credit ?? 0,
+                        'totalOrders'          => $orders->count(),
+                        'joinDate'             => $customer->created_at?->format('M d, Y'),
+                        'receiveReviewEmails'  => $customer->receive_review_emails ?? false,
+                    ],
+                    'currentOrders' => OrderResource::collection($currentOrders),
+                    'pastOrders'    => OrderResource::collection($pastOrders),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve customer details.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function updateOrderStatus(Request $request, $id)
     {
         $request->validate(['status' => 'required|string']);
