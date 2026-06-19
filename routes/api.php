@@ -485,6 +485,7 @@ Route::prefix('web')->group(function () {
         Route::get('/admin-messages', 'adminMessages');
         Route::post('/mark-read', 'markAsRead');
         Route::post('/mark-unread', 'markAsUnread');
+        Route::put('/update/{id}', 'updateMessage');
         Route::post('/delete', 'deleteMessages');
     });
     Route::prefix('order-items')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {

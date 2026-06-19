@@ -353,6 +353,85 @@ class CustomerMessageController extends Controller
         }
     }
 
+    // ===================== ADMIN: Edit Message =====================
+    public function updateMessage(Request $request, $id)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected.'
+                ], 400);
+            }
+
+            $message = CustomerMessage::where('id', $id)
+                ->where('store_id', $storeId)
+                ->first();
+
+            if (!$message) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Message not found.'
+                ], 404);
+            }
+
+            $validated = $request->validate([
+                'subject'     => 'nullable|string|max:255',
+                'message'     => 'nullable|string',
+                'is_read'     => 'nullable|boolean',
+                'sender_type' => 'nullable|string|in:customer,admin',
+                'order_id'    => 'nullable|integer',
+            ]);
+
+            if (isset($validated['order_id'])) {
+                $order = Order::where('id', $validated['order_id'])
+                    ->where('store_id', $storeId)
+                    ->first();
+
+                if ($order) {
+                    $message->order_id = $order->id;
+                    $message->order_number = $order->order_number;
+                }
+            }
+
+            if (isset($validated['subject'])) {
+                $message->subject = $validated['subject'];
+            }
+
+            if (isset($validated['message'])) {
+                $message->message = $validated['message'];
+            }
+
+            if (isset($validated['is_read'])) {
+                $message->is_read = $validated['is_read'];
+            }
+
+            if (isset($validated['sender_type'])) {
+                $message->sender_type = $validated['sender_type'];
+            }
+
+            $message->save();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Message updated successfully.',
+                'data' => $this->formatMessage($message),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // ===================== ADMIN: Delete Messages =====================
     public function deleteMessages(Request $request)
     {
