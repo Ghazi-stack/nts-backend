@@ -356,6 +356,49 @@ class OrderController extends Controller
         }
     }
 
+
+    public function myOrdersList(Request $request)
+    {
+        try {
+            $user = auth('sanctum')->user();
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not authenticated.'
+                ], 401);
+            }
+
+            $storeId = current_store_id();
+
+            $orders = Order::where('user_id', $user->id)
+                ->where('store_id', $storeId)
+                ->where('is_draft', 0)
+                ->select('id', 'order_number', 'created_at', 'total_amount')
+                ->latest()
+                ->get()
+                ->map(function ($order) {
+                    return [
+                        'id'           => $order->id,
+                        'orderNumber'  => $order->order_number,
+                        'createdAt'    => $order->created_at?->format('M d, Y'),
+                        'totalAmount'  => $order->total_amount,
+                        'label'        => 'Order #' . $order->order_number . ' - Placed on ' . $order->created_at?->format('M d, Y') . ' for $' . number_format($order->total_amount, 2),
+                    ];
+                });
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Orders retrieved successfully.',
+                'data' => $orders,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // public function show(Request $request, $id)
     // {
     //     try {

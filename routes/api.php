@@ -464,6 +464,7 @@ Route::prefix('cart')->middleware('auth:sanctum')->controller(CartController::cl
         Route::post('/place-order', 'store');
         Route::post('/track-order', 'trackOrder');
         Route::post('/add-notes/{orderId}', 'addOrderNote');
+        Route::get('/my-orders-list', 'myOrdersList');
     });
     // 🧾 Orders (auth required)
     Route::prefix('orders')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {
