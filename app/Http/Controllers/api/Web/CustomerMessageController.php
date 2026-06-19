@@ -33,12 +33,12 @@ class CustomerMessageController extends Controller
             }
 
             $validated = $request->validate([
-                'order_number' => 'required|string',
-                'subject'      => 'required|string|max:255',
-                'message'      => 'required|string',
+                'order_id' => 'required|integer',
+                'subject'  => 'required|string|max:255',
+                'message'  => 'required|string',
             ]);
 
-            $order = Order::where('order_number', $validated['order_number'])
+            $order = Order::where('id', $validated['order_id'])
                 ->where('store_id', $storeId)
                 ->first();
 
