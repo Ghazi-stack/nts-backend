@@ -39,7 +39,8 @@ use App\Http\Controllers\api\Web\{
     OrderItemController,
     ShipmentController,
     ContactRequestController,
-    BulkInquiryController
+    BulkInquiryController,
+    CustomerMessageController
 };
 use App\Http\Controllers\api\AuthController;
 use App\Http\Controllers\api\SitemapController;
@@ -473,6 +474,11 @@ Route::prefix('cart')->middleware('auth:sanctum')->controller(CartController::cl
         Route::post('/return-order', 'submitReturnRequest');
         Route::post('/order-details', 'showByOrderId');
     });
+
+    Route::prefix('customer-messages')->middleware('auth:sanctum')->controller(CustomerMessageController::class)->group(function () {
+    Route::post('/send', 'store');       // Customer: message bhejo
+    Route::get('/list', 'index');        // Admin: sab messages dekho
+});
     Route::prefix('order-items')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {
         Route::get('/order-items/{orderId}', 'webIndex');
     });
