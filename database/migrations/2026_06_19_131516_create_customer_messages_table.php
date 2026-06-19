@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('customer_messages', function (Blueprint $table) {
@@ -17,6 +14,8 @@ return new class extends Migration
             $table->unsignedBigInteger('customer_id');
             $table->unsignedBigInteger('order_id');
             $table->string('order_number')->nullable();
+            $table->string('sender_type')->default('customer');
+            $table->unsignedBigInteger('parent_id')->nullable();
             $table->string('subject');
             $table->text('message');
             $table->boolean('is_read')->default(false);
@@ -24,9 +23,6 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('customer_messages');

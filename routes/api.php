@@ -144,7 +144,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/refund/{id}', 'refund');
         Route::get('/timeline/{id}', 'getOrderTimeline');
         Route::get('/send-payment-invoice/{id}', 'sendPaymentInvoice');
-         Route::get('/customer/{customerId}/orders', 'getCustomerWithOrders');
+        Route::get('/customer/{customerId}/orders', 'getCustomerWithOrders');
     });
 
     // Web Pages
@@ -443,17 +443,17 @@ Route::prefix('web')->group(function () {
         Route::get('/last-week-product', 'lastWeekProducts');
     });
     // 🛒 Cart (Guest + Auth dono)
-Route::prefix('cart')->controller(CartController::class)->group(function () {
-    Route::get('/list',           'index');       // GET   - Cart list dekho
-    Route::post('/add-cart',      'storeCart');   // POST  - Item add karo
-    Route::put('/update/{id}',    'updateCart');  // PUT   - Quantity set karo
-    Route::delete('/delete/{id}', 'destroyCart'); // DEL   - Item remove karo
-});
+    Route::prefix('cart')->controller(CartController::class)->group(function () {
+        Route::get('/list',           'index');       // GET   - Cart list dekho
+        Route::post('/add-cart',      'storeCart');   // POST  - Item add karo
+        Route::put('/update/{id}',    'updateCart');  // PUT   - Quantity set karo
+        Route::delete('/delete/{id}', 'destroyCart'); // DEL   - Item remove karo
+    });
 
-// 🔀 Cart Transfer (auth required)
-Route::prefix('cart')->middleware('auth:sanctum')->controller(CartController::class)->group(function () {
-    Route::post('/transfer', 'transferGuestCartToUser');
-});
+    // 🔀 Cart Transfer (auth required)
+    Route::prefix('cart')->middleware('auth:sanctum')->controller(CartController::class)->group(function () {
+        Route::post('/transfer', 'transferGuestCartToUser');
+    });
 
     // ❤️ Wishlist (auth required)
     Route::prefix('wishlist')->middleware('auth:sanctum')->controller(WishlistController::class)->group(function () {
@@ -476,9 +476,17 @@ Route::prefix('cart')->middleware('auth:sanctum')->controller(CartController::cl
     });
 
     Route::prefix('customer-messages')->middleware('auth:sanctum')->controller(CustomerMessageController::class)->group(function () {
-    Route::post('/send', 'store');       // Customer: message bhejo
-    Route::get('/list', 'index');        // Admin: sab messages dekho
-});
+        // Customer APIs
+        Route::post('/send', 'store');
+        Route::get('/my-messages', 'myMessages');
+
+        // Admin APIs
+        Route::post('/admin-reply', 'adminReply');
+        Route::get('/admin-messages', 'adminMessages');
+        Route::post('/mark-read', 'markAsRead');
+        Route::post('/mark-unread', 'markAsUnread');
+        Route::post('/delete', 'deleteMessages');
+    });
     Route::prefix('order-items')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {
         Route::get('/order-items/{orderId}', 'webIndex');
     });

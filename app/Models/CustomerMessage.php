@@ -14,6 +14,8 @@ class CustomerMessage extends Model
         'customer_id',
         'order_id',
         'order_number',
+        'sender_type',
+        'parent_id',
         'subject',
         'message',
         'is_read',
@@ -32,5 +34,15 @@ class CustomerMessage extends Model
     public function store()
     {
         return $this->belongsTo(Store::class);
+    }
+
+    public function replies()
+    {
+        return $this->hasMany(CustomerMessage::class, 'parent_id');
+    }
+
+    public function parent()
+    {
+        return $this->belongsTo(CustomerMessage::class, 'parent_id');
     }
 }
