@@ -299,6 +299,44 @@ class CustomerMessageController extends Controller
         }
     }
 
+    // ===================== ADMIN: Show Single Message =====================
+    public function showMessage($id)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected.'
+                ], 400);
+            }
+
+            $message = CustomerMessage::with(['customer', 'order'])
+                ->where('id', $id)
+                ->where('store_id', $storeId)
+                ->first();
+
+            if (!$message) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Message not found.'
+                ], 404);
+            }
+
+            $storeName = Store::find($storeId)?->name ?? 'Store';
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Message retrieved successfully.',
+                'data' => $this->formatMessageWithSender($message, $storeName),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
     // ===================== ADMIN: Mark as Read =====================
     public function markAsRead(Request $request)
     {

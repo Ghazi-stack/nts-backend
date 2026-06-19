@@ -483,6 +483,7 @@ Route::prefix('web')->group(function () {
         // Admin APIs
         Route::post('/admin-reply', 'adminReply');
         Route::get('/admin-messages', 'adminMessages');
+        Route::get('/show/{id}', 'showMessage');
         Route::post('/mark-read', 'markAsRead');
         Route::post('/mark-unread', 'markAsUnread');
         Route::put('/update/{id}', 'updateMessage');
