@@ -28,12 +28,8 @@
         }
 
         body {
-            -moz-box-sizing: border-box;
-            -webkit-box-sizing: border-box;
             box-sizing: border-box;
             min-width: 100%;
-            -ms-text-size-adjust: 100%;
-            -webkit-text-size-adjust: 100%;
             width: 100%;
         }
 
@@ -57,9 +53,6 @@
             font-family: Montserrat, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             font-size: 14px;
             font-weight: 400;
-            -moz-hyphens: auto;
-            -webkit-hyphens: auto;
-            hyphens: auto;
             line-height: 1.57143;
             word-wrap: break-word;
         }
@@ -98,18 +91,6 @@
         hr {
             border: none;
             border-bottom: 1px solid #d0d0d0;
-        }
-
-        .preheader {
-            display: none;
-            font-size: 1px;
-            line-height: 1px;
-            max-height: 0;
-            max-width: 0;
-            mso-hide: all;
-            opacity: 0;
-            overflow: hidden;
-            visibility: hidden;
         }
 
         .body {
@@ -256,8 +237,6 @@
             background: #555;
             border: none;
             border-radius: 4px;
-            -moz-box-sizing: border-box;
-            -webkit-box-sizing: border-box;
             box-sizing: border-box;
             color: #fff;
             display: inline-block;
@@ -280,8 +259,6 @@
         .store-button a {
             border: 1px solid #999;
             border-radius: 4px;
-            -moz-box-sizing: border-box;
-            -webkit-box-sizing: border-box;
             box-sizing: border-box;
             color: #777;
             padding: 3px 15px;
@@ -305,8 +282,6 @@
             }
 
             .column {
-                -moz-box-sizing: border-box;
-                -webkit-box-sizing: border-box;
                 box-sizing: border-box;
                 height: auto !important;
                 padding-left: 15px !important;
@@ -325,8 +300,6 @@
 
             .products__content,
             .products__quantity {
-                -moz-box-sizing: border-box;
-                -webkit-box-sizing: border-box;
                 box-sizing: border-box;
                 display: inline-block !important;
                 width: 100% !important;
@@ -358,8 +331,6 @@
 </head>
 
 <body>
-    <span class="preheader"></span>
-
     <table class="body">
         <tr>
             <td>
@@ -369,7 +340,7 @@
                     </tr>
                 </table>
 
-                {{-- Logo --}}
+                {{-- Logo + Delimiter --}}
                 <table class="container">
                     <tr>
                         <td>
@@ -378,9 +349,13 @@
                                     <th class="column">
                                         <table class="logo">
                                             <tr>
-                                                <th>
-                                                    <a href="{{ config('app.frontend_url') }}" target="_blank">
-                                                        <span>{{ config('app.name') }}</span>
+                                                <th style="text-align: center;">
+                                                    <a href="{{ $storePath }}" target="_blank">
+                                                        @if($logoUrl)
+                                                        <img src="{{ $logoUrl }}" alt="{{ $store?->name ?? 'Store' }} Logo" width="300" height="150" style="display: block; margin: 0 auto; max-width: 300px; max-height: 150px; width: auto; height: auto;">
+                                                        @else
+                                                        <span>{{ $store?->name ?? 'Our Store' }}</span>
+                                                        @endif
                                                     </a>
                                                 </th>
                                                 <th class="expander"></th>
@@ -390,7 +365,6 @@
                                 </tr>
                             </table>
 
-                            {{-- Divider --}}
                             <table class="row">
                                 <tr>
                                     <th class="column">
@@ -403,7 +377,7 @@
                                                                 <hr>
                                                             </th>
                                                             <th class="delimiter__image-block">
-                                                                🛒
+                                                                <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/img/emails/cart.png" alt="Cart" class="delimiter__image">
                                                             </th>
                                                             <th>
                                                                 <hr>
@@ -441,19 +415,19 @@
                                                     @if($emailType === '1hr')
                                                     <h1>You left something behind!</h1>
                                                     <p>
-                                                        Hi {{ $user->name }},<br />
+                                                        Hi {{ $user->name }},<br /><br />
                                                         You added items to your cart but didn't complete your order. Your cart is saved and ready for you!
                                                     </p>
                                                     @elseif($emailType === '24hr')
                                                     <h1>Your cart is waiting for you!</h1>
                                                     <p>
-                                                        Hi {{ $user->name }},<br />
+                                                        Hi {{ $user->name }},<br /><br />
                                                         Your cart is still waiting! Don't let these items sell out before you complete your purchase.
                                                     </p>
                                                     @else
                                                     <h1>Last chance! Don't miss out!</h1>
                                                     <p>
-                                                        Hi {{ $user->name }},<br />
+                                                        Hi {{ $user->name }},<br /><br />
                                                         This is your final reminder. Items in your cart are in high demand — complete your order before they're gone!
                                                     </p>
                                                     @endif
@@ -488,9 +462,7 @@
                                                             @endif
 
                                                             <th class="products__content">
-                                                                <p>
-                                                                    <strong>{{ $item['name'] }}</strong>
-                                                                </p>
+                                                                <p><strong>{{ $item['name'] }}</strong></p>
                                                                 @if(!empty($item['sku']))
                                                                 <p class="products__sku">{{ $item['sku'] }}</p>
                                                                 @endif
@@ -573,14 +545,47 @@
                         <td>
                             <table class="row">
                                 <tr>
+                                    <th class="column">
+                                        <table>
+                                            <tr>
+                                                <th>
+                                                    <table class="delimiter">
+                                                        <tr>
+                                                            <th>
+                                                                <hr>
+                                                            </th>
+                                                            <th class="delimiter__image-block">
+                                                                <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/img/emails/shop.png" alt="Shop" class="delimiter__image">
+                                                            </th>
+                                                            <th>
+                                                                <hr>
+                                                            </th>
+                                                        </tr>
+                                                    </table>
+                                                </th>
+                                                <th class="expander"></th>
+                                            </tr>
+                                        </table>
+                                    </th>
+                                </tr>
+                            </table>
+
+                            <table class="spacer spacer--24">
+                                <tr>
+                                    <td>&nbsp;</td>
+                                </tr>
+                            </table>
+
+                            <table class="row">
+                                <tr>
                                     <th class="column column--md-9 column--xs-12">
                                         <table class="store">
                                             <tr>
                                                 <th>
-                                                    <p><strong>{{ config('app.name') }}</strong></p>
+                                                    <p><strong>{{ $store?->name ?? 'Our Store' }}</strong></p>
                                                     <p>
-                                                        <a href="{{ config('app.frontend_url') }}" target="_blank">
-                                                            {{ parse_url(config('app.frontend_url'), PHP_URL_HOST) }}
+                                                        <a href="{{ $storePath }}" target="_blank">
+                                                            {{ str_replace(['https://', 'http://'], '', $storePath) }}
                                                         </a>
                                                     </p>
                                                 </th>
@@ -593,7 +598,7 @@
                                         <table class="store-button">
                                             <tr>
                                                 <th>
-                                                    <a href="{{ config('app.frontend_url') }}">
+                                                    <a href="{{ $storePath }}">
                                                         <strong>Go Shopping</strong>
                                                     </a>
                                                 </th>
@@ -619,7 +624,7 @@
                                                     <div>
                                                         <p style="text-align: center; color: #777; font-size: 12px;">
                                                             You're receiving this email because you have items in your cart at
-                                                            <a href="{{ config('app.frontend_url') }}">{{ config('app.name') }}</a>.
+                                                            <a href="{{ $storePath }}">{{ $store?->name ?? 'Our Store' }}</a>.
                                                         </p>
                                                     </div>
                                                 </th>

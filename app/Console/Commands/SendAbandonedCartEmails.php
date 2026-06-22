@@ -38,18 +38,21 @@ class SendAbandonedCartEmails extends Command
             ->groupBy('user_id');
 
         foreach ($carts as $userId => $userCarts) {
-            $user = $userCarts->first()->user;
+            $user    = $userCarts->first()->user;
+            $storeId = $userCarts->first()->store_id;
+
             if (!$user || !$user->email) continue;
 
             $cartItems    = $this->formatCartItems($userCarts);
-            $checkoutLink = config('app.frontend_url') . '/checkout';
+            $checkoutLink = $this->getCheckoutLink($storeId);
 
             try {
                 Mail::to($user->email)->send(new AbandonedCartEmail(
                     user: $user,
                     cartItems: $cartItems,
                     emailType: '1hr',
-                    checkoutLink: $checkoutLink
+                    checkoutLink: $checkoutLink,
+                    storeId: $storeId
                 ));
 
                 Cart::where('user_id', $userId)
@@ -79,18 +82,21 @@ class SendAbandonedCartEmails extends Command
             ->groupBy('user_id');
 
         foreach ($carts as $userId => $userCarts) {
-            $user = $userCarts->first()->user;
+            $user    = $userCarts->first()->user;
+            $storeId = $userCarts->first()->store_id;
+
             if (!$user || !$user->email) continue;
 
             $cartItems    = $this->formatCartItems($userCarts);
-            $checkoutLink = config('app.frontend_url') . '/checkout';
+            $checkoutLink = $this->getCheckoutLink($storeId);
 
             try {
                 Mail::to($user->email)->send(new AbandonedCartEmail(
                     user: $user,
                     cartItems: $cartItems,
                     emailType: '24hr',
-                    checkoutLink: $checkoutLink
+                    checkoutLink: $checkoutLink,
+                    storeId: $storeId
                 ));
 
                 Cart::where('user_id', $userId)
@@ -119,18 +125,21 @@ class SendAbandonedCartEmails extends Command
             ->groupBy('user_id');
 
         foreach ($carts as $userId => $userCarts) {
-            $user = $userCarts->first()->user;
+            $user    = $userCarts->first()->user;
+            $storeId = $userCarts->first()->store_id;
+
             if (!$user || !$user->email) continue;
 
             $cartItems    = $this->formatCartItems($userCarts);
-            $checkoutLink = config('app.frontend_url') . '/checkout';
+            $checkoutLink = $this->getCheckoutLink($storeId);
 
             try {
                 Mail::to($user->email)->send(new AbandonedCartEmail(
                     user: $user,
                     cartItems: $cartItems,
                     emailType: '48hr',
-                    checkoutLink: $checkoutLink
+                    checkoutLink: $checkoutLink,
+                    storeId: $storeId
                 ));
 
                 Cart::where('user_id', $userId)
@@ -142,6 +151,16 @@ class SendAbandonedCartEmails extends Command
                 $this->error("48hr email failed - {$user->email}: " . $e->getMessage());
             }
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Checkout link - store ke base_url se
+    // ─────────────────────────────────────────────────────────────
+    private function getCheckoutLink(int $storeId): string
+    {
+        $store = \App\Models\Store::find($storeId);
+        $baseUrl = $store?->base_url ?? config('app.frontend_url');
+        return rtrim($baseUrl, '/') . '/checkout';
     }
 
     // ─────────────────────────────────────────────────────────────

@@ -4,45 +4,57 @@ namespace App\Mail;
 
 use App\Models\Cart;
 use App\Models\User;
+use App\Models\Store;
+use App\Models\Logo;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Content;
-use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 class AbandonedCartEmail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    public Store  $store;
+    public ?string $logoUrl;
+    public string  $storePath;
+
     public function __construct(
         public User   $user,
-        public array  $cartItems,   // formatted cart items
-        public string $emailType,   // '1hr', '24hr', '48hr'
-        public string $checkoutLink // checkout URL
-    ) {}
+        public array  $cartItems,
+        public string $emailType,
+        public string $checkoutLink,
+        public int    $storeId
+    ) {
+        // Store record
+        $this->store     = Store::find($storeId);
 
-    public function envelope(): Envelope
+        // Logo
+        $logo            = Logo::where('store_id', $storeId)->first();
+        $this->logoUrl   = $logo?->logo_url ?? null;
+
+        // Store base URL
+        $this->storePath = $this->store?->base_url ?? config('app.frontend_url');
+    }
+
+    public function build()
     {
         $subjects = [
             '1hr'  => 'You left something behind!',
             '24hr' => 'Your cart is waiting for you!',
-            '48hr' => 'Last chance! Items in your cart are going fast!',
+            '48hr' => 'Last chance! Complete your order!',
         ];
 
-        return new Envelope(
-            subject: $subjects[$this->emailType] ?? 'Your cart is waiting!',
-        );
-    }
-
-    public function content(): Content
-    {
-        return new Content(
-            view: 'emails.abandoned-cart',
-        );
-    }
-
-    public function attachments(): array
-    {
-        return [];
+        return $this->from(config('mail.from.address'), config('mail.from.name'))
+            ->subject($subjects[$this->emailType] ?? 'Your cart is waiting!')
+            ->view('emails.abandoned-cart')
+            ->with([
+                'user'         => $this->user,
+                'cartItems'    => $this->cartItems,
+                'emailType'    => $this->emailType,
+                'checkoutLink' => $this->checkoutLink,
+                'store'        => $this->store,
+                'logoUrl'      => $this->logoUrl,
+                'storePath'    => $this->storePath,
+            ]);
     }
 }
