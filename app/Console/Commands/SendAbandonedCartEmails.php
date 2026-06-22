@@ -10,11 +10,11 @@ use Illuminate\Support\Facades\Mail;
 class SendAbandonedCartEmails extends Command
 {
     protected $signature   = 'cart:send-abandoned-emails';
-    protected $description = 'Abandoned cart users ko email bhejo (1hr, 24hr, 48hr)';
+    protected $description = 'Send abandoned cart emails to users (1hr, 24hr, 48hr)';
 
     public function handle(): void
     {
-        $this->info('Abandoned cart emails check ho rahi hain...');
+        $this->info('Checking abandoned cart emails...');
 
         $this->sendFirstEmail();
         $this->sendSecondEmail();
@@ -33,7 +33,6 @@ class SendAbandonedCartEmails extends Command
             ->whereNull('email_1hr_sent_at')
             ->where('updated_at', '<=', now()->subHour())
             ->where('updated_at', '>=', now()->subHours(23))
-            // ✅ Fix: user ke customer se check karo
             ->whereHas('user.customer', fn($q) => $q->where('receive_review_emails', 1))
             ->get()
             ->groupBy('user_id');
@@ -57,9 +56,9 @@ class SendAbandonedCartEmails extends Command
                     ->whereNull('email_1hr_sent_at')
                     ->update(['email_1hr_sent_at' => now()]);
 
-                $this->info("1hr email sent → {$user->email}");
+                $this->info("1hr email sent - {$user->email}");
             } catch (\Exception $e) {
-                $this->error("1hr email failed → {$user->email}: " . $e->getMessage());
+                $this->error("1hr email failed - {$user->email}: " . $e->getMessage());
             }
         }
     }
@@ -75,7 +74,6 @@ class SendAbandonedCartEmails extends Command
             ->whereNull('email_24hr_sent_at')
             ->where('updated_at', '<=', now()->subHours(24))
             ->where('updated_at', '>=', now()->subHours(47))
-            // ✅ Fix: user ke customer se check karo
             ->whereHas('user.customer', fn($q) => $q->where('receive_review_emails', 1))
             ->get()
             ->groupBy('user_id');
@@ -99,9 +97,9 @@ class SendAbandonedCartEmails extends Command
                     ->whereNull('email_24hr_sent_at')
                     ->update(['email_24hr_sent_at' => now()]);
 
-                $this->info("24hr email sent → {$user->email}");
+                $this->info("24hr email sent - {$user->email}");
             } catch (\Exception $e) {
-                $this->error("24hr email failed → {$user->email}: " . $e->getMessage());
+                $this->error("24hr email failed - {$user->email}: " . $e->getMessage());
             }
         }
     }
@@ -116,7 +114,6 @@ class SendAbandonedCartEmails extends Command
             ->whereNotNull('email_24hr_sent_at')
             ->whereNull('email_48hr_sent_at')
             ->where('updated_at', '<=', now()->subHours(48))
-            // ✅ Fix: user ke customer se check karo
             ->whereHas('user.customer', fn($q) => $q->where('receive_review_emails', 1))
             ->get()
             ->groupBy('user_id');
@@ -140,15 +137,15 @@ class SendAbandonedCartEmails extends Command
                     ->whereNull('email_48hr_sent_at')
                     ->update(['email_48hr_sent_at' => now()]);
 
-                $this->info("48hr email sent → {$user->email}");
+                $this->info("48hr email sent - {$user->email}");
             } catch (\Exception $e) {
-                $this->error("48hr email failed → {$user->email}: " . $e->getMessage());
+                $this->error("48hr email failed - {$user->email}: " . $e->getMessage());
             }
         }
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Cart items format karna
+    // Format cart items for email
     // ─────────────────────────────────────────────────────────────
     private function formatCartItems($carts): array
     {

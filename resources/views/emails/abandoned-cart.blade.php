@@ -369,7 +369,7 @@
                     </tr>
                 </table>
 
-                {{-- ── Logo ── --}}
+                {{-- Logo --}}
                 <table class="container">
                     <tr>
                         <td>
@@ -390,7 +390,7 @@
                                 </tr>
                             </table>
 
-                            {{-- ── Divider ── --}}
+                            {{-- Divider --}}
                             <table class="row">
                                 <tr>
                                     <th class="column">
@@ -427,7 +427,7 @@
                     </tr>
                 </table>
 
-                {{-- ── Main Content ── --}}
+                {{-- Main Content --}}
                 <table class="container">
                     <tr>
                         <td>
@@ -437,7 +437,7 @@
                                         <table>
                                             <tr>
                                                 <th>
-                                                    {{-- Title - email type ke hisaab se --}}
+                                                    {{-- Title based on email type --}}
                                                     @if($emailType === '1hr')
                                                     <h1>You left something behind!</h1>
                                                     <p>
@@ -471,7 +471,7 @@
                                 </tr>
                             </table>
 
-                            {{-- ── Products List ── --}}
+                            {{-- Products List --}}
                             <table class="row">
                                 <tr>
                                     <th class="column">
@@ -497,9 +497,7 @@
                                                             </th>
 
                                                             <th class="products__quantity">
-                                                                <p>
-                                                                    Qty: {{ $item['quantity'] }}
-                                                                </p>
+                                                                <p>Qty: {{ $item['quantity'] }}</p>
                                                             </th>
                                                         </tr>
                                                         @endforeach
@@ -518,7 +516,7 @@
                                 </tr>
                             </table>
 
-                            {{-- ── Complete Order Message ── --}}
+                            {{-- Complete Order Message --}}
                             <table class="row">
                                 <tr>
                                     <th class="column">
@@ -540,7 +538,7 @@
                                 </tr>
                             </table>
 
-                            {{-- ── CTA Button ── --}}
+                            {{-- CTA Button --}}
                             <table class="row">
                                 <tr>
                                     <th class="column">
@@ -569,7 +567,7 @@
                     </tr>
                 </table>
 
-                {{-- ── Footer ── --}}
+                {{-- Footer --}}
                 <table class="container">
                     <tr>
                         <td>
