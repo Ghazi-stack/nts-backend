@@ -34,7 +34,7 @@ class SendAbandonedCartEmails extends Command
             ->where('updated_at', '<=', now()->subHour())
             ->where('updated_at', '>=', now()->subHours(23))
             // ✅ Sirf woh users jinhon ne email receive karna allow kiya hai
-            ->whereHas('user', fn($q) => $q->where('receive_review_emails', 1))
+            ->whereHas('user.customer', fn($q) => $q->where('receive_review_emails', 1))
             ->get()
             ->groupBy('user_id');
 
@@ -76,7 +76,7 @@ class SendAbandonedCartEmails extends Command
             ->where('updated_at', '<=', now()->subHours(24))
             ->where('updated_at', '>=', now()->subHours(47))
             // ✅ Sirf woh users jinhon ne email receive karna allow kiya hai
-            ->whereHas('user', fn($q) => $q->where('receive_review_emails', 1))
+            ->whereHas('user.customer', fn($q) => $q->where('receive_review_emails', 1))
             ->get()
             ->groupBy('user_id');
 
@@ -117,7 +117,7 @@ class SendAbandonedCartEmails extends Command
             ->whereNull('email_48hr_sent_at')
             ->where('updated_at', '<=', now()->subHours(48))
             // ✅ Sirf woh users jinhon ne email receive karna allow kiya hai
-            ->whereHas('user', fn($q) => $q->where('receive_review_emails', 1))
+            ->whereHas('user.customer', fn($q) => $q->where('receive_review_emails', 1))
             ->get()
             ->groupBy('user_id');
 
