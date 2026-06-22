@@ -28,12 +28,12 @@ class SendAbandonedCartEmails extends Command
     // ─────────────────────────────────────────────────────────────
     private function sendFirstEmail(): void
     {
-        $carts = Cart::with(['user', 'product.images'])
+        $carts = Cart::with(['user.customer', 'product.images'])
             ->whereNotNull('user_id')
             ->whereNull('email_1hr_sent_at')
             ->where('updated_at', '<=', now()->subHour())
             ->where('updated_at', '>=', now()->subHours(23))
-            // ✅ Sirf woh users jinhon ne email receive karna allow kiya hai
+            // ✅ Fix: user ke customer se check karo
             ->whereHas('user.customer', fn($q) => $q->where('receive_review_emails', 1))
             ->get()
             ->groupBy('user_id');
@@ -69,13 +69,13 @@ class SendAbandonedCartEmails extends Command
     // ─────────────────────────────────────────────────────────────
     private function sendSecondEmail(): void
     {
-        $carts = Cart::with(['user', 'product.images'])
+        $carts = Cart::with(['user.customer', 'product.images'])
             ->whereNotNull('user_id')
             ->whereNotNull('email_1hr_sent_at')
             ->whereNull('email_24hr_sent_at')
             ->where('updated_at', '<=', now()->subHours(24))
             ->where('updated_at', '>=', now()->subHours(47))
-            // ✅ Sirf woh users jinhon ne email receive karna allow kiya hai
+            // ✅ Fix: user ke customer se check karo
             ->whereHas('user.customer', fn($q) => $q->where('receive_review_emails', 1))
             ->get()
             ->groupBy('user_id');
@@ -111,12 +111,12 @@ class SendAbandonedCartEmails extends Command
     // ─────────────────────────────────────────────────────────────
     private function sendThirdEmail(): void
     {
-        $carts = Cart::with(['user', 'product.images'])
+        $carts = Cart::with(['user.customer', 'product.images'])
             ->whereNotNull('user_id')
             ->whereNotNull('email_24hr_sent_at')
             ->whereNull('email_48hr_sent_at')
             ->where('updated_at', '<=', now()->subHours(48))
-            // ✅ Sirf woh users jinhon ne email receive karna allow kiya hai
+            // ✅ Fix: user ke customer se check karo
             ->whereHas('user.customer', fn($q) => $q->where('receive_review_emails', 1))
             ->get()
             ->groupBy('user_id');
