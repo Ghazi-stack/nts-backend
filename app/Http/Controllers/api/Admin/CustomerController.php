@@ -238,6 +238,8 @@ class CustomerController extends Controller
                 'customerGroup' => 'customer_group',
                 'storeCredit' => 'store_credit',
                 'taxExemptCode' => 'tax_exempt_code',
+                'receiveReviewEmails' => 'receive_review_emails',
+                'forcePasswordReset'  => 'force_password_reset',
             ];
 
             foreach ($map as $k => $v) {
