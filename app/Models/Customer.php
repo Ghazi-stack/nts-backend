@@ -31,6 +31,10 @@ class Customer extends Model
         'state',
     ];
 
+    protected $casts = [
+        'receive_review_emails' => 'boolean',
+        'force_password_reset'  => 'boolean',
+    ];
     public function store()
     {
         return $this->belongsTo(Store::class);
@@ -48,5 +52,4 @@ class Customer extends Model
     {
         return $this->hasMany(CustomerAddress::class);
     }
-
 }

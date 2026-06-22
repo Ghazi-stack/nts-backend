@@ -301,6 +301,26 @@ class AuthController extends Controller
                 ], 401);
             }
 
+            // Force Password Reset Check
+            if (
+                $customer->customer &&
+                $customer->customer->force_password_reset
+            ) {
+
+                DB::table('password_reset_tokens')
+                    ->where('email', $customer->email)
+                    ->delete();
+
+                Password::sendResetLink([
+                    'email' => $customer->email
+                ]);
+
+                return response()->json([
+                    'status' => false,
+                    'force_password_reset' => true,
+                    'message' => 'Password reset is required. A reset link has been sent to your email.',
+                ], 403);
+            }
             // ── 2FA CHECK (Customer) ───────────────────────────────────────────
             if ($customer->two_factor_enabled) {
 
