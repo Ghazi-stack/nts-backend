@@ -56,6 +56,10 @@ class Order extends Model
         return $this->hasMany(OrderItem::class)->with('product');
     }
 
+    public function messages()
+    {
+        return $this->hasMany(\App\Models\CustomerMessage::class, 'order_id');
+    }
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -64,7 +68,7 @@ class Order extends Model
     {
         return $this->hasOne(Payment::class);
     }
-    
+
     public function store()
     {
         return $this->belongsTo(Store::class);

@@ -31,7 +31,8 @@ class OrderResource extends JsonResource
             'totalAmount'        => $this->total_amount,
             'discountAmount'        => $this->discountAmount,
             'newsletter'        => $this->newsletter,
-
+            'isMessage' => $this->messages_count > 0 ? 1 : 0,
+            'messageCount' => $this->messages_count ?? 0,
             'trackingNumber'     => $this->tracking_number,
             'carrierCode'        => $this->tracking_carrier_code,
             'carrierName'        => $this->tracking_carrier_name,

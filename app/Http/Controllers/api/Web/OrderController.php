@@ -59,6 +59,7 @@ class OrderController extends Controller
             }
 
             $orders = Order::with(['items.product.images', 'customer', 'billingInformation', 'notes', 'payment'])
+                ->withCount('messages')
                 ->where('store_id', $storeId)
                 ->where('is_draft', 0)
                 ->when($status, function ($q) use ($status) {
