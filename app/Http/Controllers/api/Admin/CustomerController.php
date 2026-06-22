@@ -54,7 +54,7 @@ class CustomerController extends Controller
             }
 
             // Default sorting by ID
-            $customers = $query->orderBy('id', 'asc')
+            $customers = $query->orderBy('id', 'desc')
                 ->paginate($request->input('pageSize', 50));
 
             return response()->json([
