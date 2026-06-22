@@ -19,6 +19,15 @@ class Cart extends Model
         'session_id',
         'product_id',
         'quantity',
+        'email_1hr_sent_at',
+        'email_24hr_sent_at',
+        'email_48hr_sent_at',
+    ];
+
+    protected $casts = [
+        'email_1hr_sent_at'  => 'datetime',
+        'email_24hr_sent_at' => 'datetime',
+        'email_48hr_sent_at' => 'datetime',
     ];
 
     public function product()
@@ -29,5 +38,10 @@ class Cart extends Model
     public function store()
     {
         return $this->belongsTo(Store::class);
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 }

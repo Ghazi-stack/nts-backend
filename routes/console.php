@@ -20,3 +20,6 @@ Artisan::command('inspire', function () {
 
 Schedule::command('visitor-sessions:cleanup')
     ->hourly();
+
+
+Schedule::command('cart:send-abandoned-emails')->everyFifteenMinutes();
