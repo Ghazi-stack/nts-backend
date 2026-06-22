@@ -486,6 +486,7 @@ Route::prefix('web')->group(function () {
         Route::get('/show/{id}', 'showMessage');
         Route::post('/mark-read', 'markAsRead');
         Route::post('/mark-unread', 'markAsUnread');
+        Route::post('/toggle-flag', 'toggleFlag');
         Route::put('/update/{id}', 'updateMessage');
         Route::post('/delete', 'deleteMessages');
     });

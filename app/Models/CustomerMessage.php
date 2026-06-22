@@ -19,6 +19,7 @@ class CustomerMessage extends Model
         'subject',
         'message',
         'is_read',
+        'is_flagged',
     ];
 
     public function customer()

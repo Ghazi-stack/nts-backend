@@ -470,6 +470,34 @@ class CustomerMessageController extends Controller
         }
     }
 
+    // ===================== ADMIN: Toggle Flag =====================
+    public function toggleFlag(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'ids'   => 'required|array|min:1',
+                'ids.*' => 'integer',
+                'flag'  => 'required|boolean',
+            ]);
+
+            $storeId = current_store_id();
+
+            CustomerMessage::whereIn('id', $validated['ids'])
+                ->where('store_id', $storeId)
+                ->update(['is_flagged' => $validated['flag']]);
+
+            return response()->json([
+                'status' => true,
+                'message' => $validated['flag'] ? 'Messages flagged.' : 'Messages unflagged.',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // ===================== ADMIN: Delete Messages =====================
     public function deleteMessages(Request $request)
     {
@@ -508,6 +536,7 @@ class CustomerMessageController extends Controller
             'subject'     => $msg->subject,
             'message'     => $msg->message,
             'isRead'      => $msg->is_read,
+            'isFlagged' => $msg->is_flagged,
             'createdAt'   => $msg->created_at?->toDateTimeString(),
             'createdAtFormatted' => $msg->created_at?->format('jS M Y @ g:i A'),
         ];
@@ -540,6 +569,7 @@ class CustomerMessageController extends Controller
             'message'        => $msg->message,
             'preview'        => $senderLabel . ': ' . $msg->message,
             'isRead'         => $msg->is_read,
+            'isFlagged' => $msg->is_flagged,
             'customer'       => $msg->customer ? [
                 'id'        => $msg->customer->id,
                 'firstName' => $msg->customer->first_name,
