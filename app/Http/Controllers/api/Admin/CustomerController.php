@@ -215,6 +215,7 @@ class CustomerController extends Controller
                 'storeCredit'           => 'nullable|numeric',
                 'country'               => 'nullable|string|max:100',
                 'state'                 => 'nullable|string|max:100',
+                'address'               => 'nullable|string|max:255',
                 'taxExemptCode'         => 'nullable|string|max:50',
                 'receiveReviewEmails'   => 'nullable|boolean',
                 'forcePasswordReset'    => 'nullable|boolean',
@@ -255,9 +256,28 @@ class CustomerController extends Controller
             $addresses = $validated['addresses'] ?? [];
             unset($validated['addresses']);
 
+            // Agar flat address aaya to customer table mein save karo
+            $flatAddress = $validated['address'] ?? null;
+            unset($validated['address']);
+
             $customer = Customer::create($validated);
 
-            // Create multiple addresses
+            // Flat address se bhi address record banao
+            if ($flatAddress) {
+                $customer->addresses()->create([
+                    'address_line_1' => $flatAddress,
+                    'address_line_2' => null,
+                    'city'           => null,
+                    'state'          => $validated['state'] ?? null,
+                    'zip'            => null,
+                    'country'        => $validated['country'] ?? null,
+                ]);
+
+                // Customer table mein bhi save karo
+                $customer->update(['address' => $flatAddress]);
+            }
+
+            // Multiple addresses array se bhi banao
             foreach ($addresses as $addr) {
                 $customer->addresses()->create([
                     'address_line_1' => $addr['addressLine1'] ?? null,
