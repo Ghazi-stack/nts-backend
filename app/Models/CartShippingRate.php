@@ -15,11 +15,13 @@ class CartShippingRate extends Model
         'state',
         'city',
         'zip',
+        'service_type', // ← new
         'method_type',
         'total_charge',
     ];
 
     protected $casts = [
-        'cart_ids' => 'array',
+        'cart_ids'     => 'array',
+        'total_charge' => 'float',
     ];
 }

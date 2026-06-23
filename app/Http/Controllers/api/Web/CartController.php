@@ -357,125 +357,129 @@ class CartController extends Controller
     public function saveShippingRate(Request $request)
     {
         try {
-
             $storeId = current_store_id();
-
             if (!$storeId) {
                 return response()->json([
-                    'status' => false,
+                    'status'  => false,
                     'message' => 'Store not selected or token invalid.',
                 ], 400);
             }
 
             $validated = $request->validate([
-                'cart_ids' => 'required|array|min:1',
-                'cart_ids.*' => 'required|exists:carts,id',
-
-                'country' => 'required|string|max:255',
-                'state' => 'required|string|max:255',
-                'city' => 'required|string|max:255',
-                'zip' => 'required|string|max:50',
-
-                'rate.method_type' => 'required|string|max:255',
-                'rate.total_charge' => 'required|numeric|min:0',
+                'cartId'             => 'required|array|min:1',
+                'cartId.*'           => 'required|integer|exists:carts,id',
+                'country'            => 'required|string|max:255',
+                'state'              => 'required|string|max:255',
+                'city'               => 'required|string|max:255',
+                'zip'                => 'required|string|max:50',
+                'rate'               => 'required|array',
+                'rate.service_type'  => 'required|string|max:255',
+                'rate.method_type'   => 'required|string|max:255',
+                'rate.total_charge'  => 'required|numeric|min:0',
             ]);
 
             [$user, $sessionId] = $this->resolveIdentity($request);
 
             if (!$user && !$sessionId) {
                 return response()->json([
-                    'status' => false,
+                    'status'  => false,
                     'message' => 'X-Session-ID header required for guest users.',
                 ], 422);
             }
 
-            // Optional Security Check
-            $cartCount = Cart::whereIn('id', $validated['cart_ids'])
+            // Cart IDs validate karo - sirf us user/session ki carts
+            $validCartCount = Cart::whereIn('id', $validated['cartId'])
                 ->where('store_id', $storeId)
-                ->when($user, function ($q) use ($user) {
-                    $q->where('user_id', $user->id);
-                })
-                ->when(!$user, function ($q) use ($sessionId) {
-                    $q->where('session_id', $sessionId);
-                })
+                ->when($user,  fn($q) => $q->where('user_id', $user->id))
+                ->when(!$user, fn($q) => $q->where('session_id', $sessionId)->whereNull('user_id'))
                 ->count();
 
-            if ($cartCount !== count($validated['cart_ids'])) {
+            if ($validCartCount !== count($validated['cartId'])) {
                 return response()->json([
-                    'status' => false,
+                    'status'  => false,
                     'message' => 'One or more cart IDs are invalid.',
                 ], 422);
             }
 
+            // Save ya update karo
             $shippingRate = CartShippingRate::updateOrCreate(
                 [
-                    'store_id' => $storeId,
-                    'user_id' => $user?->id,
+                    'store_id'   => $storeId,
+                    'user_id'    => $user?->id,
                     'session_id' => $sessionId,
                 ],
                 [
-                    'cart_ids' => $validated['cart_ids'],
-
-                    'country' => $validated['country'],
-                    'state' => $validated['state'],
-                    'city' => $validated['city'],
-                    'zip' => $validated['zip'],
-
-                    'method_type' => $validated['rate']['method_type'],
+                    'cart_ids'     => $validated['cartId'],
+                    'country'      => $validated['country'],
+                    'state'        => $validated['state'],
+                    'city'         => $validated['city'],
+                    'zip'          => $validated['zip'],
+                    'service_type' => $validated['rate']['service_type'],
+                    'method_type'  => $validated['rate']['method_type'],
                     'total_charge' => $validated['rate']['total_charge'],
                 ]
             );
 
             return response()->json([
-                'status' => true,
+                'status'  => true,
                 'message' => 'Shipping rate saved successfully.',
-                'data' => $shippingRate,
-            ]);
+                'data'    => [
+                    'id'       => $shippingRate->id,
+                    'storeId'  => $shippingRate->store_id,
+                    'cartIds'  => $shippingRate->cart_ids,
+                    'country'  => $shippingRate->country,
+                    'state'    => $shippingRate->state,
+                    'city'     => $shippingRate->city,
+                    'zip'      => $shippingRate->zip,
+                    'rate'     => [
+                        'service_type' => $shippingRate->service_type,
+                        'method_type'  => $shippingRate->method_type,
+                        'total_charge' => $shippingRate->total_charge,
+                    ],
+                ],
+            ], 201);
         } catch (ValidationException $e) {
-
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Validation failed',
-                'errors' => $e->errors(),
+                'errors'  => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
-
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Failed to save shipping rate',
-                'error' => $e->getMessage(),
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
 
+    // ─── getShippingRate ─────────────────────────────────────────────────────────
+
     public function getShippingRate(Request $request)
     {
         try {
-
             $storeId = current_store_id();
-
             if (!$storeId) {
                 return response()->json([
-                    'status' => false,
+                    'status'  => false,
                     'message' => 'Store not selected or token invalid.',
                 ], 400);
             }
 
             [$user, $sessionId] = $this->resolveIdentity($request);
 
+            // Token priority: token hai → user_id se, nahi → session_id se
             $query = CartShippingRate::where('store_id', $storeId);
 
-            // Token ko priority
             if ($user) {
-
+                // Token hai → user_id se match karo (session ignore)
                 $query->where('user_id', $user->id);
             } elseif ($sessionId) {
-
+                // Guest → session_id se match karo
                 $query->where('session_id', $sessionId);
             } else {
-
                 return response()->json([
-                    'status' => false,
+                    'status'  => false,
                     'message' => 'Authentication or Session ID required.',
                 ], 422);
             }
@@ -484,22 +488,34 @@ class CartController extends Controller
 
             if (!$shippingRate) {
                 return response()->json([
-                    'status' => false,
+                    'status'  => false,
                     'message' => 'Shipping rate not found.',
                 ], 404);
             }
 
             return response()->json([
-                'status' => true,
+                'status'  => true,
                 'message' => 'Shipping rate fetched successfully.',
-                'data' => $shippingRate,
-            ]);
+                'data'    => [
+                    'id'      => $shippingRate->id,
+                    'storeId' => $shippingRate->store_id,
+                    'cartIds' => $shippingRate->cart_ids,
+                    'country' => $shippingRate->country,
+                    'state'   => $shippingRate->state,
+                    'city'    => $shippingRate->city,
+                    'zip'     => $shippingRate->zip,
+                    'rate'    => [
+                        'service_type' => $shippingRate->service_type,
+                        'method_type'  => $shippingRate->method_type,
+                        'total_charge' => $shippingRate->total_charge,
+                    ],
+                ],
+            ], 200);
         } catch (\Exception $e) {
-
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Failed to fetch shipping rate.',
-                'error' => $e->getMessage(),
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }

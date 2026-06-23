@@ -15,7 +15,6 @@ return new class extends Migration
             $table->id();
 
             $table->unsignedBigInteger('store_id');
-
             $table->unsignedBigInteger('user_id')->nullable();
             $table->string('session_id')->nullable();
 
@@ -26,6 +25,8 @@ return new class extends Migration
             $table->string('city');
             $table->string('zip');
 
+            // Rate
+            $table->string('service_type')->nullable(); // ← new
             $table->string('method_type');
             $table->decimal('total_charge', 10, 2);
 
