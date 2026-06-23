@@ -11,11 +11,6 @@ use App\Http\Resources\BillingInformationResource;
 
 class OrderResource extends JsonResource
 {
-    /**
-     * Transform the resource into an array.
-     *
-     * @return array<string, mixed>
-     */
     public function toArray(Request $request): array
     {
         return [
@@ -27,12 +22,15 @@ class OrderResource extends JsonResource
             'staffNotes'         => $this->staff_notes,
             'isDraft'            => (bool) $this->is_draft,
             'deviceType'         => $this->device_type,
-            'userType'         => $this->user_type,
+            'userType'           => $this->user_type,
             'totalAmount'        => $this->total_amount,
-            'discountAmount'        => $this->discountAmount,
-            'newsletter'        => $this->newsletter,
-            'isMessage' => $this->messages_count > 0 ? 1 : 0,
-            'messageCount' => $this->messages_count ?? 0,
+            'discountAmount'     => $this->discountAmount,
+            'newsletter'         => $this->newsletter,
+            'ipAddress'          => $this->ip_address,
+            'isSaveAddressForShipping' => (bool) $this->is_save_address_for_shipping,
+            'billingSame'        => (bool) $this->billing_same,
+            'isMessage'          => $this->messages_count > 0 ? 1 : 0,
+            'messageCount'       => $this->messages_count ?? 0,
             'trackingNumber'     => $this->tracking_number,
             'carrierCode'        => $this->tracking_carrier_code,
             'carrierName'        => $this->tracking_carrier_name,
@@ -54,13 +52,9 @@ class OrderResource extends JsonResource
             'notes' => $this->whenLoaded('notes', function () {
                 return $this->notes->pluck('note');
             }),
-            // ✅ Only product details here
-            // 'products' => ProductResource::collection(
-            //     $this->whenLoaded('items', fn() => $this->items->pluck('product'))
-            // ),
             'products' => $this->whenLoaded('items', function () {
                 return $this->items
-                    ->filter(fn($item) => $item->product) // ✅ NULL product remove
+                    ->filter(fn($item) => $item->product)
                     ->map(function ($item) {
                         return (new ProductResource($item->product))->additional([
                             'quantity' => $item->quantity,
@@ -68,8 +62,6 @@ class OrderResource extends JsonResource
                         ]);
                     });
             }),
-
-            // 'items'    => OrderItemResource::collection($this->whenLoaded('items')),
             'customer' => $this->whenLoaded('customer', function () {
                 return $this->customer ? new CustomerResource($this->customer) : null;
             }),
