@@ -22,7 +22,7 @@ class Order extends Model
         'user_id',
         'session_id',
         'order_number',
-        'billing_information_id', // ✅ Add this
+        'billing_information_id',
         'name',
         'email',
         'phone',
@@ -44,12 +44,17 @@ class Order extends Model
         'shipped_at',
         'customer_id',
         'staff_notes',
-        'newsletter'
+        'newsletter',
+        'ip_address',
+        'is_save_address_for_shipping',
+        'billing_same',
     ];
     protected $casts = [
         'is_draft'   => 'boolean',
         'shipped_at' => 'datetime',
-        'newsletter' => 'boolean'
+        'newsletter' => 'boolean',
+        'is_save_address_for_shipping' => 'boolean',
+        'billing_same' => 'boolean',
     ];
     public function items()
     {
@@ -83,7 +88,7 @@ class Order extends Model
     }
     public function shipments()
     {
-        return $this->hasMany(Shipment::class); // Adjust class name if your model is namespaced
+        return $this->hasMany(Shipment::class);
     }
     public function billingInformation()
     {

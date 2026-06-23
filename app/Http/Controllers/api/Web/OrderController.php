@@ -660,6 +660,10 @@ class OrderController extends Controller
                 'paymentIntentId' => 'required|string',
                 'isMultiAddress' => 'required|boolean',
 
+                'ipAddress'                  => 'nullable|string|max:45',
+                'isSaveAddressForShipping'   => 'nullable|boolean',
+                'billingSame'                => 'nullable|boolean',
+
                 'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
                 'destinations.*.firstName'      => 'required|string|max:255',
                 'destinations.*.lastName'       => 'required|string|max:255',
@@ -800,6 +804,13 @@ class OrderController extends Controller
             $discount = $validated['discountAmount'] ?? 0;
             $isMulti = $validated['isMultiAddress'];
 
+            // Common order fields for new keys
+            $commonOrderFields = [
+                'ip_address'                    => $validated['ipAddress'] ?? $request->ip(),
+                'is_save_address_for_shipping'  => $validated['isSaveAddressForShipping'] ?? false,
+                'billing_same'                  => $validated['billingSame'] ?? true,
+            ];
+
             if (!$isMulti) {
                 // Single Address
                 $cartTotal = 0;
@@ -828,7 +839,7 @@ class OrderController extends Controller
                     'shipping_method' => $validated['shippingMethod'],
                 ]);
 
-                $order = Order::create([
+                $order = Order::create(array_merge([
                     'store_id'               => $storeId,
                     'user_id'                => $user->id,
                     'customer_id'            => $customer->id,
@@ -843,7 +854,7 @@ class OrderController extends Controller
                     'discountAmount'         => $discount,
                     'is_multi_address'       => false,
                     'newsletter'             => $validated['newsletter'] ?? false,
-                ]);
+                ], $commonOrderFields));
 
                 foreach ($validated['products'] as $item) {
                     $product = Product::find($item['product_id']);
@@ -888,7 +899,7 @@ class OrderController extends Controller
                         'shipping_method' => $dest['shippingMethod'],
                     ]);
 
-                    $order = Order::create([
+                    $order = Order::create(array_merge([
                         'store_id'               => $storeId,
                         'user_id'                => $user->id,
                         'customer_id'            => $customer->id,
@@ -903,7 +914,7 @@ class OrderController extends Controller
                         'discountAmount'         => $discount,
                         'is_multi_address'       => true,
                         'newsletter'             => $validated['newsletter'] ?? false,
-                    ]);
+                    ], $commonOrderFields));
 
                     foreach ($dest['products'] as $item) {
                         $product = Product::find($item['product_id']);
@@ -969,7 +980,6 @@ class OrderController extends Controller
             ], 500);
         }
     }
-
     /**
      * Update an existing order
      */
