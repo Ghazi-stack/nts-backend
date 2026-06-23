@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Cart;
 use App\Models\Product;
 use App\Http\Resources\CartResource;
+use App\Models\CartShippingRate;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
@@ -348,6 +349,133 @@ class CartController extends Controller
                 'status'  => false,
                 'message' => 'Failed to transfer guest cart',
                 'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+    public function saveShippingRate(Request $request)
+    {
+        try {
+
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
+            $validated = $request->validate([
+                'country' => 'required|string|max:255',
+                'state' => 'required|string|max:255',
+                'city' => 'required|string|max:255',
+                'zip' => 'required|string|max:50',
+
+                'rate.method_type' => 'required|string|max:255',
+                'rate.total_charge' => 'required|numeric|min:0',
+            ]);
+
+            [$user, $sessionId] = $this->resolveIdentity($request);
+
+            if (!$user && !$sessionId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'X-Session-ID header required for guest users.',
+                ], 422);
+            }
+
+            $shippingRate = CartShippingRate::updateOrCreate(
+                [
+                    'store_id' => $storeId,
+                    'user_id' => $user?->id,
+                    'session_id' => $sessionId,
+                ],
+                [
+                    'country' => $validated['country'],
+                    'state' => $validated['state'],
+                    'city' => $validated['city'],
+                    'zip' => $validated['zip'],
+                    'method_type' => $validated['rate']['method_type'],
+                    'total_charge' => $validated['rate']['total_charge'],
+                ]
+            );
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Shipping rate saved successfully.',
+                'data' => $shippingRate,
+            ]);
+        } catch (ValidationException $e) {
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to save shipping rate',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function getShippingRate(Request $request)
+    {
+        try {
+
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
+            [$user, $sessionId] = $this->resolveIdentity($request);
+
+            $query = CartShippingRate::where('store_id', $storeId);
+
+            // Token ko priority
+            if ($user) {
+
+                $query->where('user_id', $user->id);
+            } elseif ($sessionId) {
+
+                $query->where('session_id', $sessionId);
+            } else {
+
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Authentication or Session ID required.',
+                ], 422);
+            }
+
+            $shippingRate = $query->latest()->first();
+
+            if (!$shippingRate) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Shipping rate not found.',
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Shipping rate fetched successfully.',
+                'data' => $shippingRate,
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to fetch shipping rate.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

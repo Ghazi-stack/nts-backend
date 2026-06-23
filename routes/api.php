@@ -447,7 +447,9 @@ Route::prefix('web')->group(function () {
         Route::get('/list',           'index');       // GET   - Cart list dekho
         Route::post('/add-cart',      'storeCart');   // POST  - Item add karo
         Route::put('/update/{id}',    'updateCart');  // PUT   - Quantity set karo
-        Route::delete('/delete/{id}', 'destroyCart'); // DEL   - Item remove karo
+        Route::delete('/delete/{id}', 'destroyCart');
+        Route::post('/add/shipping-by-rate', 'saveShippingRate');
+        Route::get('/get/shipping-by-rate', 'getShippingRate');
     });
 
     // 🔀 Cart Transfer (auth required)
