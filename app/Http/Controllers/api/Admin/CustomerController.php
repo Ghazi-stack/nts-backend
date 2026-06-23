@@ -342,6 +342,7 @@ class CustomerController extends Controller
                 'storeCredit'           => 'nullable|numeric',
                 'country'               => 'nullable|string|max:100',
                 'state'                 => 'nullable|string|max:100',
+                'address'               => 'nullable|string|max:255',
                 'taxExemptCode'         => 'nullable|string|max:50',
                 'receiveReviewEmails'   => 'nullable|boolean',
                 'forcePasswordReset'    => 'nullable|boolean',
@@ -363,6 +364,8 @@ class CustomerController extends Controller
                 'customerGroup' => 'customer_group',
                 'storeCredit' => 'store_credit',
                 'taxExemptCode' => 'tax_exempt_code',
+                'receiveReviewEmails' => 'receive_review_emails',
+                'forcePasswordReset'  => 'force_password_reset',
             ];
 
             foreach ($map as $k => $v) {
@@ -378,9 +381,35 @@ class CustomerController extends Controller
             $addresses = $validated['addresses'] ?? [];
             unset($validated['addresses']);
 
+            $flatAddress = $validated['address'] ?? null;
+            unset($validated['address']);
+
             $customer->update($validated);
 
-            // Update existing addresses or create new ones
+            // Flat address handle karo
+            if ($flatAddress) {
+                $customer->update(['address' => $flatAddress]);
+
+                $existingAddress = $customer->addresses()->first();
+                if ($existingAddress) {
+                    $existingAddress->update([
+                        'address_line_1' => $flatAddress,
+                        'state'          => $validated['state'] ?? $existingAddress->state,
+                        'country'        => $validated['country'] ?? $existingAddress->country,
+                    ]);
+                } else {
+                    $customer->addresses()->create([
+                        'address_line_1' => $flatAddress,
+                        'address_line_2' => null,
+                        'city'           => null,
+                        'state'          => $validated['state'] ?? null,
+                        'zip'            => null,
+                        'country'        => $validated['country'] ?? null,
+                    ]);
+                }
+            }
+
+            // Multiple addresses array se update ya create karo
             foreach ($addresses as $addr) {
                 if (!empty($addr['id'])) {
                     $addressModel = $customer->addresses()->find($addr['id']);
