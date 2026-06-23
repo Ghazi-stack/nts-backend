@@ -110,6 +110,7 @@ class CartController extends Controller
     // ─────────────────────────────────────────────────────────────
     // POST /web/cart/add-cart
     // ─────────────────────────────────────────────────────────────
+
     public function storeCart(Request $request)
     {
         try {
@@ -154,6 +155,14 @@ class CartController extends Controller
                 ]);
             }
 
+            // ─── Shipping Rate Cleanup ────────────────────────────────
+            // Naya item add ya quantity update hua → shipping recalculate hogi
+            // cart_shipping_rates mein is cart ID ka record hai to delete karo
+            // ─────────────────────────────────────────────────────────
+            CartShippingRate::where('store_id', $storeId)
+                ->whereJsonContains('cart_ids', $cartItem->id)
+                ->delete();
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Item added to cart successfully',
@@ -177,6 +186,7 @@ class CartController extends Controller
     // ─────────────────────────────────────────────────────────────
     // PUT /web/cart/update/{id}
     // ─────────────────────────────────────────────────────────────
+
     public function updateCart(Request $request, $id)
     {
         try {
@@ -207,6 +217,15 @@ class CartController extends Controller
 
             $cartItem->update(['quantity' => $validated['quantity']]);
 
+            // ─── Shipping Rate Cleanup ────────────────────────────────
+            // Quantity change hui → cart_shipping_rates mein check karo
+            // Agar is cart ID ka record hai to delete karo
+            // Kyunki quantity change hone se shipping recalculate hogi
+            // ─────────────────────────────────────────────────────────
+            CartShippingRate::where('store_id', $storeId)
+                ->whereJsonContains('cart_ids', $cartItem->id)
+                ->delete();
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Cart item updated successfully',
@@ -225,10 +244,10 @@ class CartController extends Controller
             ], 500);
         }
     }
-
     // ─────────────────────────────────────────────────────────────
     // DELETE /web/cart/delete/{id}
     // ─────────────────────────────────────────────────────────────
+
     public function destroyCart(Request $request, $id)
     {
         try {
@@ -255,6 +274,14 @@ class CartController extends Controller
 
             $cartItem->delete();
 
+            // ─── Shipping Rate Cleanup ────────────────────────────────
+            // Cart item delete hua → cart_shipping_rates mein check karo
+            // Agar is cart ID ka record hai to delete karo
+            // ─────────────────────────────────────────────────────────
+            CartShippingRate::where('store_id', $storeId)
+                ->whereJsonContains('cart_ids', $cartItem->id)
+                ->delete();
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Cart item removed successfully',
@@ -272,6 +299,7 @@ class CartController extends Controller
             ], 500);
         }
     }
+
 
     // ─────────────────────────────────────────────────────────────
     // POST /web/cart/transfer
