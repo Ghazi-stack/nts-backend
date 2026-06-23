@@ -19,6 +19,8 @@ return new class extends Migration
             $table->unsignedBigInteger('user_id')->nullable();
             $table->string('session_id')->nullable();
 
+            $table->json('cart_ids')->nullable();
+
             $table->string('country');
             $table->string('state');
             $table->string('city');

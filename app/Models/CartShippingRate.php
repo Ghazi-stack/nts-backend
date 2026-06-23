@@ -10,11 +10,16 @@ class CartShippingRate extends Model
         'store_id',
         'user_id',
         'session_id',
+        'cart_ids',
         'country',
         'state',
         'city',
         'zip',
         'method_type',
         'total_charge',
+    ];
+
+    protected $casts = [
+        'cart_ids' => 'array',
     ];
 }

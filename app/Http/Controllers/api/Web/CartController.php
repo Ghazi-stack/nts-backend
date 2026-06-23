@@ -368,6 +368,9 @@ class CartController extends Controller
             }
 
             $validated = $request->validate([
+                'cart_ids' => 'required|array|min:1',
+                'cart_ids.*' => 'required|exists:carts,id',
+
                 'country' => 'required|string|max:255',
                 'state' => 'required|string|max:255',
                 'city' => 'required|string|max:255',
@@ -386,6 +389,24 @@ class CartController extends Controller
                 ], 422);
             }
 
+            // Optional Security Check
+            $cartCount = Cart::whereIn('id', $validated['cart_ids'])
+                ->where('store_id', $storeId)
+                ->when($user, function ($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                })
+                ->when(!$user, function ($q) use ($sessionId) {
+                    $q->where('session_id', $sessionId);
+                })
+                ->count();
+
+            if ($cartCount !== count($validated['cart_ids'])) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'One or more cart IDs are invalid.',
+                ], 422);
+            }
+
             $shippingRate = CartShippingRate::updateOrCreate(
                 [
                     'store_id' => $storeId,
@@ -393,10 +414,13 @@ class CartController extends Controller
                     'session_id' => $sessionId,
                 ],
                 [
+                    'cart_ids' => $validated['cart_ids'],
+
                     'country' => $validated['country'],
                     'state' => $validated['state'],
                     'city' => $validated['city'],
                     'zip' => $validated['zip'],
+
                     'method_type' => $validated['rate']['method_type'],
                     'total_charge' => $validated['rate']['total_charge'],
                 ]
