@@ -109,6 +109,8 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::put('/update-name', 'updateName');
         Route::post('/update-password', 'updatePassword');
     });
+
+    Route::middleware('auth:sanctum')->post('/login-as-customer', [AuthController::class, 'loginAsCustomer']);
     // Main Search
     Route::get('/global-search', [GlobalSearchController::class, 'search']);
     // 🏢 Store Management
@@ -403,6 +405,9 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 // 🔓 Public Routes (accessible without login)
 
 Route::prefix('web')->group(function () {
+
+    Route::middleware('auth:sanctum')->get('/customer-profile', [AuthController::class, 'getCustomerProfile']);
+
     Route::prefix('shipments')->controller(ShipmentController::class)->group(function () {
         Route::get('/', 'index');      // View only their orders' shipments
     });

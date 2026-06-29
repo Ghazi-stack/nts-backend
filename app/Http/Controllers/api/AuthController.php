@@ -801,4 +801,74 @@ class AuthController extends Controller
             ], 500);
         }
     }
+
+    public function loginAsCustomer(Request $request)
+    {
+        try {
+            $request->validate([
+                'customer_id' => 'required|integer',
+            ]);
+
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected.'
+                ], 400);
+            }
+
+            $user = User::where('customer_id', $request->customer_id)
+                ->where('store_id', $storeId)
+                ->first();
+
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Customer user not found.'
+                ], 404);
+            }
+
+            $token = $user->createToken('customer_login')->plainTextToken;
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Customer logged in successfully.',
+                'token'  => $token,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function getCustomerProfile(Request $request)
+    {
+        try {
+            $user = auth('sanctum')->user();
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not authenticated.'
+                ], 401);
+            }
+
+            $storeId = current_store_id();
+            $store = Store::find($storeId);
+            $customer = $user->customer;
+
+            return response()->json([
+                'status'   => true,
+                'message'  => 'Customer profile retrieved successfully.',
+                'store'    => $store ? new StoreResource($store) : null,
+                'customer' => $customer ? new CustomerResource($customer) : null,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

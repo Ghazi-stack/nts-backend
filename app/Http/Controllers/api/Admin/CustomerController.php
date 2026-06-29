@@ -902,6 +902,7 @@ class CustomerController extends Controller
     }
     public function getMyAddresses(Request $request)
     {
+        
         try {
             $user = auth()->user();
             if (!$user || !$user->customer) {
