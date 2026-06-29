@@ -145,6 +145,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/resend-invoice/{id}', 'resendInvoice');
         Route::post('/refund/{id}', 'refund');
         Route::get('/timeline/{id}', 'getOrderTimeline');
+        Route::get('/customer-by-order/{orderId}', 'getCustomerByOrder');
         Route::get('/send-payment-invoice/{id}', 'sendPaymentInvoice');
         Route::get('/customer/{customerId}/orders', 'getCustomerWithOrders');
     });

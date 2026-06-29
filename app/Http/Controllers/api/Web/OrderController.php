@@ -3152,4 +3152,50 @@ class OrderController extends Controller
             'shipping_method' => $data['shipping_method'],
         ]);
     }
+
+    public function getCustomerByOrder($orderId)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected.'
+                ], 400);
+            }
+
+            $order = Order::where('id', $orderId)
+                ->where('store_id', $storeId)
+                ->first();
+
+            if (!$order) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Order not found.'
+                ], 404);
+            }
+
+            $customer = Customer::where('id', $order->customer_id)
+                ->where('store_id', $storeId)
+                ->first();
+
+            if (!$customer) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Customer not found.'
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Customer retrieved successfully.',
+                'data' => new CustomerResource($customer),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
