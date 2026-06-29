@@ -858,9 +858,15 @@ class AuthController extends Controller
             $store = Store::find($storeId);
             $customer = $user->customer;
 
+            // Current token ka expiry nikalo
+            $currentToken = $user->currentAccessToken();
+            $expireAt = $currentToken->expires_at ?? now()->addHours(24)->toDateTimeString();
+
             return response()->json([
                 'status'   => true,
                 'message'  => 'Customer profile retrieved successfully.',
+                'token'    => $request->bearerToken(),
+                'expireAt' => $expireAt,
                 'store'    => $store ? new StoreResource($store) : null,
                 'customer' => $customer ? new CustomerResource($customer) : null,
             ]);
