@@ -85,6 +85,19 @@ class StripePaymentController extends Controller
                 ], 400);
             }
 
+            // Extract risk data from the Charge
+            $riskScore = null;
+            $riskLevel = null;
+
+            $charge = $intent->latest_charge
+                ? \Stripe\Charge::retrieve($intent->latest_charge)
+                : null;
+
+            if ($charge && $charge->outcome) {
+                $riskScore = $charge->outcome->risk_score ?? null;
+                $riskLevel = $charge->outcome->risk_level ?? null;
+            }
+
             // 5️⃣ Payment succeeded → create order
             // $order = Order::create([
             //     'user_id' => $user?->id,
@@ -118,7 +131,9 @@ class StripePaymentController extends Controller
                 'message' => 'Payment authorized (on hold). Capture pending.',
                 'amount' => $intent->amount,
                 'payment_intent_id' => $intent->id,
-                'payment_status' => $intent->status
+                'payment_status' => $intent->status,
+                'risk_score' => $riskScore,
+                'risk_level' => $riskLevel,
             ]);
         } catch (\Stripe\Exception\CardException $e) {
             DB::rollBack();

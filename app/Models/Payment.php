@@ -15,6 +15,8 @@ class Payment extends Model
         'payment_status',
         'amount',
         'discountAmount',
+        'risk_score',
+        'risk_level',
     ];
 
     public function order()

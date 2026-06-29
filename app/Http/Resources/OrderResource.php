@@ -43,6 +43,8 @@ class OrderResource extends JsonResource
                     'payment_status'     => $this->payment->payment_status,
                     'amount'             => $this->payment->amount,
                     'discountAmount'     => $this->payment->discountAmount,
+                    'risk_score'         => $this->payment->risk_score,
+                    'risk_level'         => $this->payment->risk_level,
                 ];
             }),
 

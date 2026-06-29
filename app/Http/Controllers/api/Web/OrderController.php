@@ -933,14 +933,33 @@ class OrderController extends Controller
                 }
             }
 
-            // ===================== PAYMENT =====================
-            Payment::create([
+            // ===================== PAYMENT (with risk data from Stripe) =====================
+            $riskData = [];
+            try {
+                \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+                $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId']);
+
+                $charge = $stripeIntent->latest_charge
+                    ? \Stripe\Charge::retrieve($stripeIntent->latest_charge)
+                    : null;
+
+                if ($charge && $charge->outcome) {
+                    $riskData = [
+                        'risk_score' => $charge->outcome->risk_score ?? null,
+                        'risk_level' => $charge->outcome->risk_level ?? null,
+                    ];
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Could not fetch Stripe risk data: ' . $e->getMessage());
+            }
+
+            Payment::create(array_merge([
                 'order_id'           => $orders[0]->id,
                 'stripe_session_id'  => $validated['paymentIntentId'],
                 'amount'             => $totalOrderAmount,
                 'discountAmount'     => $discount,
                 'payment_status'     => 'authorized',
-            ]);
+            ], $riskData));
 
             // Response
             foreach ($orders as $order) {
@@ -980,6 +999,8 @@ class OrderController extends Controller
             ], 500);
         }
     }
+
+
     /**
      * Update an existing order
      */
