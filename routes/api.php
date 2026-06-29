@@ -531,6 +531,7 @@ Route::prefix('web')->group(function () {
 
     Route::prefix('store-setting')->controller(StoreSettingController::class)->group(function () {
         Route::get('/get-store-setting', 'index');
+        Route::get('/get-website-seo', 'getWebsiteSeo');
     });
 
     Route::prefix('coupons')->controller(CouponCodeController::class)->group(function () {

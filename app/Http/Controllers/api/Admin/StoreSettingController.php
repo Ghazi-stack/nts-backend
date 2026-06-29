@@ -83,4 +83,39 @@ class StoreSettingController extends Controller
             ], 500);
         }
     }
+
+    public function getWebsiteSeo()
+    {
+        try {
+            $storeId = $this->getStoreId();
+
+            $setting = StoreSetting::where('store_id', $storeId)
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if (!$setting) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store setting not found.'
+                ], 404);
+            }
+
+            $website = is_string($setting->website) ? json_decode($setting->website, true) : $setting->website;
+
+            return response()->json([
+                'status' => true,
+                'data' => [
+                    'homePageTitle'   => $website['homePageTitle'] ?? null,
+                    'metaKeywords'    => $website['metaKeywords'] ?? null,
+                    'metaDescription' => $website['metaDescription'] ?? null,
+                    'wwwRedirect'     => $website['wwwRedirect'] ?? null,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
