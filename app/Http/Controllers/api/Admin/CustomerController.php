@@ -26,7 +26,9 @@ class CustomerController extends Controller
     public function index(Request $request)
     {
         try {
+
             $storeId = current_store_id();
+
             if (!$storeId) {
                 return response()->json([
                     'status' => false,
@@ -34,16 +36,24 @@ class CustomerController extends Controller
                 ], 400);
             }
 
-            // $query = Customer::where('store_id', $storeId);
+            $query = Customer::with([
+                'addresses',
+                'billingInformations',
+                'orders.items.product.images',
+                'orders.customer',
+                'orders.billingInformation',
+                'orders.notes',
+                'orders.payment'
+            ])->where('store_id', $storeId);
 
-            $query = Customer::with(['addresses', 'billingInformations'])
-                ->where('store_id', $storeId);
-
-            // 🔍 Search by keyword
+            // Search
             if ($request->filled('search')) {
+
                 $search = $request->input('search');
+
                 $query->where(function ($q) use ($search) {
-                    $q->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'like', "%{$search}%")
+
+                    $q->orWhere(DB::raw("CONCAT(first_name,' ',last_name)"), 'like', "%{$search}%")
                         ->orWhere('first_name', 'like', "%{$search}%")
                         ->orWhere('last_name', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%")
@@ -53,22 +63,77 @@ class CustomerController extends Controller
                 });
             }
 
-            // Default sorting by ID
-            $customers = $query->orderBy('id', 'desc')
+            $customers = $query
+                ->orderBy('id', 'desc')
                 ->paginate($request->input('pageSize', 50));
+
+            $customers->getCollection()->transform(function ($customer) {
+
+                $orders = $customer->orders
+                    ->where('is_draft', 0)
+                    ->sortByDesc('id')
+                    ->values();
+
+                $currentOrders = $orders->filter(function ($order) {
+                    return !in_array($order->status, [
+                        'Completed',
+                        'Cancelled',
+                        'Refunded',
+                        'Declined'
+                    ]);
+                })->values();
+
+                $pastOrders = $orders->filter(function ($order) {
+                    return in_array($order->status, [
+                        'Completed',
+                        'Cancelled',
+                        'Refunded',
+                        'Declined'
+                    ]);
+                })->values();
+
+                return [
+                    'id' => $customer->id,
+                    'firstName' => $customer->first_name,
+                    'lastName' => $customer->last_name,
+                    'email' => $customer->email,
+                    'phone' => $customer->phone,
+                    'companyName' => $customer->company_name,
+                    'address' => $customer->address,
+                    'addressLine2' => $customer->address_line_2,
+                    'city' => $customer->city,
+                    'state' => $customer->state,
+                    'zip' => $customer->zip,
+                    'country' => $customer->country,
+                    'customerGroup' => $customer->customer_group,
+                    'storeCredit' => $customer->store_credit,
+                    'receiveReviewEmails' => $customer->receive_review_emails,
+                    'joinDate' => optional($customer->created_at)->format('M d, Y'),
+
+                    'addresses' => $customer->addresses,
+                    'billingInformations' => $customer->billingInformations,
+
+                    'totalOrders' => $orders->count(),
+
+                    'currentOrders' => OrderResource::collection($currentOrders),
+
+                    'pastOrders' => OrderResource::collection($pastOrders),
+                ];
+            });
 
             return response()->json([
                 'status' => true,
                 'message' => 'Customer list fetched.',
-                'data' => CustomerResource::collection($customers),
+                'data' => $customers->items(),
                 'pagination' => [
                     'total' => $customers->total(),
                     'page' => $customers->currentPage(),
                     'pageSize' => $customers->perPage(),
-                    'lastPage' => $customers->lastPage()
+                    'lastPage' => $customers->lastPage(),
                 ]
             ]);
         } catch (\Exception $e) {
+
             return response()->json([
                 'status' => false,
                 'message' => 'Something went wrong.',
@@ -902,7 +967,7 @@ class CustomerController extends Controller
     }
     public function getMyAddresses(Request $request)
     {
-        
+
         try {
             $user = auth()->user();
             if (!$user || !$user->customer) {

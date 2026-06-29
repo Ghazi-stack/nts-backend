@@ -44,6 +44,10 @@ class Customer extends Model
         return $this->hasOne(User::class);
     }
 
+    public function orders()
+    {
+        return $this->hasMany(Order::class, 'customer_id');
+    }
     public function billingInformations()
     {
         return $this->hasMany(BillingInformation::class);
