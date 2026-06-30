@@ -842,29 +842,12 @@ class OrderController extends Controller
                     'shipping_method' => $validated['shippingMethod'],
                 ]);
 
-                $billingAddress = [
-                    'firstName'      => $validated['firstName'],
-                    'lastName'       => $validated['lastName'],
-                    'companyName'    => $validated['companyName'] ?? null,
-                    'email'          => $validated['email'],
-                    'phone'          => $validated['phone'] ?? null,
-                    'addressLine1'   => $validated['addressLine1'],
-                    'addressLine2'   => $validated['addressLine2'] ?? null,
-                    'city'           => $validated['city'] ?? null,
-                    'state'          => $validated['state'] ?? null,
-                    'zip'            => $validated['zip'] ?? null,
-                    'country'        => $validated['country'] ?? null,
-                    'paymentMethod'  => $validated['paymentMethod'],
-                    'shippingMethod' => $validated['shippingMethod'],
-                ];
-
                 $order = Order::create(array_merge([
                     'store_id'               => $storeId,
                     'user_id'                => $user->id,
                     'customer_id'            => $customer->id,
                     'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
                     'billing_information_id' => $billing->id,
-                    'billing_address'        => $billingAddress,
                     'status'                 => 'Awaiting Payment',
                     'shipping_cost'          => $validated['shippingCost'],
                     'comments'               => $validated['comments'] ?? null,
@@ -919,28 +902,12 @@ class OrderController extends Controller
                         'shipping_method' => $dest['shippingMethod'],
                     ]);
 
-                    $billingAddress = [
-                        'firstName'      => $dest['firstName'],
-                        'lastName'       => $dest['lastName'],
-                        'companyName'    => $dest['companyName'] ?? null,
-                        'email'          => $validated['email'],
-                        'phone'          => $dest['phone'] ?? null,
-                        'addressLine1'   => $dest['addressLine1'],
-                        'addressLine2'   => $dest['addressLine2'] ?? null,
-                        'city'           => $dest['city'],
-                        'state'          => $dest['state'],
-                        'zip'            => $dest['zip'],
-                        'country'        => $dest['country'],
-                        'paymentMethod'  => $validated['paymentMethod'],
-                        'shippingMethod' => $dest['shippingMethod'],
-                    ];
                     $order = Order::create(array_merge([
                         'store_id'               => $storeId,
                         'user_id'                => $user->id,
                         'customer_id'            => $customer->id,
                         'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
                         'billing_information_id' => $billing->id,
-                        'billing_address'        => $billingAddress,
                         'status'                 => 'Awaiting Payment',
                         'shipping_cost'          => $dest['shippingCost'],
                         'comments'               => $validated['comments'] ?? null,
@@ -969,23 +936,54 @@ class OrderController extends Controller
                 }
             }
 
+            // ===================== SAVE ADDRESS IF CHECKED =====================
+            if ($validated['isSaveAddressForShipping'] ?? false) {
+                $shippingData = $isMulti
+                    ? $validated['destinations'][0]
+                    : [
+                        'firstName'    => $validated['firstName'] ?? null,
+                        'lastName'     => $validated['lastName'] ?? null,
+                        'companyName'  => $validated['companyName'] ?? null,
+                        'phone'        => $validated['phone'] ?? null,
+                        'addressLine1' => $validated['addressLine1'] ?? null,
+                        'addressLine2' => $validated['addressLine2'] ?? null,
+                        'city'         => $validated['city'] ?? null,
+                        'state'        => $validated['state'] ?? null,
+                        'zip'          => $validated['zip'] ?? null,
+                        'country'      => $validated['country'] ?? null,
+                    ];
+
+                $billingData = [
+                    'firstName'    => $isMulti ? ($validated['destinations'][0]['firstName'] ?? null) : ($validated['firstName'] ?? null),
+                    'lastName'     => $isMulti ? ($validated['destinations'][0]['lastName'] ?? null) : ($validated['lastName'] ?? null),
+                    'companyName'  => $isMulti ? ($validated['destinations'][0]['companyName'] ?? null) : ($validated['companyName'] ?? null),
+                    'phone'        => $isMulti ? ($validated['destinations'][0]['phone'] ?? null) : ($validated['phone'] ?? null),
+                    'email'        => $validated['email'],
+                    'addressLine1' => $isMulti ? ($validated['destinations'][0]['addressLine1'] ?? null) : ($validated['addressLine1'] ?? null),
+                    'addressLine2' => $isMulti ? ($validated['destinations'][0]['addressLine2'] ?? null) : ($validated['addressLine2'] ?? null),
+                    'city'         => $isMulti ? ($validated['destinations'][0]['city'] ?? null) : ($validated['city'] ?? null),
+                    'state'        => $isMulti ? ($validated['destinations'][0]['state'] ?? null) : ($validated['state'] ?? null),
+                    'zip'          => $isMulti ? ($validated['destinations'][0]['zip'] ?? null) : ($validated['zip'] ?? null),
+                    'country'      => $isMulti ? ($validated['destinations'][0]['country'] ?? null) : ($validated['country'] ?? null),
+                    'paymentMethod'  => $validated['paymentMethod'] ?? null,
+                    'shippingMethod' => $isMulti ? ($validated['destinations'][0]['shippingMethod'] ?? null) : ($validated['shippingMethod'] ?? null),
+                ];
+
+                SavedAddress::create([
+                    'store_id'         => $storeId,
+                    'user_id'          => $user->id,
+                    'order_id'         => $orders[0]->id,
+                    'shipping_address' => $shippingData,
+                    'billing_address'  => $billingData,
+                ]);
+            }
+
             // ===================== PAYMENT (with risk data from Stripe) =====================
             $riskData = [];
-            $billingDetails = null;
-
             try {
-
                 \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-
                 $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId']);
 
-                // Billing Details
-                if ($stripeIntent->payment_method) {
-                    $paymentMethod = \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method);
-                    $billingDetails = $paymentMethod->billing_details;
-                }
-
-                // Risk Data
                 $charge = $stripeIntent->latest_charge
                     ? \Stripe\Charge::retrieve($stripeIntent->latest_charge)
                     : null;
@@ -997,82 +995,15 @@ class OrderController extends Controller
                     ];
                 }
             } catch (\Exception $e) {
-                \Log::warning('Could not fetch Stripe data: ' . $e->getMessage());
+                \Log::warning('Could not fetch Stripe risk data: ' . $e->getMessage());
             }
-
-
-            // ===================== SAVE ADDRESS IF CHECKED =====================
-
-            $saveShipping = $orders[0]->is_save_address_for_shipping ?? false;
-            $saveBilling  = $orders[0]->is_save_address_for_billing ?? false;
-
-            if ($saveShipping || $saveBilling) {
-
-                $shippingData = null;
-                $billingData = null;
-
-                // SHIPPING
-                if ($saveShipping) {
-
-                    $shippingData = $isMulti
-                        ? $validated['destinations'][0]
-                        : [
-                            'firstName'    => $validated['firstName'] ?? null,
-                            'lastName'     => $validated['lastName'] ?? null,
-                            'companyName'  => $validated['companyName'] ?? null,
-                            'phone'        => $validated['phone'] ?? null,
-                            'addressLine1' => $validated['addressLine1'] ?? null,
-                            'addressLine2' => $validated['addressLine2'] ?? null,
-                            'city'         => $validated['city'] ?? null,
-                            'state'        => $validated['state'] ?? null,
-                            'zip'          => $validated['zip'] ?? null,
-                            'country'      => $validated['country'] ?? null,
-                        ];
-                }
-
-                // BILLING
-                if ($saveBilling) {
-
-                    $name = trim($billingDetails?->name ?? '');
-                    $parts = explode(' ', $name);
-
-                    $billingData = [
-                        'firstName' => $parts[0] ?? null,
-                        'lastName' => count($parts) > 1 ? implode(' ', array_slice($parts, 1)) : null,
-                        'companyName' => $validated['companyName'] ?? null,
-                        'phone' => $billingDetails?->phone,
-                        'email' => $billingDetails?->email ?? $validated['email'],
-                        'addressLine1' => $billingDetails?->address?->line1,
-                        'addressLine2' => $billingDetails?->address?->line2,
-                        'city' => $billingDetails?->address?->city,
-                        'state' => $billingDetails?->address?->state,
-                        'zip' => $billingDetails?->address?->postal_code,
-                        'country' => $billingDetails?->address?->country,
-                        'paymentMethod' => $validated['paymentMethod'] ?? null,
-                        'shippingMethod' => $isMulti
-                            ? ($validated['destinations'][0]['shippingMethod'] ?? null)
-                            : ($validated['shippingMethod'] ?? null),
-                    ];
-                }
-
-                SavedAddress::create([
-                    'store_id' => $storeId,
-                    'user_id' => $user->id,
-                    'order_id' => $orders[0]->id,
-                    'shipping_address' => $shippingData,
-                    'billing_address' => $billingData,
-                ]);
-            }
-
-
-            // ===================== PAYMENT SAVE =====================
 
             Payment::create(array_merge([
-                'order_id'          => $orders[0]->id,
-                'stripe_session_id' => $validated['paymentIntentId'],
-                'amount'            => $totalOrderAmount,
-                'discountAmount'    => $discount,
-                'payment_status'    => 'authorized',
+                'order_id'           => $orders[0]->id,
+                'stripe_session_id'  => $validated['paymentIntentId'],
+                'amount'             => $totalOrderAmount,
+                'discountAmount'     => $discount,
+                'payment_status'     => 'authorized',
             ], $riskData));
 
             // Response
