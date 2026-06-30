@@ -89,12 +89,12 @@ class CustomerAddressController extends Controller
         }
 
         $validated = $request->validate([
-            'first_name' => 'required|string|max:100',
-            'last_name' => 'required|string|max:100',
-            'company_name' => 'nullable|string|max:255',
-            'phone_number' => 'required|string|max:30',
-            'address_line_1' => 'required|string|max:255',
-            'address_line_2' => 'nullable|string|max:255',
+            'firstName' => 'required|string|max:100',
+            'lastName' => 'required|string|max:100',
+            'companyName' => 'nullable|string|max:255',
+            'phoneNumber' => 'required|string|max:30',
+            'addressLine1' => 'required|string|max:255',
+            'addressLine2' => 'nullable|string|max:255',
             'city' => 'required|string|max:100',
             'state' => 'required|string|max:100',
             'zip' => 'required|string|max:30',
