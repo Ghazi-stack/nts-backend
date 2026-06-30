@@ -842,12 +842,29 @@ class OrderController extends Controller
                     'shipping_method' => $validated['shippingMethod'],
                 ]);
 
+                $billingAddress = [
+                    'firstName'      => $validated['firstName'],
+                    'lastName'       => $validated['lastName'],
+                    'companyName'    => $validated['companyName'] ?? null,
+                    'email'          => $validated['email'],
+                    'phone'          => $validated['phone'] ?? null,
+                    'addressLine1'   => $validated['addressLine1'],
+                    'addressLine2'   => $validated['addressLine2'] ?? null,
+                    'city'           => $validated['city'] ?? null,
+                    'state'          => $validated['state'] ?? null,
+                    'zip'            => $validated['zip'] ?? null,
+                    'country'        => $validated['country'] ?? null,
+                    'paymentMethod'  => $validated['paymentMethod'],
+                    'shippingMethod' => $validated['shippingMethod'],
+                ];
+
                 $order = Order::create(array_merge([
                     'store_id'               => $storeId,
                     'user_id'                => $user->id,
                     'customer_id'            => $customer->id,
                     'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
                     'billing_information_id' => $billing->id,
+                    'billing_address'        => $billingAddress,
                     'status'                 => 'Awaiting Payment',
                     'shipping_cost'          => $validated['shippingCost'],
                     'comments'               => $validated['comments'] ?? null,
@@ -902,12 +919,28 @@ class OrderController extends Controller
                         'shipping_method' => $dest['shippingMethod'],
                     ]);
 
+                    $billingAddress = [
+                        'firstName'      => $dest['firstName'],
+                        'lastName'       => $dest['lastName'],
+                        'companyName'    => $dest['companyName'] ?? null,
+                        'email'          => $validated['email'],
+                        'phone'          => $dest['phone'] ?? null,
+                        'addressLine1'   => $dest['addressLine1'],
+                        'addressLine2'   => $dest['addressLine2'] ?? null,
+                        'city'           => $dest['city'],
+                        'state'          => $dest['state'],
+                        'zip'            => $dest['zip'],
+                        'country'        => $dest['country'],
+                        'paymentMethod'  => $validated['paymentMethod'],
+                        'shippingMethod' => $dest['shippingMethod'],
+                    ];
                     $order = Order::create(array_merge([
                         'store_id'               => $storeId,
                         'user_id'                => $user->id,
                         'customer_id'            => $customer->id,
                         'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
                         'billing_information_id' => $billing->id,
+                        'billing_address'        => $billingAddress,
                         'status'                 => 'Awaiting Payment',
                         'shipping_cost'          => $dest['shippingCost'],
                         'comments'               => $validated['comments'] ?? null,
@@ -935,7 +968,7 @@ class OrderController extends Controller
                     $totalOrderAmount += $totalAmount;
                 }
             }
-            
+
             // ===================== PAYMENT (with risk data from Stripe) =====================
             $riskData = [];
             $billingDetails = null;

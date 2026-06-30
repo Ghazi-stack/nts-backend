@@ -36,7 +36,8 @@ class OrderResource extends JsonResource
             'carrierCode'        => $this->tracking_carrier_code,
             'carrierName'        => $this->tracking_carrier_name,
             'shippedAt'          => $this->shipped_at?->toDateTimeString(),
-
+            'billingAddress' => $this->billing_address,
+            
             'payment' => $this->whenLoaded('payment', function () {
                 return [
                     'id'                 => $this->payment->id,

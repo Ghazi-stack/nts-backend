@@ -49,6 +49,7 @@ class Order extends Model
         'is_save_address_for_shipping',
         'is_save_address_for_billing',
         'billing_same',
+        'billing_address',
     ];
     protected $casts = [
         'is_draft'   => 'boolean',
@@ -57,6 +58,8 @@ class Order extends Model
         'is_save_address_for_shipping' => 'boolean',
         'is_save_address_for_billing' => 'boolean',
         'billing_same' => 'boolean',
+        'billing_address' => 'array',
+
     ];
     public function items()
     {
