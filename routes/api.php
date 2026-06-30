@@ -40,6 +40,7 @@ use App\Http\Controllers\api\Web\{
     ShipmentController,
     ContactRequestController,
     BulkInquiryController,
+    CheckoutFormDataController,
     CustomerAddressController,
     CustomerMessageController
 };
@@ -203,17 +204,25 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     Route::middleware('auth:sanctum')
-    ->prefix('customer-address')
-    ->controller(CustomerAddressController::class)
-    ->group(function () {
+        ->prefix('customer-address')
+        ->controller(CustomerAddressController::class)
+        ->group(function () {
 
-        Route::post('/store', 'store');
-        Route::put('/update/{id}', 'update');
-        Route::delete('/delete/{id}', 'destroy');
-        Route::get('/list', 'index');
-        Route::get('/show/{id}', 'show');
+            Route::post('/store', 'store');
+            Route::put('/update/{id}', 'update');
+            Route::delete('/delete/{id}', 'destroy');
+            Route::get('/list', 'index');
+            Route::get('/show/{id}', 'show');
+        });
 
-    });
+    Route::prefix('checkout-form')
+        ->controller(CheckoutFormDataController::class)
+        ->group(function () {
+
+            Route::post('/save', 'store');
+
+            Route::get('/get', 'index');
+        });
     // 📁 Categories
     Route::prefix('categories')->controller(CategoryController::class)->group(function () {
         Route::get('/list-categories', 'index');
