@@ -99,7 +99,7 @@ class CustomerAddressController extends Controller
             'state' => 'required|string|max:100',
             'zip' => 'required|string|max:30',
             'country' => 'required|string|max:100',
-            'is_default' => 'nullable|boolean'
+            'is_default' => 'nullable|boolean',
         ]);
 
         if (!empty($validated['is_default'])) {
@@ -110,10 +110,23 @@ class CustomerAddressController extends Controller
                 ]);
         }
 
-        $validated['store_id'] = $storeId;
-        $validated['customer_id'] = auth()->id();
+        $data = [
+            'store_id'       => $storeId,
+            'customer_id'    => auth()->id(),
+            'first_name'     => $validated['firstName'],
+            'last_name'      => $validated['lastName'],
+            'company_name'   => $validated['companyName'] ?? null,
+            'phone_number'   => $validated['phoneNumber'],
+            'address_line_1' => $validated['addressLine1'],
+            'address_line_2' => $validated['addressLine2'] ?? null,
+            'city'           => $validated['city'],
+            'state'          => $validated['state'],
+            'zip'            => $validated['zip'],
+            'country'        => $validated['country'],
+            'is_default'     => $validated['is_default'] ?? false,
+        ];
 
-        $address = CustomerAddress::create($validated);
+        $address = CustomerAddress::create($data);
 
         return response()->json([
             'status' => true,
