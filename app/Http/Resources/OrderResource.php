@@ -28,6 +28,7 @@ class OrderResource extends JsonResource
             'newsletter'         => $this->newsletter,
             'ipAddress'          => $this->ip_address,
             'isSaveAddressForShipping' => (bool) $this->is_save_address_for_shipping,
+            'isSaveAddressForBilling' => (bool) $this->is_save_address_for_billing,
             'billingSame'        => (bool) $this->billing_same,
             'isMessage'          => $this->messages_count > 0 ? 1 : 0,
             'messageCount'       => $this->messages_count ?? 0,

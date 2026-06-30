@@ -663,6 +663,7 @@ class OrderController extends Controller
 
                 'ipAddress'                  => 'nullable|string|max:45',
                 'isSaveAddressForShipping'   => 'nullable|boolean',
+                'isSaveAddressForBilling'   => 'nullable|boolean',
                 'billingSame'                => 'nullable|boolean',
 
                 'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
@@ -809,6 +810,7 @@ class OrderController extends Controller
             $commonOrderFields = [
                 'ip_address'                    => $validated['ipAddress'] ?? $request->ip(),
                 'is_save_address_for_shipping'  => $validated['isSaveAddressForShipping'] ?? false,
+                'is_save_address_for_billing'  => $validated['isSaveAddressForBilling'] ?? false,
                 'billing_same'                  => $validated['billingSame'] ?? true,
             ];
 

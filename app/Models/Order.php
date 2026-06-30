@@ -47,6 +47,7 @@ class Order extends Model
         'newsletter',
         'ip_address',
         'is_save_address_for_shipping',
+        'is_save_address_for_billing',
         'billing_same',
     ];
     protected $casts = [
@@ -54,6 +55,7 @@ class Order extends Model
         'shipped_at' => 'datetime',
         'newsletter' => 'boolean',
         'is_save_address_for_shipping' => 'boolean',
+        'is_save_address_for_billing' => 'boolean',
         'billing_same' => 'boolean',
     ];
     public function items()
