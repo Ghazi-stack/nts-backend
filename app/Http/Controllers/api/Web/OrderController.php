@@ -971,7 +971,9 @@ class OrderController extends Controller
                 }
             }
 
-            // ===================== SAVE SHIPPING ADDRESS IF CHECKED =====================
+            // ===================== PREPARE SHIPPING ADDRESS =====================
+            $shippingData = null;
+
             if ($validated['isSaveAddressForShipping'] ?? false) {
                 $shippingData = $isMulti
                     ? $validated['destinations'][0]
@@ -987,21 +989,15 @@ class OrderController extends Controller
                         'zip'          => $validated['zip'] ?? null,
                         'country'      => $validated['country'] ?? null,
                     ];
-
-                SavedAddress::create([
-                    'store_id'         => $storeId,
-                    'user_id'          => $user->id,
-                    'order_id'         => $orders[0]->id,
-                    'shipping_address' => $shippingData,
-                    'billing_address'  => null,
-                ]);
             }
 
-            // ===================== SAVE BILLING ADDRESS IF CHECKED =====================
+            // ===================== PREPARE BILLING ADDRESS =====================
+            $billingData = null;
+
             if ($validated['isSaveAddressForBilling'] ?? false) {
                 $billingData = $stripeBillingDetails ?? [
                     'name'         => ($validated['firstName'] ?? '') . ' ' . ($validated['lastName'] ?? ''),
-                    'email'        => $validated['email'],
+                    'email'        => $validated['email'] ?? null,
                     'phone'        => $validated['phone'] ?? null,
                     'addressLine1' => $validated['addressLine1'] ?? null,
                     'addressLine2' => $validated['addressLine2'] ?? null,
@@ -1010,12 +1006,15 @@ class OrderController extends Controller
                     'zip'          => $validated['zip'] ?? null,
                     'country'      => $validated['country'] ?? null,
                 ];
+            }
 
+            // ===================== SAVE SINGLE RECORD =====================
+            if ($shippingData || $billingData) {
                 SavedAddress::create([
                     'store_id'         => $storeId,
                     'user_id'          => $user->id,
                     'order_id'         => $orders[0]->id,
-                    'shipping_address' => null,
+                    'shipping_address' => $shippingData,
                     'billing_address'  => $billingData,
                 ]);
             }
