@@ -23,14 +23,17 @@ class CheckoutFormDataController extends Controller
         }
 
         $validated = $request->validate([
-            'sessionId' => 'nullable|string',
             'billingFormData' => 'nullable|array',
             'shippingFormData' => 'nullable|array',
         ]);
 
         $user = auth()->user();
 
-        if (!$user && empty($validated['sessionId'])) {
+        // Session ID from Header
+        $sessionId = $request->header('sessionId');
+
+        // Guest user must send sessionId
+        if (!$user && !$sessionId) {
             return response()->json([
                 'status' => false,
                 'message' => 'Session ID is required for guest user.'
@@ -44,14 +47,14 @@ class CheckoutFormDataController extends Controller
         if ($user) {
             $conditions['user_id'] = $user->id;
         } else {
-            $conditions['session_id'] = $validated['sessionId'];
+            $conditions['session_id'] = $sessionId;
         }
 
         $checkout = CheckoutFormData::updateOrCreate(
             $conditions,
             [
                 'user_id' => $user?->id,
-                'session_id' => $user ? null : $validated['sessionId'],
+                'session_id' => $user ? null : $sessionId,
                 'billing_form_data' => $validated['billingFormData'] ?? null,
                 'shipping_form_data' => $validated['shippingFormData'] ?? null,
             ]
@@ -87,12 +90,17 @@ class CheckoutFormDataController extends Controller
                 ->first();
         } else {
 
-            $request->validate([
-                'sessionId' => 'required|string'
-            ]);
+            $sessionId = $request->header('sessionId');
+
+            if (!$sessionId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Session ID is required.'
+                ], 422);
+            }
 
             $checkout = CheckoutFormData::where('store_id', $storeId)
-                ->where('session_id', $request->sessionId)
+                ->where('session_id', $sessionId)
                 ->first();
         }
 
