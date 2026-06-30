@@ -29,7 +29,7 @@ class CustomerAddressController extends Controller
             ->get();
 
         $savedAddresses = SavedAddress::where('store_id', $storeId)
-            ->where('customer_id', auth()->id())
+            ->where('user_id', auth()->id())
             ->latest()
             ->get();
 
