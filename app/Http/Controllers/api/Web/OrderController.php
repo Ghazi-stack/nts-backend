@@ -31,6 +31,7 @@ use App\Http\Resources\ProductListResource;
 use App\Http\Resources\CustomerResource;
 use App\Http\Resources\ShipmentResource;
 use App\Http\Resources\OrderNoteResource;
+use App\Models\SavedAddress;
 use App\Http\Resources\ReturnRequestResource;
 use App\Mail\OrderPlacedMail;
 use App\Models\Store;
@@ -933,6 +934,48 @@ class OrderController extends Controller
                 }
             }
 
+            // ===================== SAVE ADDRESS IF CHECKED =====================
+            if ($validated['isSaveAddressForShipping'] ?? false) {
+                $shippingData = $isMulti
+                    ? $validated['destinations'][0]
+                    : [
+                        'firstName'    => $validated['firstName'] ?? null,
+                        'lastName'     => $validated['lastName'] ?? null,
+                        'companyName'  => $validated['companyName'] ?? null,
+                        'phone'        => $validated['phone'] ?? null,
+                        'addressLine1' => $validated['addressLine1'] ?? null,
+                        'addressLine2' => $validated['addressLine2'] ?? null,
+                        'city'         => $validated['city'] ?? null,
+                        'state'        => $validated['state'] ?? null,
+                        'zip'          => $validated['zip'] ?? null,
+                        'country'      => $validated['country'] ?? null,
+                    ];
+
+                $billingData = [
+                    'firstName'    => $isMulti ? ($validated['destinations'][0]['firstName'] ?? null) : ($validated['firstName'] ?? null),
+                    'lastName'     => $isMulti ? ($validated['destinations'][0]['lastName'] ?? null) : ($validated['lastName'] ?? null),
+                    'companyName'  => $isMulti ? ($validated['destinations'][0]['companyName'] ?? null) : ($validated['companyName'] ?? null),
+                    'phone'        => $isMulti ? ($validated['destinations'][0]['phone'] ?? null) : ($validated['phone'] ?? null),
+                    'email'        => $validated['email'],
+                    'addressLine1' => $isMulti ? ($validated['destinations'][0]['addressLine1'] ?? null) : ($validated['addressLine1'] ?? null),
+                    'addressLine2' => $isMulti ? ($validated['destinations'][0]['addressLine2'] ?? null) : ($validated['addressLine2'] ?? null),
+                    'city'         => $isMulti ? ($validated['destinations'][0]['city'] ?? null) : ($validated['city'] ?? null),
+                    'state'        => $isMulti ? ($validated['destinations'][0]['state'] ?? null) : ($validated['state'] ?? null),
+                    'zip'          => $isMulti ? ($validated['destinations'][0]['zip'] ?? null) : ($validated['zip'] ?? null),
+                    'country'      => $isMulti ? ($validated['destinations'][0]['country'] ?? null) : ($validated['country'] ?? null),
+                    'paymentMethod'  => $validated['paymentMethod'] ?? null,
+                    'shippingMethod' => $isMulti ? ($validated['destinations'][0]['shippingMethod'] ?? null) : ($validated['shippingMethod'] ?? null),
+                ];
+
+                SavedAddress::create([
+                    'store_id'         => $storeId,
+                    'user_id'          => $user->id,
+                    'order_id'         => $orders[0]->id,
+                    'shipping_address' => $shippingData,
+                    'billing_address'  => $billingData,
+                ]);
+            }
+
             // ===================== PAYMENT (with risk data from Stripe) =====================
             $riskData = [];
             try {
@@ -1001,6 +1044,85 @@ class OrderController extends Controller
     }
 
 
+    // User ke saved addresses get karo
+    public function getSavedAddress(Request $request)
+    {
+        try {
+            $user = auth('sanctum')->user();
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not authenticated.'
+                ], 401);
+            }
+
+            $storeId = current_store_id();
+
+            $addresses = SavedAddress::where('user_id', $user->id)
+                ->where('store_id', $storeId)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Saved addresses retrieved successfully.',
+                'data' => $addresses->map(function ($addr) {
+                    return [
+                        'id'              => $addr->id,
+                        'orderId'         => $addr->order_id,
+                        'shippingAddress' => $addr->shipping_address,
+                        'billingAddress'  => $addr->billing_address,
+                        'createdAt'       => $addr->created_at?->toDateTimeString(),
+                    ];
+                }),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    // Saved address delete karo
+    public function destroySavedAddress($id)
+    {
+        try {
+            $user = auth('sanctum')->user();
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not authenticated.'
+                ], 401);
+            }
+
+            $storeId = current_store_id();
+
+            $address = SavedAddress::where('id', $id)
+                ->where('user_id', $user->id)
+                ->where('store_id', $storeId)
+                ->first();
+
+            if (!$address) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Address not found.'
+                ], 404);
+            }
+
+            $address->delete();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Address deleted successfully.',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
     /**
      * Update an existing order
      */

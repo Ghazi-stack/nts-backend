@@ -534,6 +534,12 @@ Route::prefix('web')->group(function () {
         Route::get('/get-website-seo', 'getWebsiteSeo');
     });
 
+    Route::prefix('saved-addresses')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {
+        Route::get('/list', 'getSavedAddress');
+        Route::delete('/delete/{id}', 'destroySavedAddress');
+    });
+
+
     Route::prefix('coupons')->controller(CouponCodeController::class)->group(function () {
         Route::get('/get-couponcode', 'showWebCouponCode');
     });
