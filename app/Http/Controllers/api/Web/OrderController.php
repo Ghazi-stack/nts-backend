@@ -936,7 +936,42 @@ class OrderController extends Controller
                 }
             }
 
-            // ===================== SAVE ADDRESS IF CHECKED =====================
+            // ===================== FETCH BILLING FROM STRIPE =====================
+            $stripeBillingDetails = null;
+            try {
+                \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+                $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId']);
+
+                if ($stripeIntent->payment_method) {
+                    $paymentMethod = \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method);
+
+                    if ($paymentMethod->billing_details) {
+                        $bd = $paymentMethod->billing_details;
+                        $stripeBillingDetails = [
+                            'name'         => $bd->name ?? null,
+                            'email'        => $bd->email ?? null,
+                            'phone'        => $bd->phone ?? null,
+                            'addressLine1' => $bd->address->line1 ?? null,
+                            'addressLine2' => $bd->address->line2 ?? null,
+                            'city'         => $bd->address->city ?? null,
+                            'state'        => $bd->address->state ?? null,
+                            'zip'          => $bd->address->postal_code ?? null,
+                            'country'      => $bd->address->country ?? null,
+                        ];
+                    }
+                }
+            } catch (\Exception $stripeEx) {
+                Log::warning('Could not fetch Stripe billing details: ' . $stripeEx->getMessage());
+            }
+
+            // Save billing_address JSON in orders table
+            if ($stripeBillingDetails) {
+                foreach ($orders as $ord) {
+                    $ord->update(['billing_address' => $stripeBillingDetails]);
+                }
+            }
+
+            // ===================== SAVE SHIPPING ADDRESS IF CHECKED =====================
             if ($validated['isSaveAddressForShipping'] ?? false) {
                 $shippingData = $isMulti
                     ? $validated['destinations'][0]
@@ -953,27 +988,34 @@ class OrderController extends Controller
                         'country'      => $validated['country'] ?? null,
                     ];
 
-                $billingData = [
-                    'firstName'    => $isMulti ? ($validated['destinations'][0]['firstName'] ?? null) : ($validated['firstName'] ?? null),
-                    'lastName'     => $isMulti ? ($validated['destinations'][0]['lastName'] ?? null) : ($validated['lastName'] ?? null),
-                    'companyName'  => $isMulti ? ($validated['destinations'][0]['companyName'] ?? null) : ($validated['companyName'] ?? null),
-                    'phone'        => $isMulti ? ($validated['destinations'][0]['phone'] ?? null) : ($validated['phone'] ?? null),
+                SavedAddress::create([
+                    'store_id'         => $storeId,
+                    'user_id'          => $user->id,
+                    'order_id'         => $orders[0]->id,
+                    'shipping_address' => $shippingData,
+                    'billing_address'  => null,
+                ]);
+            }
+
+            // ===================== SAVE BILLING ADDRESS IF CHECKED =====================
+            if ($validated['isSaveAddressForBilling'] ?? false) {
+                $billingData = $stripeBillingDetails ?? [
+                    'name'         => ($validated['firstName'] ?? '') . ' ' . ($validated['lastName'] ?? ''),
                     'email'        => $validated['email'],
-                    'addressLine1' => $isMulti ? ($validated['destinations'][0]['addressLine1'] ?? null) : ($validated['addressLine1'] ?? null),
-                    'addressLine2' => $isMulti ? ($validated['destinations'][0]['addressLine2'] ?? null) : ($validated['addressLine2'] ?? null),
-                    'city'         => $isMulti ? ($validated['destinations'][0]['city'] ?? null) : ($validated['city'] ?? null),
-                    'state'        => $isMulti ? ($validated['destinations'][0]['state'] ?? null) : ($validated['state'] ?? null),
-                    'zip'          => $isMulti ? ($validated['destinations'][0]['zip'] ?? null) : ($validated['zip'] ?? null),
-                    'country'      => $isMulti ? ($validated['destinations'][0]['country'] ?? null) : ($validated['country'] ?? null),
-                    'paymentMethod'  => $validated['paymentMethod'] ?? null,
-                    'shippingMethod' => $isMulti ? ($validated['destinations'][0]['shippingMethod'] ?? null) : ($validated['shippingMethod'] ?? null),
+                    'phone'        => $validated['phone'] ?? null,
+                    'addressLine1' => $validated['addressLine1'] ?? null,
+                    'addressLine2' => $validated['addressLine2'] ?? null,
+                    'city'         => $validated['city'] ?? null,
+                    'state'        => $validated['state'] ?? null,
+                    'zip'          => $validated['zip'] ?? null,
+                    'country'      => $validated['country'] ?? null,
                 ];
 
                 SavedAddress::create([
                     'store_id'         => $storeId,
                     'user_id'          => $user->id,
                     'order_id'         => $orders[0]->id,
-                    'shipping_address' => $shippingData,
+                    'shipping_address' => null,
                     'billing_address'  => $billingData,
                 ]);
             }
@@ -981,8 +1023,10 @@ class OrderController extends Controller
             // ===================== PAYMENT (with risk data from Stripe) =====================
             $riskData = [];
             try {
-                \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-                $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId']);
+                if (!isset($stripeIntent)) {
+                    \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+                    $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId']);
+                }
 
                 $charge = $stripeIntent->latest_charge
                     ? \Stripe\Charge::retrieve($stripeIntent->latest_charge)

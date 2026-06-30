@@ -52,6 +52,7 @@ class OrderResource extends JsonResource
             'billingInformation' => $this->billingInformation
                 ? new BillingInformationResource($this->billingInformation)
                 : null,
+            'billingAddress' => $this->billing_address,
             'notes' => $this->whenLoaded('notes', function () {
                 return $this->notes->pluck('note');
             }),
