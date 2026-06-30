@@ -40,6 +40,7 @@ use App\Http\Controllers\api\Web\{
     ShipmentController,
     ContactRequestController,
     BulkInquiryController,
+    CustomerAddressController,
     CustomerMessageController
 };
 use App\Http\Controllers\api\AuthController;
@@ -199,6 +200,19 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/import', [CustomerController::class, 'importCSV']);
         Route::get('/export', [CustomerController::class, 'exportCSV']);
         Route::post('/customer-search', [CustomerController::class, 'advancedSearch']);
+    });
+
+    Route::middleware('auth:sanctum')
+    ->prefix('customer-address')
+    ->controller(CustomerAddressController::class)
+    ->group(function () {
+
+        Route::post('/store', 'store');
+        Route::put('/update/{id}', 'update');
+        Route::delete('/delete/{id}', 'destroy');
+        Route::get('/list', 'index');
+        Route::get('/show/{id}', 'show');
+
     });
     // 📁 Categories
     Route::prefix('categories')->controller(CategoryController::class)->group(function () {
