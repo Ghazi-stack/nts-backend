@@ -36,7 +36,9 @@ class HomeController extends Controller
             $label = $date->format('D');
             $dateStr = $date->toDateString();
 
-            $visits = VisitorSession::where('store_id', $storeId)->count();
+            $visits = VisitorSession::where('store_id', $storeId)
+                ->where('created_at', '>=', now()->subHours(24))
+                ->count();
 
             $orders = DB::table('orders')
                 ->where('store_id', $storeId)
@@ -82,7 +84,9 @@ class HomeController extends Controller
             ], 400);
         }
 
-        $visits = VisitorSession::where('store_id', $storeId)->count();
+        $visits = VisitorSession::where('store_id', $storeId)
+            ->where('created_at', '>=', now()->subHours(24))
+            ->count();
 
         $orders = DB::table('orders')
             ->where('store_id', $storeId)
