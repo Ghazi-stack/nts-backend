@@ -27,7 +27,7 @@ class CheckoutFormDataController extends Controller
             'shippingFormData' => 'nullable|array',
         ]);
 
-        $user = auth()->user();
+        $user = auth('sanctum')->user();
 
         // Session ID from Header
         $sessionId = $request->header('x-session-id');
