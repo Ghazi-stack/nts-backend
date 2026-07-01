@@ -99,7 +99,7 @@ class CustomerAddressController extends Controller
             'state' => 'required|string|max:100',
             'zip' => 'required|string|max:30',
             'country' => 'required|string|max:100',
-            'is_default' => 'nullable|boolean',
+            'is_default' => 'nullable|boolean'
         ]);
 
         if (!empty($validated['is_default'])) {
@@ -110,57 +110,14 @@ class CustomerAddressController extends Controller
                 ]);
         }
 
-        $data = [
-            'store_id'       => $storeId,
-            'first_name'     => $validated['firstName'],
-            'last_name'      => $validated['lastName'],
-            'company_name'   => $validated['companyName'] ?? null,
-            'phone_number'   => $validated['phoneNumber'],
-            'address_line_1' => $validated['addressLine1'],
-            'address_line_2' => $validated['addressLine2'] ?? null,
-            'city'           => $validated['city'],
-            'state'          => $validated['state'],
-            'zip'            => $validated['zip'],
-            'country'        => $validated['country'],
-            'is_default'     => $validated['is_default'] ?? false,
-        ];
+        $validated['store_id'] = $storeId;
+        $validated['customer_id'] = auth()->id();
 
-        $user = auth('sanctum')->user();
-        $sessionId = $request->header('X-Session-ID');
-        $address = null;
-
-        if ($user) {
-            // Logged in user — check existing
-            $address = CustomerAddress::where('customer_id', $user->id)
-                ->where('store_id', $storeId)
-                ->first();
-
-            if ($address) {
-                $address->update($data);
-            } else {
-                $data['customer_id'] = $user->id;
-                $address = CustomerAddress::create($data);
-            }
-        } elseif ($sessionId) {
-            // Guest user — check by session
-            $address = CustomerAddress::where('session_id', $sessionId)
-                ->where('store_id', $storeId)
-                ->first();
-
-            if ($address) {
-                $address->update($data);
-            } else {
-                $data['session_id'] = $sessionId;
-                $address = CustomerAddress::create($data);
-            }
-        } else {
-            $data['customer_id'] = null;
-            $address = CustomerAddress::create($data);
-        }
+        $address = CustomerAddress::create($validated);
 
         return response()->json([
             'status' => true,
-            'message' => $address->wasRecentlyCreated ? 'Address created successfully.' : 'Address updated successfully.',
+            'message' => 'Address created successfully.',
             'data' => $address
         ]);
     }
