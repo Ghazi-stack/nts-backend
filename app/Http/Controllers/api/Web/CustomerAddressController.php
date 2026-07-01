@@ -112,7 +112,6 @@ class CustomerAddressController extends Controller
 
         $data = [
             'store_id'       => $storeId,
-            'customer_id'    => auth()->id(),
             'first_name'     => $validated['firstName'],
             'last_name'      => $validated['lastName'],
             'company_name'   => $validated['companyName'] ?? null,
@@ -126,11 +125,42 @@ class CustomerAddressController extends Controller
             'is_default'     => $validated['is_default'] ?? false,
         ];
 
-        $address = CustomerAddress::create($data);
+        $user = auth('sanctum')->user();
+        $sessionId = $request->header('X-Session-ID');
+        $address = null;
+
+        if ($user) {
+            // Logged in user — check existing
+            $address = CustomerAddress::where('customer_id', $user->id)
+                ->where('store_id', $storeId)
+                ->first();
+
+            if ($address) {
+                $address->update($data);
+            } else {
+                $data['customer_id'] = $user->id;
+                $address = CustomerAddress::create($data);
+            }
+        } elseif ($sessionId) {
+            // Guest user — check by session
+            $address = CustomerAddress::where('session_id', $sessionId)
+                ->where('store_id', $storeId)
+                ->first();
+
+            if ($address) {
+                $address->update($data);
+            } else {
+                $data['session_id'] = $sessionId;
+                $address = CustomerAddress::create($data);
+            }
+        } else {
+            $data['customer_id'] = null;
+            $address = CustomerAddress::create($data);
+        }
 
         return response()->json([
             'status' => true,
-            'message' => 'Address created successfully.',
+            'message' => $address->wasRecentlyCreated ? 'Address created successfully.' : 'Address updated successfully.',
             'data' => $address
         ]);
     }
