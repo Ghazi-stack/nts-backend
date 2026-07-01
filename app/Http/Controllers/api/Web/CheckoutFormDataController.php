@@ -81,7 +81,7 @@ class CheckoutFormDataController extends Controller
             ], 400);
         }
 
-        $sessionId = $request->header('sessionId');
+        $sessionId = $request->header('x-session-id');
         $user = auth('sanctum')->user();
 
         $checkout = null;
