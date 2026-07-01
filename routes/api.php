@@ -215,14 +215,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
             Route::get('/show/{id}', 'show');
         });
 
-    Route::prefix('checkout-form')
-        ->controller(CheckoutFormDataController::class)
-        ->group(function () {
-
-            Route::post('/save', 'store');
-
-            Route::get('/get', 'index');
-        });
+   
     // 📁 Categories
     Route::prefix('categories')->controller(CategoryController::class)->group(function () {
         Route::get('/list-categories', 'index');
@@ -529,6 +522,15 @@ Route::prefix('web')->group(function () {
         Route::get('/product/{productId}', 'index');
         Route::post('/add', 'store');
     });
+
+     Route::prefix('checkout-form')
+        ->controller(CheckoutFormDataController::class)
+        ->group(function () {
+
+            Route::post('/save', 'store');
+
+            Route::get('/get', 'index');
+        });
 
     Route::prefix('carousels')->controller(CarouselController::class)->group(function () {
         Route::get('/get-crousel', 'index');
