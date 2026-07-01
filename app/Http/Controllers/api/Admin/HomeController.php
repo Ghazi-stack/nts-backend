@@ -84,8 +84,11 @@ class HomeController extends Controller
             ], 400);
         }
 
+        // Last 24 hours
+        $cutoff = now()->subHours(24);
+
         $visits = VisitorSession::where('store_id', $storeId)
-            ->where('created_at', '>=', now()->subHours(24))
+            ->where('created_at', '>=', $cutoff)
             ->count();
 
         $orders = DB::table('orders')
@@ -102,7 +105,7 @@ class HomeController extends Controller
 
         return response()->json([
             'status' => true,
-            'message' => 'Store store count data retrieved successfully',
+            'message' => 'Store count data retrieved successfully',
             'data' => [
                 'visits' => $visits,
                 'orders' => $orders,
