@@ -30,7 +30,7 @@ class CheckoutFormDataController extends Controller
         $user = auth()->user();
 
         // Session ID from Header
-        $sessionId = $request->header('sessionId');
+        $sessionId = $request->header('x-session-id');
 
         // Guest user must send sessionId
         if (!$user && !$sessionId) {
