@@ -81,27 +81,33 @@ class CheckoutFormDataController extends Controller
             ], 400);
         }
 
-        // Logged in user (if exists)
-        $user = auth()->user();
-
-        // Session ID from header (if exists)
         $sessionId = $request->header('sessionId');
+        $user = auth('sanctum')->user();
 
-        // If user is logged in, always fetch by user_id
+        $checkout = null;
+
+        // 1. Token exists → first try user data
         if ($user) {
 
             $checkout = CheckoutFormData::where('store_id', $storeId)
                 ->where('user_id', $user->id)
                 ->first();
+
+            // 2. If no user data and sessionId exists → fallback to session
+            if (!$checkout && $sessionId) {
+                $checkout = CheckoutFormData::where('store_id', $storeId)
+                    ->where('session_id', $sessionId)
+                    ->first();
+            }
         }
-        // If guest, fetch by session_id
+        // 3. Guest → session only
         elseif ($sessionId) {
 
             $checkout = CheckoutFormData::where('store_id', $storeId)
                 ->where('session_id', $sessionId)
                 ->first();
         }
-        // Neither token nor sessionId provided
+        // 4. Neither token nor sessionId
         else {
 
             return response()->json([
