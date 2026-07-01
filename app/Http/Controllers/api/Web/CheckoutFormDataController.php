@@ -81,27 +81,33 @@ class CheckoutFormDataController extends Controller
             ], 400);
         }
 
+        // Logged in user (if exists)
         $user = auth()->user();
 
+        // Session ID from header (if exists)
+        $sessionId = $request->header('sessionId');
+
+        // If user is logged in, always fetch by user_id
         if ($user) {
 
             $checkout = CheckoutFormData::where('store_id', $storeId)
                 ->where('user_id', $user->id)
                 ->first();
-        } else {
-
-            $sessionId = $request->header('sessionId');
-
-            if (!$sessionId) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Session ID is required.'
-                ], 422);
-            }
+        }
+        // If guest, fetch by session_id
+        elseif ($sessionId) {
 
             $checkout = CheckoutFormData::where('store_id', $storeId)
                 ->where('session_id', $sessionId)
                 ->first();
+        }
+        // Neither token nor sessionId provided
+        else {
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Authorization token or sessionId is required.'
+            ], 422);
         }
 
         return response()->json([
