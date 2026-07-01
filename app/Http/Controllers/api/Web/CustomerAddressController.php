@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\Web;
 use App\Http\Controllers\Controller;
 use App\Models\CustomerAddress;
 use App\Models\SavedAddress;
+use App\Models\Customer;
+use App\Http\Resources\CustomerResource;
 use Illuminate\Http\Request;
 
 class CustomerAddressController extends Controller
@@ -23,19 +25,26 @@ class CustomerAddressController extends Controller
             ], 400);
         }
 
+        $user = auth('sanctum')->user();
+
+        $customer = $user->customer_id
+            ? Customer::find($user->customer_id)
+            : null;
+
         $customerAddresses = CustomerAddress::where('store_id', $storeId)
-            ->where('customer_id', auth()->id())
+            ->where('customer_id', $user->id)
             ->latest()
             ->get();
 
         $savedAddresses = SavedAddress::where('store_id', $storeId)
-            ->where('user_id', auth()->id())
+            ->where('user_id', $user->id)
             ->latest()
             ->get();
 
         return response()->json([
             'status' => true,
             'data' => [
+                'customer' => $customer ? new CustomerResource($customer) : null,
                 'customer_addresses' => $customerAddresses,
                 'saved_addresses' => $savedAddresses,
             ]
