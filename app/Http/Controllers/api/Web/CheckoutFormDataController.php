@@ -91,13 +91,13 @@ class CheckoutFormDataController extends Controller
 
             $checkout = CheckoutFormData::where('store_id', $storeId)
                 ->where('user_id', $user->id)
-                ->first();
+                ->get();
 
             // 2. If no user data and sessionId exists → fallback to session
             if (!$checkout && $sessionId) {
                 $checkout = CheckoutFormData::where('store_id', $storeId)
                     ->where('session_id', $sessionId)
-                    ->first();
+                    ->get();
             }
         }
         // 3. Guest → session only
@@ -105,7 +105,7 @@ class CheckoutFormDataController extends Controller
 
             $checkout = CheckoutFormData::where('store_id', $storeId)
                 ->where('session_id', $sessionId)
-                ->first();
+                ->get();
         }
         // 4. Neither token nor sessionId
         else {
