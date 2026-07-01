@@ -44,7 +44,7 @@ class CustomerAddressController extends Controller
         return response()->json([
             'status' => true,
             'data' => [
-                'customer' => $customer ? new CustomerResource($customer) : null,
+                'user' => $customer ? new CustomerResource($customer) : null,
                 'customer_addresses' => $customerAddresses,
                 'saved_addresses' => $savedAddresses,
             ]
