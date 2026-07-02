@@ -75,7 +75,8 @@ class Product extends Model
         'hs_codes',
         'commodity_description',
         'country_of_origin',
-        'condition'
+        'condition',
+        'faq'
     ];
 
     protected $casts = [
