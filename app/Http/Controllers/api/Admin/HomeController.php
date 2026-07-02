@@ -114,6 +114,142 @@ class HomeController extends Controller
             ]
         ]);
     }
+
+    public function storeCountFiltered(Request $request)
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected.'
+            ], 400);
+        }
+
+        $filter = $request->query('filter', 'today');
+
+        switch ($filter) {
+            case 'today':
+                $startDate = now()->startOfDay();
+                $endDate = now()->endOfDay();
+                $previousStart = now()->subDay()->startOfDay();
+                $previousEnd = now()->subDay()->endOfDay();
+                break;
+
+            case 'week_to_date':
+                $startDate = now()->startOfWeek();
+                $endDate = now()->endOfDay();
+                $previousStart = now()->subWeek()->startOfWeek();
+                $previousEnd = now()->subWeek()->endOfWeek();
+                break;
+
+            case 'month_to_date':
+                $startDate = now()->startOfMonth();
+                $endDate = now()->endOfDay();
+                $previousStart = now()->subMonth()->startOfMonth();
+                $previousEnd = now()->subMonth()->endOfMonth();
+                break;
+
+            case 'year_to_date':
+                $startDate = now()->startOfYear();
+                $endDate = now()->endOfDay();
+                $previousStart = now()->subYear()->startOfYear();
+                $previousEnd = now()->subYear()->endOfYear();
+                break;
+
+            case 'last_7_days':
+                $startDate = now()->subDays(7)->startOfDay();
+                $endDate = now()->endOfDay();
+                $previousStart = now()->subDays(14)->startOfDay();
+                $previousEnd = now()->subDays(7)->endOfDay();
+                break;
+
+            case 'last_30_days':
+                $startDate = now()->subDays(30)->startOfDay();
+                $endDate = now()->endOfDay();
+                $previousStart = now()->subDays(60)->startOfDay();
+                $previousEnd = now()->subDays(30)->endOfDay();
+                break;
+
+            case 'last_365_days':
+                $startDate = now()->subDays(365)->startOfDay();
+                $endDate = now()->endOfDay();
+                $previousStart = now()->subDays(730)->startOfDay();
+                $previousEnd = now()->subDays(365)->endOfDay();
+                break;
+
+            default:
+                $startDate = now()->startOfDay();
+                $endDate = now()->endOfDay();
+                $previousStart = now()->subDay()->startOfDay();
+                $previousEnd = now()->subDay()->endOfDay();
+                break;
+        }
+
+        // Current period
+        $visits = VisitorSession::where('store_id', $storeId)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->count();
+
+        $orders = DB::table('orders')
+            ->where('store_id', $storeId)
+            ->where('is_draft', 0)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->count();
+
+        $revenue = DB::table('orders')
+            ->where('store_id', $storeId)
+            ->where('is_draft', 0)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->sum('total_amount');
+
+        $conversion = $visits > 0
+            ? round(($orders / $visits) * 100, 2)
+            : 0;
+
+        // Previous period (comparison)
+        $previousVisits = VisitorSession::where('store_id', $storeId)
+            ->whereBetween('created_at', [$previousStart, $previousEnd])
+            ->count();
+
+        $previousOrders = DB::table('orders')
+            ->where('store_id', $storeId)
+            ->where('is_draft', 0)
+            ->whereBetween('created_at', [$previousStart, $previousEnd])
+            ->count();
+
+        $previousRevenue = DB::table('orders')
+            ->where('store_id', $storeId)
+            ->where('is_draft', 0)
+            ->whereBetween('created_at', [$previousStart, $previousEnd])
+            ->sum('total_amount');
+
+        $previousConversion = $previousVisits > 0
+            ? round(($previousOrders / $previousVisits) * 100, 2)
+            : 0;
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Store count data retrieved successfully.',
+            'filter' => $filter,
+            'dateRange' => [
+                'from' => $startDate->format('M d, Y'),
+                'to'   => $endDate->format('M d, Y'),
+            ],
+            'data' => [
+                'visits'     => $visits,
+                'orders'     => $orders,
+                'revenue'    => (float) $revenue,
+                'conversion' => $conversion,
+            ],
+            'previous' => [
+                'visits'     => $previousVisits,
+                'orders'     => $previousOrders,
+                'revenue'    => (float) $previousRevenue,
+                'conversion' => $previousConversion,
+            ],
+        ]);
+    }
     public function track(Request $request)
     {
         $today = now()->toDateString();
