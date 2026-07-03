@@ -1336,8 +1336,39 @@ class OrderController extends Controller
                 ->where('store_id', current_store_id())
                 ->firstOrFail();
 
-            $order->status = $request->input('status');
+            $newStatus = $request->input('status');
+            $order->status = $newStatus;
             $order->save();
+
+            // ===================== STRIPE CANCEL/REFUND =====================
+            if ($newStatus === 'Cancelled') {
+                $payment = Payment::where('order_id', $order->id)->first();
+
+                if ($payment && $payment->stripe_session_id) {
+                    try {
+                        \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+                        $intent = \Stripe\PaymentIntent::retrieve($payment->stripe_session_id);
+
+                        if ($intent->status === 'requires_capture') {
+                            // Payment abhi hold mein hai — cancel karo (paise release)
+                            $intent->cancel();
+                            $payment->update(['payment_status' => 'cancelled']);
+                        } elseif ($intent->status === 'succeeded') {
+                            // Payment already capture ho chuki hai — refund karo
+                            \Stripe\Refund::create([
+                                'payment_intent' => $payment->stripe_session_id,
+                            ]);
+                            $payment->update(['payment_status' => 'refunded']);
+                        }
+                    } catch (\Exception $stripeError) {
+                        \Log::error('STRIPE CANCEL/REFUND FAILED', [
+                            'order_id' => $order->id,
+                            'payment_intent' => $payment->stripe_session_id,
+                            'error' => $stripeError->getMessage(),
+                        ]);
+                    }
+                }
+            }
 
             return response()->json([
                 'status'  => true,
