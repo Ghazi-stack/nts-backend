@@ -68,6 +68,8 @@ class OrderController extends Controller
                         $q->whereHas('payment', function ($p) {
                             $p->where('risk_level', 'highest');
                         });
+                    } elseif ($status === 'Incomplete') {
+                        $q->where('status', 'Pending');
                     } else {
                         $q->where('status', $status);
                     }
@@ -121,6 +123,7 @@ class OrderController extends Controller
             ], 500);
         }
     }
+    
     public function show(Request $request, $id)
     {
         try {
