@@ -64,7 +64,13 @@ class OrderController extends Controller
                 ->where('store_id', $storeId)
                 ->where('is_draft', 0)
                 ->when($status, function ($q) use ($status) {
-                    $q->where('status', $status);
+                    if ($status === 'High Risk') {
+                        $q->whereHas('payment', function ($p) {
+                            $p->where('risk_level', 'highest');
+                        });
+                    } else {
+                        $q->where('status', $status);
+                    }
                 })
                 ->when($productId, function ($q) use ($productId) {
                     $q->whereHas('items', function ($item) use ($productId) {
