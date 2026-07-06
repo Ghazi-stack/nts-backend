@@ -28,8 +28,12 @@
         }
 
         body {
+            -moz-box-sizing: border-box;
+            -webkit-box-sizing: border-box;
             box-sizing: border-box;
             min-width: 100%;
+            -ms-text-size-adjust: 100%;
+            -webkit-text-size-adjust: 100%;
             width: 100%;
         }
 
@@ -91,6 +95,17 @@
         hr {
             border: none;
             border-bottom: 1px solid #d0d0d0;
+        }
+
+        .preheader {
+            display: none;
+            font-size: 1px;
+            line-height: 1px;
+            max-height: 0;
+            max-width: 0;
+            opacity: 0;
+            overflow: hidden;
+            visibility: hidden;
         }
 
         .body {
@@ -184,6 +199,17 @@
             font-weight: 600;
         }
 
+        h2 {
+            Margin: 0 0 4px;
+            margin: 0 0 4px;
+            color: #333;
+            font-family: Montserrat, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 21px;
+            font-weight: 500;
+            line-height: 1.57143;
+            word-wrap: break-word;
+        }
+
         .products {
             border-top: 1px solid #e5e5e5;
         }
@@ -195,11 +221,6 @@
         .products__item th {
             padding-bottom: 16px;
             padding-top: 16px;
-        }
-
-        .products__image-container,
-        .products__content {
-            padding-right: 24px;
         }
 
         .products__image-container {
@@ -220,12 +241,22 @@
             vertical-align: middle;
         }
 
+        .products__content:not(:first-child) {
+            padding-left: 24px;
+        }
+
+        .products__content {
+            padding-right: 24px;
+        }
+
         .products__content p:not(:last-child) {
             Margin: 0 0 4px;
             margin: 0 0 4px;
         }
 
-        .products__sku {
+        .products__sku,
+        .products__brand,
+        .products__price {
             font-size: 12px;
             line-height: 1.666667;
         }
@@ -235,18 +266,62 @@
         }
 
         .products__total {
-            width: 80px;
+            width: 100px;
         }
 
-        .complete-order a {
-            background: #555;
-            border: none;
+        .products__total p {
+            text-align: right;
+        }
+
+        .total>tr>th {
+            text-align: right;
+        }
+
+        .total__content {
+            width: auto;
+            margin: 0 0 0 auto;
+        }
+
+        .total__name,
+        .total__value {
+            padding-bottom: 4px;
+        }
+
+        .total__item .total__name p {
+            text-align: right;
+        }
+
+        .total__value {
+            padding-left: 15px;
+        }
+
+        .total__value p {
+            text-align: right;
+        }
+
+        .addresses__content {
+            border-top: 1px solid #e5e5e5;
+            padding-top: 12px;
+            text-transform: uppercase;
+        }
+
+        .addresses__name {
+            text-transform: none;
+        }
+
+        .customer-message {
+            border-top: 1px solid #e5e5e5;
+            padding-top: 12px;
+        }
+
+        .check {
+            border: 1px solid #999;
             border-radius: 4px;
             box-sizing: border-box;
-            color: #fff;
+            color: #777;
             display: inline-block;
             font-weight: 600;
-            padding: 4px 16px;
+            padding: 4px 15px;
             text-align: center;
             white-space: nowrap;
         }
@@ -272,10 +347,6 @@
             width: 100%;
         }
 
-        .unsubscribe p {
-            text-align: center;
-        }
-
         @media only screen and (max-width: 599px) {
             img {
                 height: auto !important;
@@ -298,25 +369,16 @@
                 width: 100% !important;
             }
 
-            .products__image {
-                height: 78px !important;
-                width: 78px !important;
-            }
-
-            .products__content,
-            .products__quantity {
-                box-sizing: border-box;
-                display: inline-block !important;
-                width: 100% !important;
-            }
-
             .products__content {
                 padding-bottom: 0 !important;
                 padding-right: 0 !important;
+                width: 100% !important;
             }
 
-            .products__quantity {
-                padding-top: 12px !important;
+            .products__quantity,
+            .products__total {
+                padding-top: 4px !important;
+                width: 50% !important;
             }
 
             .store th {
@@ -336,6 +398,20 @@
 </head>
 
 <body>
+    <span class="preheader"></span>
+
+    @php
+    $orderData = is_array($order) ? (object) $order : $order;
+    $orderNumber = $orderData->order_number ?? $orderData->orderNumber ?? 'N/A';
+    $totalAmount = $orderData->total_amount ?? $orderData->totalAmount ?? 0;
+    $shippingCost = $orderData->shipping_cost ?? $orderData->shippingCost ?? 0;
+    $discountAmt = $orderData->discountAmount ?? 0;
+    $orderStatus = $orderData->status ?? 'Pending';
+    $orderComments = $orderData->comments ?? null;
+    $items = $orderData->items ?? collect([]);
+    $billing = $orderData->billingInformation ?? $orderData->billing_information ?? null;
+    @endphp
+
     <table class="body">
         <tr>
             <td>
@@ -345,7 +421,7 @@
                     </tr>
                 </table>
 
-                {{-- Logo + Delimiter --}}
+                <!-- Logo + Delimiter -->
                 <table class="container">
                     <tr>
                         <td>
@@ -406,36 +482,18 @@
                     </tr>
                 </table>
 
-                {{-- Main Content --}}
+                <!-- Main Content -->
                 <table class="container">
                     <tr>
                         <td>
+                            <!-- Title -->
                             <table class="row">
                                 <tr>
                                     <th class="column">
                                         <table>
                                             <tr>
                                                 <th>
-                                                    {{-- Title based on email type --}}
-                                                    @if($emailType === '1hr')
-                                                    <h1>You left something behind!</h1>
-                                                    <p>
-                                                        Hi {{ $user->name }},<br /><br />
-                                                        You added items to your cart but didn't complete your order. Your cart is saved and ready for you!
-                                                    </p>
-                                                    @elseif($emailType === '24hr')
-                                                    <h1>Your cart is waiting for you!</h1>
-                                                    <p>
-                                                        Hi {{ $user->name }},<br /><br />
-                                                        Your cart is still waiting! Don't let these items sell out before you complete your purchase.
-                                                    </p>
-                                                    @else
-                                                    <h1>Last chance! Don't miss out!</h1>
-                                                    <p>
-                                                        Hi {{ $user->name }},<br /><br />
-                                                        This is your final reminder. Items in your cart are in high demand — complete your order before they're gone!
-                                                    </p>
-                                                    @endif
+                                                    <h1>Thanks for your order</h1>
                                                 </th>
                                                 <th class="expander"></th>
                                             </tr>
@@ -450,54 +508,139 @@
                                 </tr>
                             </table>
 
-                            {{-- Products List --}}
+                            <!-- Products -->
                             <table class="row">
                                 <tr>
                                     <th class="column">
                                         <table>
                                             <tr>
                                                 <th>
+                                                    <h2>Order #{{ $orderNumber }}</h2>
+
                                                     <table class="products">
-                                                        @foreach($cartItems as $item)
+                                                        @foreach($items as $item)
                                                         @php
-                                                        $imageUrl = $item['thumbnail'] ?? null;
+                                                        $product = $item->product ?? null;
+                                                        $primaryImage = null;
+                                                        if ($product && $product->images) {
+                                                        $primaryImage = $product->images->where('is_primary', 1)->first() ?? $product->images->first();
+                                                        }
+                                                        $imageUrl = $primaryImage ? ($primaryImage->path ?? $primaryImage->url ?? null) : null;
+                                                        if ($imageUrl && !str_starts_with($imageUrl, 'http')) {
+                                                        $imageUrl = 'https://aws-backend-assets.s3.us-east-2.amazonaws.com/' . $imageUrl;
+                                                        }
                                                         @endphp
                                                         <tr class="products__item">
-                                                            {{-- Image --}}
                                                             @if($imageUrl)
                                                             <th class="products__image-container">
-                                                                <img src="{{ $imageUrl }}" class="products__image" alt="{{ $item['name'] ?? '' }}">
+                                                                <img src="{{ $imageUrl }}" class="products__image" alt="{{ $product->name ?? '' }}">
                                                             </th>
                                                             @endif
 
-                                                            {{-- Product Info --}}
                                                             <th class="products__content">
-                                                                <p><strong>{{ $item['name'] ?? 'Product' }}</strong></p>
+                                                                <p><strong>{{ $product->name ?? 'Product' }}</strong></p>
 
-                                                                @if(!empty($item['sku']))
-                                                                <p class="products__sku">{{ $item['sku'] }}</p>
+                                                                @if($product && $product->sku)
+                                                                <p class="products__sku">{{ $product->sku }}</p>
                                                                 @endif
 
-                                                                @if(!empty($item['brand']))
-                                                                <p class="products__brand">Brand: {{ $item['brand'] }}</p>
+                                                                @if($product && $product->brand)
+                                                                <p class="products__brand">Brand: {{ $product->brand->name ?? '' }}</p>
                                                                 @endif
 
-                                                                @if(!empty($item['price']))
-                                                                <p class="products__price">${{ number_format($item['price'], 2) }}</p>
-                                                                @endif
+                                                                <p class="products__price">${{ number_format($item->price, 2) }}</p>
                                                             </th>
 
-                                                            {{-- Quantity --}}
                                                             <th class="products__quantity">
-                                                                <p>Qty: {{ $item['quantity'] }}</p>
+                                                                <p>Qty: {{ $item->quantity }}</p>
                                                             </th>
 
-                                                            {{-- Total --}}
                                                             <th class="products__total">
-                                                                <p><strong>${{ number_format(($item['price'] ?? 0) * $item['quantity'], 2) }}</strong></p>
+                                                                <p><strong>${{ number_format($item->price * $item->quantity, 2) }}</strong></p>
                                                             </th>
                                                         </tr>
                                                         @endforeach
+                                                    </table>
+                                                </th>
+                                                <th class="expander"></th>
+                                            </tr>
+                                        </table>
+                                    </th>
+                                </tr>
+                            </table>
+
+                            <table class="spacer spacer--16">
+                                <tr>
+                                    <td>&nbsp;</td>
+                                </tr>
+                            </table>
+
+                            <!-- Totals -->
+                            <table class="row">
+                                <tr>
+                                    <th class="column">
+                                        <table>
+                                            <tr>
+                                                <th>
+                                                    <table class="total">
+                                                        <tr>
+                                                            <th>
+                                                                <table class="total__content">
+                                                                    @if($shippingCost > 0)
+                                                                    <tr class="total__item">
+                                                                        <th class="total__name">
+                                                                            <p>Shipping:</p>
+                                                                        </th>
+                                                                        <th class="total__value">
+                                                                            <p><strong>${{ number_format($shippingCost, 2) }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+                                                                    @endif
+
+                                                                    @if($discountAmt > 0)
+                                                                    <tr class="total__item">
+                                                                        <th class="total__name">
+                                                                            <p>Discount:</p>
+                                                                        </th>
+                                                                        <th class="total__value">
+                                                                            <p><strong>-${{ number_format($discountAmt, 2) }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+                                                                    @endif
+
+                                                                    <tr class="total__item">
+                                                                        <th class="total__name">
+                                                                            <p>Total:</p>
+                                                                        </th>
+                                                                        <th class="total__value">
+                                                                            <p><strong>${{ number_format($totalAmount, 2) }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+
+                                                                    @if($billing && $billing->payment_method)
+                                                                    <tr class="total__item">
+                                                                        <th class="total__name">
+                                                                            <p>Payment method:</p>
+                                                                        </th>
+                                                                        <th class="total__value">
+                                                                            <p><strong>{{ ucfirst(str_replace('_', ' ', $billing->payment_method)) }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+                                                                    @endif
+
+                                                                    @if($billing && $billing->shipping_method)
+                                                                    <tr class="total__item">
+                                                                        <th class="total__name">
+                                                                            <p>Shipping method:</p>
+                                                                        </th>
+                                                                        <th class="total__value">
+                                                                            <p><strong>{{ $billing->shipping_method }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+                                                                    @endif
+                                                                </table>
+                                                            </th>
+                                                        </tr>
                                                     </table>
                                                 </th>
                                                 <th class="expander"></th>
@@ -513,14 +656,35 @@
                                 </tr>
                             </table>
 
-                            {{-- Complete Order Message --}}
+                            <!-- Billing Address -->
+                            @if($billing)
                             <table class="row">
                                 <tr>
                                     <th class="column">
                                         <table>
                                             <tr>
                                                 <th>
-                                                    <p>Ready to complete your purchase? Click the button below to go back to your cart.</p>
+                                                    <h2>Billing Address</h2>
+                                                    <div class="addresses__content">
+                                                        <strong class="addresses__name">{{ $billing->first_name }} {{ $billing->last_name }}</strong>
+
+                                                        @if($billing->company_name)
+                                                        <br>{{ $billing->company_name }}
+                                                        @endif
+
+                                                        <br>{{ $billing->address_line_1 }}
+
+                                                        @if($billing->address_line_2)
+                                                        <br>{{ $billing->address_line_2 }}
+                                                        @endif
+
+                                                        <br>{{ $billing->city }}, {{ $billing->state }} {{ $billing->zip }}
+                                                        <br>{{ $billing->country }}
+
+                                                        @if($billing->phone)
+                                                        <br>{{ $billing->phone }}
+                                                        @endif
+                                                    </div>
                                                 </th>
                                                 <th class="expander"></th>
                                             </tr>
@@ -528,25 +692,47 @@
                                     </th>
                                 </tr>
                             </table>
+                            @endif
 
+                            <!-- Order Comments -->
+                            @if($orderComments)
+                            <table class="spacer spacer--32">
+                                <tr>
+                                    <td>&nbsp;</td>
+                                </tr>
+                            </table>
+
+                            <table class="row">
+                                <tr>
+                                    <th class="column">
+                                        <table>
+                                            <tr>
+                                                <th>
+                                                    <h2>Order comments</h2>
+                                                    <p class="customer-message">{{ $orderComments }}</p>
+                                                </th>
+                                                <th class="expander"></th>
+                                            </tr>
+                                        </table>
+                                    </th>
+                                </tr>
+                            </table>
+                            @endif
+
+                            <!-- Check Order Status -->
                             <table class="spacer spacer--16">
                                 <tr>
                                     <td>&nbsp;</td>
                                 </tr>
                             </table>
 
-                            {{-- CTA Button --}}
                             <table class="row">
                                 <tr>
                                     <th class="column">
-                                        <table class="complete-order">
+                                        <table>
                                             <tr>
                                                 <th>
-                                                    <p>
-                                                        <a href="{{ $checkoutLink }}" target="_blank">
-                                                            Complete Your Order
-                                                        </a>
-                                                    </p>
+                                                    <a href="{{ $storePath }}" class="check">Check order status</a>
                                                 </th>
                                                 <th class="expander"></th>
                                             </tr>
@@ -564,7 +750,7 @@
                     </tr>
                 </table>
 
-                {{-- Footer --}}
+                <!-- Footer -->
                 <table class="container">
                     <tr>
                         <td>
@@ -608,11 +794,7 @@
                                             <tr>
                                                 <th>
                                                     <p><strong>{{ $store?->name ?? 'Our Store' }}</strong></p>
-                                                    <p>
-                                                        <a href="{{ $storePath }}" target="_blank">
-                                                            {{ str_replace(['https://', 'http://'], '', $storePath) }}
-                                                        </a>
-                                                    </p>
+                                                    <p><a href="{{ $storePath }}" target="_blank">{{ str_replace(['https://', 'http://'], '', $storePath) }}</a></p>
                                                 </th>
                                                 <th class="expander"></th>
                                             </tr>
@@ -623,35 +805,7 @@
                                         <table class="store-button">
                                             <tr>
                                                 <th>
-                                                    <a href="{{ $storePath }}">
-                                                        <strong>Go Shopping</strong>
-                                                    </a>
-                                                </th>
-                                                <th class="expander"></th>
-                                            </tr>
-                                        </table>
-                                    </th>
-                                </tr>
-                            </table>
-
-                            <table class="spacer spacer--40">
-                                <tr>
-                                    <td>&nbsp;</td>
-                                </tr>
-                            </table>
-
-                            <table class="row">
-                                <tr>
-                                    <th class="column">
-                                        <table class="unsubscribe">
-                                            <tr>
-                                                <th>
-                                                    <div>
-                                                        <p style="text-align: center; color: #777; font-size: 12px;">
-                                                            You're receiving this email because you have items in your cart at
-                                                            <a href="{{ $storePath }}">{{ $store?->name ?? 'Our Store' }}</a>.
-                                                        </p>
-                                                    </div>
+                                                    <a href="{{ $storePath }}"><strong>Go shopping</strong></a>
                                                 </th>
                                                 <th class="expander"></th>
                                             </tr>
