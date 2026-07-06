@@ -145,10 +145,15 @@ class OrderController extends Controller
 
             $order = Order::with([
                 'items.product.images',
-                'items.product.brand',
+               // 'items.product.brand',
+                //'items.product.categories.parent',
+                //'items.product.content',
+                //'items.product.seo',
+               // 'items.product.identifiers',
+                'items.product.reviews.user',
                 'customer',
-                'billingInformation',
-                'payment',
+               // 'billingInformation',
+                //'payment',
             ])
                 ->withCount('messages')
                 ->where('store_id', $storeId)
@@ -200,32 +205,18 @@ class OrderController extends Controller
                         'updatedAt' => $order->customer->updated_at,
                     ] : null,
 
-                    'products' => $order->items->map(function ($item) {
+                    'products' => $order->items
+                        ->filter(fn($item) => $item->product)
+                        ->map(function ($item) {
 
-                        if (!$item->product) {
-                            return null;
-                        }
+                            $product = (new ProductResource($item->product))->toArray(request());
 
-                        $primaryImage = $item->product->images->first();
+                            // Order item values overwrite
+                            $product['quantity'] = $item->quantity;
+                            $product['price'] = $item->price;
 
-                        return [
-                            'id' => $item->product->id,
-                            'name' => $item->product->name,
-                            'sku' => $item->product->sku,
-                            'price' => $item->price,
-                            'quantity' => $item->quantity,
-
-                            'image' => $primaryImage ? [
-                                'path' => Storage::disk('s3')->url($primaryImage->path),
-                                'url' => $primaryImage->url ?? Storage::disk('s3')->url($primaryImage->path),
-                                'isPrimary' => (bool) $primaryImage->is_primary,
-                                'store_id' => $primaryImage->store_id,
-                                'altText' => $primaryImage->alt_text,
-                                'description' => $primaryImage->description,
-                            ] : null,
-
-                        ];
-                    })->filter()->values(),
+                            return $product;
+                        })->values(),
 
                 ],
             ]);
