@@ -572,7 +572,9 @@ class CartController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
-                'product_id' => 'required|integer|exists:products,id',
+                'product_id'   => 'nullable|integer|exists:products,id',
+                'product_ids'  => 'nullable|array|min:1',
+                'product_ids.*' => 'integer|exists:products,id',
             ]);
 
             if ($validator->fails()) {
@@ -582,8 +584,28 @@ class CartController extends Controller
                 ], 422);
             }
 
+            // Collect product IDs
+            $productIds = [];
+
+            if ($request->filled('product_id')) {
+                $productIds[] = $request->product_id;
+            }
+
+            if ($request->filled('product_ids')) {
+                $productIds = array_merge($productIds, $request->product_ids);
+            }
+
+            $productIds = array_unique($productIds);
+
+            if (empty($productIds)) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Please provide product_id or product_ids.',
+                ], 422);
+            }
+
             $deletedCount = $this->cartQuery($user, $sessionId, $storeId)
-                ->where('product_id', $request->product_id)
+                ->whereIn('product_id', $productIds)
                 ->delete();
 
             if ($deletedCount == 0) {
