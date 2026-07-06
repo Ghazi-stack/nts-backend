@@ -1064,23 +1064,37 @@ class OrderController extends Controller
             }
 
             // ===================== SEND ORDER EMAIL =====================
-            try {
-                foreach ($orders as $ord) {
-                    // Email to customer
+            foreach ($orders as $ord) {
+                // Email to customer
+                try {
                     Mail::to($validated['email'])->send(new OrderPlacedMail($ord, $customer, $storeId));
+                    Log::info('ORDER EMAIL SENT TO CUSTOMER', ['email' => $validated['email'], 'order' => $ord->order_number]);
+                } catch (\Exception $mailError) {
+                    Log::error('ORDER EMAIL TO CUSTOMER FAILED', [
+                        'error'   => $mailError->getMessage(),
+                        'line'    => $mailError->getLine(),
+                        'file'    => $mailError->getFile(),
+                        'trace'   => $mailError->getTraceAsString(),
+                        'email'   => $validated['email'],
+                        'order'   => $ord->order_number ?? null,
+                    ]);
+                }
 
-                    // Email to admin
+                // Email to admin
+                try {
                     $adminEmail = env('MAIL_ADMIN_ADDRESS', 'info@serverblink.uk');
                     Mail::to($adminEmail)->send(new OrderPlacedMail($ord, $customer, $storeId));
+                    Log::info('ORDER EMAIL SENT TO ADMIN', ['email' => $adminEmail, 'order' => $ord->order_number]);
+                } catch (\Exception $adminMailError) {
+                    Log::error('ORDER EMAIL TO ADMIN FAILED', [
+                        'error'   => $adminMailError->getMessage(),
+                        'line'    => $adminMailError->getLine(),
+                        'file'    => $adminMailError->getFile(),
+                        'trace'   => $adminMailError->getTraceAsString(),
+                        'email'   => $adminEmail,
+                        'order'   => $ord->order_number ?? null,
+                    ]);
                 }
-            } catch (\Exception $mailError) {
-                Log::error('ORDER EMAIL FAILED', [
-                    'error'   => $mailError->getMessage(),
-                    'line'    => $mailError->getLine(),
-                    'file'    => $mailError->getFile(),
-                    'email'   => $validated['email'],
-                    'order'   => $orders[0]->order_number ?? null,
-                ]);
             }
 
             return response()->json([
