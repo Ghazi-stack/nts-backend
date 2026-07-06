@@ -672,7 +672,7 @@ class OrderController extends Controller
 
                 'ipAddress'                  => 'nullable|string|max:45',
                 'isSaveAddressForShipping'   => 'nullable|boolean',
-                'isSaveAddressForBilling'    => 'nullable|boolean',
+                'isSaveAddressForBilling'   => 'nullable|boolean',
                 'billingSame'                => 'nullable|boolean',
 
                 'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
@@ -764,36 +764,46 @@ class OrderController extends Controller
             }
 
             if (!$user) {
+
                 $plainPassword = Str::random(10);
+
                 $user = User::create([
-                    'name'      => trim($customer->first_name . ' ' . $customer->last_name),
-                    'email'     => $validated['email'],
-                    'password'  => Hash::make($plainPassword),
-                    'userRole'  => 2,
-                    'store_id'  => $storeId,
+                    'name'        => trim($customer->first_name . ' ' . $customer->last_name),
+                    'email'       => $validated['email'],
+                    'password'    => Hash::make($plainPassword),
+                    'userRole'    => 2,
+                    'store_id'    => $storeId,
                     'customer_id' => $customer->id,
                 ]);
 
                 // Generate password reset token
                 $token = app('auth.password.broker')->createToken($user);
 
-                $storeUrls = [
-                    4  => 'https://new-town-spares.vercel.app',
-                    10 => 'https://server-blink.vercel.app',
-                ];
-                $frontendUrl = $storeUrls[$storeId] ?? 'https://server-blink.vercel.app';
-                $resetLink = $frontendUrl . '/auth/reset-password?token=' . $token . '&email=' . urlencode($validated['email']);
+                $store = Store::find($storeId);
+
+                // Dynamic URL
+                $frontendUrl = rtrim($store?->base_url ?? '#', '/');
+
+                $resetLink = $frontendUrl .
+                    '/auth/reset-password?token=' . $token .
+                    '&email=' . urlencode($validated['email']);
 
                 try {
-                    Mail::to($validated['email'])->send(new WelcomeLoginMail(
-                        $customer->first_name,
-                        $validated['email'],
-                        $resetLink,
-                        $storeId
-                    ));
+
+                    Mail::to($validated['email'])->send(
+                        new WelcomeLoginMail(
+                            $customer->first_name,
+                            $validated['email'],
+                            $resetLink,
+                            $storeId
+                        )
+                    );
                 } catch (\Exception $mailEx) {
+
                     Log::error('WELCOME LOGIN EMAIL FAILED', [
                         'error' => $mailEx->getMessage(),
+                        'line'  => $mailEx->getLine(),
+                        'file'  => $mailEx->getFile(),
                         'email' => $validated['email'],
                     ]);
                 }
@@ -809,7 +819,7 @@ class OrderController extends Controller
             $commonOrderFields = [
                 'ip_address'                    => $validated['ipAddress'] ?? $request->ip(),
                 'is_save_address_for_shipping'  => $validated['isSaveAddressForShipping'] ?? false,
-                'is_save_address_for_billing'   => $validated['isSaveAddressForBilling'] ?? false,
+                'is_save_address_for_billing'  => $validated['isSaveAddressForBilling'] ?? false,
                 'billing_same'                  => $validated['billingSame'] ?? true,
             ];
 
@@ -937,12 +947,10 @@ class OrderController extends Controller
 
             // ===================== FETCH BILLING FROM STRIPE =====================
             $stripeBillingDetails = null;
-            $riskData = [];
             try {
                 \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
                 $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId']);
 
-                // Billing details from payment method
                 if ($stripeIntent->payment_method) {
                     $paymentMethod = \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method);
 
@@ -961,20 +969,8 @@ class OrderController extends Controller
                         ];
                     }
                 }
-
-                // Risk data from charge
-                $charge = $stripeIntent->latest_charge
-                    ? \Stripe\Charge::retrieve($stripeIntent->latest_charge)
-                    : null;
-
-                if ($charge && $charge->outcome) {
-                    $riskData = [
-                        'risk_score' => $charge->outcome->risk_score ?? null,
-                        'risk_level' => $charge->outcome->risk_level ?? null,
-                    ];
-                }
             } catch (\Exception $stripeEx) {
-                Log::warning('Could not fetch Stripe data: ' . $stripeEx->getMessage());
+                Log::warning('Could not fetch Stripe billing details: ' . $stripeEx->getMessage());
             }
 
             // Save billing_address JSON in orders table
@@ -984,9 +980,8 @@ class OrderController extends Controller
                 }
             }
 
-            // ===================== SAVE ADDRESSES =====================
+            // ===================== PREPARE SHIPPING ADDRESS =====================
             $shippingData = null;
-            $billingData = null;
 
             if ($validated['isSaveAddressForShipping'] ?? false) {
                 $shippingData = $isMulti
@@ -1005,6 +1000,9 @@ class OrderController extends Controller
                     ];
             }
 
+            // ===================== PREPARE BILLING ADDRESS =====================
+            $billingData = null;
+
             if ($validated['isSaveAddressForBilling'] ?? false) {
                 $billingData = $stripeBillingDetails ?? [
                     'name'         => ($validated['firstName'] ?? '') . ' ' . ($validated['lastName'] ?? ''),
@@ -1019,6 +1017,7 @@ class OrderController extends Controller
                 ];
             }
 
+            // ===================== SAVE SINGLE RECORD =====================
             if ($shippingData || $billingData) {
                 SavedAddress::create([
                     'store_id'         => $storeId,
@@ -1029,7 +1028,28 @@ class OrderController extends Controller
                 ]);
             }
 
-            // ===================== PAYMENT =====================
+            // ===================== PAYMENT (with risk data from Stripe) =====================
+            $riskData = [];
+            try {
+                if (!isset($stripeIntent)) {
+                    \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+                    $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId']);
+                }
+
+                $charge = $stripeIntent->latest_charge
+                    ? \Stripe\Charge::retrieve($stripeIntent->latest_charge)
+                    : null;
+
+                if ($charge && $charge->outcome) {
+                    $riskData = [
+                        'risk_score' => $charge->outcome->risk_score ?? null,
+                        'risk_level' => $charge->outcome->risk_level ?? null,
+                    ];
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Could not fetch Stripe risk data: ' . $e->getMessage());
+            }
+
             Payment::create(array_merge([
                 'order_id'           => $orders[0]->id,
                 'stripe_session_id'  => $validated['paymentIntentId'],
@@ -1043,7 +1063,7 @@ class OrderController extends Controller
                 $order->load('items.product.images', 'billingInformation', 'customer');
             }
 
-            // ===================== SEND ORDER EMAIL (SAME AS ORIGINAL) =====================
+            // ===================== SEND ORDER EMAIL =====================
             try {
                 foreach ($orders as $ord) {
                     $ord->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
