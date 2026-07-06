@@ -30,16 +30,11 @@ class OrderPlacedMail extends Mailable
         $logo = Logo::where('store_id', $sid)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;
 
-        $storeUrls = [
-            4  => 'https://new-town-spares.vercel.app',
-            10 => 'https://server-blink.vercel.app',
-        ];
-
-        if ($this->store && !empty($this->store->base_url)) {
-            $this->storePath = rtrim($this->store->base_url, '/');
-        } else {
-            $this->storePath = $storeUrls[$sid] ?? 'https://server-blink.vercel.app';
+        if (!$this->store || empty($this->store->base_url)) {
+            throw new \Exception('Store URL not found.');
         }
+
+        $this->storePath = rtrim($this->store->base_url, '/');
     }
 
     public function build()
