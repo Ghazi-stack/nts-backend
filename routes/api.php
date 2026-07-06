@@ -490,7 +490,7 @@ Route::prefix('web')->group(function () {
     });
     Route::prefix('orders')->controller(OrderController::class)->group(function () {
         Route::post('/place-order', 'store');
-          Route::get('/order/detail/{orderId}','detail'); 
+        Route::get('/order-detail/{orderId}','detail'); 
         Route::post('/track-order', 'trackOrder');
         Route::post('/add-notes/{orderId}', 'addOrderNote');
         Route::get('/my-orders-list', 'myOrdersList');

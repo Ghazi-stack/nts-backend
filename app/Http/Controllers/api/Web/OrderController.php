@@ -199,35 +199,6 @@ class OrderController extends Controller
                         'updatedAt' => $order->customer->updated_at,
                     ] : null,
 
-                    'billingInformation' => $order->billingInformation ? [
-                        'id' => $order->billingInformation->id,
-                        'storeId' => $order->billingInformation->store_id,
-                        'customerId' => $order->billingInformation->customer_id,
-                        'firstName' => $order->billingInformation->first_name,
-                        'lastName' => $order->billingInformation->last_name,
-                        'companyName' => $order->billingInformation->company_name,
-                        'email' => $order->billingInformation->email,
-                        'phone' => $order->billingInformation->phone,
-                        'addressLine1' => $order->billingInformation->address_line_1,
-                        'addressLine2' => $order->billingInformation->address_line_2,
-                        'city' => $order->billingInformation->city,
-                        'state' => $order->billingInformation->state,
-                        'zip' => $order->billingInformation->zip,
-                        'country' => $order->billingInformation->country,
-                        'paymentMethod' => $order->billingInformation->payment_method,
-                        'shippingMethod' => $order->billingInformation->shipping_method,
-                    ] : null,
-
-                    'payment' => $order->payment ? [
-                        'id' => $order->payment->id,
-                        'paymentIntentId' => $order->payment->stripe_session_id,
-                        'paymentStatus' => $order->payment->payment_status,
-                        'amount' => $order->payment->amount,
-                        'discountAmount' => $order->payment->discountAmount,
-                        'riskScore' => $order->payment->risk_score,
-                        'riskLevel' => $order->payment->risk_level,
-                    ] : null,
-
                     'products' => $order->items->map(function ($item) {
 
                         if (!$item->product) {
