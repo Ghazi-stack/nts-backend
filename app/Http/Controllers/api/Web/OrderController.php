@@ -130,7 +130,7 @@ class OrderController extends Controller
         try {
 
             $request->validate([
-                'orderId' => 'required'
+                'orderId' => 'required|string',
             ]);
 
             $storeId = current_store_id();
@@ -147,12 +147,12 @@ class OrderController extends Controller
                 'items.product.brand',
                 'customer',
                 'billingInformation',
-                'payment'
+                'payment',
             ])
                 ->withCount('messages')
                 ->where('store_id', $storeId)
                 ->where('is_draft', 0)
-                ->where('id', $request->orderId)
+                ->where('order_number', $request->orderId)
                 ->first();
 
             if (!$order) {
@@ -188,8 +188,8 @@ class OrderController extends Controller
                         'customerGroup' => $order->customer->customer_group,
                         'phone' => $order->customer->phone,
                         'storeCredit' => $order->customer->store_credit,
-                        'receiveReviewEmails' => (bool)$order->customer->receive_review_emails,
-                        'forcePasswordReset' => (bool)$order->customer->force_password_reset,
+                        'receiveReviewEmails' => (bool) $order->customer->receive_review_emails,
+                        'forcePasswordReset' => (bool) $order->customer->force_password_reset,
                         'taxExemptCode' => $order->customer->tax_exempt_code,
                         'country' => $order->customer->country,
                         'addressLine1' => $order->customer->address_line_1,
@@ -215,8 +215,7 @@ class OrderController extends Controller
                         ];
                     })->filter()->values(),
 
-                ]
-
+                ],
             ]);
         } catch (Exception $e) {
 
