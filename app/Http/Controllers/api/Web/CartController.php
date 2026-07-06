@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
 use Exception;
+use Illuminate\Support\Facades\Validator;
 
 class CartController extends Controller
 {
@@ -543,6 +544,64 @@ class CartController extends Controller
             return response()->json([
                 'status'  => false,
                 'message' => 'Failed to fetch shipping rate.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+    public function removeProduct(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
+            [$user, $sessionId] = $this->resolveIdentity($request);
+
+            if (!$user && !$sessionId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'X-Session-ID header required for guest users.',
+                ], 422);
+            }
+
+            $validator = Validator::make($request->all(), [
+                'product_id' => 'required|integer|exists:products,id',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => $validator->errors()->first(),
+                ], 422);
+            }
+
+            $deletedCount = $this->cartQuery($user, $sessionId, $storeId)
+                ->where('product_id', $request->product_id)
+                ->delete();
+
+            if ($deletedCount == 0) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'No matching cart items found.',
+                ], 404);
+            }
+
+            return response()->json([
+                'status'        => true,
+                'message'       => 'Cart items deleted successfully.',
+                'deleted_count' => $deletedCount,
+            ], 200);
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong while deleting cart items.',
                 'error'   => $e->getMessage(),
             ], 500);
         }
