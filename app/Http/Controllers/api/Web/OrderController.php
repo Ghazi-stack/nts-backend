@@ -123,7 +123,7 @@ class OrderController extends Controller
             ], 500);
         }
     }
-    
+
     public function show(Request $request, $id)
     {
         try {
@@ -1047,7 +1047,7 @@ class OrderController extends Controller
                     ];
                 }
             } catch (\Exception $e) {
-                \Log::warning('Could not fetch Stripe risk data: ' . $e->getMessage());
+                Log::warning('Could not fetch Stripe risk data: ' . $e->getMessage());
             }
 
             Payment::create(array_merge([
@@ -1058,16 +1058,14 @@ class OrderController extends Controller
                 'payment_status'     => 'authorized',
             ], $riskData));
 
-            // Response
+            // ===================== LOAD RELATIONS FOR RESPONSE + EMAIL =====================
             foreach ($orders as $order) {
-                $order->load('items.product.images', 'billingInformation', 'customer');
+                $order->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
             }
 
             // ===================== SEND ORDER EMAIL =====================
             try {
                 foreach ($orders as $ord) {
-                    $ord->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
-
                     // Email to customer
                     Mail::to($validated['email'])->send(new OrderPlacedMail($ord, $customer, $storeId));
 
@@ -1077,7 +1075,11 @@ class OrderController extends Controller
                 }
             } catch (\Exception $mailError) {
                 Log::error('ORDER EMAIL FAILED', [
-                    'error' => $mailError->getMessage(),
+                    'error'   => $mailError->getMessage(),
+                    'line'    => $mailError->getLine(),
+                    'file'    => $mailError->getFile(),
+                    'email'   => $validated['email'],
+                    'order'   => $orders[0]->order_number ?? null,
                 ]);
             }
 
