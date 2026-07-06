@@ -467,7 +467,7 @@ Route::prefix('web')->group(function () {
     });
     // 🛒 Cart (Guest + Auth dono)
     Route::prefix('cart')->controller(CartController::class)->group(function () {
-        Route::get('/list',           'index');       // GET   - Cart list dekho
+        Route::get('/list',           'index');       // GET   - Cart list dekho     
         Route::post('/add-cart',      'storeCart');   // POST  - Item add karo
         Route::put('/update/{id}',    'updateCart');  // PUT   - Quantity set karo
         Route::delete('/delete/{id}', 'destroyCart');
@@ -490,6 +490,7 @@ Route::prefix('web')->group(function () {
     });
     Route::prefix('orders')->controller(OrderController::class)->group(function () {
         Route::post('/place-order', 'store');
+          Route::get('/order/detail/{orderId}','detail'); 
         Route::post('/track-order', 'trackOrder');
         Route::post('/add-notes/{orderId}', 'addOrderNote');
         Route::get('/my-orders-list', 'myOrdersList');

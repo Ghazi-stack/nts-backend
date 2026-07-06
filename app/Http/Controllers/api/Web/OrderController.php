@@ -124,6 +124,138 @@ class OrderController extends Controller
         }
     }
 
+
+    public function detail(Request $request)
+    {
+        try {
+
+            $request->validate([
+                'orderId' => 'required'
+            ]);
+
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not found or unauthorized.',
+                ], 403);
+            }
+
+            $order = Order::with([
+                'items.product.images',
+                'items.product.brand',
+                'customer',
+                'billingInformation',
+                'payment'
+            ])
+                ->withCount('messages')
+                ->where('store_id', $storeId)
+                ->where('is_draft', 0)
+                ->where('id', $request->orderId)
+                ->first();
+
+            if (!$order) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Order not found.',
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Order retrieved successfully.',
+                'data' => [
+
+                    'id' => $order->id,
+                    'orderNumber' => $order->order_number,
+                    'status' => $order->status,
+                    'shippingCost' => $order->shipping_cost,
+                    'staffNotes' => $order->staff_notes,
+                    'trackingNumber' => $order->tracking_number,
+                    'shippedAt' => $order->shipped_at,
+                    'totalAmount' => $order->total_amount,
+                    'createdAt' => $order->created_at,
+                    'updatedAt' => $order->updated_at,
+
+                    'customer' => $order->customer ? [
+                        'id' => $order->customer->id,
+                        'storeId' => $order->customer->store_id,
+                        'firstName' => $order->customer->first_name,
+                        'lastName' => $order->customer->last_name,
+                        'companyName' => $order->customer->company_name,
+                        'email' => $order->customer->email,
+                        'customerGroup' => $order->customer->customer_group,
+                        'phone' => $order->customer->phone,
+                        'storeCredit' => $order->customer->store_credit,
+                        'receiveReviewEmails' => (bool)$order->customer->receive_review_emails,
+                        'forcePasswordReset' => (bool)$order->customer->force_password_reset,
+                        'taxExemptCode' => $order->customer->tax_exempt_code,
+                        'country' => $order->customer->country,
+                        'addressLine1' => $order->customer->address_line_1,
+                        'addressLine2' => $order->customer->address_line_2,
+                        'state' => $order->customer->state,
+                        'createdAt' => $order->customer->created_at,
+                        'updatedAt' => $order->customer->updated_at,
+                    ] : null,
+
+                    'billingInformation' => $order->billingInformation ? [
+                        'id' => $order->billingInformation->id,
+                        'storeId' => $order->billingInformation->store_id,
+                        'customerId' => $order->billingInformation->customer_id,
+                        'firstName' => $order->billingInformation->first_name,
+                        'lastName' => $order->billingInformation->last_name,
+                        'companyName' => $order->billingInformation->company_name,
+                        'email' => $order->billingInformation->email,
+                        'phone' => $order->billingInformation->phone,
+                        'addressLine1' => $order->billingInformation->address_line_1,
+                        'addressLine2' => $order->billingInformation->address_line_2,
+                        'city' => $order->billingInformation->city,
+                        'state' => $order->billingInformation->state,
+                        'zip' => $order->billingInformation->zip,
+                        'country' => $order->billingInformation->country,
+                        'paymentMethod' => $order->billingInformation->payment_method,
+                        'shippingMethod' => $order->billingInformation->shipping_method,
+                    ] : null,
+
+                    'payment' => $order->payment ? [
+                        'id' => $order->payment->id,
+                        'paymentIntentId' => $order->payment->stripe_session_id,
+                        'paymentStatus' => $order->payment->payment_status,
+                        'amount' => $order->payment->amount,
+                        'discountAmount' => $order->payment->discountAmount,
+                        'riskScore' => $order->payment->risk_score,
+                        'riskLevel' => $order->payment->risk_level,
+                    ] : null,
+
+                    'products' => $order->items->map(function ($item) {
+
+                        if (!$item->product) {
+                            return null;
+                        }
+
+                        return [
+                            'id' => $item->product->id,
+                            'name' => $item->product->name,
+                            'sku' => $item->product->sku,
+                            'price' => $item->price,
+                            'quantity' => $item->quantity,
+                            'image' => optional($item->product->images->first())->path,
+                        ];
+                    })->filter()->values(),
+
+                ]
+
+            ]);
+        } catch (Exception $e) {
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve order.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
     public function show(Request $request, $id)
     {
         try {
