@@ -628,4 +628,56 @@ class CartController extends Controller
             ], 500);
         }
     }
+
+    public function removeShippingRate(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
+            [$user, $sessionId] = $this->resolveIdentity($request);
+
+            if (!$user && !$sessionId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'X-Session-ID header required for guest users.',
+                ], 422);
+            }
+
+            $query = CartShippingRate::where('store_id', $storeId);
+
+            if ($user) {
+                $query->where('user_id', $user->id);
+            } else {
+                $query->where('session_id', $sessionId);
+            }
+
+            $deletedCount = $query->delete();
+
+            if ($deletedCount == 0) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'No shipping rate record found.',
+                ], 404);
+            }
+
+            return response()->json([
+                'status'        => true,
+                'message'       => 'Shipping rate record deleted successfully.',
+                'deleted_count' => $deletedCount,
+            ], 200);
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong while deleting shipping rate.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
