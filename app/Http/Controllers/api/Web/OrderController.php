@@ -145,15 +145,15 @@ class OrderController extends Controller
 
             $order = Order::with([
                 'items.product.images',
-               // 'items.product.brand',
-                //'items.product.categories.parent',
-                //'items.product.content',
-                //'items.product.seo',
-               // 'items.product.identifiers',
+               'items.product.brand',
+                'items.product.categories.parent',
+                'items.product.content',
+                'items.product.seo',
+               'items.product.identifiers',
                 'items.product.reviews.user',
                 'customer',
-               // 'billingInformation',
-                //'payment',
+               'billingInformation',
+                'payment',
             ])
                 ->withCount('messages')
                 ->where('store_id', $storeId)
