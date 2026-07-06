@@ -1072,7 +1072,7 @@ class OrderController extends Controller
                     Mail::to($validated['email'])->send(new OrderPlacedMail($ord, $customer, $storeId));
 
                     // Email to admin
-                    $adminEmail = env('MAIL_ADMIN_ADDRESS', 'info@serverblink.uk');
+                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
                     Mail::to($adminEmail)->send(new OrderPlacedMail($ord, $customer, $storeId));
                 }
             } catch (\Exception $mailError) {
