@@ -30,6 +30,7 @@ use App\Http\Resources\ProductResource;
 use App\Http\Resources\ProductListResource;
 use App\Http\Resources\CustomerResource;
 use App\Http\Resources\ShipmentResource;
+use Illuminate\Support\Facades\Storage;
 use App\Http\Resources\OrderNoteResource;
 use App\Models\SavedAddress;
 use App\Http\Resources\ReturnRequestResource;
@@ -205,13 +206,24 @@ class OrderController extends Controller
                             return null;
                         }
 
+                        $primaryImage = $item->product->images->first();
+
                         return [
                             'id' => $item->product->id,
                             'name' => $item->product->name,
                             'sku' => $item->product->sku,
                             'price' => $item->price,
                             'quantity' => $item->quantity,
-                            'image' => optional($item->product->images->first())->path,
+
+                            'image' => $primaryImage ? [
+                                'path' => Storage::disk('s3')->url($primaryImage->path),
+                                'url' => $primaryImage->url ?? Storage::disk('s3')->url($primaryImage->path),
+                                'isPrimary' => (bool) $primaryImage->is_primary,
+                                'store_id' => $primaryImage->store_id,
+                                'altText' => $primaryImage->alt_text,
+                                'description' => $primaryImage->description,
+                            ] : null,
+
                         ];
                     })->filter()->values(),
 
