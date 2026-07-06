@@ -1047,7 +1047,7 @@ class OrderController extends Controller
                     ];
                 }
             } catch (\Exception $e) {
-                Log::warning('Could not fetch Stripe risk data: ' . $e->getMessage());
+                \Log::warning('Could not fetch Stripe risk data: ' . $e->getMessage());
             }
 
             Payment::create(array_merge([
@@ -1058,13 +1058,12 @@ class OrderController extends Controller
                 'payment_status'     => 'authorized',
             ], $riskData));
 
-            // ===================== LOAD RELATIONS FOR RESPONSE + EMAIL =====================
+            // Response
             foreach ($orders as $order) {
-                $order->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
+                $order->load('items.product.images', 'billingInformation', 'customer');
             }
 
-           
-               // ===================== SEND ORDER EMAIL =====================
+            // ===================== SEND ORDER EMAIL =====================
             try {
                 foreach ($orders as $ord) {
                     $ord->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
