@@ -41,11 +41,14 @@ class CustomerAddressController extends Controller
             ->latest()
             ->get();
 
+        // Customer data + addresses merge
+        $customerData = $customer ? (new CustomerResource($customer))->resolve() : [];
+        $customerData['addresses'] = $customerAddresses;
+
         return response()->json([
             'status' => true,
             'data' => [
-                'user' => $customer ? new CustomerResource($customer) : null,
-                'customer_addresses' => $customerAddresses,
+                'customer_addresses' => $customerData,
                 'saved_addresses' => $savedAddresses,
             ]
         ]);
