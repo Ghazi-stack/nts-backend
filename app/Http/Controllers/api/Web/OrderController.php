@@ -32,6 +32,7 @@ use App\Http\Resources\CustomerResource;
 use App\Http\Resources\ShipmentResource;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Resources\OrderNoteResource;
+use App\Mail\OrderStatusUpdatedMail;
 use App\Models\SavedAddress;
 use App\Http\Resources\ReturnRequestResource;
 use App\Mail\OrderPlacedMail;
@@ -145,14 +146,14 @@ class OrderController extends Controller
 
             $order = Order::with([
                 'items.product.images',
-               'items.product.brand',
+                'items.product.brand',
                 'items.product.categories.parent',
                 'items.product.content',
                 'items.product.seo',
-               'items.product.identifiers',
+                'items.product.identifiers',
                 'items.product.reviews.user',
                 'customer',
-               'billingInformation',
+                'billingInformation',
                 'payment',
             ])
                 ->withCount('messages')
@@ -1465,11 +1466,9 @@ class OrderController extends Controller
                         $intent = \Stripe\PaymentIntent::retrieve($payment->stripe_session_id);
 
                         if ($intent->status === 'requires_capture') {
-                            // Payment abhi hold mein hai — cancel karo (paise release)
                             $intent->cancel();
                             $payment->update(['payment_status' => 'cancelled']);
                         } elseif ($intent->status === 'succeeded') {
-                            // Payment already capture ho chuki hai — refund karo
                             \Stripe\Refund::create([
                                 'payment_intent' => $payment->stripe_session_id,
                             ]);
@@ -1482,6 +1481,33 @@ class OrderController extends Controller
                             'error' => $stripeError->getMessage(),
                         ]);
                     }
+                }
+            }
+
+            // ===================== SEND STATUS UPDATE EMAIL =====================
+            $order->load('billingInformation', 'customer');
+
+            $customerEmail = $order->billingInformation->email
+                ?? $order->customer->email
+                ?? null;
+
+            $storeId = current_store_id();
+
+            if ($customerEmail) {
+                try {
+                    // Email to customer
+                    Mail::to($customerEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId));
+
+                    // Email to admin
+                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
+                    Mail::to($adminEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId));
+                } catch (\Exception $mailError) {
+                    Log::error('ORDER STATUS EMAIL FAILED', [
+                        'error'   => $mailError->getMessage(),
+                        'order'   => $order->order_number,
+                        'status'  => $newStatus,
+                        'email'   => $customerEmail,
+                    ]);
                 }
             }
 
