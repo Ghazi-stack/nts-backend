@@ -41,7 +41,26 @@ class CustomerAddressController extends Controller
             ->latest()
             ->get();
 
-        $customerData = $customer ? (new CustomerResource($customer))->resolve() : [];
+        $customerData = $customer ? [
+            'id'                    => $customer->id,
+            'store_id'              => $customer->store_id,
+            'first_name'            => $customer->first_name,
+            'last_name'             => $customer->last_name,
+            'company_name'          => $customer->company_name,
+            'email'                 => $customer->email,
+            'customer_group'        => $customer->customer_group,
+            'phone'                 => $customer->phone,
+            'store_credit'          => $customer->store_credit,
+            'receive_review_emails' => (bool) $customer->receive_review_emails,
+            'force_password_reset'  => (bool) $customer->force_password_reset,
+            'tax_exempt_code'       => $customer->tax_exempt_code,
+            'country'               => $customer->country,
+            'address_line_1'        => $customer->address,
+            'address_line_2'        => $customer->address_line_2,
+            'state'                 => $customer->state,
+            'created_at'            => $customer->created_at?->toDateTimeString(),
+            'updated_at'            => $customer->updated_at?->toDateTimeString(),
+        ] : [];
 
         $result = [];
 
@@ -49,7 +68,24 @@ class CustomerAddressController extends Controller
         foreach ($customerAddresses as $address) {
             $data = $customerData;
             $data['type'] = 'customer_address';
-            $data['addresses'] = [$address];
+            $data['addresses'] = [[
+                'id'             => $address->id,
+                'store_id'       => $address->store_id,
+                'customer_id'    => $address->customer_id,
+                'first_name'     => $address->first_name,
+                'last_name'      => $address->last_name,
+                'company_name'   => $address->company_name,
+                'phone_number'   => $address->phone_number,
+                'address_line_1' => $address->address_line_1,
+                'address_line_2' => $address->address_line_2,
+                'city'           => $address->city,
+                'state'          => $address->state,
+                'zip'            => $address->zip,
+                'country'        => $address->country,
+                'is_default'     => (bool) $address->is_default,
+                'created_at'     => $address->created_at?->toDateTimeString(),
+                'updated_at'     => $address->updated_at?->toDateTimeString(),
+            ]];
             $result[] = $data;
         }
 
