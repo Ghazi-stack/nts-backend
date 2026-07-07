@@ -495,7 +495,7 @@
                             </table>
 
                             <!-- Billing Address -->
-                            @if($order->billingInformation)
+                            <!-- @if($order->billingInformation)
                             <table class="row">
                                 <tr>
                                     <th class="column">
@@ -533,7 +533,7 @@
                                     </th>
                                 </tr>
                             </table>
-                            @endif
+                            @endif -->
 
                             <table class="spacer spacer--32">
                                 <tr>

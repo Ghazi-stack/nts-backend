@@ -30,30 +30,27 @@ class OrderStatusUpdatedMail extends Mailable
         $logo = Logo::where('store_id', $sid)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;
 
-        $storeUrls = [
-            4  => 'https://new-town-spares.vercel.app',
-            10 => 'https://server-blink.vercel.app',
-        ];
-
-        if ($this->store && !empty($this->store->base_url)) {
-            $this->storePath = rtrim($this->store->base_url, '/');
-        } else {
-            $this->storePath = $storeUrls[$sid] ?? 'https://server-blink.vercel.app';
+        if (!$this->store || empty($this->store->base_url)) {
+            throw new \Exception('Store URL not found.');
         }
+
+        $this->storePath = rtrim($this->store->base_url, '/');
     }
 
     public function build()
     {
         $orderNumber = $this->order->order_number ?? '';
 
-        return $this->subject('Order #' . $orderNumber . ' Status Updated to ' . $this->newStatus . ' - ' . ($this->store?->name ?? 'Store'))
+        return $this->subject(
+            'Order #' . $orderNumber . ' Status Updated to ' . $this->newStatus . ' - ' . ($this->store?->name ?? 'Store')
+        )
             ->view('emails.order-status-updated')
             ->with([
-                'order'     => $this->order,
-                'newStatus' => $this->newStatus,
-                'logoUrl'   => $this->logoUrl,
-                'storePath' => $this->storePath,
-                'store'     => $this->store,
+                'order'      => $this->order,
+                'newStatus'  => $this->newStatus,
+                'logoUrl'    => $this->logoUrl,
+                'storePath'  => $this->storePath,
+                'store'      => $this->store,
             ]);
     }
 }
