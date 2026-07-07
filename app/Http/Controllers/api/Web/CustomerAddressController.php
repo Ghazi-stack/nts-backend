@@ -41,19 +41,36 @@ class CustomerAddressController extends Controller
             ->latest()
             ->get();
 
-        // Customer data + addresses merge
         $customerData = $customer ? (new CustomerResource($customer))->resolve() : [];
-        $customerData['addresses'] = $customerAddresses;
+
+        $result = [];
+
+        // Customer addresses
+        foreach ($customerAddresses as $address) {
+            $data = $customerData;
+            $data['type'] = 'customer_address';
+            $data['addresses'] = [$address];
+            $result[] = $data;
+        }
+
+        // Saved addresses
+        foreach ($savedAddresses as $saved) {
+            $data = $customerData;
+            $data['type'] = 'saved_address';
+            $data['order_id'] = $saved->order_id;
+            $data['saved_address_id'] = $saved->id;
+            $data['shipping_address'] = $saved->shipping_address;
+            $data['billing_address'] = $saved->billing_address;
+            $result[] = $data;
+        }
 
         return response()->json([
             'status' => true,
             'data' => [
-                'customer_addresses' => $customerData,
-                'saved_addresses' => $savedAddresses,
+                'customer_addresses' => $result,
             ]
         ]);
     }
-
     /**
      * Single Address
      */
