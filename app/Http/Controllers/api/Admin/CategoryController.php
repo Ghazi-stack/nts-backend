@@ -90,6 +90,7 @@ class CategoryController extends Controller
             'id' => $category->id,
             'name' => $category->name,
             'slug' => $category->slug,
+            'image' => $category->image,
             'description' => $category->description,
             'is_visible' => $category->is_visible,
             'parent_id' => $category->parent_id,
