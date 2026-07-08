@@ -11,7 +11,6 @@ use App\Http\Resources\ProductResource;
 use App\Http\Resources\CategoryResource;
 use App\Http\Resources\PopularProductResource;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 
@@ -91,7 +90,8 @@ class CategoryController extends Controller
             'id' => $category->id,
             'name' => $category->name,
             'slug' => $category->slug,
-           'image' => $category->image ? Storage::disk('s3')->url($category->image) : null,
+            'image' => $category->image ? url($category->image) : null,
+            //  'image' => $category->image ? Storage::disk('s3')->url($category->image) : null,
             'description' => $category->description,
             'is_visible' => $category->is_visible,
             'parent_id' => $category->parent_id,
