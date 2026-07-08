@@ -7,17 +7,28 @@ use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Illuminate\Support\Facades\DB;
 
 class ProductExport implements FromQuery, WithHeadings, WithMapping, WithChunkReading
 {
     protected $storeId;
+    protected $maxImages;
 
     public function __construct($storeId)
     {
         $this->storeId = $storeId;
+
+        // Max images count nikalo across all products
+        $this->maxImages = DB::table('product_images')
+            ->join('products', 'products.id', '=', 'product_images.product_id')
+            ->where('products.store_id', $storeId)
+            ->select('product_id', DB::raw('COUNT(*) as img_count'))
+            ->groupBy('product_id')
+            ->orderByDesc('img_count')
+            ->limit(1)
+            ->value('img_count') ?? 1;
     }
 
-    // ✅ Process 100 records at a time — prevents memory crash
     public function chunkSize(): int
     {
         return 100;
@@ -32,18 +43,15 @@ class ProductExport implements FromQuery, WithHeadings, WithMapping, WithChunkRe
             'content:id,product_id,description,warranty,availability_text',
             'identifiers:id,product_id,mpn,gtin,upc,bpn',
             'seo:id,product_id,page_title,product_url,meta_description,meta_keywords,redirect_old_url',
-            'images:id,product_id,path,is_primary',
+            'images:id,product_id,path,url,is_primary,alt_text,store_id',
         ])
-        ->where('store_id', $this->storeId)
-        ->orderBy('id', 'desc');
+            ->where('store_id', $this->storeId)
+            ->orderBy('id', 'desc');
     }
 
     public function map($product): array
     {
         try {
-            $primaryImage = $product->images->firstWhere('is_primary', true)
-                         ?? $product->images->first();
-
             $dimensions = is_array($product->dimensions)
                 ? $product->dimensions
                 : (json_decode($product->dimensions, true) ?? []);
@@ -52,7 +60,7 @@ class ProductExport implements FromQuery, WithHeadings, WithMapping, WithChunkRe
                 ? $product->custom_fields
                 : (json_decode($product->custom_fields, true) ?? []);
 
-            return [
+            $row = [
                 $product->item_type ?? '',
                 $product->id ?? '',
                 $product->name ?? '',
@@ -91,7 +99,6 @@ class ProductExport implements FromQuery, WithHeadings, WithMapping, WithChunkRe
                 $product->current_stock ?? '',
                 $product->low_stock ?? '',
                 $this->formatCustomFields($customFields),
-                $primaryImage->path ?? '',
                 $this->boolOut($product->visible_on_storefront),
                 $product->sort_order ?? '',
                 $product->search_keywords ?? '',
@@ -100,15 +107,28 @@ class ProductExport implements FromQuery, WithHeadings, WithMapping, WithChunkRe
                 $this->boolOut($product->stop_processing_rules),
             ];
 
+            // Dynamic image columns
+            $images = $product->images->sortByDesc('is_primary')->values();
+
+            for ($i = 0; $i < $this->maxImages; $i++) {
+                $img = $images[$i] ?? null;
+                $row[] = $img ? $img->path : '';           // Product Image File
+                $row[] = $img ? ($img->alt_text ?? '') : '';  // Product Image Description
+                $row[] = $img ? $this->boolOut($img->is_primary) : '';  // Product Image Is Thumbnail
+                $row[] = $i + 1;                            // Product Image Sort
+            }
+
+            return $row;
         } catch (\Throwable $e) {
             \Log::error('ProductExport map error — product ' . $product->id . ': ' . $e->getMessage());
-            return array_fill(0, 45, '');
+            $totalCols = 44 + ($this->maxImages * 4);
+            return array_fill(0, $totalCols, '');
         }
     }
 
     public function headings(): array
     {
-        return [
+        $headings = [
             'Item Type',
             'Product ID',
             'Product Name',
@@ -147,7 +167,6 @@ class ProductExport implements FromQuery, WithHeadings, WithMapping, WithChunkRe
             'Current Stock Level',
             'Low Stock Level',
             'Product Custom Fields',
-            'Product Image File - 1',
             'Product Visible?',
             'Sort Order',
             'Search Keywords',
@@ -155,6 +174,16 @@ class ProductExport implements FromQuery, WithHeadings, WithMapping, WithChunkRe
             'Tax Provider Tax Code',
             'Stop Processing Rules',
         ];
+
+        // Dynamic image headings
+        for ($i = 1; $i <= $this->maxImages; $i++) {
+            $headings[] = "Product Image File - {$i}";
+            $headings[] = "Product Image Description - {$i}";
+            $headings[] = "Product Image Is Thumbnail - {$i}";
+            $headings[] = "Product Image Sort - {$i}";
+        }
+
+        return $headings;
     }
 
     private function boolOut($val): string
