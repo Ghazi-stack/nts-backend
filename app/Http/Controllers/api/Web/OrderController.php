@@ -746,6 +746,7 @@ class OrderController extends Controller
     //     }
     // }
 
+
     public function store(Request $request)
     {
         try {
@@ -983,6 +984,9 @@ class OrderController extends Controller
                             'quantity'   => $item['quantity'],
                             'price'      => $product->price,
                         ]);
+
+                        // ── Stock Decrease ──
+                        $product->decrement('current_stock', $item['quantity']);
                     }
                 }
 
@@ -1043,6 +1047,9 @@ class OrderController extends Controller
                                 'quantity'   => $item['quantity'],
                                 'price'      => $product->price,
                             ]);
+
+                            // ── Stock Decrease ──
+                            $product->decrement('current_stock', $item['quantity']);
                         }
                     }
 
