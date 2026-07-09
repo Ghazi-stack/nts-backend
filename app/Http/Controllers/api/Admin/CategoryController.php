@@ -11,6 +11,7 @@ use App\Http\Resources\ProductResource;
 use App\Http\Resources\CategoryResource;
 use App\Http\Resources\PopularProductResource;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 
@@ -299,7 +300,7 @@ class CategoryController extends Controller
                 'name'                => 'nullable|string|max:255',
                 'slug'                => 'nullable|string|max:255',
                 'description'         => 'nullable|string',
-                'parentId'            => 'nullable|integer',   // remove exists if you want zero checks
+                'parentId'            => 'nullable|integer',
                 'isVisible'           => 'nullable|boolean',
                 'channel'             => 'nullable|string|max:100',
 
@@ -343,25 +344,28 @@ class CategoryController extends Controller
             if ($request->exists('seoMetaDescription')) $data['seo_meta_description'] = $request->seoMetaDescription;
             if ($request->exists('seoSearchKeywords'))  $data['seo_search_keywords'] = $request->seoSearchKeywords;
 
-            // image (public)
+            // image (S3)
             if ($request->hasFile('image')) {
-                $destinationPath = public_path("category_images/{$storeId}");
-                if (!file_exists($destinationPath)) {
-                    mkdir($destinationPath, 0755, true);
-                }
+                $file = $request->file('image');
 
-                $original  = $request->file('image')->getClientOriginalName();
-                $safeName  = preg_replace('/[^A-Za-z0-9.\-_]/', '_', $original);
-                $imageName = time() . '_' . $safeName;
+                $name = Str::slug(
+                    pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)
+                );
+                $extension = $file->getClientOriginalExtension();
+                $fileName = time() . '_' . $name . '.' . $extension;
 
-                $request->file('image')->move($destinationPath, $imageName);
+                $path = Storage::disk('s3')->putFileAs(
+                    "category_images/{$storeId}",
+                    $file,
+                    $fileName
+                );
 
+                // Delete old image from S3
                 if (!empty($category->image)) {
-                    $old = public_path($category->image);
-                    if (file_exists($old)) @unlink($old);
+                    Storage::disk('s3')->delete($category->image);
                 }
 
-                $data['image'] = "category_images/{$storeId}/{$imageName}";
+                $data['image'] = $path;
             }
 
             if (!empty($data)) {
