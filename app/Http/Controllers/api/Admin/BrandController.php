@@ -135,14 +135,6 @@ class BrandController extends Controller
                 'name' => $request->name,
             ];
 
-            // if ($request->hasFile('logo')) {
-            //     $imageName = time() . '_' . preg_replace('/[^A-Za-z0-9.\-_]/', '_', $request->file('logo')->getClientOriginalName());
-            //     $request->file('logo')->move(public_path('brand_logos'), $imageName);
-            //     $data['logo'] = 'brand_logos/' . $imageName;
-            // }
-
-            // $brand = Brand::create($data);
-
             if ($request->hasFile('logo')) {
 
                 $file = $request->file('logo');
@@ -209,25 +201,10 @@ class BrandController extends Controller
                 'template_layout'   => $validated['templateLayout'] ?? $brand->template_layout,
             ]);
 
-            // ✅ Handle logo upload
-            // if ($request->hasFile('logo')) {
-            //     $this->deleteOldLogo($brand->logo);
-
-            //     $image = $request->file('logo');
-            //     $imageName = time() . '_' . preg_replace('/[^A-Za-z0-9.\-_]/', '_', $image->getClientOriginalName());
-            //     $image->move(public_path('brand_logos'), $imageName);
-            //     $brand->logo = 'brand_logos/' . $imageName;
-            // }
-
             if ($request->hasFile('logo')) {
 
-            // Delete old logo
-            if ($brand->logo) {
-                    $oldPath = parse_url($brand->logo, PHP_URL_PATH);
-                    $oldPath = ltrim($oldPath, '/');
-
-                    Storage::disk('s3')->delete($oldPath);
-                }
+                // Delete old logo from S3
+                $this->deleteOldLogoFromS3($brand->logo);
 
                 $file = $request->file('logo');
 
@@ -298,9 +275,8 @@ class BrandController extends Controller
             }
 
             foreach ($brands as $brand) {
-                if ($brand->logo && file_exists(public_path($brand->logo))) {
-                    unlink(public_path($brand->logo));
-                }
+                // Delete logo from S3
+                $this->deleteOldLogoFromS3($brand->logo);
                 $brand->delete();
             }
 
@@ -320,10 +296,15 @@ class BrandController extends Controller
     }
 
 
-    private function deleteOldLogo(?string $path): void
+    private function deleteOldLogoFromS3(?string $logoUrl): void
     {
-        if ($path && file_exists(public_path($path))) {
-            @unlink(public_path($path));
+        if (!$logoUrl) return;
+
+        $path = parse_url($logoUrl, PHP_URL_PATH);
+        $path = ltrim($path, '/');
+
+        if ($path) {
+            Storage::disk('s3')->delete($path);
         }
     }
 }
