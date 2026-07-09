@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use Illuminate\Http\Request;
 use App\Http\Resources\ProductResource;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Storage;
 
 class CategoryResource extends JsonResource
 {
@@ -27,7 +28,7 @@ class CategoryResource extends JsonResource
             'parent_id' => $this->parent_id,
 
               // NEW fields (no imageUrl accessor, as requested)
-            'image'           => $this->image ? url($this->image) : null, 
+            'image' => $this->image ? Storage::disk('s3')->url($this->image) : null,
             'seoHomeTitle'       => $this->seo_home_title,
             'seoMetakeywords'    => $this->seo_meta_keywords,
             'seoMetaDescription' => $this->seo_meta_description,
