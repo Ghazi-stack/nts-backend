@@ -229,13 +229,27 @@ class CartController extends Controller
                 ->where('id', $id)
                 ->firstOrFail();
 
+            $product = Product::find($cartItem->product_id);
+            $quantity = (int) $validated['quantity'];
+            $minQty = (int) $product->min_purchase_quantity;
+            $maxQty = (int) $product->max_purchase_quantity;
+
+            if ($minQty > 0 && $quantity < $minQty) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Minimum purchase quantity for this product is ' . $minQty . '.',
+                ], 422);
+            }
+
+            if ($maxQty > 0 && $quantity > $maxQty) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Maximum purchase quantity for this product is ' . $maxQty . '.',
+                ], 422);
+            }
+
             $cartItem->update(['quantity' => $validated['quantity']]);
 
-            // ─── Shipping Rate Cleanup ────────────────────────────────
-            // Quantity change hui → cart_shipping_rates mein check karo
-            // Agar is cart ID ka record hai to delete karo
-            // Kyunki quantity change hone se shipping recalculate hogi
-            // ─────────────────────────────────────────────────────────
             CartShippingRate::where('store_id', $storeId)
                 ->whereJsonContains('cart_ids', $cartItem->id)
                 ->delete();
