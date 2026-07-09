@@ -137,16 +137,33 @@ class CartController extends Controller
                 ], 422);
             }
 
+            $product = Product::find($validated['productId']);
+            $quantity = (int) $validated['quantity'];
+            $minQty = (int) $product->min_purchase_quantity;
+            $maxQty = (int) $product->max_purchase_quantity;
+
+            if ($minQty > 0 && $quantity < $minQty) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Minimum purchase quantity for this product is ' . $minQty . '.',
+                ], 422);
+            }
+
+            if ($maxQty > 0 && $quantity > $maxQty) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Maximum purchase quantity for this product is ' . $maxQty . '.',
+                ], 422);
+            }
+
             $existingCartItem = $this->cartQuery($user, $sessionId, $storeId)
                 ->where('product_id', $validated['productId'])
                 ->first();
 
             if ($existingCartItem) {
-                // Same product → quantity add karo (overwrite nahi)
                 $existingCartItem->increment('quantity', $validated['quantity']);
                 $cartItem = $existingCartItem->fresh();
             } else {
-                // Naya item
                 $cartItem = Cart::create([
                     'store_id'   => $storeId,
                     'user_id'    => $user?->id,
@@ -156,10 +173,6 @@ class CartController extends Controller
                 ]);
             }
 
-            // ─── Shipping Rate Cleanup ────────────────────────────────
-            // Naya item add ya quantity update hua → shipping recalculate hogi
-            // cart_shipping_rates mein is cart ID ka record hai to delete karo
-            // ─────────────────────────────────────────────────────────
             CartShippingRate::where('store_id', $storeId)
                 ->whereJsonContains('cart_ids', $cartItem->id)
                 ->delete();
