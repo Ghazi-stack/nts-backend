@@ -219,7 +219,7 @@ class ShipmentController extends Controller
             ->findOrFail($id);
 
         // Convert logo to base64
-        $logoPath = public_path('logo/nts-logo.png');
+        //$logoPath = public_path('logo/nts-logo.png');
         $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
 
         // Load PDF with view and pass base64 logo

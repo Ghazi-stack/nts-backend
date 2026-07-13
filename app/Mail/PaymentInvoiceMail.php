@@ -23,7 +23,7 @@ class PaymentInvoiceMail extends Mailable
 
     public function build()
     {
-        return $this->subject('Your Payment Invoice from Newtown Spares')
+        return $this->subject('Your Payment Invoice from Server Blink')
                     ->view('emails.payment_invoice')
                     ->with([
                         'order'       => $this->order,

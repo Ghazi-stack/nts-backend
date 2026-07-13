@@ -3355,12 +3355,12 @@ class OrderController extends Controller
             ->where('store_id', $storeId)
             ->findOrFail($id);
 
-        $logoPath  = public_path('logo/nts-logo.png');
-        $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+       // $logoPath  = public_path('logo/nts-logo.png');
+        // $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
 
         $pdf = Pdf::loadView('pdf.invoice', [
             'order'     => $order,
-            'logoBase64' => $logoBase64,
+            //'logoBase64' => $logoBase64,
         ]);
 
         return $pdf->download('invoice-' . $order->order_number . '.pdf');
@@ -3370,19 +3370,19 @@ class OrderController extends Controller
     {
         $order = Order::with(['items.product.images', 'billingInformation'])->findOrFail($orderId);
 
-        $logoPath  = public_path('logo/nts-logo.png');
-        $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+       // $logoPath  = public_path('logo/nts-logo.png');
+        // $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
 
         $pdf = Pdf::loadView('pdf.invoice', [
             'order'     => $order,
-            'logoBase64' => $logoBase64,
+            //'logoBase64' => $logoBase64,
         ]);
 
         // Use billing email
-        $email = optional($order->billingInformation)->email;
-        if ($email) {
-            Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64));
-        }
+        // $email = optional($order->billingInformation)->email;
+        // if ($email) {
+        //     Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64));
+        // }
 
         return response()->json(['message' => 'Invoice email sent successfully']);
     }
@@ -3394,18 +3394,18 @@ class OrderController extends Controller
                 ->where('store_id', current_store_id())
                 ->findOrFail($id);
 
-            $logoPath  = public_path('logo/nts-logo.png');
-            $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+           // $logoPath  = public_path('logo/nts-logo.png');
+           // $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
 
             $pdf = Pdf::loadView('pdf.invoice', [
                 'order'     => $order,
-                'logoBase64' => $logoBase64,
+               // 'logoBase64' => $logoBase64,
             ]);
 
-            $email = optional($order->billingInformation)->email;
-            if ($email) {
-                Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64));
-            }
+            // $email = optional($order->billingInformation)->email;
+            // if ($email) {
+            //     Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64));
+            // }
 
             return response()->json([
                 'status'  => true,

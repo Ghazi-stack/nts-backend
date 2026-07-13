@@ -15,7 +15,7 @@
           <tr bgcolor="white">
             <td align="center" style="padding: 20px;">
               <div style="background-color: white; padding: 10px 20px; display: inline-block; border-radius: 8px;">
-                <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/images/stencil/250x70/nts-newlogo_nts_1682517516__50628.original.png" alt="Newtown Spares Logo" width="180" />
+                <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/images/stencil/250x70/nts-newlogo_nts_1682517516__50628.original.png" alt="Logo" width="180" />
               </div>
             </td>
           </tr>
@@ -59,17 +59,17 @@
                 </tr>
               </table>
 
-              <p style="font-size: 14px; color: #555;">
+              <!-- <p style="font-size: 14px; color: #555;">
                 You will receive another update once your order is out for delivery.<br>
                 Thank you for shopping with <strong>Newtown Spares</strong>!
-              </p>
+              </p> -->
             </td>
           </tr>
 
           <!-- Footer -->
           <tr bgcolor="#f0f0f0">
             <td align="center" style="font-size: 13px; color: #777777; padding: 20px;">
-              &copy; {{ now()->year }} Newtown Spares. All rights reserved.
+              &copy; {{ now()->year }} . All rights reserved.
             </td>
           </tr>
 
