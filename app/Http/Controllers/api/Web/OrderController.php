@@ -1506,7 +1506,7 @@ class OrderController extends Controller
                     Mail::to($customerEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId));
 
                     // Email to admin
-                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
+                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
                     Mail::to($adminEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId));
                 } catch (\Exception $mailError) {
                     Log::error('ORDER STATUS EMAIL FAILED', [
