@@ -3317,7 +3317,7 @@ class OrderController extends Controller
             // ✅ Sorting
             $query->orderBy(
                 $request->input('sortBy', 'id'),
-                $request->input('sortDirection', 'asc')
+                $request->input('sortDirection', 'DESC')
             );
 
             // ✅ Pagination
