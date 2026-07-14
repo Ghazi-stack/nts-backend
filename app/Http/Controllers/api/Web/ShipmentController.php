@@ -12,6 +12,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Cache;
 use App\Models\Logo;
 use App\Http\Resources\ShipmentResource;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\ShipmentTrackingMail;
 
 class ShipmentController extends Controller
 {
@@ -164,25 +166,55 @@ class ShipmentController extends Controller
         $shipment = Shipment::where('store_id', $storeId)->findOrFail($id);
 
         $validated = $request->validate([
-            'shippedTo' => 'nullable|string|max:255',
-            'dateShipped' => 'nullable|date',
-            'shippingMethod' => 'nullable|string|max:255',
+            'shippedTo'       => 'nullable|string|max:255',
+            'dateShipped'     => 'nullable|date',
+            'shippingMethod'  => 'nullable|string|max:255',
             'trackingCarrier' => 'nullable|string|max:255',
-            'trackingId' => 'required|string|max:255',
+            'trackingId'      => 'required|string|max:255',
         ]);
 
         $shipment->update([
-            'shipped_to' => $validated['shippedTo'] ?? $shipment->shipped_to,
-            'date_shipped' => $validated['dateShipped'] ?? $shipment->date_shipped,
+            'shipped_to'      => $validated['shippedTo'] ?? $shipment->shipped_to,
+            'date_shipped'    => $validated['dateShipped'] ?? $shipment->date_shipped,
             'shipping_method' => $validated['shippingMethod'] ?? $shipment->shipping_method,
             'tracking_carrie' => $validated['trackingCarrier'] ?? $shipment->tracking_carrie,
-            'tracking_number' => $validated['trackingId'] ?? $shipment->tracking_number,
+            'tracking_number' => $validated['trackingId'],
         ]);
 
+        /*
+    |--------------------------------------------------------------------------
+    | Send Tracking Email To Customer
+    |--------------------------------------------------------------------------
+    */
+
+        try {
+
+            $order = Order::with('customer')
+                ->where('store_id', $storeId)
+                ->find($shipment->order_id);
+
+            if (
+                $order &&
+                $order->customer &&
+                !empty($order->customer->email)
+            ) {
+
+                Mail::to($order->customer->email)
+                    ->send(new ShipmentTrackingMail($order, $shipment));
+            }
+        } catch (\Exception $e) {
+
+            \Log::error('Shipment Tracking Email Failed', [
+                'shipment_id' => $shipment->id,
+                'order_id'    => $shipment->order_id,
+                'error'       => $e->getMessage(),
+            ]);
+        }
+
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Shipment updated.',
-            'data' => new ShipmentResource($shipment)
+            'data'    => new ShipmentResource($shipment)
         ]);
     }
 
