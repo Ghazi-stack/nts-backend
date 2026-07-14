@@ -3365,9 +3365,11 @@ class OrderController extends Controller
     {
         $storeId = current_store_id();
 
-        $order = Order::with(['items.product.images', 'billingInformation'])
+        $order = Order::with(['items.product.images', 'billingInformation', 'customer', 'payment'])
             ->where('store_id', $storeId)
             ->findOrFail($id);
+
+        $store = Store::find($storeId);
 
         // Dynamic logo from Logo table
         $logo = Logo::where('store_id', $storeId)->first();
@@ -3396,6 +3398,7 @@ class OrderController extends Controller
         $pdf = Pdf::loadView('pdf.invoice', [
             'order'      => $order,
             'logoBase64' => $logoBase64,
+            'store'      => $store,
         ]);
 
         return $pdf->download('invoice-' . $order->order_number . '.pdf');
@@ -3405,7 +3408,10 @@ class OrderController extends Controller
     {
         $storeId = current_store_id();
 
-        $order = Order::with(['items.product.images', 'billingInformation'])->findOrFail($orderId);
+        $order = Order::with(['items.product.images', 'billingInformation', 'customer', 'payment'])
+            ->findOrFail($orderId);
+
+        $store = Store::find($storeId);
 
         // Dynamic logo from Logo table
         $logo = Logo::where('store_id', $storeId)->first();
@@ -3434,6 +3440,7 @@ class OrderController extends Controller
         $pdf = Pdf::loadView('pdf.invoice', [
             'order'      => $order,
             'logoBase64' => $logoBase64,
+            'store'      => $store,
         ]);
 
         // Use billing email
