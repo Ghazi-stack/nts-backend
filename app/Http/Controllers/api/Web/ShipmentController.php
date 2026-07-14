@@ -250,9 +250,24 @@ class ShipmentController extends Controller
     {
         $storeId = current_store_id();
 
+        // Pehle shipment ID se dhundo, nahi mila to order ID se dhundo
         $shipment = Shipment::with(['order.items.product.identifiers', 'order.billingInformation'])
             ->where('store_id', $storeId)
-            ->findOrFail($id);
+            ->find($id);
+
+        if (!$shipment) {
+            $shipment = Shipment::with(['order.items.product.identifiers', 'order.billingInformation'])
+                ->where('store_id', $storeId)
+                ->where('order_id', $id)
+                ->first();
+        }
+
+        if (!$shipment) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'No shipment found for this ID. Please create a shipment first.',
+            ], 404);
+        }
 
         $store = Store::find($storeId);
 
