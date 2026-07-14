@@ -296,7 +296,15 @@
                                                 <th style="text-align: center;">
                                                     <a href="{{ $storePath }}" target="_blank">
                                                         @if($logoUrl)
-                                                        <img src="{{ $logoUrl }}" alt="{{ $store?->name ?? 'Store' }} Logo" width="300" height="150" style="display: block; margin: 0 auto; max-width: 300px; max-height: 150px; width: auto; height: auto;">
+                                                        <img src="{{ $logoUrl }}"
+                                                            alt="{{ $store?->name }}"
+                                                            style="display:block;
+            width:auto;
+            height:auto;
+            max-width:320px;
+            max-height:80px;
+            object-fit:contain;
+            margin:0 auto;">
                                                         @else
                                                         <span>{{ $store?->name ?? 'Our Store' }}</span>
                                                         @endif
