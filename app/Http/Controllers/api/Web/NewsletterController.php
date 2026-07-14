@@ -66,24 +66,24 @@ class NewsletterController extends Controller
 
         try {
 
-            // Customer Confirmation Email
+            // Customer Email
             Mail::to($newsletter->email)
                 ->send(new NewsletterSubscribedMail($newsletter));
 
-            // Admin Notification Email
+            // Admin Email
             $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
-
             Mail::to($adminEmail)
                 ->send(new NewsletterSubscribedMail($newsletter, true));
+                
         } catch (\Exception $e) {
 
-            Log::error('NEWSLETTER EMAIL FAILED', [
+            \Log::error('NEWSLETTER EMAIL FAILED', [
                 'newsletter_id' => $newsletter->id,
-                'email'         => $newsletter->email,
-                'error'         => $e->getMessage(),
+                'customer_email' => $newsletter->email,
+                'admin_email' => $adminEmail ?? null,
+                'error' => $e->getMessage(),
             ]);
         }
-
         return response()->json([
             'status'  => true,
             'message' => 'Email successfully subscribed!',
