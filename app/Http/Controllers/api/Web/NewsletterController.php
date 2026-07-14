@@ -71,7 +71,7 @@ class NewsletterController extends Controller
                 ->send(new NewsletterSubscribedMail($newsletter));
 
             // Admin Notification Email
-            $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
+            $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
 
             Mail::to($adminEmail)
                 ->send(new NewsletterSubscribedMail($newsletter, true));
