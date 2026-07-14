@@ -14,6 +14,7 @@ use App\Models\Logo;
 use App\Http\Resources\ShipmentResource;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\ShipmentTrackingMail;
+use App\Models\Store;
 
 class ShipmentController extends Controller
 {
@@ -249,9 +250,11 @@ class ShipmentController extends Controller
     {
         $storeId = current_store_id();
 
-        $shipment = Shipment::with(['order.items.product'])
+        $shipment = Shipment::with(['order.items.product.identifiers', 'order.billingInformation'])
             ->where('store_id', $storeId)
             ->findOrFail($id);
+
+        $store = Store::find($storeId);
 
         // Dynamic logo from Logo table
         $logo = Logo::where('store_id', $storeId)->first();
@@ -286,6 +289,7 @@ class ShipmentController extends Controller
             'shipment'   => $shipment,
             'order'      => $shipment->order,
             'logoBase64' => $logoBase64,
+            'store'      => $store,
         ]);
 
         return $pdf->download('packing-slip-' . $shipment->id . '.pdf');

@@ -3,205 +3,257 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Packing Slip</title>
+    <title>Packing Slip - {{ $order->order_number }}</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Segoe UI', sans-serif;
-            font-size: 13px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 11px;
             color: #333;
-            margin: 40px;
+            padding: 30px;
             background-color: #fff;
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .title {
-            font-size: 24px;
-            font-weight: bold;
-            margin-top: 10px;
-        }
-
-        .info-table {
-            width: 100%;
-            border: 1px solid #ddd;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-        }
-
-        .info-table td {
-            padding: 8px 10px;
-            border: 1px solid #ddd;
-        }
-
-        h3 {
-            margin-bottom: 10px;
-            font-size: 18px;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 5px;
-        }
-
-        .product-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .product-table th,
-        .product-table td {
-            padding: 10px;
-            border: 1px solid #ddd;
+        .logo-section {
             text-align: left;
-            vertical-align: middle;
+            margin-bottom: 5px;
+            padding-bottom: 8px;
+            border-bottom: 3px solid #000;
         }
 
-        .product-info {
-            display: flex;
-            align-items: center;
-            gap: 10px;
+        .logo-section img {
+            max-height: 55px;
+            max-width: 250px;
         }
 
-        .product-info img {
-            height: 40px;
-            width: auto;
-            /* border: 1px solid #ccc; */
-            padding: 2px;
-        }
-
-        .text-right {
-            text-align: right;
-        }
-
-        .total {
-            text-align: right;
+        .logo-section .store-name {
+            font-size: 28px;
             font-weight: bold;
-            font-size: 16px;
-            margin-top: 20px;
+            color: #000;
         }
 
-        .footer {
+        .slip-bar {
+            background-color: #e8e8e8;
+            padding: 6px 10px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            font-weight: bold;
+            color: #000;
+        }
+
+        .store-address {
+            margin-bottom: 15px;
             font-size: 11px;
-            color: #999;
-            text-align: center;
-            margin-top: 40px;
+            line-height: 1.5;
         }
 
-        @media print {
-            body {
-                margin: 0;
-            }
+        .store-address strong {
+            font-size: 11px;
+        }
+
+        .two-column {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .two-column td {
+            width: 50%;
+            vertical-align: top;
+            padding: 0;
+        }
+
+        .two-column td:first-child {
+            padding-right: 15px;
+        }
+
+        .two-column td:last-child {
+            padding-left: 15px;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: bold;
+            text-decoration: underline;
+            margin-bottom: 6px;
+        }
+
+        .address-block {
+            font-size: 11px;
+            line-height: 1.6;
+        }
+
+        .order-info {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 18px;
+        }
+
+        .order-info td {
+            padding: 5px 8px;
+            border: 1px solid #ccc;
+            font-size: 11px;
+            width: 25%;
+        }
+
+        .order-info td strong {
+            font-size: 11px;
+        }
+
+        .items-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 2px solid #000;
+        }
+
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 5px;
+        }
+
+        .items-table th {
+            border-bottom: 2px solid #000;
+            padding: 6px 8px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .items-table td {
+            padding: 8px 8px;
+            font-size: 11px;
+            vertical-align: top;
+            border-bottom: 1px solid #eee;
+        }
+
+        .items-table .text-right {
+            text-align: right;
+        }
+
+        .items-table .text-center {
+            text-align: center;
         }
     </style>
 </head>
 
 <body>
 
-    <div class="header">
+    {{-- Logo --}}
+    <div class="logo-section">
         @if($logoBase64)
-        <img src="{{ $logoBase64 }}" alt="Store Logo" height="60">
+        <img src="{{ $logoBase64 }}" alt="{{ $store?->name ?? 'Store' }} Logo">
         @else
-        <p style="font-size: 14px; color: #999;">Logo not found</p>
+        <span class="store-name">{{ $store?->name ?? 'Store' }}</span>
         @endif
-        <div class="title">Packing Slip</div>
     </div>
 
-    <table class="info-table">
+    {{-- Packing Slip Title Bar --}}
+    <div class="slip-bar">
+        {{ $store?->name ?? 'Store' }} packing slip for order #{{ $order->order_number }}
+    </div>
+
+    {{-- Store Address --}}
+    @if($store && ($store->address || $store->city))
+    <div class="store-address">
+        <strong>Address:</strong><br>
+        @if($store->address){{ $store->address }}<br>@endif
+        @if($store->city || $store->state || $store->zip)
+        {{ $store->city ?? '' }}{{ $store->state ? ', ' . $store->state : '' }} {{ $store->zip ?? '' }}
+        @endif
+    </div>
+    @endif
+
+    {{-- Billing & Shipping Side by Side --}}
+    @php
+    $billing = $order->billing_address ?? [];
+    $shipping = $order->billingInformation;
+    @endphp
+
+    <table class="two-column">
         <tr>
-            <td><strong>Order Number:</strong> {{ $order->order_number }}</td>
-            <td><strong>Order Date:</strong> {{ optional($order->created_at)->format('d M Y') }}</td>
-        </tr>
-        <tr>
-            <td><strong>Customer:</strong> {{ optional($order->billingInformation)->first_name }} {{ optional($order->billingInformation)->last_name }}</td>
-            <td><strong>Phone:</strong> {{ optional($order->billingInformation)->phone ?? 'N/A' }}</td>
-        </tr>
-        <tr>
-            <td><strong>Email:</strong> {{ optional($order->billingInformation)->email ?? 'N/A' }}</td>
-            <td><strong>Shipping Address:</strong>
-                {{ $order->billingInformation->address_line_1 }},
-                {{ $order->billingInformation->city }},
-                {{ $order->billingInformation->state }},
-                {{ $order->billingInformation->country }}
+            <td>
+                <div class="section-title">Billing Details</div>
+                <div class="address-block">
+                    @if(!empty($billing))
+                    <strong>{{ $billing['name'] ?? '' }}</strong><br>
+                    @if(!empty($billing['company'])){{ $billing['company'] }}<br>@endif
+                    {{ $billing['addressLine1'] ?? '' }}<br>
+                    @if(!empty($billing['addressLine2'])){{ $billing['addressLine2'] }}<br>@endif
+                    {{ $billing['city'] ?? '' }}{{ !empty($billing['state']) ? ', ' . $billing['state'] : '' }} {{ $billing['zip'] ?? '' }}<br>
+                    {{ $billing['country'] ?? '' }}<br>
+                    @if(!empty($billing['phone']))Phone: {{ $billing['phone'] }}@endif
+                    @else
+                    <strong>{{ $shipping->first_name ?? '' }} {{ $shipping->last_name ?? '' }}</strong><br>
+                    @if($shipping->company_name){{ $shipping->company_name }}<br>@endif
+                    {{ $shipping->address_line_1 ?? '' }}<br>
+                    @if($shipping->address_line_2){{ $shipping->address_line_2 }}<br>@endif
+                    {{ $shipping->city ?? '' }}{{ $shipping->state ? ', ' . $shipping->state : '' }} {{ $shipping->zip ?? '' }}<br>
+                    {{ $shipping->country ?? '' }}<br>
+                    @if($shipping->phone)Phone: {{ $shipping->phone }}@endif
+                    @endif
+                </div>
             </td>
-        </tr>
-        <tr>
-            <td><strong>Tracking #:</strong> {{ $shipment->tracking_number ?? 'N/A' }}</td>
-            <td><strong>Shipped On:</strong> {{ optional($shipment->date_shipped) ? \Carbon\Carbon::parse($shipment->date_shipped)->format('d M Y') : 'N/A' }}</td>
+            <td>
+                <div class="section-title">Shipping Details</div>
+                <div class="address-block">
+                    <strong>{{ $shipping->first_name ?? '' }} {{ $shipping->last_name ?? '' }}</strong><br>
+                    @if($shipping->company_name){{ $shipping->company_name }}<br>@endif
+                    {{ $shipping->address_line_1 ?? '' }}<br>
+                    @if($shipping->address_line_2){{ $shipping->address_line_2 }}<br>@endif
+                    {{ $shipping->city ?? '' }}{{ $shipping->state ? ', ' . $shipping->state : '' }} {{ $shipping->zip ?? '' }}<br>
+                    {{ $shipping->country ?? '' }}<br>
+                    @if($shipping->phone)Phone: {{ $shipping->phone }}@endif
+                </div>
+            </td>
         </tr>
     </table>
 
-    <h3>Ordered Products</h3>
+    {{-- Order Info --}}
+    <table class="order-info">
+        <tr>
+            <td><strong>Order:</strong></td>
+            <td>#{{ $order->order_number }}</td>
+            <td><strong>Shipping Method:</strong></td>
+            <td>{{ $shipping->shipping_method ?? 'N/A' }}</td>
+        </tr>
+        <tr>
+            <td><strong>Order Date:</strong></td>
+            <td>{{ optional($order->created_at)->format('M d, Y') }}</td>
+            <td>&nbsp;</td>
+            <td>&nbsp;</td>
+        </tr>
+    </table>
 
-    <table class="product-table">
+    {{-- Shipped Items --}}
+    <div class="items-title">Shipped Items</div>
+
+    <table class="items-table">
         <thead>
             <tr>
-                <th>Serial No</th>
-                <th>Product</th>
-                <th>Qty</th>
-                <th>Unit Price</th>
-                <th class="text-right">Total</th>
+                <th class="text-center" style="width: 35px;">Qty</th>
+                <th style="width: 90px;">Code/SKU</th>
+                <th>Product Name</th>
+                <th class="text-right" style="width: 80px;">Bin Picking No.</th>
             </tr>
         </thead>
         <tbody>
-            @foreach ($order->items as $index => $item)
-            @php
-            $imageData = null;
-            $mimeType = 'image/jpeg';
-
-            $image = $item->product->images->first()->path ?? null;
-
-            if ($image) {
-            if (filter_var($image, FILTER_VALIDATE_URL)) {
-            try {
-            $imgContent = file_get_contents($image);
-            if ($imgContent !== false) {
-            $mimeType = (new finfo(FILEINFO_MIME_TYPE))->buffer($imgContent) ?: 'image/jpeg';
-            $imageData = base64_encode($imgContent);
-            }
-            } catch (\Exception $e) {
-            // fail silently
-            }
-            } else {
-            $imagePath = public_path($image);
-            if (file_exists($imagePath)) {
-            $imgContent = file_get_contents($imagePath);
-            $mimeType = mime_content_type($imagePath);
-            $imageData = base64_encode($imgContent);
-            }
-            }
-            }
-
-            if (!$imageData && file_exists(public_path('no-image.png'))) {
-            $imgContent = file_get_contents(public_path('no-image.png'));
-            $mimeType = 'image/png';
-            $imageData = base64_encode($imgContent);
-            }
-            @endphp
+            @foreach ($order->items as $item)
             <tr>
-                <td>{{ $index + 1 }}</td>
-                <td>
-                    <div class="product-info">
-                        @if ($imageData)
-                        <img src="data:{{ $mimeType }};base64,{{ $imageData }}" alt="Product Image">
-                        @endif
-                        <span>{{ $item->product->name ?? 'N/A' }}</span>
-                    </div>
-                </td>
-                <td>{{ $item->quantity ?? 0 }}</td>
-                <td>${{ number_format($item->price ?? 0, 2) }}</td>
-                <td class="text-right">${{ number_format(($item->price ?? 0) * ($item->quantity ?? 0), 2) }}</td>
+                <td class="text-center">{{ $item->quantity }}</td>
+                <td>{{ $item->product->sku ?? 'N/A' }}</td>
+                <td>{{ $item->product->name ?? 'N/A' }}</td>
+                <td class="text-right">{{ $item->product->identifiers->bpn ?? 'N/A' }}</td>
             </tr>
             @endforeach
         </tbody>
     </table>
-
-    <div class="total">
-        Total Amount: ${{ number_format($order->total_amount ?? 0, 2) }}
-    </div>
-
-    <div class="footer">
-        This is a system-generated document. No signature required.
-    </div>
 
 </body>
 
