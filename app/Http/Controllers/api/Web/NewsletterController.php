@@ -7,6 +7,9 @@ use App\Models\Newsletter;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
+use App\Mail\NewsletterSubscribedMail;
 
 class NewsletterController extends Controller
 {
@@ -58,13 +61,33 @@ class NewsletterController extends Controller
 
         $newsletter = Newsletter::create([
             'store_id' => $storeId,
-            'email' => $request->email,
+            'email'    => $request->email,
         ]);
 
+        try {
+
+            // Customer Confirmation Email
+            Mail::to($newsletter->email)
+                ->send(new NewsletterSubscribedMail($newsletter));
+
+            // Admin Notification Email
+            $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
+
+            Mail::to($adminEmail)
+                ->send(new NewsletterSubscribedMail($newsletter, true));
+        } catch (\Exception $e) {
+
+            Log::error('NEWSLETTER EMAIL FAILED', [
+                'newsletter_id' => $newsletter->id,
+                'email'         => $newsletter->email,
+                'error'         => $e->getMessage(),
+            ]);
+        }
+
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Email successfully subscribed!',
-            'data' => $newsletter
+            'data'    => $newsletter
         ], 201);
     }
 
