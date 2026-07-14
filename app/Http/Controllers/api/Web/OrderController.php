@@ -963,7 +963,7 @@ class OrderController extends Controller
                     'store_id'               => $storeId,
                     'user_id'                => $user->id,
                     'customer_id'            => $customer->id,
-                    'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
+                    'order_number'           => '',
                     'billing_information_id' => $billing->id,
                     'status'                 => 'Awaiting Payment',
                     'shipping_cost'          => $validated['shippingCost'],
@@ -976,6 +976,9 @@ class OrderController extends Controller
                     'newsletter'             => $validated['newsletter'] ?? false,
                 ], $commonOrderFields));
 
+                $order->update([
+                    'order_number' => $order->id,
+                ]);
                 foreach ($validated['products'] as $item) {
                     $product = Product::find($item['product_id']);
                     if ($product) {
@@ -1026,7 +1029,7 @@ class OrderController extends Controller
                         'store_id'               => $storeId,
                         'user_id'                => $user->id,
                         'customer_id'            => $customer->id,
-                        'order_number'           => 'ORD-' . strtoupper(Str::random(8)),
+                        'order_number'           => '',
                         'billing_information_id' => $billing->id,
                         'status'                 => 'Awaiting Payment',
                         'shipping_cost'          => $dest['shippingCost'],
@@ -1039,6 +1042,9 @@ class OrderController extends Controller
                         'newsletter'             => $validated['newsletter'] ?? false,
                     ], $commonOrderFields));
 
+                    $order->update([
+                        'order_number' => $order->id,
+                    ]);
                     foreach ($dest['products'] as $item) {
                         $product = Product::find($item['product_id']);
                         if ($product) {
@@ -1586,10 +1592,13 @@ class OrderController extends Controller
             'store_id'     => current_store_id(),
             'user_id'      => $user?->id,
             'session_id'   => $user ? null : session()->getId(),
-            'order_number' => 'DRAFT-' . strtoupper(Str::random(6)),
+            'order_number' => '',
             'status'       => 'Draft',
             'is_draft'     => true,
             'channel'      => $validated['channel'],
+        ]);
+        $order->update([
+            'order_number' => $order->id,
         ]);
 
         return response()->json([
@@ -2293,7 +2302,7 @@ class OrderController extends Controller
                     'customer_id' => $customer->id,
                     'user_id' => $user->id,
                     'billing_information_id' => $billing->id,
-                    'order_number' => 'ORD-' . strtoupper(Str::random(8)),
+                    'order_number' => '',
                     'status' => 'Awaiting Payment',
                     'is_draft' => $validated['isDraft'] ?? false,
                     'device_type' => $validated['deviceType'] ?? null,
@@ -2305,7 +2314,9 @@ class OrderController extends Controller
                     'staff_notes' => $validated['staffNotes'] ?? null,
                     'total_amount' => 0,
                 ]);
-
+                $order->update([
+                    'order_number' => $order->id,
+                ]);
                 $total = 0;
 
                 foreach ($destination['products'] as $item) {
@@ -2777,7 +2788,7 @@ class OrderController extends Controller
                     'customer_id' => $customer->id,
                     'user_id' => $user->id,
                     'billing_information_id' => $billing->id,
-                    'order_number' => 'ORD-' . strtoupper(Str::random(8)),
+                    'order_number' => '',
                     'status' => 'Awaiting Payment',
                     'is_draft' => $validated['isDraft'] ?? false,
                     'device_type' => $validated['deviceType'] ?? null,
@@ -2789,7 +2800,9 @@ class OrderController extends Controller
                     'staff_notes' => $validated['staffNotes'] ?? $destination['staffNotes'] ?? null,
                     'total_amount' => 0,
                 ]);
-
+                $order->update([
+                    'order_number' => $order->id,
+                ]);
                 $total = 0;
 
                 foreach ($products as $item) {
@@ -3426,7 +3439,7 @@ class OrderController extends Controller
         // Use billing email
         $email = optional($order->billingInformation)->email;
         if ($email) {
-          Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64, $storeId));
+            Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64, $storeId));
         }
 
         return response()->json(['message' => 'Invoice email sent successfully']);
@@ -3471,7 +3484,7 @@ class OrderController extends Controller
 
             $email = optional($order->billingInformation)->email;
             if ($email) {
-               Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64, $storeId));
+                Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64, $storeId));
             }
 
             return response()->json([
