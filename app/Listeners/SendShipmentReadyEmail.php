@@ -15,8 +15,11 @@ class SendShipmentReadyEmail
         $order = $shipment->order;
 
         try {
-            if ($order && $order->email) {
-                Mail::to($order->email)->send(new ShipmentReadyMail($shipment));
+            $email = $order->billingInformation->email ?? $order->email ?? null;
+            $storeId = $order->store_id ?? null;
+
+            if ($order && $email) {
+                Mail::to($email)->send(new ShipmentReadyMail($shipment, $storeId));
                 Cache::put('shipment_email_status_' . $shipment->id, 'success', now()->addMinutes(1));
             } else {
                 Cache::put('shipment_email_status_' . $shipment->id, 'no_email', now()->addMinutes(1));

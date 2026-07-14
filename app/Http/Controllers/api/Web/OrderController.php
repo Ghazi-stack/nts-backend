@@ -36,6 +36,7 @@ use App\Mail\OrderStatusUpdatedMail;
 use App\Models\SavedAddress;
 use App\Http\Resources\ReturnRequestResource;
 use App\Mail\OrderPlacedMail;
+use App\Models\Logo;
 use App\Models\Store;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -3355,12 +3356,33 @@ class OrderController extends Controller
             ->where('store_id', $storeId)
             ->findOrFail($id);
 
-       // $logoPath  = public_path('logo/nts-logo.png');
-        // $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+        // Dynamic logo from Logo table
+        $logo = Logo::where('store_id', $storeId)->first();
+        $logoBase64 = null;
+
+        if ($logo && $logo->logo_url) {
+            try {
+                $logoContent = file_get_contents($logo->logo_url);
+                if ($logoContent) {
+                    $extension = pathinfo(parse_url($logo->logo_url, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'png';
+                    $mimeTypes = [
+                        'png'  => 'image/png',
+                        'jpg'  => 'image/jpeg',
+                        'jpeg' => 'image/jpeg',
+                        'webp' => 'image/webp',
+                        'svg'  => 'image/svg+xml',
+                    ];
+                    $mime = $mimeTypes[$extension] ?? 'image/png';
+                    $logoBase64 = 'data:' . $mime . ';base64,' . base64_encode($logoContent);
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Invoice logo fetch failed: ' . $e->getMessage());
+            }
+        }
 
         $pdf = Pdf::loadView('pdf.invoice', [
-            'order'     => $order,
-            //'logoBase64' => $logoBase64,
+            'order'      => $order,
+            'logoBase64' => $logoBase64,
         ]);
 
         return $pdf->download('invoice-' . $order->order_number . '.pdf');
@@ -3368,44 +3390,89 @@ class OrderController extends Controller
 
     public function sendPaymentInvoice($orderId)
     {
+        $storeId = current_store_id();
+
         $order = Order::with(['items.product.images', 'billingInformation'])->findOrFail($orderId);
 
-       // $logoPath  = public_path('logo/nts-logo.png');
-        // $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+        // Dynamic logo from Logo table
+        $logo = Logo::where('store_id', $storeId)->first();
+        $logoBase64 = null;
+
+        if ($logo && $logo->logo_url) {
+            try {
+                $logoContent = file_get_contents($logo->logo_url);
+                if ($logoContent) {
+                    $extension = pathinfo(parse_url($logo->logo_url, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'png';
+                    $mimeTypes = [
+                        'png'  => 'image/png',
+                        'jpg'  => 'image/jpeg',
+                        'jpeg' => 'image/jpeg',
+                        'webp' => 'image/webp',
+                        'svg'  => 'image/svg+xml',
+                    ];
+                    $mime = $mimeTypes[$extension] ?? 'image/png';
+                    $logoBase64 = 'data:' . $mime . ';base64,' . base64_encode($logoContent);
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Invoice logo fetch failed: ' . $e->getMessage());
+            }
+        }
 
         $pdf = Pdf::loadView('pdf.invoice', [
-            'order'     => $order,
-            //'logoBase64' => $logoBase64,
+            'order'      => $order,
+            'logoBase64' => $logoBase64,
         ]);
 
         // Use billing email
-        // $email = optional($order->billingInformation)->email;
-        // if ($email) {
-        //     Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64));
-        // }
+        $email = optional($order->billingInformation)->email;
+        if ($email) {
+          Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64, $storeId));
+        }
 
         return response()->json(['message' => 'Invoice email sent successfully']);
     }
-
     public function resendInvoice($id)
     {
         try {
+            $storeId = current_store_id();
+
             $order = Order::with(['items.product.images', 'billingInformation'])
-                ->where('store_id', current_store_id())
+                ->where('store_id', $storeId)
                 ->findOrFail($id);
 
-           // $logoPath  = public_path('logo/nts-logo.png');
-           // $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+            // Dynamic logo from Logo table
+            $logo = Logo::where('store_id', $storeId)->first();
+            $logoBase64 = null;
+
+            if ($logo && $logo->logo_url) {
+                try {
+                    $logoContent = file_get_contents($logo->logo_url);
+                    if ($logoContent) {
+                        $extension = pathinfo(parse_url($logo->logo_url, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'png';
+                        $mimeTypes = [
+                            'png'  => 'image/png',
+                            'jpg'  => 'image/jpeg',
+                            'jpeg' => 'image/jpeg',
+                            'webp' => 'image/webp',
+                            'svg'  => 'image/svg+xml',
+                        ];
+                        $mime = $mimeTypes[$extension] ?? 'image/png';
+                        $logoBase64 = 'data:' . $mime . ';base64,' . base64_encode($logoContent);
+                    }
+                } catch (\Exception $e) {
+                    \Log::warning('Invoice logo fetch failed: ' . $e->getMessage());
+                }
+            }
 
             $pdf = Pdf::loadView('pdf.invoice', [
-                'order'     => $order,
-               // 'logoBase64' => $logoBase64,
+                'order'      => $order,
+                'logoBase64' => $logoBase64,
             ]);
 
-            // $email = optional($order->billingInformation)->email;
-            // if ($email) {
-            //     Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64));
-            // }
+            $email = optional($order->billingInformation)->email;
+            if ($email) {
+               Mail::to($email)->send(new PaymentInvoiceMail($order, $pdf, $logoBase64, $storeId));
+            }
 
             return response()->json([
                 'status'  => true,
@@ -3424,7 +3491,6 @@ class OrderController extends Controller
             ], 500);
         }
     }
-
     public function getOrderTimeline($id)
     {
         try {

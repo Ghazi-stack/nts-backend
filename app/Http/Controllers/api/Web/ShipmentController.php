@@ -10,6 +10,7 @@ use App\Events\ShipmentCreated;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Cache;
+use App\Models\Logo;
 use App\Http\Resources\ShipmentResource;
 
 class ShipmentController extends Controller
@@ -210,6 +211,8 @@ class ShipmentController extends Controller
     /**
      * Download PDF packing slip.
      */
+
+
     public function printPackingSlip($id)
     {
         $storeId = current_store_id();
@@ -218,15 +221,39 @@ class ShipmentController extends Controller
             ->where('store_id', $storeId)
             ->findOrFail($id);
 
-        // Convert logo to base64
-        //$logoPath = public_path('logo/nts-logo.png');
-        $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+        // Dynamic logo from Logo table
+        $logo = Logo::where('store_id', $storeId)->first();
+        $logoBase64 = null;
 
-        // Load PDF with view and pass base64 logo
+        if ($logo && $logo->logo_url) {
+            try {
+                $logoContent = file_get_contents($logo->logo_url);
+
+                if ($logoContent) {
+                    $extension = pathinfo(parse_url($logo->logo_url, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'png';
+
+                    $mimeTypes = [
+                        'png'  => 'image/png',
+                        'jpg'  => 'image/jpeg',
+                        'jpeg' => 'image/jpeg',
+                        'webp' => 'image/webp',
+                        'svg'  => 'image/svg+xml',
+                    ];
+
+                    $mime = $mimeTypes[strtolower($extension)] ?? 'image/png';
+
+                    $logoBase64 = 'data:' . $mime . ';base64,' . base64_encode($logoContent);
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Packing Slip logo fetch failed: ' . $e->getMessage());
+            }
+        }
+
+        // Generate PDF
         $pdf = Pdf::loadView('pdf.packing-slip', [
-            'shipment' => $shipment,
-            'order' => $shipment->order,
-            'logoBase64' => $logoBase64
+            'shipment'   => $shipment,
+            'order'      => $shipment->order,
+            'logoBase64' => $logoBase64,
         ]);
 
         return $pdf->download('packing-slip-' . $shipment->id . '.pdf');
