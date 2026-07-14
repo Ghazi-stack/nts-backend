@@ -19,9 +19,6 @@ class NewsletterSubscribedMail extends Mailable
     public $store;
     public $isAdmin;
 
-    /**
-     * Create a new message instance.
-     */
     public function __construct(Newsletter $newsletter, $isAdmin = false)
     {
         $this->newsletter = $newsletter;
@@ -41,34 +38,20 @@ class NewsletterSubscribedMail extends Mailable
         $this->storePath = rtrim($this->store->base_url, '/');
     }
 
-    /**
-     * Build the message.
-     */
     public function build()
     {
-        if ($this->isAdmin) {
+        $subject = $this->isAdmin
+            ? 'New Newsletter Subscription - ' . ($this->store?->name ?? 'Store')
+            : 'Thank You For Subscribing to ' . ($this->store?->name ?? 'Our Store');
 
-            return $this->subject(
-                'New Newsletter Subscription - ' . ($this->store?->name ?? 'Store')
-            )
-                ->view('emails.newsletter-admin')
-                ->with([
-                    'newsletter' => $this->newsletter,
-                    'logoUrl'    => $this->logoUrl,
-                    'storePath'  => $this->storePath,
-                    'store'      => $this->store,
-                ]);
-        }
-
-        return $this->subject(
-            'Thank you for subscribing to ' . ($this->store?->name ?? 'Our Store')
-        )
+        return $this->subject($subject)
             ->view('emails.newsletter-subscribed')
             ->with([
                 'newsletter' => $this->newsletter,
                 'logoUrl'    => $this->logoUrl,
                 'storePath'  => $this->storePath,
                 'store'      => $this->store,
+                'isAdmin'    => $this->isAdmin,
             ]);
     }
 }
