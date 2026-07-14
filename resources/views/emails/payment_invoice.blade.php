@@ -1,331 +1,697 @@
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <title>Invoice - {{ $order->order_number }}</title>
-    <style>
-        * {
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width">
+
+    <style type="text/css">
+        @media only screen {
+            html {
+                background: #fff;
+                min-height: 100%;
+            }
+        }
+
+        body,
+        table,
+        tr,
+        td,
+        th,
+        div,
+        h1,
+        p,
+        img {
+            Margin: 0;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
         }
 
         body {
-            font-family: 'Segoe UI', Arial, sans-serif;
-            font-size: 11px;
+            box-sizing: border-box;
+            min-width: 100%;
+            width: 100%;
+        }
+
+        table {
+            border-collapse: collapse;
+            border-spacing: 0;
+            width: 100%;
+        }
+
+        td,
+        th {
+            border-collapse: collapse;
+        }
+
+        h1,
+        p,
+        a,
+        span,
+        img {
             color: #333;
-            padding: 30px;
-            background-color: #fff;
-        }
-
-        .logo-section {
-            text-align: left;
-            margin-bottom: 5px;
-            padding-bottom: 8px;
-            border-bottom: 3px solid #000;
-        }
-
-        .logo-section img {
-            max-height: 55px;
-            max-width: 250px;
-        }
-
-        .logo-section .store-name {
-            font-size: 28px;
-            font-weight: bold;
-            color: #000;
-        }
-
-        .invoice-bar {
-            background-color: #e8e8e8;
-            padding: 6px 10px;
-            margin-bottom: 12px;
-            font-size: 13px;
-            font-weight: bold;
-            color: #000;
-        }
-
-        .store-address {
-            margin-bottom: 15px;
-            font-size: 11px;
-            line-height: 1.5;
-        }
-
-        .store-address strong {
-            font-size: 11px;
-        }
-
-        .two-column {
-            width: 100%;
-            margin-bottom: 15px;
-        }
-
-        .two-column td {
-            width: 50%;
-            vertical-align: top;
-            padding: 0;
-        }
-
-        .two-column td:first-child {
-            padding-right: 15px;
-        }
-
-        .two-column td:last-child {
-            padding-left: 15px;
-        }
-
-        .section-title {
-            font-size: 13px;
-            font-weight: bold;
-            text-decoration: underline;
-            margin-bottom: 6px;
-        }
-
-        .address-block {
-            font-size: 11px;
-            line-height: 1.6;
-        }
-
-        .order-info {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 18px;
-        }
-
-        .order-info td {
-            padding: 5px 8px;
-            border: 1px solid #ccc;
-            font-size: 11px;
-            width: 25%;
-        }
-
-        .order-info td strong {
-            font-size: 11px;
-        }
-
-        .items-title {
+            font-family: Montserrat, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 6px;
+            font-weight: 400;
+            line-height: 1.57143;
+            word-wrap: break-word;
         }
 
-        .items-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 5px;
+        h1 {
+            font-size: 28px;
+            font-weight: 500;
+            line-height: 1.21429;
         }
 
-        .items-table th {
-            border-bottom: 2px solid #000;
-            padding: 6px 8px;
-            text-align: left;
-            font-size: 11px;
-            font-weight: bold;
+        h1:not(:last-child),
+        p:not(:last-child) {
+            Margin: 0 0 32px;
+            margin: 0 0 32px;
         }
 
-        .items-table td {
-            padding: 8px 8px;
-            font-size: 11px;
-            vertical-align: top;
-            border-bottom: 1px solid #eee;
+        a {
+            color: #2199e8;
+            display: inline-block;
+            text-decoration: none;
         }
 
-        .items-table .text-right {
-            text-align: right;
+        strong {
+            font-weight: 600;
         }
 
-        .items-table .text-center {
+        img {
+            border: none;
+            display: block;
+            outline: 0;
+            text-align: center;
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        hr {
+            border: none;
+            border-bottom: 1px solid #d0d0d0;
+        }
+
+        .body {
+            background: #fff;
+            height: 100%;
+        }
+
+        .body>tr>td {
             text-align: center;
         }
 
-        .totals-section {
-            width: 100%;
-            margin-top: 5px;
-            border-top: 1px solid #ccc;
+        .container,
+        .column {
+            Margin: 0 auto;
+            margin: 0 auto;
+            width: 544px;
         }
 
-        .totals-section td {
-            padding: 4px 8px;
-            font-size: 11px;
+        .column td,
+        .column th {
+            text-align: left;
+            vertical-align: top;
         }
 
-        .totals-section .label {
-            text-align: right;
-            width: 80%;
+        .column--md-9 {
+            width: 75%;
         }
 
-        .totals-section .value {
-            text-align: right;
-            width: 20%;
+        .column--md-3 {
+            width: 25%;
         }
 
-        .totals-section .grand-total td {
-            font-weight: bold;
+        .expander {
+            padding: 0 !important;
+            visibility: hidden;
+            width: 0;
+        }
+
+        .spacer--16 td {
+            font-size: 16px;
+            height: 16px;
+            line-height: 16px;
+        }
+
+        .spacer--24 td {
+            font-size: 24px;
+            height: 24px;
+            line-height: 24px;
+        }
+
+        .spacer--32 td {
+            font-size: 32px;
+            height: 32px;
+            line-height: 32px;
+        }
+
+        .spacer--40 td {
+            font-size: 40px;
+            height: 40px;
+            line-height: 40px;
+        }
+
+        .delimiter th {
+            vertical-align: middle;
+        }
+
+        .delimiter__image,
+        .delimiter__image-block {
+            width: 48px;
+        }
+
+        .logo td {
+            padding: 24px 0;
+        }
+
+        .logo a {
+            color: #333;
+            display: block;
+            text-align: center;
+        }
+
+        .logo img {
+            color: #333;
+            text-decoration: none;
+            margin: 0 auto;
+        }
+
+        .logo span {
+            color: #333;
+            font-size: 36px;
+            font-weight: 600;
+        }
+
+        h2 {
+            Margin: 0 0 4px;
+            margin: 0 0 4px;
+            color: #333;
+            font-family: Montserrat, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 21px;
+            font-weight: 500;
+            line-height: 1.57143;
+        }
+
+        .details {
+            border-top: 1px solid #e5e5e5;
+        }
+
+        .details>tr>th {
+            padding-top: 16px;
+        }
+
+        .details__content {
+            width: auto;
+        }
+
+        .details__content tr:not(:last-child) th {
+            padding-bottom: 8px;
+        }
+
+        .details__content th:first-child {
+            padding-right: 30px;
+            width: 140px;
+        }
+
+        .store p {
+            Margin: 0;
+            margin: 0;
+        }
+
+        .store a {
+            color: #777;
             font-size: 12px;
-            border-top: 1px solid #000;
-            padding-top: 6px;
+        }
+
+        .store-button a {
+            border: 1px solid #999;
+            border-radius: 4px;
+            box-sizing: border-box;
+            color: #777;
+            padding: 3px 15px;
+            text-align: center;
+            white-space: nowrap;
+            width: 100%;
+        }
+
+        .products {
+            border-top: 1px solid #e5e5e5;
+        }
+
+        .products__item {
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        .products__item th {
+            padding-bottom: 16px;
+            padding-top: 16px;
+        }
+
+        .products__content {
+            padding-right: 24px;
+        }
+
+        .products__quantity {
+            width: 65px;
+        }
+
+        .products__total {
+            width: 80px;
+        }
+
+        @media only screen and (max-width: 599px) {
+            img {
+                height: auto !important;
+                width: auto !important;
+            }
+
+            .container {
+                width: 100% !important;
+            }
+
+            .column {
+                box-sizing: border-box;
+                height: auto !important;
+                padding-left: 15px !important;
+                padding-right: 15px !important;
+            }
+
+            .column--xs-12 {
+                display: inline-block !important;
+                width: 100% !important;
+            }
+
+            .details__content th {
+                width: 100% !important;
+                display: block !important;
+            }
+
+            .store th {
+                padding-bottom: 16px !important;
+            }
+
+            .store p {
+                text-align: center !important;
+            }
+
+            .store-button a {
+                margin-left: auto !important;
+                margin-right: auto !important;
+            }
         }
     </style>
 </head>
+
 <body>
-
-    {{-- Logo --}}
-    <div class="logo-section">
-        @if($logoBase64)
-            <img src="{{ $logoBase64 }}" alt="{{ $store?->name ?? 'Store' }} Logo">
-        @else
-            <span class="store-name">{{ $store?->name ?? 'Store' }}</span>
-        @endif
-    </div>
-
-    {{-- Invoice Title Bar --}}
-    <div class="invoice-bar">
-        {{ $store?->name ?? 'Store' }} invoice for order #{{ $order->order_number }}
-    </div>
-
-    {{-- Store Address --}}
-    @if($store && ($store->address || $store->city))
-    <div class="store-address">
-        <strong>Address:</strong><br>
-        @if($store->address){{ $store->address }}<br>@endif
-        @if($store->city || $store->state || $store->zip)
-            {{ $store->city ?? '' }}{{ $store->state ? ', ' . $store->state : '' }} {{ $store->zip ?? '' }}
-        @endif
-    </div>
-    @endif
-
-    {{-- Billing & Shipping Side by Side --}}
-    @php
-        $billing = $order->billing_address ?? [];
-        $shipping = $order->billingInformation;
-
-        $rawPayment = $shipping->payment_method ?? 'N/A';
-        $paymentLabels = [
-            'credit_card' => 'Credit Card',
-            'stripe_card' => 'Credit Card (Stripe)',
-            'paypal_express' => 'PayPal Express',
-            'cash_on_delivery' => 'Cash on Delivery',
-            'bank_transfer' => 'Bank Transfer',
-            'cod' => 'Cash on Delivery',
-            'stripe' => 'Stripe',
-        ];
-        $paymentMethod = $paymentLabels[$rawPayment] ?? ucwords(str_replace('_', ' ', $rawPayment));
-    @endphp
-
-    <table class="two-column">
+    <table class="body">
         <tr>
             <td>
-                <div class="section-title">Billing Details</div>
-                <div class="address-block">
-                    @if(!empty($billing))
-                        <strong>{{ $billing['name'] ?? '' }}</strong><br>
-                        @if(!empty($billing['company'])){{ $billing['company'] }}<br>@endif
-                        {{ $billing['addressLine1'] ?? '' }}<br>
-                        @if(!empty($billing['addressLine2'])){{ $billing['addressLine2'] }}<br>@endif
-                        {{ $billing['city'] ?? '' }}{{ !empty($billing['state']) ? ', ' . $billing['state'] : '' }} {{ $billing['zip'] ?? '' }}<br>
-                        {{ $billing['country'] ?? '' }}<br><br>
-                        @if(!empty($billing['phone']))Phone: {{ $billing['phone'] }}<br>@endif
-                        @if(!empty($billing['email']))Email: {{ $billing['email'] }}@endif
-                    @else
-                        <strong>{{ $shipping->first_name ?? '' }} {{ $shipping->last_name ?? '' }}</strong><br>
-                        @if($shipping->company_name){{ $shipping->company_name }}<br>@endif
-                        {{ $shipping->address_line_1 ?? '' }}<br>
-                        @if($shipping->address_line_2){{ $shipping->address_line_2 }}<br>@endif
-                        {{ $shipping->city ?? '' }}{{ $shipping->state ? ', ' . $shipping->state : '' }} {{ $shipping->zip ?? '' }}<br>
-                        {{ $shipping->country ?? '' }}<br><br>
-                        @if($shipping->phone)Phone: {{ $shipping->phone }}<br>@endif
-                        @if($shipping->email)Email: {{ $shipping->email }}@endif
-                    @endif
-                </div>
+                <table class="spacer spacer--16">
+                    <tr>
+                        <td>&nbsp;</td>
+                    </tr>
+                </table>
+
+                <!-- Logo + Delimiter -->
+                <table class="container">
+                    <tr>
+                        <td>
+                            <table class="row">
+                                <tr>
+                                    <th class="column">
+                                        <table class="logo">
+                                            <tr>
+                                                <th style="text-align: center;">
+                                                    <a href="{{ $storePath }}" target="_blank">
+                                                        @if($logoUrl)
+                                                            <img src="{{ $logoUrl }}" alt="{{ $store?->name ?? 'Store' }} Logo" width="300" height="150" style="display: block; margin: 0 auto; max-width: 300px; max-height: 150px; width: auto; height: auto;">
+                                                        @else
+                                                            <span>{{ $store?->name ?? 'Our Store' }}</span>
+                                                        @endif
+                                                    </a>
+                                                </th>
+                                                <th class="expander"></th>
+                                            </tr>
+                                        </table>
+                                    </th>
+                                </tr>
+                            </table>
+
+                            <table class="row">
+                                <tr>
+                                    <th class="column">
+                                        <table>
+                                            <tr>
+                                                <th>
+                                                    <table class="delimiter">
+                                                        <tr>
+                                                            <th>
+                                                                <hr>
+                                                            </th>
+                                                            <th class="delimiter__image-block">
+                                                                <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/img/emails/cart.png" alt="Cart" class="delimiter__image">
+                                                            </th>
+                                                            <th>
+                                                                <hr>
+                                                            </th>
+                                                        </tr>
+                                                    </table>
+                                                </th>
+                                                <th class="expander"></th>
+                                            </tr>
+                                        </table>
+                                    </th>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+
+                <table class="spacer spacer--40">
+                    <tr>
+                        <td>&nbsp;</td>
+                    </tr>
+                </table>
+
+                <!-- Main Content -->
+                <table class="container">
+                    <tr>
+                        <td>
+                            <table class="row">
+                                <tr>
+                                    <th class="column">
+                                        <table>
+                                            <tr>
+                                                <th>
+                                                    <h1>Payment Invoice</h1>
+
+                                                    <p>
+                                                        Hello {{ $order->billingInformation->first_name ?? 'Customer' }},
+                                                        <br /><br />
+                                                        Thank you for your order. Here is your payment invoice for Order <strong>#{{ $order->order_number }}</strong>.
+                                                    </p>
+                                                </th>
+                                                <th class="expander"></th>
+                                            </tr>
+                                        </table>
+                                    </th>
+                                </tr>
+                            </table>
+
+                            <table class="spacer spacer--32">
+                                <tr>
+                                    <td>&nbsp;</td>
+                                </tr>
+                            </table>
+
+                            <!-- Order Details -->
+                            <table class="row">
+                                <tr>
+                                    <th class="column">
+                                        <table>
+                                            <tr>
+                                                <th>
+                                                    <h2>Order Details</h2>
+
+                                                    @php
+                                                        $rawPayment = $order->billingInformation->payment_method ?? 'N/A';
+                                                        $paymentLabels = [
+                                                            'credit_card' => 'Credit Card',
+                                                            'stripe_card' => 'Credit Card (Stripe)',
+                                                            'paypal_express' => 'PayPal Express',
+                                                            'cash_on_delivery' => 'Cash on Delivery',
+                                                            'bank_transfer' => 'Bank Transfer',
+                                                            'cod' => 'Cash on Delivery',
+                                                            'stripe' => 'Stripe',
+                                                        ];
+                                                        $paymentMethod = $paymentLabels[$rawPayment] ?? ucwords(str_replace('_', ' ', $rawPayment));
+                                                    @endphp
+
+                                                    <table class="details">
+                                                        <tr>
+                                                            <th>
+                                                                <table class="details__content">
+                                                                    <tr>
+                                                                        <th style="width: 140px; padding-right: 30px;">
+                                                                            <p>Order Number:</p>
+                                                                        </th>
+                                                                        <th>
+                                                                            <p><strong>#{{ $order->order_number }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+
+                                                                    <tr>
+                                                                        <th style="width: 140px; padding-right: 30px;">
+                                                                            <p>Date:</p>
+                                                                        </th>
+                                                                        <th>
+                                                                            <p><strong>{{ optional($order->created_at)->format('d M Y') }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+
+                                                                    <tr>
+                                                                        <th style="width: 140px; padding-right: 30px;">
+                                                                            <p>Status:</p>
+                                                                        </th>
+                                                                        <th>
+                                                                            <p><strong>{{ ucfirst($order->status ?? 'Pending') }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+
+                                                                    <tr>
+                                                                        <th style="width: 140px; padding-right: 30px;">
+                                                                            <p>Payment Method:</p>
+                                                                        </th>
+                                                                        <th>
+                                                                            <p><strong>{{ $paymentMethod }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+
+                                                                    <tr>
+                                                                        <th style="width: 140px; padding-right: 30px;">
+                                                                            <p>Customer:</p>
+                                                                        </th>
+                                                                        <th>
+                                                                            <p><strong>{{ $order->billingInformation->first_name }} {{ $order->billingInformation->last_name }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+
+                                                                    <tr>
+                                                                        <th style="width: 140px; padding-right: 30px;">
+                                                                            <p>Email:</p>
+                                                                        </th>
+                                                                        <th>
+                                                                            <a href="mailto:{{ $order->billingInformation->email }}">
+                                                                                <strong>{{ $order->billingInformation->email }}</strong>
+                                                                            </a>
+                                                                        </th>
+                                                                    </tr>
+
+                                                                    <tr>
+                                                                        <th style="width: 140px; padding-right: 30px;">
+                                                                            <p>Phone:</p>
+                                                                        </th>
+                                                                        <th>
+                                                                            <p><strong>{{ $order->billingInformation->phone ?? 'N/A' }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+
+                                                                    <tr>
+                                                                        <th style="width: 140px; padding-right: 30px;">
+                                                                            <p>Billing Address:</p>
+                                                                        </th>
+                                                                        <th>
+                                                                            <p><strong>
+                                                                                {{ $order->billingInformation->address_line_1 }},
+                                                                                {{ $order->billingInformation->city }},
+                                                                                {{ $order->billingInformation->state }},
+                                                                                {{ $order->billingInformation->country }}
+                                                                            </strong></p>
+                                                                        </th>
+                                                                    </tr>
+                                                                </table>
+                                                            </th>
+                                                        </tr>
+                                                    </table>
+                                                </th>
+                                                <th class="expander"></th>
+                                            </tr>
+                                        </table>
+                                    </th>
+                                </tr>
+                            </table>
+
+                            <table class="spacer spacer--32">
+                                <tr>
+                                    <td>&nbsp;</td>
+                                </tr>
+                            </table>
+
+                            <!-- Products -->
+                            <table class="row">
+                                <tr>
+                                    <th class="column">
+                                        <table>
+                                            <tr>
+                                                <th>
+                                                    <h2>Purchased Products</h2>
+
+                                                    <table class="products">
+                                                        @foreach ($order->items as $index => $item)
+                                                        <tr class="products__item">
+                                                            <th class="products__content">
+                                                                <p><strong>{{ $index + 1 }}. {{ $item->product->name ?? 'N/A' }}</strong></p>
+                                                            </th>
+
+                                                            <th class="products__quantity">
+                                                                <p>Qty: {{ $item->quantity }}</p>
+                                                            </th>
+
+                                                            <th class="products__total">
+                                                                <p><strong>${{ number_format($item->price * $item->quantity, 2) }}</strong></p>
+                                                            </th>
+                                                        </tr>
+                                                        @endforeach
+                                                    </table>
+                                                </th>
+                                                <th class="expander"></th>
+                                            </tr>
+                                        </table>
+                                    </th>
+                                </tr>
+                            </table>
+
+                            <table class="spacer spacer--16">
+                                <tr>
+                                    <td>&nbsp;</td>
+                                </tr>
+                            </table>
+
+                            <!-- Total -->
+                            <table class="row">
+                                <tr>
+                                    <th class="column">
+                                        <table>
+                                            <tr>
+                                                <th>
+                                                    <p style="text-align: right; font-size: 18px;">
+                                                        <strong>Total Paid: ${{ number_format($order->total_amount ?? 0, 2) }}</strong>
+                                                    </p>
+                                                </th>
+                                                <th class="expander"></th>
+                                            </tr>
+                                        </table>
+                                    </th>
+                                </tr>
+                            </table>
+
+                            <table class="spacer spacer--16">
+                                <tr>
+                                    <td>&nbsp;</td>
+                                </tr>
+                            </table>
+
+                            <table class="row">
+                                <tr>
+                                    <th class="column">
+                                        <table>
+                                            <tr>
+                                                <th>
+                                                    <p>The invoice PDF is attached to this email. If you have any questions, please contact us.</p>
+                                                </th>
+                                                <th class="expander"></th>
+                                            </tr>
+                                        </table>
+                                    </th>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+
+                <table class="spacer spacer--40">
+                    <tr>
+                        <td>&nbsp;</td>
+                    </tr>
+                </table>
+
+                <!-- Footer -->
+                <table class="container">
+                    <tr>
+                        <td>
+                            <table class="row">
+                                <tr>
+                                    <th class="column">
+                                        <table>
+                                            <tr>
+                                                <th>
+                                                    <table class="delimiter">
+                                                        <tr>
+                                                            <th>
+                                                                <hr>
+                                                            </th>
+                                                            <th class="delimiter__image-block">
+                                                                <img src="https://cdn11.bigcommerce.com/s-4jpol1blth/img/emails/shop.png" alt="Shop" class="delimiter__image">
+                                                            </th>
+                                                            <th>
+                                                                <hr>
+                                                            </th>
+                                                        </tr>
+                                                    </table>
+                                                </th>
+                                                <th class="expander"></th>
+                                            </tr>
+                                        </table>
+                                    </th>
+                                </tr>
+                            </table>
+
+                            <table class="spacer spacer--24">
+                                <tr>
+                                    <td>&nbsp;</td>
+                                </tr>
+                            </table>
+
+                            <table class="row">
+                                <tr>
+                                    <th class="column column--md-9 column--xs-12">
+                                        <table class="store">
+                                            <tr>
+                                                <th>
+                                                    <p><strong>{{ $store?->name ?? 'Our Store' }}</strong></p>
+                                                    <p><a href="{{ $storePath }}" target="_blank">{{ str_replace(['https://', 'http://'], '', $storePath) }}</a></p>
+                                                </th>
+                                                <th class="expander"></th>
+                                            </tr>
+                                        </table>
+                                    </th>
+
+                                    <th class="column column--md-3 column--xs-12">
+                                        <table class="store-button">
+                                            <tr>
+                                                <th>
+                                                    <a href="{{ $storePath }}"><strong>Go shopping</strong></a>
+                                                </th>
+                                                <th class="expander"></th>
+                                            </tr>
+                                        </table>
+                                    </th>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+
+                <table class="spacer spacer--16">
+                    <tr>
+                        <td>&nbsp;</td>
+                    </tr>
+                </table>
             </td>
-            <td>
-                <div class="section-title">Shipping Details</div>
-                <div class="address-block">
-                    <strong>{{ $shipping->first_name ?? '' }} {{ $shipping->last_name ?? '' }}</strong><br>
-                    @if($shipping->company_name){{ $shipping->company_name }}<br>@endif
-                    {{ $shipping->address_line_1 ?? '' }}<br>
-                    @if($shipping->address_line_2){{ $shipping->address_line_2 }}<br>@endif
-                    {{ $shipping->city ?? '' }}{{ $shipping->state ? ', ' . $shipping->state : '' }} {{ $shipping->zip ?? '' }}<br>
-                    {{ $shipping->country ?? '' }}<br><br>
-                    @if($shipping->phone)Phone: {{ $shipping->phone }}<br>@endif
-                    @if($shipping->email)Email: {{ $shipping->email }}@endif
-                </div>
-            </td>
         </tr>
     </table>
-
-    {{-- Order Info --}}
-    <table class="order-info">
-        <tr>
-            <td><strong>Order:</strong></td>
-            <td>#{{ $order->order_number }}</td>
-            <td><strong>Order Date:</strong></td>
-            <td>{{ optional($order->created_at)->format('M d, Y') }}</td>
-        </tr>
-        <tr>
-            <td><strong>Payment Method:</strong></td>
-            <td>{{ $paymentMethod }} (${{ number_format($order->total_amount, 2) }})</td>
-            <td><strong>Shipping Method:</strong></td>
-            <td>{{ $shipping->shipping_method ?? 'N/A' }}</td>
-        </tr>
-    </table>
-
-    {{-- Order Items --}}
-    <div class="items-title">Order Items</div>
-
-    <table class="items-table">
-        <thead>
-            <tr>
-                <th class="text-center" style="width: 35px;">Qty</th>
-                <th style="width: 90px;">Code/SKU</th>
-                <th>Product Name</th>
-                <th class="text-right" style="width: 95px;">Price</th>
-                <th class="text-right" style="width: 95px;">Total</th>
-            </tr>
-        </thead>
-        <tbody>
-            @php $subtotal = 0; @endphp
-            @foreach ($order->items as $item)
-                @php
-                    $lineTotal = $item->price * $item->quantity;
-                    $subtotal += $lineTotal;
-                @endphp
-                <tr>
-                    <td class="text-center">{{ $item->quantity }}</td>
-                    <td>{{ $item->product->sku ?? 'N/A' }}</td>
-                    <td>{{ $item->product->name ?? 'N/A' }}</td>
-                    <td class="text-right">${{ number_format($item->price, 2) }} USD</td>
-                    <td class="text-right">${{ number_format($lineTotal, 2) }} USD</td>
-                </tr>
-            @endforeach
-        </tbody>
-    </table>
-
-    {{-- Totals --}}
-    <table class="totals-section">
-        <tr>
-            <td class="label">Subtotal:</td>
-            <td class="value">${{ number_format($subtotal, 2) }} USD</td>
-        </tr>
-        <tr>
-            <td class="label">Shipping:</td>
-            <td class="value">${{ number_format($order->shipping_cost ?? 0, 2) }} USD</td>
-        </tr>
-        @if($order->discountAmount > 0)
-        <tr>
-            <td class="label">Discount:</td>
-            <td class="value">-${{ number_format($order->discountAmount, 2) }} USD</td>
-        </tr>
-        @endif
-        <tr>
-            <td class="label">Tax:</td>
-            <td class="value">$0.00 USD</td>
-        </tr>
-        <tr class="grand-total">
-            <td class="label">Grand total:</td>
-            <td class="value">${{ number_format($order->total_amount ?? 0, 2) }} USD</td>
-        </tr>
-    </table>
-
 </body>
+
 </html>
