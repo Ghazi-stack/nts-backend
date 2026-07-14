@@ -167,19 +167,19 @@
         }
 
         .logo a {
-            color: #333;
-            display: block;
+            color: #f0ebeb !important;
+            display: white !important;
             text-align: center;
         }
 
         .logo img {
-            color: #333;
+            color: #f8f7f7 !important;
             text-decoration: none;
             margin: 0 auto;
         }
 
         .logo span {
-            color: #333;
+            color: #eee9e9 !important;
             font-size: 36px;
             font-weight: 600;
         }
