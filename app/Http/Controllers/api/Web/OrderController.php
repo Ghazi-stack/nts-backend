@@ -1499,29 +1499,40 @@ class OrderController extends Controller
             }
 
             // ===================== SEND STATUS UPDATE EMAIL =====================
-            $order->load('billingInformation', 'customer');
+            $emailStatuses = [
+                'Awaiting Fulfillment',
+                'Awaiting Shipment',
+                'Awaiting Pickup',
+                'Partially Shipped',
+                'Shipped',
+                'Completed',
+            ];
 
-            $customerEmail = $order->billingInformation->email
-                ?? $order->customer->email
-                ?? null;
+            if (in_array($newStatus, $emailStatuses)) {
+                $order->load('billingInformation', 'customer');
 
-            $storeId = current_store_id();
+                $customerEmail = $order->billingInformation->email
+                    ?? $order->customer->email
+                    ?? null;
 
-            if ($customerEmail) {
-                try {
-                    // Email to customer
-                    Mail::to($customerEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId));
+                $storeId = current_store_id();
 
-                    // Email to admin
-                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
-                    Mail::to($adminEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId));
-                } catch (\Exception $mailError) {
-                    Log::error('ORDER STATUS EMAIL FAILED', [
-                        'error'   => $mailError->getMessage(),
-                        'order'   => $order->order_number,
-                        'status'  => $newStatus,
-                        'email'   => $customerEmail,
-                    ]);
+                if ($customerEmail) {
+                    try {
+                        // Email to customer
+                        Mail::to($customerEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId));
+
+                        // Email to admin
+                        $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
+                        Mail::to($adminEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId));
+                    } catch (\Exception $mailError) {
+                        Log::error('ORDER STATUS EMAIL FAILED', [
+                            'error'   => $mailError->getMessage(),
+                            'order'   => $order->order_number,
+                            'status'  => $newStatus,
+                            'email'   => $customerEmail,
+                        ]);
+                    }
                 }
             }
 
