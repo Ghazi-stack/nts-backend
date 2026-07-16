@@ -142,7 +142,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/existing-customer', 'storeFromDashboard');
         Route::get('/get-draft-order', 'getDraftOrders');
         Route::post('/new-customer', 'storeNewCustomerOrder');
-        Route::post('/search-advanced', 'advancedOrderSearch');
+        Route::get('/search-advanced', 'advancedOrderSearch');
         Route::put('/update-order/{id}', 'updateFromDashboard');
         Route::get('/invoice/{id}', 'downloadInvoice');
         Route::post('/resend-invoice/{id}', 'resendInvoice');
