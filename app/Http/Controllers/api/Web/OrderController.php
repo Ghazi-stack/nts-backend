@@ -1506,6 +1506,7 @@ class OrderController extends Controller
                 'Partially Shipped',
                 'Shipped',
                 'Completed',
+                'Refunded',
             ];
 
             if (in_array($newStatus, $emailStatuses)) {
