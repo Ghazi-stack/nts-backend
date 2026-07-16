@@ -3239,9 +3239,7 @@ class OrderController extends Controller
 
                 $query->where(function ($q) use ($keywords, $customerIds, $billingIds) {
                     $q->where('order_number', 'like', "%{$keywords}%")
-                        ->orWhere('status', 'like', "%{$keywords}%")
-                        ->orWhere('name', 'like', "%{$keywords}%");
-                  
+                        ->orWhere('status', 'like', "%{$keywords}%");
 
                     if (is_numeric($keywords)) {
                         $q->orWhere('id', $keywords)
