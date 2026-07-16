@@ -160,13 +160,16 @@
     </div>
 
     {{-- Store Address --}}
-    @if($store && ($store->address || $store->city))
+    @php
+    $storeAddress = $store->store_address ?? [];
+    @endphp
+
+    @if(!empty($storeAddress))
     <div class="store-address">
         <strong>Address:</strong><br>
-        @if($store->address){{ $store->address }}<br>@endif
-        @if($store->city || $store->state || $store->zip)
-        {{ $store->city ?? '' }}{{ $store->state ? ', ' . $store->state : '' }} {{ $store->zip ?? '' }}
-        @endif
+        @if(!empty($storeAddress['line1'])){{ $storeAddress['line1'] }}<br>@endif
+        @if(!empty($storeAddress['line2'])){{ $storeAddress['line2'] }}<br>@endif
+        {{ $storeAddress['city'] ?? '' }}{{ !empty($storeAddress['state']) ? ', ' . $storeAddress['state'] : '' }} {{ $storeAddress['zip'] ?? '' }}
     </div>
     @endif
 
