@@ -522,7 +522,7 @@ class ProductController extends Controller
 
             $validated = $request->validate([
                 'name' => 'nullable|string|max:255',
-                'sku' => 'nullable|string|unique:products,sku',
+                'sku' => 'nullable|string|unique:products,sku,NULL,id,store_id,' . $storeId,
                 'brandId' => 'required|exists:brands,id',
                 'categoryIds' => 'required|array|min:1',
                 'categoryIds.*' => 'exists:categories,id',
@@ -534,7 +534,7 @@ class ProductController extends Controller
                 'costPrice' => 'nullable|numeric',
                 'salePrice' => 'nullable|numeric',
 
-                'dimensions' => 'nullable|array',
+                'dimensions' => 'nullable|array'  ,
                 'dimensions.weight' => 'nullable|numeric',
                 'dimensions.width' => 'nullable|numeric',
                 'dimensions.height' => 'nullable|numeric',
@@ -570,7 +570,7 @@ class ProductController extends Controller
                 'bpn' => 'nullable|string',
 
                 'pageTitle' => 'nullable|string',
-                'productUrl' => 'required|string|unique:product_seo,product_url',
+                'productUrl' => 'required|string|unique:product_seo,product_url,NULL,id,store_id,' . $storeId,
                 'metaDescription' => 'nullable|string',
 
                 'purchasabilityStatus' => 'nullable|string',
