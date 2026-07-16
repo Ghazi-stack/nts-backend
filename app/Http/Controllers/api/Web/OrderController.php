@@ -3217,137 +3217,203 @@ class OrderController extends Controller
                 'customer'
             ])->where('store_id', $storeId);
 
-            // ✅ If 'keywords' is filled, apply keyword-based filters ONLY
+            // ✅ Keyword search
             if ($request->filled('keywords')) {
-                $keywords = $request->input('keywords');
+                $keywords = trim($request->input('keywords'));
 
-                $query->where(function ($q) use ($keywords) {
+                $customerIds = \App\Models\Customer::where('store_id', $storeId)
+                    ->where(function ($c) use ($keywords) {
+                        $c->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keywords}%"])
+                            ->orWhere('first_name', 'like', "%{$keywords}%")
+                            ->orWhere('last_name', 'like', "%{$keywords}%")
+                            ->orWhere('email', 'like', "%{$keywords}%")
+                            ->orWhere('phone', 'like', "%{$keywords}%");
+                    })->pluck('id');
+
+                $billingIds = \App\Models\BillingInformation::where('store_id', $storeId)
+                    ->where(function ($b) use ($keywords) {
+                        $b->where('first_name', 'like', "%{$keywords}%")
+                            ->orWhere('last_name', 'like', "%{$keywords}%")
+                            ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keywords}%"])
+                            ->orWhere('email', 'like', "%{$keywords}%")
+                            ->orWhere('phone', 'like', "%{$keywords}%")
+                            ->orWhere('payment_method', 'like', "%{$keywords}%")
+                            ->orWhere('shipping_method', 'like', "%{$keywords}%");
+                    })->pluck('id');
+
+                $query->where(function ($q) use ($keywords, $customerIds, $billingIds) {
+                    $q->where('order_number', 'like', "%{$keywords}%")
+                        ->orWhere('status', 'like', "%{$keywords}%")
+                        ->orWhere('email', 'like', "%{$keywords}%")
+                        ->orWhere('name', 'like', "%{$keywords}%")
+                        ->orWhere('phone', 'like', "%{$keywords}%");
+
                     if (is_numeric($keywords)) {
-                        $q->orWhere('id', $keywords);
+                        $q->orWhere('id', $keywords)
+                            ->orWhere('total_amount', $keywords);
                     }
 
-                    $q->orWhere('status', 'like', "%{$keywords}%")
-                        ->orWhere('total_amount', 'like', "%{$keywords}%")
-                        ->orWhereHas('customer', function ($c) use ($keywords) {
-                            $c->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keywords}%"])
-                                ->orWhere('first_name', 'like', "%{$keywords}%")
-                                ->orWhere('last_name', 'like', "%{$keywords}%")
-                                ->orWhere('email', 'like', "%{$keywords}%")
-                                ->orWhere('phone', 'like', "%{$keywords}%");
-                        })
-                        ->orWhereHas('billingInformation', function ($b) use ($keywords) {
-                            $b->where('first_name', 'like', "%{$keywords}%")
-                                ->orWhere('last_name', 'like', "%{$keywords}%")
-                                ->orWhere('phone', 'like', "%{$keywords}%")
-                                ->orWhere('payment_method', 'like', "%{$keywords}%")
-                                ->orWhere('shipping_method', 'like', "%{$keywords}%");
-                        });
-                });
-            } else {
-                $query->where(function ($q) use ($request) {
-                    // ✅ Basic filters
-                    if ($request->filled('status')) {
-                        $q->where('status', $request->input('status'));
+                    if ($customerIds->isNotEmpty()) {
+                        $q->orWhereIn('customer_id', $customerIds);
                     }
 
-                    if ($request->filled('paymentMethod')) {
-                        $q->whereHas('billingInformation', function ($b) use ($request) {
-                            $b->where('payment_method', $request->input('paymentMethod'));
-                        });
-                    }
-
-                    if ($request->filled('shippingMethod')) {
-                        $q->whereHas('billingInformation', function ($b) use ($request) {
-                            $b->where('shipping_method', $request->input('shippingMethod'));
-                        });
-                    }
-
-                    if ($request->filled('shippingProvider') && $request->input('shippingProvider') !== 'any') {
-                        $q->where('tracking_carrier_name', $request->input('shippingProvider'));
-                    }
-
-                    if ($request->filled('coupon') && $request->input('coupon') !== 'any') {
-                        $q->where('coupon_code', $request->input('coupon'));
-                    }
-
-                    if ($request->filled('fulfillmentSource') && $request->input('fulfillmentSource') !== 'any') {
-                        $q->where('fulfillment_source', $request->input('fulfillmentSource'));
-                    }
-
-                    // ✅ Boolean filters (only if true)
-                    if ($request->boolean('guest') === true) {
-                        $q->whereNull('user_id');
-                    }
-
-                    // ✅ Preorder filters: only one is applied if true
-                    if ($request->boolean('preorderYes') === true && $request->boolean('preorderNo') !== true) {
-                        $q->where('channel', 'preorder');
-                    } elseif ($request->boolean('preorderNo') === true && $request->boolean('preorderYes') !== true) {
-                        $q->where('channel', '!=', 'preorder');
-                    }
-
-                    // ✅ ID Range filters
-                    if ($request->filled('orderIdFrom')) {
-                        $q->where('id', '>=', $request->input('orderIdFrom'));
-                    }
-
-                    if ($request->filled('orderIdTo')) {
-                        $q->where('id', '<=', $request->input('orderIdTo'));
-                    }
-
-                    // ✅ Total Range filters
-                    if ($request->filled('orderTotalFrom')) {
-                        $q->where('total_amount', '>=', $request->input('orderTotalFrom'));
-                    }
-
-                    if ($request->filled('orderTotalTo')) {
-                        $q->where('total_amount', '<=', $request->input('orderTotalTo'));
-                    }
-
-                    // ✅ Date Range filter
-                    if ($request->filled('dateRange') && $request->filled('dateType')) {
-                        $column = match ($request->input('dateType')) {
-                            'order-date'   => 'created_at',
-                            'shipped-date' => 'shipped_at',
-                            default        => 'created_at'
-                        };
-
-                        switch ($request->input('dateRange')) {
-                            case 'Yesterday':
-                                $q->whereDate($column, today()->subDay());
-                                break;
-                            case 'Today':
-                                $q->whereDate($column, today());
-                                break;
-                            case 'Last7Days':
-                                $q->whereDate($column, '>=', now()->subDays(7));
-                                break;
-                            case 'Last30Days':
-                                $q->whereDate($column, '>=', now()->subDays(30));
-                                break;
-                        }
-                    }
-
-                    // ✅ Handle deletedOrder (only apply if not 'ignore')
-                    if ($request->has('deletedOrder')) {
-                        $deleted = $request->input('deletedOrder');
-                        if ($deleted === 'only') {
-                            $q->onlyTrashed(); // Show only deleted
-                        } elseif ($deleted === 'with') {
-                            $q->withTrashed(); // Include deleted
-                        }
+                    if ($billingIds->isNotEmpty()) {
+                        $q->orWhereIn('billing_information_id', $billingIds);
                     }
                 });
             }
 
+            // ✅ Status filter
+            if ($request->filled('status')) {
+                $query->where('status', $request->input('status'));
+            }
+
+            // ✅ Payment Method
+            if ($request->filled('paymentMethod')) {
+                $query->whereHas('billingInformation', function ($b) use ($request) {
+                    $b->where('payment_method', $request->input('paymentMethod'));
+                });
+            }
+
+            // ✅ Shipping Provider
+            if ($request->filled('shippingProvider') && $request->input('shippingProvider') !== 'any') {
+                $query->where('tracking_carrier_name', $request->input('shippingProvider'));
+            }
+
+            // ✅ Shipping Method
+            if ($request->filled('shippingMethod') && $request->input('shippingMethod') !== 'any') {
+                $query->whereHas('billingInformation', function ($b) use ($request) {
+                    $b->where('shipping_method', $request->input('shippingMethod'));
+                });
+            }
+
+            // ✅ Fulfillment Source
+            if ($request->filled('fulfillmentSource') && $request->input('fulfillmentSource') !== 'any') {
+                $query->where('fulfillment_source', $request->input('fulfillmentSource'));
+            }
+
+            // ✅ Coupon Code
+            if ($request->filled('coupon') && $request->input('coupon') !== 'any') {
+                $query->where('coupon_code', $request->input('coupon'));
+            }
+
+            // ✅ Guest orders
+            if ($request->filled('guest') && $request->input('guest') === 'true') {
+                $query->whereNull('customer_id');
+            }
+
+            // ✅ Preorder filters
+            if (
+                $request->filled('preorderYes') && $request->input('preorderYes') === 'true'
+                && (!$request->filled('preorderNo') || $request->input('preorderNo') === 'false')
+            ) {
+                $query->where('channel', 'preorder');
+            } elseif (
+                $request->filled('preorderNo') && $request->input('preorderNo') === 'true'
+                && (!$request->filled('preorderYes') || $request->input('preorderYes') === 'false')
+            ) {
+                $query->where(function ($q) {
+                    $q->where('channel', '!=', 'preorder')
+                        ->orWhereNull('channel');
+                });
+            }
+
+            // ✅ Order ID Range
+            if ($request->filled('orderIdFrom')) {
+                $query->where('id', '>=', (int) $request->input('orderIdFrom'));
+            }
+
+            if ($request->filled('orderIdTo')) {
+                $query->where('id', '<=', (int) $request->input('orderIdTo'));
+            }
+
+            // ✅ Order Total Range
+            if ($request->filled('orderTotalFrom')) {
+                $query->where('total_amount', '>=', (float) $request->input('orderTotalFrom'));
+            }
+
+            if ($request->filled('orderTotalTo')) {
+                $query->where('total_amount', '<=', (float) $request->input('orderTotalTo'));
+            }
+
+            // ✅ Date Range filter
+            if ($request->filled('dateRange')) {
+                $dateType = $request->input('dateType', 'order-date');
+
+                // Determine column based on date type
+                if ($dateType === 'shipped-date') {
+                    $columns = ['shipped_at'];
+                } elseif ($dateType === 'both') {
+                    $columns = ['created_at', 'shipped_at'];
+                } else {
+                    $columns = ['created_at'];
+                }
+
+                $dateRange = $request->input('dateRange');
+
+                if ($dateRange === 'custom' && $request->filled('dateFrom') && $request->filled('dateTo')) {
+                    // Custom date range
+                    $query->where(function ($q) use ($columns, $request) {
+                        foreach ($columns as $i => $col) {
+                            $method = $i === 0 ? 'where' : 'orWhere';
+                            $q->$method(function ($sub) use ($col, $request) {
+                                $sub->whereDate($col, '>=', $request->input('dateFrom'))
+                                    ->whereDate($col, '<=', $request->input('dateTo'));
+                            });
+                        }
+                    });
+                } else {
+                    $dateMap = [
+                        'Yesterday'  => today()->subDay(),
+                        'Today'      => today(),
+                        'Last7Days'  => now()->subDays(7),
+                        'Last30Days' => now()->subDays(30),
+                        'Last90Days' => now()->subDays(90),
+                        'Last365Days' => now()->subDays(365),
+                    ];
+
+                    if (isset($dateMap[$dateRange])) {
+                        $query->where(function ($q) use ($columns, $dateRange, $dateMap) {
+                            foreach ($columns as $i => $col) {
+                                $method = $i === 0 ? 'where' : 'orWhere';
+                                if ($dateRange === 'Yesterday' || $dateRange === 'Today') {
+                                    $q->$method(function ($sub) use ($col, $dateMap, $dateRange) {
+                                        $sub->whereDate($col, $dateMap[$dateRange]);
+                                    });
+                                } else {
+                                    $q->$method(function ($sub) use ($col, $dateMap, $dateRange) {
+                                        $sub->whereDate($col, '>=', $dateMap[$dateRange]);
+                                    });
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+
+            // ✅ Deleted orders
+            if ($request->filled('deletedOrder') && $request->input('deletedOrder') !== 'ignore') {
+                $deleted = $request->input('deletedOrder');
+                if ($deleted === 'only') {
+                    $query->onlyTrashed();
+                } elseif ($deleted === 'with') {
+                    $query->withTrashed();
+                }
+            }
+
             // ✅ Sorting
-            $query->orderBy(
-                $request->input('sortBy', 'id'),
-                $request->input('sortDirection', 'DESC')
-            );
+            $sortBy = $request->input('sortBy', 'id');
+            $sortDirection = $request->input('sortDirection', 'DESC');
+
+            $allowedSorts = ['id', 'order_number', 'total_amount', 'created_at', 'updated_at', 'status', 'shipped_at'];
+            if (!in_array($sortBy, $allowedSorts)) {
+                $sortBy = 'id';
+            }
+
+            $query->orderBy($sortBy, $sortDirection);
 
             // ✅ Pagination
-            $perPage = $request->input('perPage', 20);
+            $perPage = (int) $request->input('perPage', 20);
             $orders = $query->paginate($perPage);
 
             return response()->json([
@@ -3370,7 +3436,6 @@ class OrderController extends Controller
             ], 500);
         }
     }
-
 
 
     public function downloadInvoice($id)
