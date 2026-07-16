@@ -13,8 +13,13 @@ class Store extends Model
         'name',
         'user_id',
         'base_url',
+        'store_address',
     ];
 
+    protected $casts = [
+
+        'store_address'  => 'array',
+    ];
     public function users()
     {
         return $this->belongsToMany(User::class);
