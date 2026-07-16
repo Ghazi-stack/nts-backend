@@ -3225,9 +3225,7 @@ class OrderController extends Controller
                     ->where(function ($c) use ($keywords) {
                         $c->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keywords}%"])
                             ->orWhere('first_name', 'like', "%{$keywords}%")
-                            ->orWhere('last_name', 'like', "%{$keywords}%")
-                            // ->orWhere('email', 'like', "%{$keywords}%")
-                            // ->orWhere('phone', 'like', "%{$keywords}%");
+                            ->orWhere('last_name', 'like', "%{$keywords}%");
                     })->pluck('id');
 
                 $billingIds = \App\Models\BillingInformation::where('store_id', $storeId)
@@ -3235,8 +3233,6 @@ class OrderController extends Controller
                         $b->where('first_name', 'like', "%{$keywords}%")
                             ->orWhere('last_name', 'like', "%{$keywords}%")
                             ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keywords}%"])
-                            // ->orWhere('email', 'like', "%{$keywords}%")
-                            // ->orWhere('phone', 'like', "%{$keywords}%")
                             ->orWhere('payment_method', 'like', "%{$keywords}%")
                             ->orWhere('shipping_method', 'like', "%{$keywords}%");
                     })->pluck('id');
@@ -3244,9 +3240,8 @@ class OrderController extends Controller
                 $query->where(function ($q) use ($keywords, $customerIds, $billingIds) {
                     $q->where('order_number', 'like', "%{$keywords}%")
                         ->orWhere('status', 'like', "%{$keywords}%")
-                        // ->orWhere('email', 'like', "%{$keywords}%")
-                        ->orWhere('name', 'like', "%{$keywords}%")
-                        // ->orWhere('phone', 'like', "%{$keywords}%");
+                        ->orWhere('name', 'like', "%{$keywords}%");
+                  
 
                     if (is_numeric($keywords)) {
                         $q->orWhere('id', $keywords)
