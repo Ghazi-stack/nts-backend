@@ -24,6 +24,7 @@ use App\Mail\PasswordResetSuccessMail;
 use App\Services\TwoFactorService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
@@ -34,7 +35,13 @@ class AuthController extends Controller
             $validator = Validator::make($request->all(), [
                 'firstName'     => 'required|string|max:100',
                 'lastName'      => 'nullable|string|max:100',
-                'email'         => 'required|email|unique:users,email',
+                'email'         => [
+                    'required',
+                    'email',
+                    $request->userRole == 1
+                        ? 'unique:users,email'
+                        : Rule::unique('users', 'email')->where('store_id', $storeId),
+                ],
                 'phoneNumber'   => 'nullable|string|max:20|unique:customers,phone',
                 'password'      => 'required|string|min:6',
                 'companyName'   => 'nullable|string|max:255',
