@@ -14,6 +14,7 @@ use App\Models\Logo;
 use App\Http\Resources\ShipmentResource;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\ShipmentTrackingMail;
+use App\Models\OrderTimeline;
 use App\Models\Store;
 
 class ShipmentController extends Controller
@@ -144,6 +145,15 @@ class ShipmentController extends Controller
         $order->tracking_number = $validated['trackingId'] ?? null;
         $order->save();
 
+        // ===================== TIMELINE: SHIPMENT CREATED =====================
+        OrderTimeline::addEvent($order->id, $storeId, 'shipment_created', 'Shipment created', [
+            'tracking_number' => $shipment->tracking_number,
+            'shipping_method' => $shipment->shipping_method,
+            'shipped_to'      => $shipment->shipped_to,
+            'date_shipped'    => $shipment->date_shipped,
+        ], 'shipping');
+
+
         event(new ShipmentCreated($shipment));
         sleep(1);
 
@@ -182,6 +192,13 @@ class ShipmentController extends Controller
             'tracking_number' => $validated['trackingId'],
         ]);
 
+        // ===================== TIMELINE: TRACKING UPDATED =====================
+        OrderTimeline::addEvent($shipment->order_id, $storeId, 'tracking_updated', 'Tracking information updated', [
+            'tracking_number'  => $shipment->tracking_number,
+            'tracking_carrier' => $shipment->tracking_carrie,
+            'shipping_method'  => $shipment->shipping_method,
+            'shipped_to'       => $shipment->shipped_to,
+        ], 'shipping');
         /*
     |--------------------------------------------------------------------------
     | Send Tracking Email To Customer

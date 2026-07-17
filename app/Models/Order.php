@@ -66,6 +66,11 @@ class Order extends Model
         return $this->hasMany(OrderItem::class)->with('product');
     }
 
+    public function timelines()
+    {
+        return $this->hasMany(OrderTimeline::class);
+    }
+
     public function messages()
     {
         return $this->hasMany(\App\Models\CustomerMessage::class, 'order_id');

@@ -37,6 +37,7 @@ use App\Models\SavedAddress;
 use App\Http\Resources\ReturnRequestResource;
 use App\Mail\OrderPlacedMail;
 use App\Models\Logo;
+use App\Models\OrderTimeline;
 use App\Models\Store;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -1178,6 +1179,37 @@ class OrderController extends Controller
                 'payment_status'     => 'authorized',
             ], $riskData));
 
+            // ===================== TIMELINE EVENTS =====================
+            foreach ($orders as $ord) {
+                $ord->load('billingInformation');
+
+                // 1. Order Created
+                OrderTimeline::addEvent($ord->id, $storeId, 'order_created', 'Order created', [
+                    'status' => $ord->status,
+                ], 'dot');
+
+                // 2. Status Changed (Incomplete → Awaiting Payment)
+                OrderTimeline::addEvent($ord->id, $storeId, 'status_changed', 'Order status changed', [
+                    'previous_status' => 'Incomplete',
+                    'new_status'      => $ord->status,
+                ], 'dot');
+
+                // 3. Shipping Quote
+                OrderTimeline::addEvent($ord->id, $storeId, 'shipping_quote', 'Shipping quote persisted', [
+                    'shipping_cost'   => '$' . number_format($ord->shipping_cost, 2),
+                    'shipping_method' => $ord->billingInformation->shipping_method ?? null,
+                ], 'dot');
+
+                // 4. Order Confirmed
+                OrderTimeline::addEvent($ord->id, $storeId, 'order_confirmed', 'Order confirmed', [], 'dot');
+
+                // 5. Payment Authorized
+                OrderTimeline::addEvent($ord->id, $storeId, 'payment_authorized', 'Payment authorized', [
+                    'source'         => ucwords(str_replace('_', ' ', $validated['paymentMethod'] ?? 'N/A')),
+                    'amount'         => '$' . number_format($ord->total_amount, 2),
+                    'payment_intent' => $validated['paymentIntentId'] ?? null,
+                ], 'payment');
+            }
             // Response
             foreach ($orders as $order) {
                 $order->load('items.product.images', 'billingInformation', 'customer');
@@ -1466,9 +1498,47 @@ class OrderController extends Controller
                 ->where('store_id', current_store_id())
                 ->firstOrFail();
 
+            $previousStatus = $order->status;
             $newStatus = $request->input('status');
             $order->status = $newStatus;
             $order->save();
+
+            $storeId = current_store_id();
+
+            // ===================== TIMELINE: STATUS CHANGED =====================
+            OrderTimeline::addEvent($order->id, $storeId, 'status_changed', 'Order status changed', [
+                'previous_status' => $previousStatus,
+                'new_status'      => $newStatus,
+            ], 'dot');
+
+            // ===================== STRIPE CAPTURE =====================
+            if ($newStatus === 'Awaiting Fulfillment') {
+                $payment = Payment::where('order_id', $order->id)->first();
+
+                if ($payment && $payment->stripe_session_id && $payment->payment_status === 'authorized') {
+                    try {
+                        \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+                        $intent = \Stripe\PaymentIntent::retrieve($payment->stripe_session_id);
+
+                        if ($intent->status === 'requires_capture') {
+                            $intent->capture();
+                            $payment->update(['payment_status' => 'completed']);
+
+                            OrderTimeline::addEvent($order->id, $storeId, 'payment_captured', 'Capture request successfully processed for the order #' . $order->order_number, [
+                                'source'         => 'Credit Card (via Stripe)',
+                                'payment_intent' => $payment->stripe_session_id,
+                                'amount'         => '$' . number_format($payment->amount, 2),
+                            ], 'payment');
+                        }
+                    } catch (\Exception $captureError) {
+                        \Log::error('STRIPE CAPTURE FAILED', [
+                            'order_id'       => $order->id,
+                            'payment_intent' => $payment->stripe_session_id,
+                            'error'          => $captureError->getMessage(),
+                        ]);
+                    }
+                }
+            }
 
             // ===================== STRIPE CANCEL/REFUND =====================
             if ($newStatus === 'Cancelled') {
@@ -1482,11 +1552,20 @@ class OrderController extends Controller
                         if ($intent->status === 'requires_capture') {
                             $intent->cancel();
                             $payment->update(['payment_status' => 'cancelled']);
+
+                            OrderTimeline::addEvent($order->id, $storeId, 'payment_cancelled', 'Payment cancelled for order #' . $order->order_number, [
+                                'payment_intent' => $payment->stripe_session_id,
+                            ], 'payment');
                         } elseif ($intent->status === 'succeeded') {
                             \Stripe\Refund::create([
                                 'payment_intent' => $payment->stripe_session_id,
                             ]);
                             $payment->update(['payment_status' => 'refunded']);
+
+                            OrderTimeline::addEvent($order->id, $storeId, 'payment_refunded', 'Payment refunded for order #' . $order->order_number, [
+                                'payment_intent' => $payment->stripe_session_id,
+                                'amount'         => '$' . number_format($payment->amount, 2),
+                            ], 'payment');
                         }
                     } catch (\Exception $stripeError) {
                         \Log::error('STRIPE CANCEL/REFUND FAILED', [
@@ -1516,8 +1595,6 @@ class OrderController extends Controller
                     ?? $order->customer->email
                     ?? null;
 
-                $storeId = current_store_id();
-
                 if ($customerEmail) {
                     try {
                         // Email to customer
@@ -1526,6 +1603,12 @@ class OrderController extends Controller
                         // Email to admin
                         $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
                         Mail::to($adminEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId));
+
+                        // Timeline: Email Sent
+                        OrderTimeline::addEvent($order->id, $storeId, 'email_sent', 'Status update email sent', [
+                            'email'  => $customerEmail,
+                            'status' => $newStatus,
+                        ], 'email');
                     } catch (\Exception $mailError) {
                         Log::error('ORDER STATUS EMAIL FAILED', [
                             'error'   => $mailError->getMessage(),
@@ -3581,32 +3664,42 @@ class OrderController extends Controller
             ], 500);
         }
     }
+
     public function getOrderTimeline($id)
     {
         try {
-            $order = Order::with([
-                'notes.user',
-                'items.product.images',
-                'shipments',
-                'billingInformation',
-            ])
-                ->where('store_id', current_store_id())
-                ->findOrFail($id);
+            $storeId = current_store_id();
+
+            $order = Order::where('store_id', $storeId)->findOrFail($id);
+
+            $timelines = OrderTimeline::where('order_id', $id)
+                ->where('store_id', $storeId)
+                ->orderBy('created_at', 'asc')
+                ->get()
+                ->map(function ($event) {
+                    return [
+                        'id'         => $event->id,
+                        'eventType'  => $event->event_type,
+                        'title'      => $event->title,
+                        'details'    => $event->details,
+                        'icon'       => $event->icon,
+                        'date'       => $event->created_at->format('F d, Y'),
+                        'time'       => $event->created_at->format('g:i A'),
+                        'created_at' => $event->created_at,
+                    ];
+                });
 
             return response()->json([
                 'status' => true,
-                'data' => [
-                    'order'      => new OrderResource($order),
-                    'notes'      => OrderNoteResource::collection($order->notes),
-                    'shipments'  => ShipmentResource::collection($order->shipments),
-                    'status'     => $order->status,
-                    'created_at' => $order->created_at,
-                    'updated_at' => $order->updated_at,
+                'data'   => [
+                    'order_id'     => $order->id,
+                    'order_number' => $order->order_number,
+                    'timeline'     => $timelines,
                 ],
             ]);
         } catch (ModelNotFoundException $e) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Order not found for this store.',
             ], 404);
         } catch (\Exception $e) {
@@ -3617,7 +3710,7 @@ class OrderController extends Controller
 
             return response()->json([
                 'status'  => false,
-                'message' => 'An unexpected error occurred while retrieving the order timeline.',
+                'message' => 'An unexpected error occurred.',
                 'error'   => $e->getMessage(),
             ], 500);
         }
