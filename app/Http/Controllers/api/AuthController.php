@@ -32,6 +32,7 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         try {
+              $storeId = current_store_id();
             $validator = Validator::make($request->all(), [
                 'firstName'     => 'required|string|max:100',
                 'lastName'      => 'nullable|string|max:100',
