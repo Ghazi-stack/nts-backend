@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Http\Controllers\Controller;
+use App\Models\OrderTimeline;
 
 class StripePaymentController extends Controller
 {
@@ -200,9 +201,25 @@ class StripePaymentController extends Controller
                 'payment_status' => 'completed',
             ]);
 
+            // ===================== TIMELINE: PAYMENT CAPTURED =====================
+            $storeId = current_store_id();
+
+            OrderTimeline::addEvent($payment->order_id, $storeId, 'payment_captured', 'Capture request successfully processed for the order #' . ($payment->order->order_number ?? $payment->order_id), [
+                'source'         => 'Credit Card (via Stripe)',
+                'payment_intent' => $request->payment_intent_id,
+                'amount'         => '$' . number_format($captured->amount_received / 100, 2),
+            ], 'payment');
+
             $order = $payment->order;
             if ($order) {
+                $previousStatus = $order->status;
                 $order->update(['status' => 'Awaiting Fulfillment']);
+
+                // Timeline: Status Changed
+                OrderTimeline::addEvent($order->id, $storeId, 'status_changed', 'Order status changed', [
+                    'previous_status' => $previousStatus,
+                    'new_status'      => 'Awaiting Fulfillment',
+                ], 'dot');
             }
 
             return response()->json([
