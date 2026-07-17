@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WebPageResource;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\Rule;
 
 class WebPageController extends Controller
@@ -31,7 +32,7 @@ class WebPageController extends Controller
             $keyword = trim((string) $request->query('keyword', ''));
 
             $query = WebPage::where('store_id', $storeId)
-                            ->orderBy('id', 'desc');
+                ->orderBy('id', 'desc');
 
             if ($keyword !== '') {
                 $query->where('page_name', 'like', "%{$keyword}%");
@@ -252,7 +253,7 @@ class WebPageController extends Controller
                 $slugWithUrl = '/' . $currentSlug;
             }
 
-            
+
             $data = [
                 'page_name' => $validated['pageName'] ?? $page->page_name,
                 'page_url' => $validated['pageUrl'] ?? $page->page_url,
@@ -293,6 +294,46 @@ class WebPageController extends Controller
         }
     }
 
+    public function updateNavigation(Request $request, $id)
+    {
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $page = WebPage::where('store_id', $storeId)->findOrFail($id);
+
+            $validated = $request->validate([
+                'showInNavigation' => 'required|boolean',
+            ]);
+
+            $page->update([
+                'show_in_navigation' => $validated['showInNavigation'],
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Navigation visibility updated successfully',
+                'data' => new WebPageResource($page)
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Web page not found'
+            ], 404);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to update navigation visibility',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
     public function destroy($ids)
     {
         try {

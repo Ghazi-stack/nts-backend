@@ -159,6 +159,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/single-page/{id}', 'show');
         Route::post('/create-page', 'store');
         Route::put('update/{id}', 'update');
+        Route::put('update-navigation/{id}', 'updateNavigation');
         Route::delete('/delete/{ids}', 'destroy');
     });
 
