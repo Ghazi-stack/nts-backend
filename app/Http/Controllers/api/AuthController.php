@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Password;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
 use Exception;
+use App\Models\Permission;
 use App\Mail\PasswordResetSuccessMail;
 use App\Services\TwoFactorService;
 use Illuminate\Support\Carbon;
@@ -32,7 +33,7 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         try {
-              $storeId = current_store_id();
+            $storeId = current_store_id();
             $validator = Validator::make($request->all(), [
                 'firstName'     => 'required|string|max:100',
                 'lastName'      => 'nullable|string|max:100',
@@ -56,6 +57,8 @@ class AuthController extends Controller
                 'businessSize'  => 'nullable|string|max:100',
                 'region'        => 'nullable|string|max:100',
                 'userRole'      => 'required|in:1,2',
+                'permissions'   => $request->userRole == 1 ? 'required|array|min:1' : 'nullable',
+                'permissions.*' => 'exists:permissions,id',
             ]);
 
             if ($validator->fails()) {
@@ -91,7 +94,42 @@ class AuthController extends Controller
                 $user->store_id = $store->id;
                 $user->save();
 
+                // ===================== ASSIGN PERMISSIONS =====================
+                if (!empty($request->permissions)) {
+                    $inserts = [];
+                    foreach ($request->permissions as $permId) {
+                        $inserts[] = [
+                            'user_id'       => $user->id,
+                            'permission_id' => $permId,
+                            'store_id'      => $store->id,
+                            'created_at'    => now(),
+                            'updated_at'    => now(),
+                        ];
+                    }
+                    DB::table('user_permissions')->insert($inserts);
+                }
+
                 DB::commit();
+
+                // Get assigned permissions for response
+                $userPermissions = Permission::whereIn('id', $request->permissions ?? [])
+                    ->orderBy('group')
+                    ->orderBy('sort_order')
+                    ->get()
+                    ->groupBy('group')
+                    ->map(function ($items, $group) {
+                        return [
+                            'group' => $group,
+                            'permissions' => $items->map(function ($p) {
+                                return [
+                                    'id'    => $p->id,
+                                    'name'  => $p->name,
+                                    'label' => $p->label,
+                                    'slug'  => $p->slug,
+                                ];
+                            })->values(),
+                        ];
+                    })->values();
 
                 // Send Registration Email to Store Owner
                 try {
@@ -110,12 +148,13 @@ class AuthController extends Controller
                 $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
 
                 return response()->json([
-                    'status'   => true,
-                    'message'  => 'Store owner registered successfully',
-                    'token'    => $token,
-                    'expireAt' => $expireAt,
-                    'user'     => new UserResource($user),
-                    'store'    => $store,
+                    'status'      => true,
+                    'message'     => 'Store owner registered successfully',
+                    'token'       => $token,
+                    'expireAt'    => $expireAt,
+                    'user'        => new UserResource($user),
+                    'store'       => $store,
+                    'permissions' => $userPermissions,
                 ], 201);
             }
 
@@ -173,13 +212,14 @@ class AuthController extends Controller
             $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
 
             return response()->json([
-                'status'   => true,
-                'message'  => 'Customer registered successfully',
-                'token'    => $token,
-                'expireAt' => $expireAt,
-                'store'    => Store::find($storeId),
-                'user'     => new UserResource($user),
-                'customer' => new CustomerResource($customer),
+                'status'      => true,
+                'message'     => 'Customer registered successfully',
+                'token'       => $token,
+                'expireAt'    => $expireAt,
+                'store'       => Store::find($storeId),
+                'user'        => new UserResource($user),
+                'customer'    => new CustomerResource($customer),
+                'permissions' => null,
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -216,10 +256,10 @@ class AuthController extends Controller
             $storeId = $request->header('storeId', $request->input('storeId'));
 
             /*
-            |--------------------------------------------------------------------------
-            | ADMIN LOGIN (userRole = 1)
-            |--------------------------------------------------------------------------
-            */
+        |--------------------------------------------------------------------------
+        | ADMIN LOGIN (userRole = 1)
+        |--------------------------------------------------------------------------
+        */
             $admin = User::where('email', $email)
                 ->where('userRole', 1)
                 ->first();
@@ -266,21 +306,43 @@ class AuthController extends Controller
                     $accessToken->save();
                 }
 
+                // ===================== GET ADMIN PERMISSIONS =====================
+                $adminPermissions = $admin->permissions()
+                    ->where('user_permissions.store_id', $admin->store_id)
+                    ->orderBy('group')
+                    ->orderBy('sort_order')
+                    ->get()
+                    ->groupBy('group')
+                    ->map(function ($items, $group) {
+                        return [
+                            'group' => $group,
+                            'permissions' => $items->map(function ($p) {
+                                return [
+                                    'id'    => $p->id,
+                                    'name'  => $p->name,
+                                    'label' => $p->label,
+                                    'slug'  => $p->slug,
+                                ];
+                            })->values(),
+                        ];
+                    })->values();
+
                 return response()->json([
-                    'status'   => true,
-                    'message'  => 'Admin logged in successfully.',
-                    'token'    => $plainTextToken,
-                    'expireAt' => $expireAt->toDateTimeString(),
-                    'user'     => new UserResource($admin),
-                    'stores'   => StoreResource::collection($stores),
+                    'status'      => true,
+                    'message'     => 'Admin logged in successfully.',
+                    'token'       => $plainTextToken,
+                    'expireAt'    => $expireAt->toDateTimeString(),
+                    'user'        => new UserResource($admin),
+                    'stores'      => StoreResource::collection($stores),
+                    'permissions' => $adminPermissions,
                 ]);
             }
 
             /*
-            |--------------------------------------------------------------------------
-            | CUSTOMER LOGIN (userRole = 2)
-            |--------------------------------------------------------------------------
-            */
+        |--------------------------------------------------------------------------
+        | CUSTOMER LOGIN (userRole = 2)
+        |--------------------------------------------------------------------------
+        */
             if (!$storeId) {
                 return response()->json([
                     'status'  => false,
@@ -361,12 +423,13 @@ class AuthController extends Controller
             }
 
             return response()->json([
-                'status'   => true,
-                'message'  => 'Customer logged in successfully.',
-                'token'    => $plainTextToken,
-                'expireAt' => $expireAt->toDateTimeString(),
-                'store'    => new StoreResource($store),
-                'customer' => new CustomerResource($customer->customer),
+                'status'      => true,
+                'message'     => 'Customer logged in successfully.',
+                'token'       => $plainTextToken,
+                'expireAt'    => $expireAt->toDateTimeString(),
+                'store'       => new StoreResource($store),
+                'customer'    => new CustomerResource($customer->customer),
+                'permissions' => null,
             ]);
         } catch (\Exception $e) {
             Log::error('Login failed: ' . $e->getMessage());

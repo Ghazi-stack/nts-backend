@@ -73,6 +73,29 @@ class User extends Authenticatable
     {
         $this->notify(new CustomResetPasswordNotification($token));
     }
+
+    public function permissions()
+    {
+        return $this->belongsToMany(Permission::class, 'user_permissions')
+            ->withPivot('store_id')
+            ->withTimestamps();
+    }
+
+    public function hasPermission($slug)
+    {
+        return $this->permissions()
+            ->where('slug', $slug)
+            ->where('user_permissions.store_id', $this->store_id)
+            ->exists();
+    }
+
+    public function hasAnyPermission(array $slugs)
+    {
+        return $this->permissions()
+            ->whereIn('slug', $slugs)
+            ->where('user_permissions.store_id', $this->store_id)
+            ->exists();
+    }
     public function orders()
     {
         return $this->hasMany(Order::class);
