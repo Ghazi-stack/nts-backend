@@ -41,69 +41,142 @@ class CustomerAddressController extends Controller
             ->latest()
             ->get();
 
-        $customerData = $customer ? [
-            'id'                    => $customer->id,
-            'store_id'              => $customer->store_id,
-            'first_name'            => $customer->first_name,
-            'last_name'             => $customer->last_name,
-            'company_name'          => $customer->company_name,
-            'email'                 => $customer->email,
-            'customer_group'        => $customer->customer_group,
-            'phone'                 => $customer->phone,
-            'store_credit'          => $customer->store_credit,
-            'receive_review_emails' => (bool) $customer->receive_review_emails,
-            'force_password_reset'  => (bool) $customer->force_password_reset,
-            'tax_exempt_code'       => $customer->tax_exempt_code,
-            'country'               => $customer->country,
-            'address_line_1'        => $customer->address,
-            'address_line_2'        => $customer->address_line_2,
-            'state'                 => $customer->state,
-            'created_at'            => $customer->created_at?->toDateTimeString(),
-            'updated_at'            => $customer->updated_at?->toDateTimeString(),
-        ] : [];
-
         $result = [];
 
-        // Customer addresses
-        foreach ($customerAddresses as $address) {
-            $data = $customerData;
-            $data['type'] = 'customer_address';
-            $data['addresses'] = [[
-                'id'             => $address->id,
-                'store_id'       => $address->store_id,
-                'customer_id'    => $address->customer_id,
-                'first_name'     => $address->first_name,
-                'last_name'      => $address->last_name,
-                'company_name'   => $address->company_name,
-                'phone_number'   => $address->phone_number,
-                'address_line_1' => $address->address_line_1,
-                'address_line_2' => $address->address_line_2,
-                'city'           => $address->city,
-                'state'          => $address->state,
-                'zip'            => $address->zip,
-                'country'        => $address->country,
-                'is_default'     => (bool) $address->is_default,
-                'created_at'     => $address->created_at?->toDateTimeString(),
-                'updated_at'     => $address->updated_at?->toDateTimeString(),
-            ]];
-            $result[] = $data;
+        /*
+    |--------------------------------------------------------------------------
+    | Customer
+    |--------------------------------------------------------------------------
+    */
+        if ($customer) {
+
+            $result[] = [
+                'type'                    => 'customer',
+                'id'                      => $customer->id,
+                'store_id'                => $customer->store_id,
+                'first_name'              => $customer->first_name,
+                'last_name'               => $customer->last_name,
+                'company_name'            => $customer->company_name,
+                'email'                   => $customer->email,
+                'customer_group'          => $customer->customer_group,
+                'phone'                   => $customer->phone,
+                'store_credit'            => $customer->store_credit,
+                'receive_review_emails'   => (bool)$customer->receive_review_emails,
+                'force_password_reset'    => (bool)$customer->force_password_reset,
+                'tax_exempt_code'         => $customer->tax_exempt_code,
+                'country'                 => $customer->country,
+                'address_line_1'          => $customer->address,
+                'address_line_2'          => $customer->address_line_2,
+                'state'                   => $customer->state,
+                'created_at'              => optional($customer->created_at)->toDateTimeString(),
+                'updated_at'              => optional($customer->updated_at)->toDateTimeString(),
+            ];
         }
 
-        // Saved addresses
+        /*
+    |--------------------------------------------------------------------------
+    | Customer Addresses
+    |--------------------------------------------------------------------------
+    */
+        foreach ($customerAddresses as $address) {
+
+            $result[] = [
+                'type'             => 'customer_address',
+                'id'               => $address->id,
+                'store_id'         => $address->store_id,
+                'customer_id'      => $address->customer_id,
+                'first_name'       => $address->first_name,
+                'last_name'        => $address->last_name,
+                'company_name'     => $address->company_name,
+                'phone_number'     => $address->phone_number,
+                'address_line_1'   => $address->address_line_1,
+                'address_line_2'   => $address->address_line_2,
+                'city'             => $address->city,
+                'state'            => $address->state,
+                'zip'              => $address->zip,
+                'country'          => $address->country,
+                'is_default'       => (bool)$address->is_default,
+                'created_at'       => optional($address->created_at)->toDateTimeString(),
+                'updated_at'       => optional($address->updated_at)->toDateTimeString(),
+            ];
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | Saved Addresses
+    |--------------------------------------------------------------------------
+    */
         foreach ($savedAddresses as $saved) {
-            $data = $customerData;
-            $data['type'] = 'saved_address';
-            $data['order_id'] = $saved->order_id;
-            $data['saved_address_id'] = $saved->id;
-            $data['shipping_address'] = $saved->shipping_address;
-            $data['billing_address'] = $saved->billing_address;
-            $result[] = $data;
+
+            $result[] = [
+                'type'       => 'saved_address',
+                'id'         => $saved->id,
+                'store_id'   => $saved->store_id,
+                'order_id'   => $saved->order_id,
+                'created_at' => optional($saved->created_at)->toDateTimeString(),
+                'updated_at' => optional($saved->updated_at)->toDateTimeString(),
+            ];
+
+            // Shipping Address
+            if (!empty($saved->shipping_address)) {
+
+                $shipping = is_array($saved->shipping_address)
+                    ? $saved->shipping_address
+                    : json_decode($saved->shipping_address, true);
+
+                $result[] = [
+                    'type'            => 'saved_address_shipping',
+                    'id'              => $saved->id,
+                    'store_id'        => $saved->store_id,
+                    'first_name'      => $shipping['firstName'] ?? null,
+                    'last_name'       => $shipping['lastName'] ?? null,
+                    'company_name'    => $shipping['companyName'] ?? null,
+                    'phone'           => $shipping['phone'] ?? null,
+                    'address_line_1'  => $shipping['addressLine1'] ?? null,
+                    'address_line_2'  => $shipping['addressLine2'] ?? null,
+                    'city'            => $shipping['city'] ?? null,
+                    'state'           => $shipping['state'] ?? null,
+                    'zip'             => $shipping['zip'] ?? null,
+                    'country'         => $shipping['country'] ?? null,
+                    'created_at'      => optional($saved->created_at)->toDateTimeString(),
+                    'updated_at'      => optional($saved->updated_at)->toDateTimeString(),
+                ];
+            }
+
+            // Billing Address
+            if (!empty($saved->billing_address)) {
+
+                $billing = is_array($saved->billing_address)
+                    ? $saved->billing_address
+                    : json_decode($saved->billing_address, true);
+
+                $name = explode(' ', $billing['name'] ?? '', 2);
+
+                $result[] = [
+                    'type'            => 'saved_address_billing',
+                    'id'              => $saved->id,
+                    'store_id'        => $saved->store_id,
+                    'first_name'      => $name[0] ?? null,
+                    'last_name'       => $name[1] ?? null,
+                    'company_name'    => null,
+                    'email'           => $billing['email'] ?? null,
+                    'phone'           => $billing['phone'] ?? null,
+                    'address_line_1'  => $billing['addressLine1'] ?? null,
+                    'address_line_2'  => $billing['addressLine2'] ?? null,
+                    'city'            => $billing['city'] ?? null,
+                    'state'           => $billing['state'] ?? null,
+                    'zip'             => $billing['zip'] ?? null,
+                    'country'         => $billing['country'] ?? null,
+                    'created_at'      => optional($saved->created_at)->toDateTimeString(),
+                    'updated_at'      => optional($saved->updated_at)->toDateTimeString(),
+                ];
+            }
         }
 
         return response()->json([
             'status' => true,
             'data' => [
-                'customer_addresses' => $result,
+                'customer_addresses' => $result
             ]
         ]);
     }
@@ -121,22 +194,135 @@ class CustomerAddressController extends Controller
             ], 400);
         }
 
+        $user = auth('sanctum')->user();
+
+        /*
+    |--------------------------------------------------------------------------
+    | Customer Address
+    |--------------------------------------------------------------------------
+    */
+
         $address = CustomerAddress::where('id', $id)
             ->where('store_id', $storeId)
-            ->where('customer_id', auth()->id())
+            ->where('customer_id', $user->id)
             ->first();
 
-        if (!$address) {
+        if ($address) {
+
             return response()->json([
-                'status' => false,
-                'message' => 'Address not found.'
-            ], 404);
+                'status' => true,
+                'data' => [
+                    'type'             => 'customer_address',
+                    'id'               => $address->id,
+                    'store_id'         => $address->store_id,
+                    'customer_id'      => $address->customer_id,
+                    'first_name'       => $address->first_name,
+                    'last_name'        => $address->last_name,
+                    'company_name'     => $address->company_name,
+                    'phone_number'     => $address->phone_number,
+                    'address_line_1'   => $address->address_line_1,
+                    'address_line_2'   => $address->address_line_2,
+                    'city'             => $address->city,
+                    'state'            => $address->state,
+                    'zip'              => $address->zip,
+                    'country'          => $address->country,
+                    'is_default'       => (bool) $address->is_default,
+                    'created_at'       => optional($address->created_at)->toDateTimeString(),
+                    'updated_at'       => optional($address->updated_at)->toDateTimeString(),
+                ]
+            ]);
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | Saved Address
+    |--------------------------------------------------------------------------
+    */
+
+        $saved = SavedAddress::where('id', $id)
+            ->where('store_id', $storeId)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if ($saved) {
+
+            $response = [];
+
+            // Parent Saved Address
+            $response[] = [
+                'type'       => 'saved_address',
+                'id'         => $saved->id,
+                'store_id'   => $saved->store_id,
+                'order_id'   => $saved->order_id,
+                'created_at' => optional($saved->created_at)->toDateTimeString(),
+                'updated_at' => optional($saved->updated_at)->toDateTimeString(),
+            ];
+
+            // Shipping
+            if (!empty($saved->shipping_address)) {
+
+                $shipping = is_array($saved->shipping_address)
+                    ? $saved->shipping_address
+                    : json_decode($saved->shipping_address, true);
+
+                $response[] = [
+                    'type'            => 'saved_address_shipping',
+                    'id'              => $saved->id,
+                    'store_id'        => $saved->store_id,
+                    'first_name'      => $shipping['firstName'] ?? null,
+                    'last_name'       => $shipping['lastName'] ?? null,
+                    'company_name'    => $shipping['companyName'] ?? null,
+                    'phone'           => $shipping['phone'] ?? null,
+                    'address_line_1'  => $shipping['addressLine1'] ?? null,
+                    'address_line_2'  => $shipping['addressLine2'] ?? null,
+                    'city'            => $shipping['city'] ?? null,
+                    'state'           => $shipping['state'] ?? null,
+                    'zip'             => $shipping['zip'] ?? null,
+                    'country'         => $shipping['country'] ?? null,
+                    'created_at'      => optional($saved->created_at)->toDateTimeString(),
+                    'updated_at'      => optional($saved->updated_at)->toDateTimeString(),
+                ];
+            }
+
+            // Billing
+            if (!empty($saved->billing_address)) {
+
+                $billing = is_array($saved->billing_address)
+                    ? $saved->billing_address
+                    : json_decode($saved->billing_address, true);
+
+                $name = explode(' ', $billing['name'] ?? '', 2);
+
+                $response[] = [
+                    'type'            => 'saved_address_billing',
+                    'id'              => $saved->id,
+                    'store_id'        => $saved->store_id,
+                    'first_name'      => $name[0] ?? null,
+                    'last_name'       => $name[1] ?? null,
+                    'company_name'    => null,
+                    'email'           => $billing['email'] ?? null,
+                    'phone'           => $billing['phone'] ?? null,
+                    'address_line_1'  => $billing['addressLine1'] ?? null,
+                    'address_line_2'  => $billing['addressLine2'] ?? null,
+                    'city'            => $billing['city'] ?? null,
+                    'state'           => $billing['state'] ?? null,
+                    'zip'             => $billing['zip'] ?? null,
+                    'country'         => $billing['country'] ?? null,
+                    'created_at'      => optional($saved->created_at)->toDateTimeString(),
+                    'updated_at'      => optional($saved->updated_at)->toDateTimeString(),
+                ];
+            }
+
+            return response()->json([
+                'status' => true,
+                'data' => $response
+            ]);
         }
 
         return response()->json([
-            'status' => true,
-            'data' => $address
-        ]);
+            'status' => false,
+            'message' => 'Address not found.'
+        ], 404);
     }
 
     /**
@@ -196,7 +382,25 @@ class CustomerAddressController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Address created successfully.',
-            'data' => $address
+            'data' => [
+                'type'             => 'customer_address',
+                'id'               => $address->id,
+                'store_id'         => $address->store_id,
+                'customer_id'      => $address->customer_id,
+                'first_name'       => $address->first_name,
+                'last_name'        => $address->last_name,
+                'company_name'     => $address->company_name,
+                'phone_number'     => $address->phone_number,
+                'address_line_1'   => $address->address_line_1,
+                'address_line_2'   => $address->address_line_2,
+                'city'             => $address->city,
+                'state'            => $address->state,
+                'zip'              => $address->zip,
+                'country'          => $address->country,
+                'is_default'       => (bool) $address->is_default,
+                'created_at'       => optional($address->created_at)->toDateTimeString(),
+                'updated_at'       => optional($address->updated_at)->toDateTimeString(),
+            ]
         ]);
     }
 
