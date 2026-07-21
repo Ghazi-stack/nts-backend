@@ -323,7 +323,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::delete('/delete-my-address/{addressId}', [CustomerController::class, 'deleteMyAddress']);
     });
 
-    Route::prefix('customer-address')->middleware('permission:customers.all')->controller(CustomerAddressController::class)->group(function () {
+    Route::prefix('customer-address')->controller(CustomerAddressController::class)->group(function () {
         Route::post('/store', 'store');
         Route::put('/update/{id}', 'update');
         Route::delete('/delete/{id}', 'destroy');
