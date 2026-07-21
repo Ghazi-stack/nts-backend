@@ -34,6 +34,11 @@ class AuthController extends Controller
     {
         try {
             $storeId = current_store_id();
+
+            // Detect: owner (store create) or sub-user (storeId header)
+            $isOwnerRegistration = $request->userRole == 1 && !$storeId;
+            $isSubUser = $request->userRole == 1 && $storeId;
+
             $validator = Validator::make($request->all(), [
                 'firstName'     => 'required|string|max:100',
                 'lastName'      => 'nullable|string|max:100',
@@ -57,7 +62,7 @@ class AuthController extends Controller
                 'businessSize'  => 'nullable|string|max:100',
                 'region'        => 'nullable|string|max:100',
                 'userRole'      => 'required|in:1,2',
-                'permissions'   => $request->userRole == 1 ? 'required|array|min:1' : 'nullable',
+                'permissions'   => $isSubUser ? 'required|array|min:1' : 'nullable',
                 'permissions.*' => 'exists:permissions,id',
             ]);
 
@@ -72,90 +77,172 @@ class AuthController extends Controller
             DB::beginTransaction();
 
             if ($request->userRole == 1) {
-                $user = User::create([
-                    'name'          => $request->firstName . ' ' . $request->lastName,
-                    'email'         => $request->email,
-                    'password'      => bcrypt($request->password),
-                    'userRole'      => 1,
-                    'store_name'    => $request->storeName,
-                    'base_url'      => $request->base_url,
-                    'business_size' => $request->businessSize,
-                    'region'        => $request->region,
-                    'store_id'      => null,
-                    'customer_id'   => null,
-                ]);
 
-                $store = Store::create([
-                    'name'     => $request->storeName,
-                    'user_id'  => $user->id,
-                    'base_url' => $request->base_url,
-                ]);
+                // ===================== OWNER REGISTRATION (store create) =====================
+                if ($isOwnerRegistration) {
 
-                $user->store_id = $store->id;
-                $user->save();
+                    $user = User::create([
+                        'name'          => $request->firstName . ' ' . $request->lastName,
+                        'email'         => $request->email,
+                        'password'      => bcrypt($request->password),
+                        'userRole'      => 1,
+                        'store_name'    => $request->storeName,
+                        'base_url'      => $request->base_url,
+                        'business_size' => $request->businessSize,
+                        'region'        => $request->region,
+                        'store_id'      => null,
+                        'customer_id'   => null,
+                    ]);
 
-                // ===================== ASSIGN PERMISSIONS =====================
-                if (!empty($request->permissions)) {
+                    $store = Store::create([
+                        'name'     => $request->storeName,
+                        'user_id'  => $user->id,
+                        'base_url' => $request->base_url,
+                    ]);
+
+                    $user->store_id = $store->id;
+                    $user->save();
+
+                    // Assign ALL permissions to owner
+                    $allPermissions = Permission::all();
                     $inserts = [];
-                    foreach ($request->permissions as $permId) {
+                    foreach ($allPermissions as $perm) {
                         $inserts[] = [
                             'user_id'       => $user->id,
-                            'permission_id' => $permId,
+                            'permission_id' => $perm->id,
                             'store_id'      => $store->id,
                             'created_at'    => now(),
                             'updated_at'    => now(),
                         ];
                     }
                     DB::table('user_permissions')->insert($inserts);
+
+                    DB::commit();
+
+                    // Get all permissions for response
+                    $userPermissions = Permission::orderBy('group')
+                        ->orderBy('sort_order')
+                        ->get()
+                        ->groupBy('group')
+                        ->map(function ($items, $group) {
+                            return [
+                                'group' => $group,
+                                'permissions' => $items->map(function ($p) {
+                                    return [
+                                        'id'    => $p->id,
+                                        'name'  => $p->name,
+                                        'label' => $p->label,
+                                        'slug'  => $p->slug,
+                                    ];
+                                })->values(),
+                            ];
+                        })->values();
+
+                    // Send Registration Email to Store Owner
+                    try {
+                        Mail::to($user->email)->send(new UserRegistrationMail($user, $store->id));
+
+                        $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
+                        Mail::to($adminEmail)->send(new UserRegistrationMail($user, $store->id));
+                    } catch (\Exception $mailError) {
+                        Log::error('REGISTRATION EMAIL FAILED', [
+                            'error' => $mailError->getMessage(),
+                            'user_email' => $user->email,
+                        ]);
+                    }
+
+                    $token = $user->createToken('auth_token')->plainTextToken;
+                    $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+                    return response()->json([
+                        'status'      => true,
+                        'message'     => 'Store owner registered successfully',
+                        'token'       => $token,
+                        'expireAt'    => $expireAt,
+                        'user'        => new UserResource($user),
+                        'store'       => $store,
+                        'permissions' => $userPermissions,
+                        'isOwner'     => true,
+                    ], 201);
                 }
 
-                DB::commit();
+                // ===================== SUB-USER REGISTRATION (storeId header) =====================
+                if ($isSubUser) {
 
-                // Get assigned permissions for response
-                $userPermissions = Permission::whereIn('id', $request->permissions ?? [])
-                    ->orderBy('group')
-                    ->orderBy('sort_order')
-                    ->get()
-                    ->groupBy('group')
-                    ->map(function ($items, $group) {
-                        return [
-                            'group' => $group,
-                            'permissions' => $items->map(function ($p) {
-                                return [
-                                    'id'    => $p->id,
-                                    'name'  => $p->name,
-                                    'label' => $p->label,
-                                    'slug'  => $p->slug,
-                                ];
-                            })->values(),
-                        ];
-                    })->values();
-
-                // Send Registration Email to Store Owner
-                try {
-                    Mail::to($user->email)->send(new UserRegistrationMail($user, $store->id));
-
-                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
-                    Mail::to($adminEmail)->send(new UserRegistrationMail($user, $store->id));
-                } catch (\Exception $mailError) {
-                    Log::error('REGISTRATION EMAIL FAILED', [
-                        'error' => $mailError->getMessage(),
-                        'user_email' => $user->email,
+                    $user = User::create([
+                        'name'          => $request->firstName . ' ' . $request->lastName,
+                        'email'         => $request->email,
+                        'password'      => bcrypt($request->password),
+                        'userRole'      => 1,
+                        'store_name'    => $request->storeName,
+                        'business_size' => $request->businessSize,
+                        'region'        => $request->region,
+                        'store_id'      => $storeId,
+                        'customer_id'   => null,
                     ]);
+
+                    // Assign selected permissions
+                    $inserts = [];
+                    foreach ($request->permissions as $permId) {
+                        $inserts[] = [
+                            'user_id'       => $user->id,
+                            'permission_id' => $permId,
+                            'store_id'      => $storeId,
+                            'created_at'    => now(),
+                            'updated_at'    => now(),
+                        ];
+                    }
+                    DB::table('user_permissions')->insert($inserts);
+
+                    DB::commit();
+
+                    // Get assigned permissions for response
+                    $userPermissions = Permission::whereIn('id', $request->permissions)
+                        ->orderBy('group')
+                        ->orderBy('sort_order')
+                        ->get()
+                        ->groupBy('group')
+                        ->map(function ($items, $group) {
+                            return [
+                                'group' => $group,
+                                'permissions' => $items->map(function ($p) {
+                                    return [
+                                        'id'    => $p->id,
+                                        'name'  => $p->name,
+                                        'label' => $p->label,
+                                        'slug'  => $p->slug,
+                                    ];
+                                })->values(),
+                            ];
+                        })->values();
+
+                    // Send Registration Email
+                    try {
+                        Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
+
+                        $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
+                        Mail::to($adminEmail)->send(new UserRegistrationMail($user, $storeId));
+                    } catch (\Exception $mailError) {
+                        Log::error('REGISTRATION EMAIL FAILED', [
+                            'error' => $mailError->getMessage(),
+                            'user_email' => $user->email,
+                        ]);
+                    }
+
+                    $token = $user->createToken('auth_token')->plainTextToken;
+                    $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+                    return response()->json([
+                        'status'      => true,
+                        'message'     => 'Sub-user registered successfully',
+                        'token'       => $token,
+                        'expireAt'    => $expireAt,
+                        'user'        => new UserResource($user),
+                        'store'       => Store::find($storeId),
+                        'permissions' => $userPermissions,
+                        'isOwner'     => false,
+                    ], 201);
                 }
-
-                $token = $user->createToken('auth_token')->plainTextToken;
-                $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
-
-                return response()->json([
-                    'status'      => true,
-                    'message'     => 'Store owner registered successfully',
-                    'token'       => $token,
-                    'expireAt'    => $expireAt,
-                    'user'        => new UserResource($user),
-                    'store'       => $store,
-                    'permissions' => $userPermissions,
-                ], 201);
             }
 
             // ===================== CUSTOMER REGISTRATION =====================
@@ -220,6 +307,7 @@ class AuthController extends Controller
                 'user'        => new UserResource($user),
                 'customer'    => new CustomerResource($customer),
                 'permissions' => null,
+                'isOwner'     => false,
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
