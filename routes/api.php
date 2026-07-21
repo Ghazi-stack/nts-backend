@@ -191,7 +191,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Orders — Return Request
-    Route::prefix('orders')->middleware('permission:orders.return')->controller(OrderController::class)->group(function () {
+    Route::prefix('orders')->controller(OrderController::class)->group(function () {
         Route::get('/get-return-order', 'listReturnRequestsForAdmin');
     });
 
