@@ -457,7 +457,25 @@ class CustomerAddressController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Address updated successfully.',
-            'data' => $address
+            'data' => [
+                'type'             => 'customer_address',
+                'id'               => $address->id,
+                'store_id'         => $address->store_id,
+                'customer_id'      => $address->customer_id,
+                'first_name'       => $address->first_name,
+                'last_name'        => $address->last_name,
+                'company_name'     => $address->company_name,
+                'phone_number'     => $address->phone_number,
+                'address_line_1'   => $address->address_line_1,
+                'address_line_2'   => $address->address_line_2,
+                'city'             => $address->city,
+                'state'            => $address->state,
+                'zip'              => $address->zip,
+                'country'          => $address->country,
+                'is_default'       => (bool) $address->is_default,
+                'created_at'       => optional($address->created_at)->toDateTimeString(),
+                'updated_at'       => optional($address->updated_at)->toDateTimeString(),
+            ]
         ]);
     }
 
