@@ -715,8 +715,11 @@ class AuthController extends Controller
                 ], 400);
             }
 
+            $currentUser = auth('sanctum')->user();
+
             $users = User::where('store_id', $storeId)
                 ->where('userRole', 1)
+                ->where('id', '!=', $currentUser->id)
                 ->latest()
                 ->get();
 
