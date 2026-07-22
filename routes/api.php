@@ -68,6 +68,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 Route::prefix('user')->controller(AuthController::class)->group(function () {
     Route::post('/register', 'register');
+
     Route::post('/login', 'login');
     Route::post('/forgot-password', 'forgotPassword');
     Route::post('/reset-password', 'resetPassword');
@@ -111,6 +112,10 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::put('/update-name', 'updateName');
         Route::post('/update-password', 'updatePassword');
     });
+
+    Route::get('/admin-users', [AuthController::class, 'getAdminUsers']);
+    Route::put('/admin-users/{id}', [AuthController::class, 'updateAdminUser']);
+    Route::delete('/admin-users/{id}', [AuthController::class, 'deleteAdminUser']);
 
     Route::post('/login-as-customer', [AuthController::class, 'loginAsCustomer']);
 

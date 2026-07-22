@@ -25,6 +25,7 @@ use App\Mail\PasswordResetSuccessMail;
 use App\Services\TwoFactorService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
@@ -702,7 +703,197 @@ class AuthController extends Controller
     // }
 
 
+    public function getAdminUsers(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
 
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $users = User::where('store_id', $storeId)
+                ->where('userRole', 1)
+                ->latest()
+                ->get();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Admin users fetched successfully.',
+                'data' => UserResource::collection($users),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to fetch admin users.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function updateAdminUser(Request $request, $id)
+    {
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $user = User::where('store_id', $storeId)
+                ->where('userRole', 1)
+                ->findOrFail($id);
+
+            $request->validate([
+                'firstName'     => 'nullable|string|max:100',
+                'lastName'      => 'nullable|string|max:100',
+                'email'         => 'nullable|email|unique:users,email,' . $user->id,
+                //'password'      => 'nullable|string|min:6',
+                'permissions'   => 'nullable|array',
+                'permissions.*' => 'exists:permissions,id',
+            ]);
+
+            if ($request->filled('firstName') || $request->filled('lastName')) {
+                $user->name = trim(
+                    ($request->firstName ?? explode(' ', $user->name)[0] ?? '') . ' ' .
+                        ($request->lastName ?? explode(' ', $user->name)[1] ?? '')
+                );
+            }
+
+            if ($request->filled('email')) {
+                $user->email = $request->email;
+            }
+
+            // if ($request->filled('password')) {
+            //     $user->password = bcrypt($request->password);
+            // }
+
+            $user->save();
+
+            // Update permissions
+            if ($request->has('permissions')) {
+                DB::table('user_permissions')
+                    ->where('user_id', $user->id)
+                    ->where('store_id', $storeId)
+                    ->delete();
+
+                $inserts = [];
+                foreach ($request->permissions as $permId) {
+                    $inserts[] = [
+                        'user_id'       => $user->id,
+                        'permission_id' => $permId,
+                        'store_id'      => $storeId,
+                        'created_at'    => now(),
+                        'updated_at'    => now(),
+                    ];
+                }
+
+                if (!empty($inserts)) {
+                    DB::table('user_permissions')->insert($inserts);
+                }
+            }
+
+            // Get updated permissions
+            $userPermissions = $user->permissions()
+                ->where('user_permissions.store_id', $storeId)
+                ->orderBy('group')
+                ->orderBy('sort_order')
+                ->get()
+                ->groupBy('group')
+                ->map(function ($items, $group) {
+                    return [
+                        'group' => $group,
+                        'permissions' => $items->map(function ($p) {
+                            return [
+                                'id'    => $p->id,
+                                'name'  => $p->name,
+                                'label' => $p->label,
+                                'slug'  => $p->slug,
+                            ];
+                        })->values(),
+                    ];
+                })->values();
+
+            return response()->json([
+                'status'      => true,
+                'message'     => 'Admin user updated successfully.',
+                'data'        => new UserResource($user),
+                'permissions' => $userPermissions,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Admin user not found.',
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to update admin user.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function deleteAdminUser($id)
+    {
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $currentUser = auth('sanctum')->user();
+
+            if ($currentUser->id == $id) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'You cannot delete your own account.',
+                ], 403);
+            }
+
+            $user = User::where('store_id', $storeId)
+                ->where('userRole', 1)
+                ->findOrFail($id);
+
+            // Delete permissions
+            DB::table('user_permissions')
+                ->where('user_id', $user->id)
+                ->where('store_id', $storeId)
+                ->delete();
+
+            // Delete tokens
+            $user->tokens()->delete();
+
+            // Delete user
+            $user->delete();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Admin user deleted successfully.',
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Admin user not found.',
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to delete admin user.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
     public function forgotPassword(Request $request)
     {
         try {
