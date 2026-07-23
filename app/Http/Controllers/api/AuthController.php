@@ -197,7 +197,19 @@ class AuthController extends Controller
                         ], 401);
                     }
 
-                    // Naya Sub User Create  (now uses the correct store from header)
+                    // Target store ka owner nikaalo
+                    $targetStore = Store::find($storeId);
+
+                    if (!$targetStore) {
+                        return response()->json([
+                            'status' => false,
+                            'message' => 'Store not found.'
+                        ], 404);
+                    }
+
+                    $storeOwner = User::find($targetStore->user_id);
+
+                    // Naya Sub User Create
                     $user = User::create([
                         'name'          => $request->firstName . ' ' . $request->lastName,
                         'email'         => $request->email,
@@ -205,12 +217,12 @@ class AuthController extends Controller
                         'userRole'      => 1,
                         'phone_number'  => $request->phoneNumber,
 
-                        // Login User se copy hoga
-                        'store_name'    => $loginUser->store_name,
-                        'business_size' => $loginUser->business_size,
-                        'region'        => $loginUser->region,
+                        // Ab target store ke owner se copy hoga
+                        'store_name'    => $storeOwner->store_name ?? $loginUser->store_name,
+                        'business_size' => $storeOwner->business_size ?? $loginUser->business_size,
+                        'region'        => $storeOwner->region ?? $loginUser->region,
 
-                        // Correct store from header / current_store_id
+                        // Correct store from header
                         'store_id'      => $storeId,
                         'customer_id'   => null,
                     ]);
@@ -221,7 +233,7 @@ class AuthController extends Controller
                         $inserts[] = [
                             'user_id'       => $user->id,
                             'permission_id' => $permId,
-                            'store_id'      => $storeId,          // ← fixed
+                            'store_id'      => $storeId,
                             'created_at'    => now(),
                             'updated_at'    => now(),
                         ];
@@ -273,7 +285,7 @@ class AuthController extends Controller
                         'token'       => $token,
                         'expireAt'    => $expireAt,
                         'user'        => new UserResource($user),
-                        'store'       => Store::find($storeId),
+                        'store'       => $targetStore,
                         'permissions' => $userPermissions,
                         'isOwner'     => false,
                     ], 201);
