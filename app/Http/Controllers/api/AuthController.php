@@ -87,7 +87,7 @@ class AuthController extends Controller
                         'email'         => $request->email,
                         'password'      => bcrypt($request->password),
                         'userRole'      => 1,
-                        'phone_number '    => $request->phone_number,
+                        'phone_number'    => $request->phoneNumber,
                         'store_name'    => $request->storeName,
                         'base_url'      => $request->base_url,
                         'business_size' => $request->businessSize,
@@ -188,7 +188,7 @@ class AuthController extends Controller
                         'email'         => $request->email,
                         'password'      => bcrypt($request->password),
                         'userRole'      => 1,
-                        'phone_number'  => $request->phone_number,
+                        'phone_number'  => $request->phoneNumber,
 
                         // Login User se copy hoga
                         'store_name'    => $loginUser->store_name,
@@ -273,7 +273,7 @@ class AuthController extends Controller
                 'email'         => $request->email,
                 'password'      => bcrypt($request->password),
                 'userRole'      => 2,
-                'phone_number'    => $request->phone_number,
+                'phone_number'    => $request->phoneNumber,
                 'store_name'    => $request->storeName,
                 'business_size' => $request->businessSize,
                 'region'        => $request->region,
