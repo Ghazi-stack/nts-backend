@@ -36,6 +36,16 @@ class AuthController extends Controller
         try {
             $storeId = current_store_id();
 
+            // Fallback: if current_store_id() didn't pick the header
+            if (!$storeId) {
+                $storeId = $request->header('storeId')
+                    ?: $request->header('Store-Id')
+                    ?: $request->header('X-Store-Id');
+            }
+            if ($storeId) {
+                $storeId = (int) $storeId;
+            }
+
             // Detect: owner (store create) or sub-user (storeId header)
             $isOwnerRegistration = $request->userRole == 1 && !$storeId;
             $isSubUser = $request->userRole == 1 && $storeId;
@@ -51,7 +61,7 @@ class AuthController extends Controller
                     $isOwnerRegistration
                         ? 'unique:users,email'
 
-                        // Sub User / Customer
+                        // Sub User / Customer  → unique only inside the same store
                         : Rule::unique('users', 'email')->where(function ($query) use ($storeId) {
                             return $query->where('store_id', $storeId);
                         }),
@@ -93,7 +103,7 @@ class AuthController extends Controller
                         'email'         => $request->email,
                         'password'      => bcrypt($request->password),
                         'userRole'      => 1,
-                        'phone_number'    => $request->phoneNumber,
+                        'phone_number'  => $request->phoneNumber,
                         'store_name'    => $request->storeName,
                         'base_url'      => $request->base_url,
                         'business_size' => $request->businessSize,
@@ -175,7 +185,6 @@ class AuthController extends Controller
                 }
 
                 // ===================== SUB-USER REGISTRATION (storeId header) =====================
-
                 if ($isSubUser) {
 
                     // Token se login user nikalo
@@ -188,7 +197,7 @@ class AuthController extends Controller
                         ], 401);
                     }
 
-                    // Naya Sub User Create
+                    // Naya Sub User Create  (now uses the correct store from header)
                     $user = User::create([
                         'name'          => $request->firstName . ' ' . $request->lastName,
                         'email'         => $request->email,
@@ -201,8 +210,8 @@ class AuthController extends Controller
                         'business_size' => $loginUser->business_size,
                         'region'        => $loginUser->region,
 
-                        // Same Store ID
-                        'store_id'      => $loginUser->store_id,
+                        // Correct store from header / current_store_id
+                        'store_id'      => $storeId,
                         'customer_id'   => null,
                     ]);
 
@@ -212,7 +221,7 @@ class AuthController extends Controller
                         $inserts[] = [
                             'user_id'       => $user->id,
                             'permission_id' => $permId,
-                            'store_id'      => $loginUser->store_id,
+                            'store_id'      => $storeId,          // ← fixed
                             'created_at'    => now(),
                             'updated_at'    => now(),
                         ];
@@ -244,10 +253,10 @@ class AuthController extends Controller
 
                     // Send Registration Email
                     try {
-                        Mail::to($user->email)->send(new UserRegistrationMail($user, $loginUser->store_id));
+                        Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
 
                         $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
-                        Mail::to($adminEmail)->send(new UserRegistrationMail($user, $loginUser->store_id));
+                        Mail::to($adminEmail)->send(new UserRegistrationMail($user, $storeId));
                     } catch (\Exception $mailError) {
                         Log::error('REGISTRATION EMAIL FAILED', [
                             'error' => $mailError->getMessage(),
@@ -264,7 +273,7 @@ class AuthController extends Controller
                         'token'       => $token,
                         'expireAt'    => $expireAt,
                         'user'        => new UserResource($user),
-                        'store'       => Store::find($loginUser->store_id),
+                        'store'       => Store::find($storeId),
                         'permissions' => $userPermissions,
                         'isOwner'     => false,
                     ], 201);
@@ -279,7 +288,7 @@ class AuthController extends Controller
                 'email'         => $request->email,
                 'password'      => bcrypt($request->password),
                 'userRole'      => 2,
-                'phone_number'    => $request->phoneNumber,
+                'phone_number'  => $request->phoneNumber,
                 'store_name'    => $request->storeName,
                 'business_size' => $request->businessSize,
                 'region'        => $request->region,
