@@ -18,7 +18,7 @@ class UserResource extends JsonResource
             'id'         => $this->id,
             'name'       => $this->name,
             'email'      => $this->email,
-            'phone'      => $this->phone_number,
+            'phoneNumber'      => $this->phone_number,
             'userRole'   => $this->userRole,
             'businessSize'  => $this->business_size,   // ✅ map to DB field
             'storeName'     => $this->store_name,      // ✅ map to DB field

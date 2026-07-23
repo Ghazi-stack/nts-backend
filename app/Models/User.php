@@ -27,6 +27,7 @@ class User extends Authenticatable
         'password',
         'phone_number',
         'userRole',
+        'phone_number',
         'store_name',
         'business_size',
         'region',

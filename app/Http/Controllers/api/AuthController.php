@@ -87,6 +87,7 @@ class AuthController extends Controller
                         'email'         => $request->email,
                         'password'      => bcrypt($request->password),
                         'userRole'      => 1,
+                        'phone_number '    => $request->phone_number,
                         'store_name'    => $request->storeName,
                         'base_url'      => $request->base_url,
                         'business_size' => $request->businessSize,
@@ -168,17 +169,34 @@ class AuthController extends Controller
                 }
 
                 // ===================== SUB-USER REGISTRATION (storeId header) =====================
+                
                 if ($isSubUser) {
 
+                    // Token se login user nikalo
+                    $loginUser = auth('sanctum')->user();
+
+                    if (!$loginUser) {
+                        return response()->json([
+                            'status' => false,
+                            'message' => 'Unauthorized.'
+                        ], 401);
+                    }
+
+                    // Naya Sub User Create
                     $user = User::create([
                         'name'          => $request->firstName . ' ' . $request->lastName,
                         'email'         => $request->email,
                         'password'      => bcrypt($request->password),
                         'userRole'      => 1,
-                        'store_name'    => $request->storeName,
-                        'business_size' => $request->businessSize,
-                        'region'        => $request->region,
-                        'store_id'      => $storeId,
+                        'phone_number'  => $request->phone_number,
+
+                        // Login User se copy hoga
+                        'store_name'    => $loginUser->store_name,
+                        'business_size' => $loginUser->business_size,
+                        'region'        => $loginUser->region,
+
+                        // Same Store ID
+                        'store_id'      => $loginUser->store_id,
                         'customer_id'   => null,
                     ]);
 
@@ -188,16 +206,17 @@ class AuthController extends Controller
                         $inserts[] = [
                             'user_id'       => $user->id,
                             'permission_id' => $permId,
-                            'store_id'      => $storeId,
+                            'store_id'      => $loginUser->store_id,
                             'created_at'    => now(),
                             'updated_at'    => now(),
                         ];
                     }
+
                     DB::table('user_permissions')->insert($inserts);
 
                     DB::commit();
 
-                    // Get assigned permissions for response
+                    // Get assigned permissions
                     $userPermissions = Permission::whereIn('id', $request->permissions)
                         ->orderBy('group')
                         ->orderBy('sort_order')
@@ -219,10 +238,10 @@ class AuthController extends Controller
 
                     // Send Registration Email
                     try {
-                        Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
+                        Mail::to($user->email)->send(new UserRegistrationMail($user, $loginUser->store_id));
 
                         $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
-                        Mail::to($adminEmail)->send(new UserRegistrationMail($user, $storeId));
+                        Mail::to($adminEmail)->send(new UserRegistrationMail($user, $loginUser->store_id));
                     } catch (\Exception $mailError) {
                         Log::error('REGISTRATION EMAIL FAILED', [
                             'error' => $mailError->getMessage(),
@@ -239,7 +258,7 @@ class AuthController extends Controller
                         'token'       => $token,
                         'expireAt'    => $expireAt,
                         'user'        => new UserResource($user),
-                        'store'       => Store::find($storeId),
+                        'store'       => Store::find($loginUser->store_id),
                         'permissions' => $userPermissions,
                         'isOwner'     => false,
                     ], 201);
@@ -254,6 +273,7 @@ class AuthController extends Controller
                 'email'         => $request->email,
                 'password'      => bcrypt($request->password),
                 'userRole'      => 2,
+                'phone_number'    => $request->phone_number,
                 'store_name'    => $request->storeName,
                 'business_size' => $request->businessSize,
                 'region'        => $request->region,
