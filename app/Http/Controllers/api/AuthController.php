@@ -169,7 +169,7 @@ class AuthController extends Controller
                 }
 
                 // ===================== SUB-USER REGISTRATION (storeId header) =====================
-                
+
                 if ($isSubUser) {
 
                     // Token se login user nikalo
@@ -403,7 +403,8 @@ class AuthController extends Controller
                 }
                 // ── END 2FA CHECK ──────────────────────────────────────────────
 
-                $stores = Store::where('user_id', $admin->id)->get();
+                // Get Store using store_id (Works for Owner & Sub User)
+                $store = Store::find($admin->store_id);
 
                 $tokenResult    = $admin->createToken('adminToken');
                 $plainTextToken = $tokenResult->plainTextToken;
@@ -442,7 +443,7 @@ class AuthController extends Controller
                     'token'       => $plainTextToken,
                     'expireAt'    => $expireAt->toDateTimeString(),
                     'user'        => new UserResource($admin),
-                    'stores'      => StoreResource::collection($stores),
+                    'store'       => new StoreResource($store),
                     'permissions' => $adminPermissions,
                 ]);
             }
