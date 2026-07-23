@@ -403,14 +403,23 @@ class AuthController extends Controller
                 }
                 // ── END 2FA CHECK ──────────────────────────────────────────────
 
-                // Get Store using store_id (Works for Owner & Sub User)
-                $store = Store::find($admin->store_id);
+                // ===================== GET STORES =====================
+
+                // Pehle owner ke stores nikalo
+                $stores = Store::where('user_id', $admin->id)->get();
+
+                // Agar owner ke stores nahi mile aur user ke paas store_id hai,
+                // to iska matlab ye sub-user hai.
+                if ($stores->isEmpty() && !empty($admin->store_id)) {
+                    $stores = Store::where('id', $admin->store_id)->get();
+                }
 
                 $tokenResult    = $admin->createToken('adminToken');
                 $plainTextToken = $tokenResult->plainTextToken;
 
                 $expireAt    = now()->addHours(24);
                 $accessToken = PersonalAccessToken::findToken($plainTextToken);
+
                 if ($accessToken) {
                     $accessToken->expires_at = $expireAt;
                     $accessToken->save();
@@ -443,7 +452,7 @@ class AuthController extends Controller
                     'token'       => $plainTextToken,
                     'expireAt'    => $expireAt->toDateTimeString(),
                     'user'        => new UserResource($admin),
-                    'store'       => new StoreResource($store),
+                    'stores'      => StoreResource::collection($stores),
                     'permissions' => $adminPermissions,
                 ]);
             }
