@@ -43,12 +43,18 @@ class AuthController extends Controller
             $validator = Validator::make($request->all(), [
                 'firstName'     => 'required|string|max:100',
                 'lastName'      => 'nullable|string|max:100',
-                'email'         => [
+                'email' => [
                     'required',
                     'email',
-                    $request->userRole == 1
+
+                    // Owner Registration
+                    $isOwnerRegistration
                         ? 'unique:users,email'
-                        : Rule::unique('users', 'email')->where('store_id', $storeId),
+
+                        // Sub User / Customer
+                        : Rule::unique('users', 'email')->where(function ($query) use ($storeId) {
+                            return $query->where('store_id', $storeId);
+                        }),
                 ],
                 'phoneNumber'   => 'nullable|string|max:20|unique:customers,phone',
                 'password'      => 'required|string|min:6',
