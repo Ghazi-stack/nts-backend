@@ -405,12 +405,18 @@ class AuthController extends Controller
 
                 // ===================== GET STORES =====================
 
-                // Pehle owner ke stores nikalo
+                // ===================== GET STORES =====================
+
+                $isOwner = false;
+
+                // Pehle check karo kya ye owner hai
                 $stores = Store::where('user_id', $admin->id)->get();
 
-                // Agar owner ke stores nahi mile aur user ke paas store_id hai,
-                // to iska matlab ye sub-user hai.
-                if ($stores->isEmpty() && !empty($admin->store_id)) {
+                if ($stores->isNotEmpty()) {
+                    // Owner
+                    $isOwner = true;
+                } elseif (!empty($admin->store_id)) {
+                    // Sub User
                     $stores = Store::where('id', $admin->store_id)->get();
                 }
 
@@ -448,12 +454,15 @@ class AuthController extends Controller
 
                 return response()->json([
                     'status'      => true,
-                    'message'     => 'Admin logged in successfully.',
+                    'message'     => $isOwner
+                        ? 'Admin logged in successfully.'
+                        : 'Sub-user logged in successfully.',
                     'token'       => $plainTextToken,
                     'expireAt'    => $expireAt->toDateTimeString(),
                     'user'        => new UserResource($admin),
                     'stores'      => StoreResource::collection($stores),
                     'permissions' => $adminPermissions,
+                    'isOwner'     => $isOwner,
                 ]);
             }
 
