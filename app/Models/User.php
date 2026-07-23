@@ -81,18 +81,18 @@ class User extends Authenticatable
             ->withTimestamps();
     }
 
-    public function hasPermission($slug)
+    public function hasPermission($name)
     {
         return $this->permissions()
-            ->where('slug', $slug)
+            ->where('permissions.name', $name)
             ->where('user_permissions.store_id', $this->store_id)
             ->exists();
     }
 
-    public function hasAnyPermission(array $slugs)
+    public function hasAnyPermission(array $names)
     {
         return $this->permissions()
-            ->whereIn('slug', $slugs)
+            ->whereIn('permissions.name', $names)
             ->where('user_permissions.store_id', $this->store_id)
             ->exists();
     }

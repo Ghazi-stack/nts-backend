@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 
 class CheckPermission
 {
-    public function handle(Request $request, Closure $next, ...$slugs)
+    public function handle(Request $request, Closure $next, ...$names)
     {
         $user = auth('sanctum')->user();
 
@@ -26,8 +26,13 @@ class CheckPermission
             ], 403);
         }
 
-        // Check specific permissions for userRole 1
-        if (!$user->hasAnyPermission($slugs)) {
+        // Check specific permissions by name
+        $hasPermission = $user->permissions()
+            ->whereIn('permissions.name', $names)
+            ->where('user_permissions.store_id', $user->store_id)
+            ->exists();
+
+        if (!$hasPermission) {
             return response()->json([
                 'status'  => false,
                 'message' => 'You do not have permission to access this resource.',

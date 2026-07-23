@@ -142,7 +142,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::post('/permissions/assign/{userId}', [PermissionController::class, 'assignPermissions']);
 
     // ===================== ORDERS =====================
-    Route::prefix('orders')->middleware('permission:orders.all')->controller(OrderController::class)->group(function () {
+    Route::prefix('orders')->middleware('permission:all_orders')->controller(OrderController::class)->group(function () {
         Route::get('/list-orders', 'index');
         Route::get('/show-order/{id}', 'show');
         Route::patch('/update-status/{id}', 'updateOrderStatus');
@@ -160,23 +160,23 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Orders — Add
-    Route::prefix('orders')->middleware('permission:orders.add')->controller(OrderController::class)->group(function () {
+    Route::prefix('orders')->middleware('permission:add_order')->controller(OrderController::class)->group(function () {
         Route::post('/existing-customer', 'storeFromDashboard');
         Route::post('/new-customer', 'storeNewCustomerOrder');
     });
 
     // Orders — Search
-    Route::prefix('orders')->middleware('permission:orders.search')->controller(OrderController::class)->group(function () {
+    Route::prefix('orders')->middleware('permission:search_orders')->controller(OrderController::class)->group(function () {
         Route::get('/search-advanced', 'advancedOrderSearch');
     });
 
     // Orders — Export
-    Route::prefix('orders')->middleware('permission:orders.export')->controller(OrderController::class)->group(function () {
+    Route::prefix('orders')->middleware('permission:export_orders')->controller(OrderController::class)->group(function () {
         Route::get('/export-orders', 'exportToExcel');
     });
 
     // Orders — Draft
-    Route::prefix('orders')->middleware('permission:orders.draft')->controller(OrderController::class)->group(function () {
+    Route::prefix('orders')->middleware('permission:draft_orders')->controller(OrderController::class)->group(function () {
         Route::get('/list-drafts', 'listDraftOrders');
         Route::post('/create-draft', 'createDraftOrder');
         Route::delete('/delete-draft/{id}', 'deleteDraftOrder');
@@ -184,7 +184,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Orders — Shipments
-    Route::prefix('shipments')->middleware('permission:orders.shipments')->controller(ShipmentController::class)->group(function () {
+    Route::prefix('shipments')->middleware('permission:shipments')->controller(ShipmentController::class)->group(function () {
         Route::get('/list-shipment', 'index');
         Route::get('/get-shipment/{id}', 'show');
         Route::get('/shipment-by-order', 'getShipmentByOrderId');
@@ -201,7 +201,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Orders — Tracking
-    Route::prefix('orders-tracking')->middleware('permission:orders.shipments')->controller(OrderTrackingImportController::class)->group(function () {
+    Route::prefix('orders-tracking')->middleware('permission:shipments')->controller(OrderTrackingImportController::class)->group(function () {
         Route::post('/tracking/import', 'import');
         Route::get('/tracking/template', 'template');
         Route::get('/tracking/export', 'export');
@@ -209,7 +209,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Order Items
-    Route::prefix('order-items')->middleware('permission:orders.all')->controller(OrderItemController::class)->group(function () {
+    Route::prefix('order-items')->middleware('permission:all_orders')->controller(OrderItemController::class)->group(function () {
         Route::get('/{orderId}', 'index');
         Route::post('/add/{orderId}', 'store');
         Route::put('/update/{id}', 'update');
@@ -217,7 +217,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== PRODUCTS =====================
-    Route::prefix('products')->middleware('permission:products.all')->controller(ProductController::class)->group(function () {
+    Route::prefix('products')->middleware('permission:all_products')->controller(ProductController::class)->group(function () {
         Route::get('/products-list', 'index');
         Route::get('/products-filter', 'filterProducts');
         Route::get('/product/{id}', 'show');
@@ -230,30 +230,30 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Products — Add
-    Route::prefix('products')->middleware('permission:products.add')->controller(ProductController::class)->group(function () {
+    Route::prefix('products')->middleware('permission:add_product')->controller(ProductController::class)->group(function () {
         Route::post('/add-product', 'addProduct');
     });
 
     // Products — Search
-    Route::prefix('products')->middleware('permission:products.search')->controller(ProductController::class)->group(function () {
+    Route::prefix('products')->middleware('permission:search_products')->controller(ProductController::class)->group(function () {
         Route::get('/search-product', 'searchProduct');
         Route::post('/advanced-search', 'searchAdvanced');
     });
 
     // Products — Import
-    Route::prefix('products')->middleware('permission:products.import')->controller(ProductController::class)->group(function () {
+    Route::prefix('products')->middleware('permission:import_products')->controller(ProductController::class)->group(function () {
         Route::post('/import-csv', 'importCSV');
         Route::post('/cancel-import', 'cancelImport');
         Route::get('/import-progress/{progressKey}', 'importProgress');
     });
 
     // Products — Export
-    Route::prefix('products')->middleware('permission:products.export')->controller(ProductController::class)->group(function () {
+    Route::prefix('products')->middleware('permission:export_products')->controller(ProductController::class)->group(function () {
         Route::get('/export-csv', 'exportCSV');
     });
 
     // Products — Categories
-    Route::prefix('categories')->middleware('permission:products.categories')->controller(CategoryController::class)->group(function () {
+    Route::prefix('categories')->middleware('permission:categories')->controller(CategoryController::class)->group(function () {
         Route::get('/list-categories', 'index');
         Route::get('/category/{id}', 'show');
         Route::get('/slug/{slug}', 'showBySlug');
@@ -266,7 +266,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Products — Reviews
-    Route::prefix('reviews')->middleware('permission:products.reviews')->controller(ReviewController::class)->group(function () {
+    Route::prefix('reviews')->middleware('permission:reviews')->controller(ReviewController::class)->group(function () {
         Route::get('/admin', 'adminIndex');
         Route::get('/get-by-id/{id}', 'show');
         Route::put('/update-review/{id}', 'update');
@@ -278,7 +278,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Products — Brands
-    Route::prefix('brands')->middleware('permission:products.brands')->controller(BrandController::class)->group(function () {
+    Route::prefix('brands')->middleware('permission:brands')->controller(BrandController::class)->group(function () {
         Route::get('/brand-list', 'index');
         Route::get('/brand/{id}', 'showBrands');
         Route::post('/add-brand', 'storeBrands');
@@ -287,13 +287,13 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Product Filters
-    Route::prefix('product-filters')->middleware('permission:products.all')->controller(ProductFilterController::class)->group(function () {
+    Route::prefix('product-filters')->middleware('permission:all_products')->controller(ProductFilterController::class)->group(function () {
         Route::get('/filter-products', 'index');
         Route::get('/filter-visibility', 'updateVisibility');
     });
 
     // ===================== CUSTOMERS =====================
-    Route::prefix('customers')->middleware('permission:customers.all')->group(function () {
+    Route::prefix('customers')->middleware('permission:all_customers')->group(function () {
         Route::get('/get-customers', [CustomerController::class, 'index']);
         Route::get('/get-customer/{id}', [CustomerController::class, 'show']);
         Route::put('/update-customer/{id}', [CustomerController::class, 'update']);
@@ -301,22 +301,22 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Customers — Add
-    Route::prefix('customers')->middleware('permission:customers.add')->group(function () {
+    Route::prefix('customers')->middleware('permission:add_customer')->group(function () {
         Route::post('/add-customer', [CustomerController::class, 'store']);
     });
 
     // Customers — Search
-    Route::prefix('customers')->middleware('permission:customers.search')->group(function () {
+    Route::prefix('customers')->middleware('permission:search_customers')->group(function () {
         Route::post('/customer-search', [CustomerController::class, 'advancedSearch']);
     });
 
     // Customers — Import
-    Route::prefix('customers')->middleware('permission:customers.import')->group(function () {
+    Route::prefix('customers')->middleware('permission:import_customers')->group(function () {
         Route::post('/import', [CustomerController::class, 'importCSV']);
     });
 
     // Customers — Export
-    Route::prefix('customers')->middleware('permission:customers.export')->group(function () {
+    Route::prefix('customers')->middleware('permission:export_customers')->group(function () {
         Route::get('/export', [CustomerController::class, 'exportCSV']);
     });
 
@@ -337,7 +337,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== STOREFRONT — LOGO =====================
-    Route::prefix('logos')->middleware('permission:storefront.logo')->controller(LogoController::class)->group(function () {
+    Route::prefix('logos')->middleware('permission:logo')->controller(LogoController::class)->group(function () {
         Route::get('/get-logos', 'index');
         Route::get('/get-logo/{id}', 'showById');
         Route::post('/add-logo', 'store');
@@ -346,7 +346,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== STOREFRONT — CAROUSEL =====================
-    Route::prefix('carousels')->middleware('permission:storefront.carousel')->controller(CarouselController::class)->group(function () {
+    Route::prefix('carousels')->middleware('permission:home_page_carousel')->controller(CarouselController::class)->group(function () {
         Route::get('/get-crousel', 'index');
         Route::get('/get-single/{id}', 'show');
         Route::post('/add-crousel', 'store');
@@ -355,7 +355,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== STOREFRONT — SCRIPTS =====================
-    Route::prefix('scripts')->middleware('permission:storefront.scripts')->controller(ScriptController::class)->group(function () {
+    Route::prefix('scripts')->middleware('permission:script_manager')->controller(ScriptController::class)->group(function () {
         Route::get('/get-script', 'index');
         Route::get('/get-script/{id}', 'show');
         Route::post('/add-script', 'store');
@@ -364,7 +364,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== STOREFRONT — WEB PAGES =====================
-    Route::prefix('webpages')->middleware('permission:storefront.pages')->controller(WebPageController::class)->group(function () {
+    Route::prefix('webpages')->middleware('permission:web_pages')->controller(WebPageController::class)->group(function () {
         Route::get('/web-pages', 'index');
         Route::get('/single-page/{id}', 'show');
         Route::post('/create-page', 'store');
@@ -374,7 +374,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== STOREFRONT — BLOG =====================
-    Route::prefix('blogs')->middleware('permission:storefront.blog')->controller(BlogPostController::class)->group(function () {
+    Route::prefix('blogs')->middleware('permission:blog')->controller(BlogPostController::class)->group(function () {
         Route::get('/get-blog', 'index');
         Route::get('/get-blogSingle/{id}', 'show');
         Route::post('/add-blog', 'store');
@@ -384,7 +384,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== MARKETING — COUPONS =====================
-    Route::prefix('coupons')->middleware('permission:marketing.coupons')->controller(CouponCodeController::class)->group(function () {
+    Route::prefix('coupons')->middleware('permission:coupon_codes')->controller(CouponCodeController::class)->group(function () {
         Route::get('/get-couponcode', 'index');
         Route::get('/get-couponcode/{id}', 'show');
         Route::post('/add-couponcode', 'store');
@@ -393,7 +393,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== SETTINGS =====================
-    Route::middleware('permission:settings.all')->group(function () {
+    Route::middleware('permission:settings')->group(function () {
         // Store Setting
         Route::prefix('store-setting')->controller(StoreSettingController::class)->group(function () {
             Route::get('/get-store-setting', 'index');
