@@ -545,6 +545,7 @@ Route::prefix('web')->group(function () {
         Route::delete('/cart-remove-product', 'removeProduct');
         Route::delete('/remove-shipping-rate', 'removeShippingRate');
         Route::post('/add-by-sku', 'storeCartBySku');
+        Route::delete('/clear-all', 'clearCart');
     });
 
     // 🔀 Cart Transfer (auth required)

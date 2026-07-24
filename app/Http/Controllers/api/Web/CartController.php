@@ -191,6 +191,64 @@ class CartController extends Controller
         }
     }
 
+    public function clearCart(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
+            [$user, $sessionId] = $this->resolveIdentity($request);
+
+            if (!$user && !$sessionId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'X-Session-ID header required for guest users.',
+                ], 422);
+            }
+
+            // Pehle cart IDs collect karo
+            $cartIds = $this->cartQuery($user, $sessionId, $storeId)
+                ->pluck('id')
+                ->toArray();
+
+            if (empty($cartIds)) {
+                return response()->json([
+                    'status'  => true,
+                    'message' => 'Cart is already empty.',
+                ], 200);
+            }
+
+            // Sab cart items delete karo
+            $deletedCount = $this->cartQuery($user, $sessionId, $storeId)->delete();
+
+            // Shipping rates bhi clear karo
+            foreach ($cartIds as $cartId) {
+                CartShippingRate::where('store_id', $storeId)
+                    ->whereJsonContains('cart_ids', $cartId)
+                    ->delete();
+            }
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Cart cleared successfully.',
+                'data'    => [
+                    'deleted_items' => $deletedCount,
+                ],
+            ], 200);
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to clear cart.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────
     // POST /web/cart/add-cart
     // ─────────────────────────────────────────────────────────────
