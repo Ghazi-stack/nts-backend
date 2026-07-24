@@ -143,7 +143,7 @@ class CartController extends Controller
                 return response()->json([
                     'status'  => false,
                     'message' => 'Product not found with this SKU.',
-                ], 200);
+                ], 404);
             }
 
             // Cart mein already hai?
