@@ -108,6 +108,89 @@ class CartController extends Controller
         }
     }
 
+    public function storeCartBySku(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
+            $validated = $request->validate([
+                'sku'      => 'required|string|max:255',
+                'quantity' => 'required|integer|min:1',
+            ]);
+
+            [$user, $sessionId] = $this->resolveIdentity($request);
+
+            if (!$user && !$sessionId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'X-Session-ID header required for guest users.',
+                ], 422);
+            }
+
+            // SKU + storeId se product dhundho
+            $product = Product::where('sku', $validated['sku'])
+                ->where('store_id', $storeId)
+                ->first();
+
+            // Product nahi mila → message aayega, 200 status
+            if (!$product) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Product not found with this SKU.',
+                ], 200);
+            }
+
+            // Cart mein already hai?
+            $existingCartItem = $this->cartQuery($user, $sessionId, $storeId)
+                ->where('product_id', $product->id)
+                ->first();
+
+            if ($existingCartItem) {
+                // Same product → quantity add karo
+                $existingCartItem->increment('quantity', $validated['quantity']);
+                $cartItem = $existingCartItem->fresh();
+            } else {
+                // Naya item
+                $cartItem = Cart::create([
+                    'store_id'   => $storeId,
+                    'user_id'    => $user?->id,
+                    'session_id' => $sessionId,
+                    'product_id' => $product->id,
+                    'quantity'   => $validated['quantity'],
+                ]);
+            }
+
+            // Shipping rate clear karo
+            CartShippingRate::where('store_id', $storeId)
+                ->whereJsonContains('cart_ids', $cartItem->id)
+                ->delete();
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Item added to cart successfully',
+                'data'    => new CartResource($cartItem->load($this->productRelations())),
+            ], 201);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Validation failed',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to add item to cart',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────
     // POST /web/cart/add-cart
     // ─────────────────────────────────────────────────────────────

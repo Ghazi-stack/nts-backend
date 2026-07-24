@@ -544,6 +544,7 @@ Route::prefix('web')->group(function () {
         Route::get('/get/shipping-by-rate', 'getShippingRate');
         Route::delete('/cart-remove-product', 'removeProduct');
         Route::delete('/remove-shipping-rate', 'removeShippingRate');
+        Route::post('/add-by-sku', 'storeCartBySku');
     });
 
     // 🔀 Cart Transfer (auth required)
