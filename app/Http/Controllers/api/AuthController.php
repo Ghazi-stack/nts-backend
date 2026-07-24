@@ -947,29 +947,53 @@ class AuthController extends Controller
 
             if (!$storeId) {
                 return response()->json([
-                    'status' => false,
+                    'status'  => false,
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
 
             $currentUser = auth('sanctum')->user();
 
-            $users = User::where('store_id', $storeId)
+            // 1. Check: Current user ke paas is store ka access hai ya nahi
+            $hasAccess = DB::table('user_permissions')
+                ->where('user_id', $currentUser->id)
+                ->where('store_id', $storeId)
+                ->exists();
+
+            // Owner check bhi (agar permissions table mein nahi bhi ho to)
+            $isOwner = Store::where('id', $storeId)
+                ->where('user_id', $currentUser->id)
+                ->exists();
+
+            if (!$hasAccess && !$isOwner) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'You do not have access to this store.',
+                ], 403);
+            }
+
+            // 2. Is store ke saare admin/sub-users nikalo
+            $userIds = DB::table('user_permissions')
+                ->where('store_id', $storeId)
+                ->distinct()
+                ->pluck('user_id');
+
+            $users = User::whereIn('id', $userIds)
                 ->where('userRole', 1)
-                ->where('id', '!=', $currentUser->id)
+                ->where('id', '!=', $currentUser->id)   // khud ko exclude
                 ->latest()
                 ->get();
 
             return response()->json([
-                'status' => true,
+                'status'  => true,
                 'message' => 'Admin users fetched successfully.',
-                'data' => UserResource::collection($users),
+                'data'    => UserResource::collection($users),
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Failed to fetch admin users.',
-                'error' => $e->getMessage(),
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
