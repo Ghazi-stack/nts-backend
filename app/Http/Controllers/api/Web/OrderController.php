@@ -63,7 +63,7 @@ class OrderController extends Controller
                 ], 403);
             }
 
-            $orders = Order::with(['items.product.images', 'customer', 'billingInformation', 'notes', 'payment'])
+            $orders = Order::with(['items.product.images', 'customer', 'billingInformation', 'notes', 'payment','shipment'])
                 ->withCount('messages')
                 ->where('store_id', $storeId)
                 ->where('is_draft', 0)
@@ -800,7 +800,7 @@ class OrderController extends Controller
                 'destinations.*.shippingMethod' => 'required|string|max:100',
                 'destinations.*.shippingCost'   => 'required|numeric',
                 'destinations.*.shippingData' => 'nullable',
-                
+
                 'destinations.*.products'       => 'required|array|min:1',
                 'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
                 'destinations.*.products.*.quantity'   => 'required|integer|min:1',

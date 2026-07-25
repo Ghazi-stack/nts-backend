@@ -71,6 +71,11 @@ class Order extends Model
         return $this->hasMany(OrderTimeline::class);
     }
 
+    public function shipment()
+    {
+        return $this->hasOne(Shipment::class)->latest();
+    }
+
     public function messages()
     {
         return $this->hasMany(\App\Models\CustomerMessage::class, 'order_id');

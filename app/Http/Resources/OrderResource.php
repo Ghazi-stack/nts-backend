@@ -33,6 +33,7 @@ class OrderResource extends JsonResource
             'isMessage'          => $this->messages_count > 0 ? 1 : 0,
             'messageCount'       => $this->messages_count ?? 0,
             'trackingNumber'     => $this->tracking_number,
+            'shipmentId'         => $this->shipment?->id ?? null,
             'carrierCode'        => $this->tracking_carrier_code,
             'carrierName'        => $this->tracking_carrier_name,
             'shippedAt'          => $this->shipped_at?->toDateTimeString(),
