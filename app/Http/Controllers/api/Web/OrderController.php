@@ -773,6 +773,7 @@ class OrderController extends Controller
 
                 'shippingMethod' => 'nullable|string|max:100',
                 'shippingCost'   => 'nullable|numeric',
+                'shippingData'  => 'nullable',
 
                 'comments'       => 'nullable|string|max:1000',
                 'discountAmount' => 'nullable|numeric',
@@ -798,7 +799,8 @@ class OrderController extends Controller
 
                 'destinations.*.shippingMethod' => 'required|string|max:100',
                 'destinations.*.shippingCost'   => 'required|numeric',
-
+                'destinations.*.shippingData' => 'nullable',
+                
                 'destinations.*.products'       => 'required|array|min:1',
                 'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
                 'destinations.*.products.*.quantity'   => 'required|integer|min:1',
@@ -958,6 +960,7 @@ class OrderController extends Controller
                     'country'         => $validated['country'] ?? null,
                     'payment_method'  => $validated['paymentMethod'],
                     'shipping_method' => $validated['shippingMethod'],
+                    'shipping_data'   => $validated['shippingData'] ?? null,
                 ]);
 
                 $order = Order::create(array_merge([
@@ -1024,6 +1027,7 @@ class OrderController extends Controller
                         'country'         => $dest['country'],
                         'payment_method'  => $validated['paymentMethod'],
                         'shipping_method' => $dest['shippingMethod'],
+                        'shipping_data'   => $dest['shippingData'] ?? null,
                     ]);
 
                     $order = Order::create(array_merge([

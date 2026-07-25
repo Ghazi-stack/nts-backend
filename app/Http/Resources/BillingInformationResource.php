@@ -32,6 +32,7 @@ class BillingInformationResource extends JsonResource
             'country'         => $this->country,
             'paymentMethod'   => $this->payment_method,
             'shippingMethod'  => $this->shipping_method,
+            'shippingData '  => $this->shipping_data,
             'createdAt'       => $this->created_at,
             'updatedAt'       => $this->updated_at,
         ];

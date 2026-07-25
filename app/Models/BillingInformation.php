@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class BillingInformation extends Model
 {
     use HasFactory;
-     protected $fillable = [
+    protected $fillable = [
         'store_id',
         'customer_id',
         'user_id',
@@ -27,8 +27,12 @@ class BillingInformation extends Model
         'country',
         'payment_method',
         'shipping_method',
+        'shipping_data',
     ];
 
+    protected $casts = [
+        'shipping_data' => 'array',
+    ];
     public function customer()
     {
         return $this->belongsTo(Customer::class);
