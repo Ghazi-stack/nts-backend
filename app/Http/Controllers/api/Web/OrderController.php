@@ -430,7 +430,8 @@ class OrderController extends Controller
                     "country" => $order->billingInformation->country ?? null,
                     "email" => $order->billingInformation->email ?? $customer->email ?? null,
                     "paymentMethod" => $order->billingInformation->payment_method ?? null,
-                    "shippingMethod" => $order->billingInformation->shipping_method ?? null
+                    "shippingMethod" => $order->billingInformation->shipping_method ?? null,
+                    "shippingData"   => $order->billingInformation->shipping_data['display_name'] ?? null,
                 ],
                 "paymentMethod" => [
                     "method" => $order->billingInformation->payment_method ?? null,
