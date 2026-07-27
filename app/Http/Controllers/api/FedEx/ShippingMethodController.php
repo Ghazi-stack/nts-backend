@@ -12,20 +12,29 @@ class ShippingMethodController extends Controller
 {
     public function index(int $zoneId): JsonResponse
     {
-        $zone = ShippingZone::findOrFail($zoneId);
+        $zone = ShippingZone::find($zoneId);
+        if (!$zone) {
+            return response()->json(['success' => false, 'message' => 'Shipping zone not found.'], 404);
+        }
         $methods = $zone->shippingMethods()->with('fedexConfiguration')->orderBy('sort_order')->get();
         return response()->json(['success' => true, 'data' => $methods]);
     }
 
     public function show(int $id): JsonResponse
     {
-        $method = ShippingMethod::with('fedexConfiguration')->findOrFail($id);
+        $method = ShippingMethod::with('fedexConfiguration')->find($id);
+        if (!$method) {
+            return response()->json(['success' => false, 'message' => 'Shipping method not found.'], 404);
+        }
         return response()->json(['success' => true, 'data' => $method]);
     }
 
     public function store(Request $request, int $zoneId): JsonResponse
     {
-        $zone = ShippingZone::findOrFail($zoneId);
+        $zone = ShippingZone::find($zoneId);
+        if (!$zone) {
+            return response()->json(['success' => false, 'message' => 'Shipping zone not found.'], 404);
+        }
         $validated = $request->validate([
             'method_type' => 'required|string|in:free_shipping,flat_rate,flat_rate_weight,fedex_realtime,custom_label',
             'display_name' => 'required|string|max:255',
@@ -54,7 +63,10 @@ class ShippingMethodController extends Controller
 
     public function update(Request $request, int $id): JsonResponse
     {
-        $method = ShippingMethod::findOrFail($id);
+        $method = ShippingMethod::find($id);
+        if (!$method) {
+            return response()->json(['success' => false, 'message' => 'Shipping method not found.'], 404);
+        }
         $validated = $request->validate([
             'display_name' => 'sometimes|string|max:255',
             'is_active' => 'sometimes|boolean',
@@ -81,13 +93,20 @@ class ShippingMethodController extends Controller
 
     public function destroy(int $id): JsonResponse
     {
-        ShippingMethod::findOrFail($id)->delete();
+        $method = ShippingMethod::find($id);
+        if (!$method) {
+            return response()->json(['success' => false, 'message' => 'Shipping method not found.'], 404);
+        }
+        $method->delete();
         return response()->json(['success' => true, 'message' => 'Shipping method deleted successfully.']);
     }
 
     public function toggle(int $id): JsonResponse
     {
-        $method = ShippingMethod::findOrFail($id);
+        $method = ShippingMethod::find($id);
+        if (!$method) {
+            return response()->json(['success' => false, 'message' => 'Shipping method not found.'], 404);
+        }
         $method->update(['is_active' => !$method->is_active]);
         return response()->json(['success' => true, 'message' => $method->is_active ? 'Shipping method enabled.' : 'Shipping method disabled.', 'data' => ['id' => $method->id, 'is_active' => $method->is_active]]);
     }
