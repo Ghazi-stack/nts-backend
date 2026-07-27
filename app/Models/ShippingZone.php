@@ -9,9 +9,9 @@ class ShippingZone extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name','zone_type','countries','states','zip_ranges','is_active','sort_order'];
+    protected $fillable = ['store_id', 'name', 'zone_type', 'countries', 'states', 'zip_ranges', 'is_active', 'sort_order'];
 
-    protected $casts = ['countries'=>'array','states'=>'array','zip_ranges'=>'array','is_active'=>'boolean'];
+    protected $casts = ['countries' => 'array', 'states' => 'array', 'zip_ranges' => 'array', 'is_active' => 'boolean'];
 
     public function shippingMethods()
     {
@@ -23,7 +23,15 @@ class ShippingZone extends Model
         return $this->hasMany(ShippingMethod::class)->where('is_active', true)->orderBy('sort_order');
     }
 
-    public function scopeActive($query) { return $query->where('is_active', true); }
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    public function scopeForStore($query, $storeId)
+    {
+        return $query->where('store_id', $storeId);
+    }
 
     public function matchesDestination(string $countryCode, ?string $stateCode = null): bool
     {

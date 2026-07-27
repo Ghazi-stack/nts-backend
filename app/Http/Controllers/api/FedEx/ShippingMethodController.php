@@ -12,17 +12,43 @@ class ShippingMethodController extends Controller
 {
     public function index(int $zoneId): JsonResponse
     {
-        $zone = ShippingZone::find($zoneId);
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+
+        $zone = ShippingZone::where('id', $zoneId)->where('store_id', $storeId)->first();
         if (!$zone) {
             return response()->json(['success' => false, 'message' => 'Shipping zone not found.'], 404);
         }
-        $methods = $zone->shippingMethods()->with('fedexConfiguration')->orderBy('sort_order')->get();
+
+        $methods = $zone->shippingMethods()
+            ->where('store_id', $storeId)
+            ->with('fedexConfiguration')
+            ->orderBy('sort_order')
+            ->get();
+
         return response()->json(['success' => true, 'data' => $methods]);
     }
 
     public function show(int $id): JsonResponse
     {
-        $method = ShippingMethod::with('fedexConfiguration')->find($id);
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+
+        $method = ShippingMethod::with('fedexConfiguration')
+            ->where('id', $id)
+            ->where('store_id', $storeId)
+            ->first();
+
         if (!$method) {
             return response()->json(['success' => false, 'message' => 'Shipping method not found.'], 404);
         }
@@ -31,10 +57,19 @@ class ShippingMethodController extends Controller
 
     public function store(Request $request, int $zoneId): JsonResponse
     {
-        $zone = ShippingZone::find($zoneId);
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+
+        $zone = ShippingZone::where('id', $zoneId)->where('store_id', $storeId)->first();
         if (!$zone) {
             return response()->json(['success' => false, 'message' => 'Shipping zone not found.'], 404);
         }
+
         $validated = $request->validate([
             'method_type' => 'required|string|in:free_shipping,flat_rate,flat_rate_weight,fedex_realtime,custom_label',
             'display_name' => 'required|string|max:255',
@@ -57,16 +92,26 @@ class ShippingMethodController extends Controller
             'ranges.*.cost' => 'required_with:ranges|numeric|min:0',
         ]);
         $validated['shipping_zone_id'] = $zone->id;
+        $validated['store_id'] = $storeId;
         $method = ShippingMethod::create($validated);
         return response()->json(['success' => true, 'message' => 'Shipping method added successfully.', 'data' => $method], 201);
     }
 
     public function update(Request $request, int $id): JsonResponse
     {
-        $method = ShippingMethod::find($id);
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+
+        $method = ShippingMethod::where('id', $id)->where('store_id', $storeId)->first();
         if (!$method) {
             return response()->json(['success' => false, 'message' => 'Shipping method not found.'], 404);
         }
+
         $validated = $request->validate([
             'display_name' => 'sometimes|string|max:255',
             'is_active' => 'sometimes|boolean',
@@ -93,7 +138,15 @@ class ShippingMethodController extends Controller
 
     public function destroy(int $id): JsonResponse
     {
-        $method = ShippingMethod::find($id);
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+
+        $method = ShippingMethod::where('id', $id)->where('store_id', $storeId)->first();
         if (!$method) {
             return response()->json(['success' => false, 'message' => 'Shipping method not found.'], 404);
         }
@@ -103,7 +156,15 @@ class ShippingMethodController extends Controller
 
     public function toggle(int $id): JsonResponse
     {
-        $method = ShippingMethod::find($id);
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+
+        $method = ShippingMethod::where('id', $id)->where('store_id', $storeId)->first();
         if (!$method) {
             return response()->json(['success' => false, 'message' => 'Shipping method not found.'], 404);
         }

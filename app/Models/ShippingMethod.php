@@ -9,7 +9,7 @@ class ShippingMethod extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['shipping_zone_id', 'method_type', 'display_name', 'is_active', 'sort_order', 'flat_rate_amount', 'flat_rate_type', 'weight_threshold', 'weight_rate_amount', 'free_shipping_min_order', 'custom_description', 'charge_shipping_by', 'default_shipping_cost', 'rate_display_type', 'ranges'];
+    protected $fillable = ['shipping_zone_id','store_id', 'method_type', 'display_name', 'is_active', 'sort_order', 'flat_rate_amount', 'flat_rate_type', 'weight_threshold', 'weight_rate_amount', 'free_shipping_min_order', 'custom_description', 'charge_shipping_by', 'default_shipping_cost', 'rate_display_type', 'ranges'];
 
     protected $casts = ['is_active' => 'boolean', 'flat_rate_amount' => 'decimal:2', 'weight_threshold' => 'decimal:2', 'weight_rate_amount' => 'decimal:2', 'free_shipping_min_order' => 'decimal:2', 'default_shipping_cost' => 'decimal:2', 'ranges' => 'array'];
 
