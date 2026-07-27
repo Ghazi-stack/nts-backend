@@ -34,31 +34,68 @@ class ShippingSeeder extends Seeder
             'sort_order' => 1,
         ]);
 
+        // Free shipping (disabled by default as per screenshot)
         ShippingMethod::create([
             'shipping_zone_id'   => $usZone->id,
-            'method_type'        => 'custom_label',
-            'display_name'       => 'Ship on my own/company shipping account (mention shipping account on order comments)',
-            'is_active'          => true,
+            'method_type'        => 'free_shipping',
+            'display_name'       => 'Free shipping',
+            'is_active'          => false,
             'sort_order'         => 1,
-            'custom_description' => 'I will provide the shipping label/others (Mentions the details on below comments box)',
+            'custom_description' => 'Use free shipping to improve checkout conversion, increase average order value and reduce abandoned carts.',
+            'free_shipping_min_order' => 0.00,
         ]);
 
-        ShippingMethod::create([
+            ShippingMethod::create([
             'shipping_zone_id'   => $usZone->id,
             'method_type'        => 'flat_rate_weight',
             'display_name'       => 'Flat Rate for under 10 LBS',
             'is_active'          => true,
-            'sort_order'         => 2,
+            'sort_order'         => 3,
             'weight_threshold'   => 10.00,
             'weight_rate_amount' => 10.00,
         ]);
+
+        // Estimated Freight Cost (weight/value based)
+        ShippingMethod::create([
+            'shipping_zone_id'   => $usZone->id,
+            'method_type'        => 'flat_rate_weight',
+            'display_name'       => 'Estimated Freight Cost',
+            'is_active'          => true,
+            'sort_order'         => 4,
+            'custom_description' => 'Calculate shipping cost based on order value or the total weight of items.',
+            'weight_threshold'   => 10.00,
+            'weight_rate_amount' => 0.00,
+        ]);
+
+        // Flat rate (disabled by default as per screenshot)
+        ShippingMethod::create([
+            'shipping_zone_id'   => $usZone->id,
+            'method_type'        => 'flat_rate',
+            'display_name'       => 'Flat rate',
+            'is_active'          => false,
+            'sort_order'         => 5,
+            'custom_description' => 'Charge a fixed shipping cost per order or per item.',
+            'flat_rate_amount'   => 0.00,
+            'flat_rate_type'     => 'per_order',
+        ]);
+
+         ShippingMethod::create([
+            'shipping_zone_id'   => $usZone->id,
+            'method_type'        => 'custom_label',
+            'display_name'       => 'Ship on my own/company shipping account (mention shipping account on order comments)',
+            'is_active'          => true,
+            'sort_order'         => 2,
+            'custom_description' => 'I will provide the shipping label/others (Mentions the details on below comments box)',
+        ]);
+
+    
 
         $usFedex = ShippingMethod::create([
             'shipping_zone_id' => $usZone->id,
             'method_type'      => 'fedex_realtime',
             'display_name'     => 'FedEx',
             'is_active'        => true,
-            'sort_order'       => 3,
+            'sort_order'       => 6,
         ]);
 
         FedexConfiguration::create([

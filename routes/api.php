@@ -424,6 +424,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         // Shipping Methods
         Route::prefix('shipping-methods')->controller(ShippingMethodController::class)->group(function () {
             Route::get('/get-methods/{zoneId}', 'index');
+            Route::get('/get-method/{id}', 'show');
             Route::post('/add-method/{zoneId}', 'store');
             Route::put('/update-method/{id}', 'update');
             Route::delete('/delete-method/{id}', 'destroy');
