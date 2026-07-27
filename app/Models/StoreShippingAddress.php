@@ -31,9 +31,12 @@ class StoreShippingAddress extends Model
     /**
      * Get the active pickup address (sirf ek hoga)
      */
-    public static function getActive(): ?self
+    public static function getActive(?int $storeId = null): ?self
     {
-        return self::where('is_active', true)->first();
+        return static::query()
+            ->when($storeId, fn($q) => $q->where('store_id', $storeId))
+            ->where('is_active', true)
+            ->first();
     }
 
     /**

@@ -22,9 +22,37 @@ class FedexConfigurationController extends Controller
         $this->authService = $authService;
     }
 
+    /**
+     * Store-scoped shipping method resolve karta hai.
+     * store_id na mile to null (400 caller handle karega),
+     * method na mile to bhi null (404 caller handle karega).
+     */
+    protected function resolveMethod(int $methodId): array
+    {
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return [null, response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400)];
+        }
+
+        $method = ShippingMethod::where('id', $methodId)->where('store_id', $storeId)->first();
+        if (!$method) {
+            return [null, response()->json([
+                'success' => false,
+                'message' => 'Shipping method not found.'
+            ], 404)];
+        }
+
+        return [$method, null];
+    }
+
     public function show(int $methodId): JsonResponse
     {
-        $method = ShippingMethod::findOrFail($methodId);
+        [$method, $error] = $this->resolveMethod($methodId);
+        if ($error) return $error;
+
         $config = $method->fedexConfiguration;
         if (!$config) return response()->json(['success' => true, 'data' => null, 'message' => 'No FedEx configuration found.']);
 
@@ -39,7 +67,9 @@ class FedexConfigurationController extends Controller
 
     public function storeOrUpdate(Request $request, int $methodId): JsonResponse
     {
-        $method = ShippingMethod::findOrFail($methodId);
+        [$method, $error] = $this->resolveMethod($methodId);
+        if ($error) return $error;
+
         $validated = $request->validate([
             'client_id' => 'sometimes|required|string|max:255',
             'client_secret' => 'sometimes|required|string|max:255',
@@ -64,7 +94,9 @@ class FedexConfigurationController extends Controller
 
     public function testConnection(int $methodId): JsonResponse
     {
-        $method = ShippingMethod::findOrFail($methodId);
+        [$method, $error] = $this->resolveMethod($methodId);
+        if ($error) return $error;
+
         $config = $method->fedexConfiguration;
         if (!$config) return response()->json(['success' => false, 'message' => 'No FedEx configuration found.'], 400);
 
@@ -76,7 +108,9 @@ class FedexConfigurationController extends Controller
 
     public function disconnect(int $methodId): JsonResponse
     {
-        $method = ShippingMethod::findOrFail($methodId);
+        [$method, $error] = $this->resolveMethod($methodId);
+        if ($error) return $error;
+
         $config = $method->fedexConfiguration;
         if ($config) {
             $this->authService->clearToken($config);
@@ -94,7 +128,9 @@ class FedexConfigurationController extends Controller
      */
     public function getQuote(Request $request, int $methodId): JsonResponse
     {
-        $method = ShippingMethod::findOrFail($methodId);
+        [$method, $error] = $this->resolveMethod($methodId);
+        if ($error) return $error;
+
         $config = $method->fedexConfiguration;
         if (!$config || !$config->is_connected) return response()->json(['success' => false, 'message' => 'FedEx is not connected.'], 400);
 
@@ -143,7 +179,9 @@ class FedexConfigurationController extends Controller
 
     public function quoteLogs(Request $request, int $methodId): JsonResponse
     {
-        $method = ShippingMethod::findOrFail($methodId);
+        [$method, $error] = $this->resolveMethod($methodId);
+        if ($error) return $error;
+
         $config = $method->fedexConfiguration;
         if (!$config) return response()->json(['success' => true, 'data' => []]);
         $logs = $config->quoteLogs()->orderBy('created_at', 'desc')->limit($request->input('limit', 20))->get();

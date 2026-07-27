@@ -17,7 +17,15 @@ class StoreShippingAddressController extends Controller
      */
     public function index(): JsonResponse
     {
-        $address = StoreShippingAddress::getActive();
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+
+        $address = StoreShippingAddress::getActive($storeId);
 
         return response()->json([
             'success' => true,
@@ -31,10 +39,18 @@ class StoreShippingAddressController extends Controller
      * Pickup address create ya update karti hai
      * Screenshot 2 jaisa — "Configure shipping address" modal ka Submit button
      *
-     * Sirf ek address hoga — agar pehle se hai to update, nahi hai to create
+     * Sirf ek address per store — agar pehle se hai to update, nahi hai to create
      */
     public function store(Request $request): JsonResponse
     {
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+
         $validated = $request->validate([
             'address_line_1' => 'required|string|max:255',
             'address_line_2' => 'sometimes|nullable|string|max:255',
@@ -57,13 +73,14 @@ class StoreShippingAddressController extends Controller
             $validated['state_code'] = $this->mapStateCode($validated['state']);
         }
 
-        // Sirf ek address — update or create
-        $address = StoreShippingAddress::first();
+        // Sirf ek address per store — update or create
+        $address = StoreShippingAddress::where('store_id', $storeId)->first();
 
         if ($address) {
             $address->update($validated);
             $message = 'Shipping address updated successfully.';
         } else {
+            $validated['store_id']  = $storeId;
             $validated['is_active'] = true;
             $address = StoreShippingAddress::create($validated);
             $message = 'Shipping address created successfully.';
@@ -85,7 +102,7 @@ class StoreShippingAddressController extends Controller
             'United States' => 'US',
             'Canada'        => 'CA',
             'Mexico'        => 'MX',
-            'United Kingdom'=> 'GB',
+            'United Kingdom' => 'GB',
             'Australia'     => 'AU',
             'Germany'       => 'DE',
             'France'        => 'FR',
@@ -104,19 +121,56 @@ class StoreShippingAddressController extends Controller
     private function mapStateCode(string $state): string
     {
         $map = [
-            'Alabama' => 'AL', 'Alaska' => 'AK', 'Arizona' => 'AZ', 'Arkansas' => 'AR',
-            'California' => 'CA', 'Colorado' => 'CO', 'Connecticut' => 'CT', 'Delaware' => 'DE',
-            'Florida' => 'FL', 'Georgia' => 'GA', 'Hawaii' => 'HI', 'Idaho' => 'ID',
-            'Illinois' => 'IL', 'Indiana' => 'IN', 'Iowa' => 'IA', 'Kansas' => 'KS',
-            'Kentucky' => 'KY', 'Louisiana' => 'LA', 'Maine' => 'ME', 'Maryland' => 'MD',
-            'Massachusetts' => 'MA', 'Michigan' => 'MI', 'Minnesota' => 'MN', 'Mississippi' => 'MS',
-            'Missouri' => 'MO', 'Montana' => 'MT', 'Nebraska' => 'NE', 'Nevada' => 'NV',
-            'New Hampshire' => 'NH', 'New Jersey' => 'NJ', 'New Mexico' => 'NM', 'New York' => 'NY',
-            'North Carolina' => 'NC', 'North Dakota' => 'ND', 'Ohio' => 'OH', 'Oklahoma' => 'OK',
-            'Oregon' => 'OR', 'Pennsylvania' => 'PA', 'Rhode Island' => 'RI', 'South Carolina' => 'SC',
-            'South Dakota' => 'SD', 'Tennessee' => 'TN', 'Texas' => 'TX', 'Utah' => 'UT',
-            'Vermont' => 'VT', 'Virginia' => 'VA', 'Washington' => 'WA', 'West Virginia' => 'WV',
-            'Wisconsin' => 'WI', 'Wyoming' => 'WY',
+            'Alabama' => 'AL',
+            'Alaska' => 'AK',
+            'Arizona' => 'AZ',
+            'Arkansas' => 'AR',
+            'California' => 'CA',
+            'Colorado' => 'CO',
+            'Connecticut' => 'CT',
+            'Delaware' => 'DE',
+            'Florida' => 'FL',
+            'Georgia' => 'GA',
+            'Hawaii' => 'HI',
+            'Idaho' => 'ID',
+            'Illinois' => 'IL',
+            'Indiana' => 'IN',
+            'Iowa' => 'IA',
+            'Kansas' => 'KS',
+            'Kentucky' => 'KY',
+            'Louisiana' => 'LA',
+            'Maine' => 'ME',
+            'Maryland' => 'MD',
+            'Massachusetts' => 'MA',
+            'Michigan' => 'MI',
+            'Minnesota' => 'MN',
+            'Mississippi' => 'MS',
+            'Missouri' => 'MO',
+            'Montana' => 'MT',
+            'Nebraska' => 'NE',
+            'Nevada' => 'NV',
+            'New Hampshire' => 'NH',
+            'New Jersey' => 'NJ',
+            'New Mexico' => 'NM',
+            'New York' => 'NY',
+            'North Carolina' => 'NC',
+            'North Dakota' => 'ND',
+            'Ohio' => 'OH',
+            'Oklahoma' => 'OK',
+            'Oregon' => 'OR',
+            'Pennsylvania' => 'PA',
+            'Rhode Island' => 'RI',
+            'South Carolina' => 'SC',
+            'South Dakota' => 'SD',
+            'Tennessee' => 'TN',
+            'Texas' => 'TX',
+            'Utah' => 'UT',
+            'Vermont' => 'VT',
+            'Virginia' => 'VA',
+            'Washington' => 'WA',
+            'West Virginia' => 'WV',
+            'Wisconsin' => 'WI',
+            'Wyoming' => 'WY',
         ];
 
         return $map[$state] ?? $state;

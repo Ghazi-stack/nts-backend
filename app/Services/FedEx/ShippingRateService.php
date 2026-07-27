@@ -21,14 +21,16 @@ class ShippingRateService
      *
      * Origin address ab database se aata hai (store_shipping_address table)
      * Agar database mein nahi hai to .env fallback use hoga
+     *
+     * $storeId: har cheez isi store ke against — zones, methods, origin address
      */
-    public function getCheckoutShippingRates(array $destination, array $packageInfo, ?array $origin = null): array
+    public function getCheckoutShippingRates(array $destination, array $packageInfo, ?int $storeId = null, ?array $origin = null): array
     {
         $allRates = [];
 
-        // Origin address: Database se lo, nahi mila to .env fallback
+        // Origin address: Database se lo (store ke against), nahi mila to .env fallback
         if (!$origin) {
-            $storeAddress = StoreShippingAddress::getActive();
+            $storeAddress = StoreShippingAddress::getActive($storeId);
 
             if ($storeAddress) {
                 $origin = $storeAddress->toOriginArray();
@@ -43,13 +45,16 @@ class ShippingRateService
             }
         }
 
-        $zone = $this->findMatchingZone($destination['country_code'], $destination['state'] ?? null);
+        $zone = $this->findMatchingZone($destination['country_code'], $destination['state'] ?? null, $storeId);
 
         if (!$zone) {
             return ['success' => false, 'error' => 'No shipping zone configured for this destination.', 'rates' => []];
         }
 
-        $methods = $zone->activeShippingMethods()->with('fedexConfiguration')->get();
+        $methods = $zone->activeShippingMethods()
+            ->when($storeId, fn($q) => $q->where('store_id', $storeId))
+            ->with('fedexConfiguration')
+            ->get();
 
         foreach ($methods as $method) {
             // Static methods
@@ -130,9 +135,12 @@ class ShippingRateService
         ];
     }
 
-    protected function findMatchingZone(string $countryCode, ?string $stateCode = null): ?ShippingZone
+    protected function findMatchingZone(string $countryCode, ?string $stateCode = null, ?int $storeId = null): ?ShippingZone
     {
-        $zones = ShippingZone::active()->orderBy('sort_order')->get();
+        $zones = ShippingZone::active()
+            ->when($storeId, fn($q) => $q->where('store_id', $storeId))
+            ->orderBy('sort_order')
+            ->get();
 
         $bestMatch    = null;
         $bestPriority = -1;
