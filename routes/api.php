@@ -652,7 +652,7 @@ Route::prefix('web')->group(function () {
 
     //Newsletters
     Route::apiResource('newsletters', NewsletterController::class);
-
+    Route::get('/subscribers/export', [NewsletterController::class, 'exportSubscribers']);
     //VisitorSession
     Route::post('/visitor-session', [VisitorSessionController::class, 'store']);
 

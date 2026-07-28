@@ -74,7 +74,6 @@ class NewsletterController extends Controller
             $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
             Mail::to($adminEmail)
                 ->send(new NewsletterSubscribedMail($newsletter, true));
-                
         } catch (\Exception $e) {
 
             \Log::error('NEWSLETTER EMAIL FAILED', [
@@ -179,5 +178,52 @@ class NewsletterController extends Controller
             'status' => true,
             'message' => 'Email deleted successfully!'
         ]);
+    }
+
+    public function exportSubscribers()
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+
+        $subscribers = \App\Models\Newsletter::where('store_id', $storeId)
+            ->select('email')
+            ->orderBy('id', 'asc')
+            ->get();
+
+        if ($subscribers->isEmpty()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'No subscribers found.'
+            ], 404);
+        }
+
+        $fileName = 'subscribers-' . now()->format('Y-m-d') . '.csv';
+
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+        ];
+
+        $callback = function () use ($subscribers) {
+            $file = fopen('php://output', 'w');
+
+            // Header
+            fputcsv($file, ['Email']);
+
+            // Data
+            foreach ($subscribers as $sub) {
+                fputcsv($file, [$sub->email]);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 }
