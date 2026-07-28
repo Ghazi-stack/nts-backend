@@ -13,7 +13,8 @@ class Newsletter extends Model
 
     protected $fillable = [
         'store_id',
-        'email'
+        'email',
+        'name'
     ];
 
     protected $hidden = [

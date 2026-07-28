@@ -24,11 +24,17 @@ class SubscriberExport implements FromQuery, WithHeadings, WithMapping
 
     public function headings(): array
     {
-        return ['Email'];
+        return [
+            'Name',
+            'Email',
+        ];
     }
 
     public function map($subscriber): array
     {
-        return [$subscriber->email];
+        return [
+            $subscriber->name ?? '',   // agar name null ho to empty
+            $subscriber->email,
+        ];
     }
 }

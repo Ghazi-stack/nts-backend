@@ -45,7 +45,7 @@ class NewsletterController extends Controller
 
         if (!$storeId) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Store not selected'
             ], 400);
         }
@@ -61,13 +61,17 @@ class NewsletterController extends Controller
             ],
         ]);
 
+        // Check if user is logged in
+        $user = auth('sanctum')->user();
+        $name = $user ? $user->name : null;
+
         $newsletter = Newsletter::create([
             'store_id' => $storeId,
             'email'    => $request->email,
+            'name'     => $name,          // login user ka name save hoga
         ]);
 
         try {
-
             // Customer Email
             Mail::to($newsletter->email)
                 ->send(new NewsletterSubscribedMail($newsletter));
@@ -77,14 +81,14 @@ class NewsletterController extends Controller
             Mail::to($adminEmail)
                 ->send(new NewsletterSubscribedMail($newsletter, true));
         } catch (\Exception $e) {
-
             \Log::error('NEWSLETTER EMAIL FAILED', [
-                'newsletter_id' => $newsletter->id,
+                'newsletter_id'  => $newsletter->id,
                 'customer_email' => $newsletter->email,
-                'admin_email' => $adminEmail ?? null,
-                'error' => $e->getMessage(),
+                'admin_email'    => $adminEmail ?? null,
+                'error'          => $e->getMessage(),
             ]);
         }
+
         return response()->json([
             'status'  => true,
             'message' => 'Email successfully subscribed!',
@@ -118,14 +122,14 @@ class NewsletterController extends Controller
 
         if (!$storeId) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Store not selected'
             ], 400);
         }
 
         if ($newsletter->store_id != $storeId) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Newsletter not found'
             ], 404);
         }
@@ -142,14 +146,19 @@ class NewsletterController extends Controller
             ],
         ]);
 
+        // Check if user is logged in
+        $user = auth('sanctum')->user();
+        $name = $user ? $user->name : $newsletter->name;   // login hai to naya name, warna purana name rehne do
+
         $newsletter->update([
-            'email' => $request->email
+            'email' => $request->email,
+            'name'  => $name,
         ]);
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Email updated successfully!',
-            'data' => $newsletter
+            'data'    => $newsletter
         ]);
     }
 
