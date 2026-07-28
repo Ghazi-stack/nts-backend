@@ -156,15 +156,26 @@ class NewsletterController extends Controller
                 Rule::unique('newsletters')
                     ->where(function ($query) use ($storeId) {
                         return $query->where('store_id', $storeId)
-                            ->whereNull('deleted_at');   // soft deleted ignore
+                            ->whereNull('deleted_at');
                     })
                     ->ignore($newsletter->id),
             ],
         ]);
 
-        // Check if user is logged in
         $user = auth('sanctum')->user();
         $name = $user ? $user->name : $newsletter->name;
+
+        // Agar naya email soft-deleted record mein already maujood hai
+        $trashed = Newsletter::onlyTrashed()
+            ->where('store_id', $storeId)
+            ->where('email', $request->email)
+            ->where('id', '!=', $newsletter->id)
+            ->first();
+
+        if ($trashed) {
+            // Soft deleted record ko permanently delete kar do taake unique conflict na aaye
+            $trashed->forceDelete();
+        }
 
         $newsletter->update([
             'email' => $request->email,
