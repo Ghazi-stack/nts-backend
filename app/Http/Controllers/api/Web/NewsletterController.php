@@ -202,7 +202,7 @@ class NewsletterController extends Controller
             ], 404);
         }
 
-        $fileName = 'subscribers-' . now()->format('Y-m-d') . '.csv';
+        $fileName = 'subscribers-' . now()->format('Y-m-d') . '.xlsx';
         return Excel::download(new SubscriberExport($storeId), $fileName);
     }
 }
