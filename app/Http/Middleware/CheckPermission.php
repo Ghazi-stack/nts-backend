@@ -26,10 +26,11 @@ class CheckPermission
             ], 403);
         }
 
+
         // Check specific permissions by name
         $hasPermission = $user->permissions()
             ->whereIn('permissions.name', $names)
-            ->where('user_permissions.store_id', $user->store_id)
+           ->where('user_permissions.store_id', current_store_id() ?? $user->store_id)
             ->exists();
 
         if (!$hasPermission) {
