@@ -10,6 +10,8 @@ use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use App\Mail\NewsletterSubscribedMail;
+use App\Exports\SubscriberExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class NewsletterController extends Controller
 {
@@ -191,12 +193,9 @@ class NewsletterController extends Controller
             ], 400);
         }
 
-        $subscribers = \App\Models\Newsletter::where('store_id', $storeId)
-            ->select('email')
-            ->orderBy('id', 'asc')
-            ->get();
+        $count = \App\Models\Newsletter::where('store_id', $storeId)->count();
 
-        if ($subscribers->isEmpty()) {
+        if ($count === 0) {
             return response()->json([
                 'status' => false,
                 'message' => 'No subscribers found.'
@@ -204,17 +203,6 @@ class NewsletterController extends Controller
         }
 
         $fileName = 'subscribers-' . now()->format('Y-m-d') . '.csv';
-        $filePath = storage_path('app/public/' . $fileName);
-
-        $file = fopen($filePath, 'w');
-        fputcsv($file, ['Email']);
-        foreach ($subscribers as $sub) {
-            fputcsv($file, [$sub->email]);
-        }
-        fclose($file);
-
-        return response()->download($filePath, $fileName, [
-            'Content-Type' => 'text/csv',
-        ])->deleteFileAfterSend(true);
+        return Excel::download(new SubscriberExport($storeId), $fileName);
     }
 }
