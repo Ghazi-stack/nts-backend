@@ -204,26 +204,17 @@ class NewsletterController extends Controller
         }
 
         $fileName = 'subscribers-' . now()->format('Y-m-d') . '.csv';
+        $filePath = storage_path('app/public/' . $fileName);
 
-        $headers = [
-            'Content-Type'        => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
-        ];
+        $file = fopen($filePath, 'w');
+        fputcsv($file, ['Email']);
+        foreach ($subscribers as $sub) {
+            fputcsv($file, [$sub->email]);
+        }
+        fclose($file);
 
-        $callback = function () use ($subscribers) {
-            $file = fopen('php://output', 'w');
-
-            // Header
-            fputcsv($file, ['Email']);
-
-            // Data
-            foreach ($subscribers as $sub) {
-                fputcsv($file, [$sub->email]);
-            }
-
-            fclose($file);
-        };
-
-        return response()->stream($callback, 200, $headers);
+        return response()->download($filePath, $fileName, [
+            'Content-Type' => 'text/csv',
+        ])->deleteFileAfterSend(true);
     }
 }
