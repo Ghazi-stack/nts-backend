@@ -54,30 +54,45 @@ class NewsletterController extends Controller
             'email' => [
                 'required',
                 'email',
+                // Sirf active (non-deleted) records check karega
                 Rule::unique('newsletters')
                     ->where(function ($query) use ($storeId) {
                         return $query->where('store_id', $storeId)
-                            ->whereNull('deleted_at');   // ← soft deleted ko ignore karega
+                            ->whereNull('deleted_at');
                     }),
             ],
         ]);
 
-        // Check if user is logged in
         $user = auth('sanctum')->user();
         $name = $user ? $user->name : null;
 
-        $newsletter = Newsletter::create([
-            'store_id' => $storeId,
-            'email'    => $request->email,
-            'name'     => $name,
-        ]);
+        // Soft deleted record check karo
+        $existing = Newsletter::withTrashed()
+            ->where('store_id', $storeId)
+            ->where('email', $request->email)
+            ->first();
+
+        if ($existing && $existing->trashed()) {
+            // Soft deleted tha → restore + update
+            $existing->restore();
+            $existing->update([
+                'name' => $name,
+            ]);
+
+            $newsletter = $existing;
+        } else {
+            // Naya record banao
+            $newsletter = Newsletter::create([
+                'store_id' => $storeId,
+                'email'    => $request->email,
+                'name'     => $name,
+            ]);
+        }
 
         try {
-            // Customer Email
             Mail::to($newsletter->email)
                 ->send(new NewsletterSubscribedMail($newsletter));
 
-            // Admin Email
             $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
             Mail::to($adminEmail)
                 ->send(new NewsletterSubscribedMail($newsletter, true));
