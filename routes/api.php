@@ -481,7 +481,8 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::post('/stripe/capture', [StripePaymentController::class, 'capturePayment']);
     //Newsletter
     Route::get('/subscribers/export', [NewsletterController::class, 'exportSubscribers']);
-    
+    Route::delete('/subscribers/delete-all', [NewsletterController::class, 'deleteAllSubscribers']);
+
 });
 
 

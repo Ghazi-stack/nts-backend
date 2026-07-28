@@ -205,4 +205,32 @@ class NewsletterController extends Controller
         $fileName = 'subscribers-' . now()->format('Y-m-d') . '.xlsx';
         return Excel::download(new SubscriberExport($storeId), $fileName);
     }
+
+    public function deleteAllSubscribers()
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+
+        $count = Newsletter::where('store_id', $storeId)->count();
+
+        if ($count === 0) {
+            return response()->json([
+                'status' => false,
+                'message' => 'No subscribers found.'
+            ], 404);
+        }
+
+        Newsletter::where('store_id', $storeId)->delete();
+
+        return response()->json([
+            'status' => true,
+            'message' => $count . ' subscribers deleted successfully.',
+        ]);
+    }
 }
