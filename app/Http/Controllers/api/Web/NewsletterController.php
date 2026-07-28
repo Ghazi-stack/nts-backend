@@ -56,7 +56,8 @@ class NewsletterController extends Controller
                 'email',
                 Rule::unique('newsletters')
                     ->where(function ($query) use ($storeId) {
-                        return $query->where('store_id', $storeId);
+                        return $query->where('store_id', $storeId)
+                            ->whereNull('deleted_at');   // ← soft deleted ko ignore karega
                     }),
             ],
         ]);
@@ -68,7 +69,7 @@ class NewsletterController extends Controller
         $newsletter = Newsletter::create([
             'store_id' => $storeId,
             'email'    => $request->email,
-            'name'     => $name,          // login user ka name save hoga
+            'name'     => $name,
         ]);
 
         try {
@@ -95,7 +96,6 @@ class NewsletterController extends Controller
             'data'    => $newsletter
         ], 201);
     }
-
     /**
      * Display the specified resource.
      */
@@ -140,7 +140,8 @@ class NewsletterController extends Controller
                 'email',
                 Rule::unique('newsletters')
                     ->where(function ($query) use ($storeId) {
-                        return $query->where('store_id', $storeId);
+                        return $query->where('store_id', $storeId)
+                            ->whereNull('deleted_at');   // soft deleted ignore
                     })
                     ->ignore($newsletter->id),
             ],
@@ -148,7 +149,7 @@ class NewsletterController extends Controller
 
         // Check if user is logged in
         $user = auth('sanctum')->user();
-        $name = $user ? $user->name : $newsletter->name;   // login hai to naya name, warna purana name rehne do
+        $name = $user ? $user->name : $newsletter->name;
 
         $newsletter->update([
             'email' => $request->email,
