@@ -998,6 +998,74 @@ class AuthController extends Controller
         }
     }
 
+    public function getAdminUser($id)
+    {
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $hasAccess = DB::table('user_permissions')
+                ->where('user_id', $id)
+                ->where('store_id', $storeId)
+                ->exists();
+
+            if (!$hasAccess) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'User not found in this store.',
+                ], 404);
+            }
+
+            $user = User::where('id', $id)
+                ->where('userRole', 1)
+                ->firstOrFail();
+
+            // Get user permissions for this store
+            $userPermissions = $user->permissions()
+                ->where('user_permissions.store_id', $storeId)
+                ->orderBy('group')
+                ->orderBy('sort_order')
+                ->get()
+                ->groupBy('group')
+                ->map(function ($items, $group) {
+                    return [
+                        'group' => $group,
+                        'permissions' => $items->map(function ($p) {
+                            return [
+                                'id'    => $p->id,
+                                'name'  => $p->name,
+                                'label' => $p->label,
+                                'slug'  => $p->slug,
+                            ];
+                        })->values(),
+                    ];
+                })->values();
+
+            return response()->json([
+                'status'      => true,
+                'message'     => 'Admin user fetched successfully.',
+                'data'        => new UserResource($user),
+                'permissions' => $userPermissions,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Admin user not found.',
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to fetch admin user.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
     public function updateAdminUser(Request $request, $id)
     {
         try {

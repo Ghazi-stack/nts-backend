@@ -114,6 +114,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     Route::get('/admin-users', [AuthController::class, 'getAdminUsers']);
+    Route::get('/admin-users/{id}', [AuthController::class, 'getAdminUser']);
     Route::put('/admin-users/{id}', [AuthController::class, 'updateAdminUser']);
     Route::delete('/admin-users/{id}', [AuthController::class, 'deleteAdminUser']);
 
