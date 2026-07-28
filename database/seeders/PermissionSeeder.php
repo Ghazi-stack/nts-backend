@@ -45,6 +45,7 @@ class PermissionSeeder extends Seeder
 
             // Marketing
             ['group' => 'marketing', 'name' => 'coupon_codes', 'label' => 'Coupon Codes', 'slug' => '/manage/marketing/coupon-codes', 'sort_order' => 1],
+            ['group' => 'marketing', 'name' => 'email_marketing', 'label' => 'Email Marketing', 'slug' => '/manage/marketing/email-marketing', 'sort_order' => 2],
 
             // Settings
             ['group' => 'settings', 'name' => 'settings', 'label' => 'Settings', 'slug' => '/manage/settings', 'sort_order' => 1],
