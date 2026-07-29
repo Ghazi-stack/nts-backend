@@ -133,7 +133,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
             // --- Brand --------------------------------------------------------
             $brandName = $this->getField($data, ['brand name', 'brand', 'manufacturer']) ?? 'Unknown Brand';
-            $brandKey  = strtolower($brandName);
+            $brandKey  = $this->storeId . '_' . strtolower($brandName);   // ← FIX
 
             if (!isset(self::$brandCache[$brandKey])) {
                 $brand = Brand::firstOrCreate(
@@ -150,7 +150,6 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             }
 
             $brandId = self::$brandCache[$brandKey];
-
             // --- Category -----------------------------------------------------
             $categoryRaw = $this->getField($data, ['category', 'gps category', 'gps_category'], 'Uncategorized');
             $categoryId  = $this->resolveCategory($categoryRaw);
@@ -203,7 +202,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'option_set_align'     => $this->getField($data, ['option set align', 'option_set_align']) ?? null,
                     'visible_on_storefront' => $this->toBool($this->getField($data, ['product visible?', 'visible']) ?? 'Yes'),
                     'free_shipping'        => $this->toBool($this->getField($data, ['free shipping', 'free_shipping']) ?? 'N'),
-                    'show_shipping'        => $this->toBool($this->getField($data, ['free shipping', 'free_shipping']) ?? 'N'),   
+                    'show_shipping'        => $this->toBool($this->getField($data, ['free shipping', 'free_shipping']) ?? 'N'),
                     'purchasability_status' => (strtoupper($this->getField($data, ['allow purchases?', 'allow purchases']) ?? 'Y') === 'Y') ? 'available' : 'notAvailable',
                     'search_keywords'      => $this->getField($data, ['search keywords', 'keywords']) ?? null,
                 ]
@@ -631,7 +630,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             }
 
             $slug = Str::slug($segment);
-            $key  = ($parent ?: 0) . '_' . $slug;
+            $key  = $this->storeId . '_' . ($parent ?: 0) . '_' . $slug;   // ← FIX
 
             if (!isset(self::$categoryCache[$key])) {
                 $category = Category::firstOrCreate(

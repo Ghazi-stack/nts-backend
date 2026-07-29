@@ -131,9 +131,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 return;
             }
 
+
             // --- Brand --------------------------------------------------------
             $brandName = $this->getField($data, ['brand name', 'brand', 'manufacturer']) ?? 'Unknown Brand';
-            $brandKey  = strtolower($brandName);
+            $brandKey  = $this->storeId . '_' . strtolower($brandName);   // ← FIX
 
             if (!isset(self::$brandCache[$brandKey])) {
                 $brand = Brand::firstOrCreate(
@@ -630,7 +631,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             }
 
             $slug = Str::slug($segment);
-            $key  = ($parent ?: 0) . '_' . $slug;
+            $key  = $this->storeId . '_' . ($parent ?: 0) . '_' . $slug;   // ← FIX
 
             if (!isset(self::$categoryCache[$key])) {
                 $category = Category::firstOrCreate(
