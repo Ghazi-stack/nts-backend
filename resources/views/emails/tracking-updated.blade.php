@@ -485,6 +485,28 @@
 
                                                                     <tr>
                                                                         <th style="width:150px;padding-right:30px;">
+                                                                            <p>Shipped By:</p>
+                                                                        </th>
+                                                                        <th>
+                                                                            <p>
+                                                                                <strong>{{ $shipment->shipped_by ?? 'N/A' }}</strong>
+                                                                            </p>
+                                                                        </th>
+                                                                    </tr>
+
+                                                                    <tr>
+                                                                        <th style="width:150px;padding-right:30px;">
+                                                                            <p>Packing Slip Notes:</p>
+                                                                        </th>
+                                                                        <th>
+                                                                            <p>
+                                                                                <strong>{{ $shipment->packing_slip_notes ?? 'N/A' }}</strong>
+                                                                            </p>
+                                                                        </th>
+                                                                    </tr>
+
+                                                                    <tr>
+                                                                        <th style="width:150px;padding-right:30px;">
                                                                             <p>Date Shipped:</p>
                                                                         </th>
 

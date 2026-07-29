@@ -183,57 +183,46 @@ class ShipmentController extends Controller
         $shipment = Shipment::where('store_id', $storeId)->findOrFail($id);
 
         $validated = $request->validate([
-            'shippedTo'       => 'nullable|string|max:255',
-            'dateShipped'     => 'nullable|date',
-            'shippingMethod'  => 'nullable|string|max:255',
-            'trackingCarrier' => 'nullable|string|max:255',
-            'shippedBy' => 'nullable|string|max:255',
-            'packingSlipNotes' => 'nullable|string|max:255',
-            'trackingId'      => 'required|string|max:255',
+            'shippedTo'         => 'nullable|string|max:255',
+            'dateShipped'       => 'nullable|date',
+            'shippingMethod'    => 'nullable|string|max:255',
+            'trackingCarrier'   => 'nullable|string|max:255',
+            'shippedBy'         => 'nullable|string|max:255',
+            'packingSlipNotes'  => 'nullable|string|max:1000',
+            'trackingId'        => 'required|string|max:255',
         ]);
 
         $shipment->update([
-            'shipped_to'      => $validated['shippedTo'] ?? $shipment->shipped_to,
-            'date_shipped'    => $validated['dateShipped'] ?? $shipment->date_shipped,
-            'shipping_method' => $validated['shippingMethod'] ?? $shipment->shipping_method,
-            'tracking_carrie' => $validated['trackingCarrier'] ?? $shipment->tracking_carrie,
-            'shipped_by' => $validated['shippedBy'] ?? $shipment->shipped_by,
-            'packing_slip_note' => $validated['packingSlipNotes'] ?? $shipment->packing_slip_note,
-            'tracking_number' => $validated['trackingId'],
+            'shipped_to'           => $validated['shippedTo'] ?? $shipment->shipped_to,
+            'date_shipped'         => $validated['dateShipped'] ?? $shipment->date_shipped,
+            'shipping_method'      => $validated['shippingMethod'] ?? $shipment->shipping_method,
+            'tracking_carrier'     => $validated['trackingCarrier'] ?? $shipment->tracking_carrier,  // typo fixed
+            'shipped_by'           => $validated['shippedBy'] ?? $shipment->shipped_by,
+            'packing_slip_notes'   => $validated['packingSlipNotes'] ?? $shipment->packing_slip_notes, // consistent name
+            'tracking_number'      => $validated['trackingId'],
         ]);
 
-        // ===================== TIMELINE: TRACKING UPDATED =====================
+        // ===================== TIMELINE =====================
         OrderTimeline::addEvent($shipment->order_id, $storeId, 'tracking_updated', 'Tracking information updated', [
-            'tracking_number'  => $shipment->tracking_number,
-            'tracking_carrier' => $shipment->tracking_carrie,
-            'shipped_by' => $shipment->shipped_by,
-            'packing_slip_note' => $shipment->packing_slip_note,
-            'shipping_method'  => $shipment->shipping_method,
-            'shipped_to'       => $shipment->shipped_to,
+            'tracking_number'    => $shipment->tracking_number,
+            'tracking_carrier'   => $shipment->tracking_carrier,
+            'shipped_by'         => $shipment->shipped_by,
+            'packing_slip_notes' => $shipment->packing_slip_notes,
+            'shipping_method'    => $shipment->shipping_method,
+            'shipped_to'         => $shipment->shipped_to,
         ], 'shipping');
-        /*
-    |--------------------------------------------------------------------------
-    | Send Tracking Email To Customer
-    |--------------------------------------------------------------------------
-    */
 
+        // ===================== EMAIL =====================
         try {
-
             $order = Order::with('customer')
                 ->where('store_id', $storeId)
                 ->find($shipment->order_id);
 
-            if (
-                $order &&
-                $order->customer &&
-                !empty($order->customer->email)
-            ) {
-
+            if ($order && $order->customer && !empty($order->customer->email)) {
                 Mail::to($order->customer->email)
                     ->send(new ShipmentTrackingMail($order, $shipment));
             }
         } catch (\Exception $e) {
-
             \Log::error('Shipment Tracking Email Failed', [
                 'shipment_id' => $shipment->id,
                 'order_id'    => $shipment->order_id,
