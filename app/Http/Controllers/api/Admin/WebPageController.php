@@ -226,16 +226,21 @@ class WebPageController extends Controller
 
             $validated = $request->validate([
                 'pageName' => [
-                    'nullable',
+                    'required',
                     'string',
                     'max:255',
-                    Rule::unique('web_pages', 'page_name')->ignore($page->id),
+                    Rule::unique('web_pages', 'page_name')->where(function ($query) use ($storeId) {
+                        return $query->where('store_id', $storeId);
+                    }),
                 ],
+
                 'pageUrl' => [
                     'nullable',
                     'string',
                     'max:255',
-                    Rule::unique('web_pages', 'page_url')->ignore($page->id),
+                    Rule::unique('web_pages', 'page_url')->where(function ($query) use ($storeId) {
+                        return $query->where('store_id', $storeId);
+                    }),
                 ],
                 'pageTitle' => 'nullable|string|max:255',
                 'pageContent' => 'nullable|string',
