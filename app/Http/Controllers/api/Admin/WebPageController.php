@@ -229,19 +229,24 @@ class WebPageController extends Controller
                     'required',
                     'string',
                     'max:255',
-                    Rule::unique('web_pages', 'page_name')->where(function ($query) use ($storeId) {
-                        return $query->where('store_id', $storeId);
-                    }),
+                    Rule::unique('web_pages', 'page_name')
+                        ->where(function ($query) use ($storeId) {
+                            return $query->where('store_id', $storeId);
+                        })
+                        ->ignore($page->id),
                 ],
 
                 'pageUrl' => [
                     'nullable',
                     'string',
                     'max:255',
-                    Rule::unique('web_pages', 'page_url')->where(function ($query) use ($storeId) {
-                        return $query->where('store_id', $storeId);
-                    }),
+                    Rule::unique('web_pages', 'page_url')
+                        ->where(function ($query) use ($storeId) {
+                            return $query->where('store_id', $storeId);
+                        })
+                        ->ignore($page->id),
                 ],
+
                 'pageTitle' => 'nullable|string|max:255',
                 'pageContent' => 'nullable|string',
                 'pageType' => 'nullable|string|max:100',
@@ -258,6 +263,9 @@ class WebPageController extends Controller
                 'emailQuestionsTo' => 'nullable|string|max:255',
                 'showTheseFields' => 'nullable|array',
                 'rawHtml' => 'nullable|string',
+            ], [
+                'pageName.unique' => 'A page with this name already exists for this store.',
+                'pageUrl.unique' => 'A page with this URL already exists for this store.',
             ]);
 
             $pageUrl = $validated['pageUrl'] ?? $page->page_url;
