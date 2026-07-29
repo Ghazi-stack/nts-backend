@@ -50,6 +50,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             mkdir($this->tmpDir, 0755, true);
         }
 
+        // Har naye import pe cache reset
+        self::$brandCache    = [];
+        self::$categoryCache = [];
+
         \DB::connection()->disableQueryLog();
     }
 
@@ -133,18 +137,48 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
             // --- Brand --------------------------------------------------------
             $brandName = $this->getField($data, ['brand name', 'brand', 'manufacturer']) ?? 'Unknown Brand';
-            $brandKey  = $this->storeId . '_' . strtolower($brandName);   // ← FIX
+            $brandKey  = $this->storeId . '_' . strtolower(trim($brandName));
 
             if (!isset(self::$brandCache[$brandKey])) {
-                $brand = Brand::firstOrCreate(
-                    [
-                        'store_id' => $this->storeId,
-                        'name'     => $brandName,
-                    ],
-                    [
-                        'slug' => Str::slug($brandName),
-                    ]
-                );
+
+                // Pehle is store ke against dhoondo
+                $brand = Brand::where('store_id', $this->storeId)
+                    ->where('name', $brandName)
+                    ->first();
+
+                // Nahi mila to naya banao
+                if (!$brand) {
+                    try {
+                        $brand = Brand::create([
+                            'store_id' => $this->storeId,
+                            'name'     => $brandName,
+                            'slug'     => Str::slug($brandName) . '-' . $this->storeId,
+                        ]);
+                    } catch (\Throwable $e) {
+                        // Agar unique conflict aaye to dubara try (race condition)
+                        $brand = Brand::where('store_id', $this->storeId)
+                            ->where('name', $brandName)
+                            ->first();
+
+                        if (!$brand) {
+                            Log::error('Brand create failed', [
+                                'store_id' => $this->storeId,
+                                'name'     => $brandName,
+                                'error'    => $e->getMessage(),
+                            ]);
+                            // fallback unknown brand for this store
+                            $brand = Brand::firstOrCreate(
+                                [
+                                    'store_id' => $this->storeId,
+                                    'name'     => 'Unknown Brand',
+                                ],
+                                [
+                                    'slug' => 'unknown-brand-' . $this->storeId,
+                                ]
+                            );
+                        }
+                    }
+                }
 
                 self::$brandCache[$brandKey] = $brand->id;
             }
@@ -621,7 +655,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
     private function resolveCategory($path)
     {
-        $segments = array_map('trim', explode('/', $path));
+        $segments = array_map('trim', explode('/', (string) $path));
         $parent   = null;
 
         foreach ($segments as $segment) {
@@ -630,24 +664,90 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             }
 
             $slug = Str::slug($segment);
-            $key  = $this->storeId . '_' . ($parent ?: 0) . '_' . $slug;   // ← FIX
+            $key  = $this->storeId . '_' . ($parent ?: 0) . '_' . $slug;
 
             if (!isset(self::$categoryCache[$key])) {
-                $category = Category::firstOrCreate(
-                    [
-                        'store_id'  => $this->storeId,
-                        'slug'      => $slug,
-                        'parent_id' => $parent,
-                    ],
-                    [
-                        'name' => $segment,
-                    ]
-                );
+
+                // Pehle is store + parent ke against dhoondo
+                $category = Category::where('store_id', $this->storeId)
+                    ->where('slug', $slug)
+                    ->where(function ($q) use ($parent) {
+                        if ($parent) {
+                            $q->where('parent_id', $parent);
+                        } else {
+                            $q->whereNull('parent_id')->orWhere('parent_id', 0);
+                        }
+                    })
+                    ->first();
+
+                // Nahi mila to naya banao
+                if (!$category) {
+                    try {
+                        $category = Category::create([
+                            'store_id'  => $this->storeId,
+                            'name'      => $segment,
+                            'slug'      => $slug,
+                            'parent_id' => $parent,
+                        ]);
+                    } catch (\Throwable $e) {
+                        $category = Category::where('store_id', $this->storeId)
+                            ->where('slug', $slug)
+                            ->where(function ($q) use ($parent) {
+                                if ($parent) {
+                                    $q->where('parent_id', $parent);
+                                } else {
+                                    $q->whereNull('parent_id')->orWhere('parent_id', 0);
+                                }
+                            })
+                            ->first();
+
+                        if (!$category) {
+                            Log::error('Category create failed', [
+                                'store_id' => $this->storeId,
+                                'name'     => $segment,
+                                'slug'     => $slug,
+                                'parent'   => $parent,
+                                'error'    => $e->getMessage(),
+                            ]);
+
+                            // fallback
+                            $category = Category::firstOrCreate(
+                                [
+                                    'store_id'  => $this->storeId,
+                                    'slug'      => 'uncategorized-' . $this->storeId,
+                                    'parent_id' => null,
+                                ],
+                                [
+                                    'name' => 'Uncategorized',
+                                ]
+                            );
+                        }
+                    }
+                }
 
                 self::$categoryCache[$key] = $category->id;
             }
 
             $parent = self::$categoryCache[$key];
+        }
+
+        // Agar bilkul empty path aaya
+        if (!$parent) {
+            $fallbackKey = $this->storeId . '_0_uncategorized';
+            if (!isset(self::$categoryCache[$fallbackKey])) {
+                $cat = Category::firstOrCreate(
+                    [
+                        'store_id'  => $this->storeId,
+                        'slug'      => 'uncategorized-' . $this->storeId,
+                        'parent_id' => null,
+                    ],
+                    [
+                        'name' => 'Uncategorized',
+                    ]
+                );
+                self::$categoryCache[$fallbackKey] = $cat->id;
+            }
+            $parent = self::$categoryCache[$fallbackKey];
         }
 
         return $parent;
