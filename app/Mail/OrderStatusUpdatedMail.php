@@ -17,11 +17,13 @@ class OrderStatusUpdatedMail extends Mailable
     public $logoUrl;
     public $storePath;
     public $store;
+    public $shipment;   // ← naya
 
-    public function __construct($order, $newStatus, $storeId = null)
+    public function __construct($order, $newStatus, $storeId = null, $shipment = null)
     {
         $this->order = $order;
         $this->newStatus = $newStatus;
+        $this->shipment = $shipment;
 
         $sid = $storeId ?? ($order->store_id ?? 10);
 
@@ -51,6 +53,7 @@ class OrderStatusUpdatedMail extends Mailable
                 'logoUrl'    => $this->logoUrl,
                 'storePath'  => $this->storePath,
                 'store'      => $this->store,
+                'shipment'   => $this->shipment,   // ← naya
             ]);
     }
 }

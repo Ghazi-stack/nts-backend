@@ -63,7 +63,7 @@ class OrderController extends Controller
                 ], 403);
             }
 
-            $orders = Order::with(['items.product.images', 'customer', 'billingInformation', 'notes', 'payment','shipment'])
+            $orders = Order::with(['items.product.images', 'customer', 'billingInformation', 'notes', 'payment', 'shipment'])
                 ->withCount('messages')
                 ->where('store_id', $storeId)
                 ->where('is_draft', 0)
@@ -1596,6 +1596,15 @@ class OrderController extends Controller
             if (in_array($newStatus, $emailStatuses)) {
                 $order->load('billingInformation', 'customer');
 
+                // Shipment load karo (Shipped status ke liye)
+                $shipment = null;
+                if ($newStatus === 'Shipped') {
+                    $shipment = \App\Models\Shipment::where('order_id', $order->id)
+                        ->where('store_id', $storeId)
+                        ->latest()
+                        ->first();
+                }
+
                 $customerEmail = $order->billingInformation->email
                     ?? $order->customer->email
                     ?? null;
@@ -1603,11 +1612,11 @@ class OrderController extends Controller
                 if ($customerEmail) {
                     try {
                         // Email to customer
-                        Mail::to($customerEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId));
+                        Mail::to($customerEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId, $shipment));
 
                         // Email to admin
                         $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
-                        Mail::to($adminEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId));
+                        Mail::to($adminEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId, $shipment));
 
                         // Timeline: Email Sent
                         OrderTimeline::addEvent($order->id, $storeId, 'email_sent', 'Status update email sent', [
