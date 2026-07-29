@@ -32,6 +32,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Models\OrderItem;
+use App\Models\StaffLog;
 use Carbon\Carbon;
 
 class ProductController extends Controller
@@ -534,7 +535,7 @@ class ProductController extends Controller
                 'costPrice' => 'nullable|numeric',
                 'salePrice' => 'nullable|numeric',
 
-                'dimensions' => 'nullable|array'  ,
+                'dimensions' => 'nullable|array',
                 'dimensions.weight' => 'nullable|numeric',
                 'dimensions.width' => 'nullable|numeric',
                 'dimensions.height' => 'nullable|numeric',
@@ -797,6 +798,11 @@ class ProductController extends Controller
             }
 
             $product = Product::where('store_id', $storeId)->findOrFail($id);
+
+            // ===================== ORIGINAL DATA (for Staff Log) =====================
+            $original = $product->getAttributes();
+            $originalName = $product->name;
+            $originalSku  = $product->sku;
 
             $validated = $request->validate([
                 'name' => 'nullable|string|max:255',
@@ -1100,6 +1106,69 @@ class ProductController extends Controller
                 ]
             );
 
+            // ===================== STAFF LOG: PRODUCT UPDATE =====================
+            $product->refresh(); // latest data lo
+
+            $changes = [];
+            $trackedFields = [
+                'name'                    => 'Name',
+                'sku'                     => 'SKU',
+                'price'                   => 'Price',
+                'sale_price'              => 'Sale Price',
+                'cost_price'              => 'Cost Price',
+                'quantity'                => 'Quantity',
+                'current_stock'           => 'Current Stock',
+                'low_stock'               => 'Low Stock',
+                'is_featured'             => 'Featured',
+                'visible_on_storefront'   => 'Visible',
+                'condition'               => 'Condition',
+                'msrp'                    => 'MSRP',
+                'brand_id'                => 'Brand',
+                'track_inventory'         => 'Track Inventory',
+                'show_condition'          => 'Show Condition',
+                'show_shipping'           => 'Free Shipping',
+                'sort_order'              => 'Sort Order',
+                'search_keywords'         => 'Search Keywords',
+                'purchasability_status'   => 'Purchasability',
+                'min_purchase_quantity'   => 'Min Purchase Qty',
+                'max_purchase_quantity'   => 'Max Purchase Qty',
+                'fixed_shipping_cost'     => 'Fixed Shipping Cost',
+                'product_type'            => 'Product Type',
+                'tax_class'               => 'Tax Class',
+                'tax_code'                => 'Tax Code',
+                'discount_type'           => 'Discount Type',
+                'call_pricing'            => 'Call For Pricing',
+            ];
+
+            foreach ($trackedFields as $column => $label) {
+                $old = $original[$column] ?? null;
+                $new = $product->$column;
+
+                // Normalize boolean / null comparison
+                if ($old != $new) {
+                    $oldDisplay = is_bool($old) ? ($old ? 'Yes' : 'No') : ($old ?? 'N/A');
+                    $newDisplay = is_bool($new) ? ($new ? 'Yes' : 'No') : ($new ?? 'N/A');
+                    $changes[] = "{$label}: {$oldDisplay} → {$newDisplay}";
+                }
+            }
+
+            $actionText = "Product {$product->sku} | {$product->name} updated ({$product->id}, {$product->sku} | {$product->name})";
+
+            if (!empty($changes)) {
+                $actionText .= ' | Changes: ' . implode(', ', $changes);
+            }
+
+            \App\Models\StaffLog::record([
+                'store_id'    => $storeId,
+                'action'      => $actionText,
+                'action_type' => 'product_update',
+                'model_type'  => 'Product',
+                'model_id'    => $product->id,
+                'old_values'  => $original,
+                'new_values'  => $product->getAttributes(),
+                'ip_address'  => $request->ip(),
+            ]);
+
             return response()->json([
                 'status' => true,
                 'message' => 'Product updated successfully.',
@@ -1135,7 +1204,6 @@ class ProductController extends Controller
                 'products.*.fields' => 'required|array',
             ]);
 
-
             $updatedProducts = [];
 
             foreach ($data['products'] as $item) {
@@ -1148,6 +1216,9 @@ class ProductController extends Controller
                     }
 
                     $product = Product::where('store_id', $storeId)->findOrFail($productId);
+
+                    // ===================== ORIGINAL DATA (for Staff Log) =====================
+                    $original = $product->getAttributes();
 
                     // ✅ Main product fields
                     $product->fill([
@@ -1196,6 +1267,7 @@ class ProductController extends Controller
                         $categoryIds = array_map(fn($id) => (int)$id, $fields['categoryIds']);
                         $product->categories()->sync($categoryIds);
                     }
+
                     // ✅ Update Content (description, warranty, etc.)
                     if (isset($fields['description']) || isset($fields['warranty']) || isset($fields['availabilityText']) || isset($fields['templateLayout'])) {
                         $content = $product->content ?: new ProductContent([
@@ -1367,6 +1439,67 @@ class ProductController extends Controller
                             $fields['name'] ?? $product->name
                         );
                     }
+
+                    // ===================== STAFF LOG: PRODUCT UPDATE =====================
+                    $product->refresh();
+
+                    $changes = [];
+                    $trackedFields = [
+                        'name'                    => 'Name',
+                        'sku'                     => 'SKU',
+                        'price'                   => 'Price',
+                        'sale_price'              => 'Sale Price',
+                        'cost_price'              => 'Cost Price',
+                        'quantity'                => 'Quantity',
+                        'current_stock'           => 'Current Stock',
+                        'low_stock'               => 'Low Stock',
+                        'is_featured'             => 'Featured',
+                        'visible_on_storefront'   => 'Visible',
+                        'condition'               => 'Condition',
+                        'msrp'                    => 'MSRP',
+                        'brand_id'                => 'Brand',
+                        'track_inventory'         => 'Track Inventory',
+                        'show_condition'          => 'Show Condition',
+                        'show_shipping'           => 'Free Shipping',
+                        'sort_order'              => 'Sort Order',
+                        'search_keywords'         => 'Search Keywords',
+                        'purchasability_status'   => 'Purchasability',
+                        'min_purchase_quantity'   => 'Min Purchase Qty',
+                        'max_purchase_quantity'   => 'Max Purchase Qty',
+                        'fixed_shipping_cost'     => 'Fixed Shipping Cost',
+                        'product_type'            => 'Product Type',
+                        'tax_class'               => 'Tax Class',
+                        'tax_code'                => 'Tax Code',
+                        'discount_type'           => 'Discount Type',
+                    ];
+
+                    foreach ($trackedFields as $column => $label) {
+                        $old = $original[$column] ?? null;
+                        $new = $product->$column;
+
+                        if ($old != $new) {
+                            $oldDisplay = is_bool($old) ? ($old ? 'Yes' : 'No') : ($old ?? 'N/A');
+                            $newDisplay = is_bool($new) ? ($new ? 'Yes' : 'No') : ($new ?? 'N/A');
+                            $changes[] = "{$label}: {$oldDisplay} → {$newDisplay}";
+                        }
+                    }
+
+                    $actionText = "Product {$product->sku} | {$product->name} updated ({$product->id}, {$product->sku} | {$product->name})";
+
+                    if (!empty($changes)) {
+                        $actionText .= ' | Changes: ' . implode(', ', $changes);
+                    }
+
+                    \App\Models\StaffLog::record([
+                        'store_id'    => $storeId,
+                        'action'      => $actionText,
+                        'action_type' => 'product_update',
+                        'model_type'  => 'Product',
+                        'model_id'    => $product->id,
+                        'old_values'  => $original,
+                        'new_values'  => $product->getAttributes(),
+                        'ip_address'  => $request->ip(),
+                    ]);
 
                     // ✅ Add to response
                     $updatedProducts[] = new ProductResource($product->load([

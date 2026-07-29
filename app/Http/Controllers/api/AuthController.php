@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Validator;
 use Exception;
 use App\Models\Permission;
 use App\Mail\PasswordResetSuccessMail;
+use App\Models\StaffLog;
 use App\Services\TwoFactorService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -654,6 +655,16 @@ class AuthController extends Controller
                             })->values(),
                         ];
                     })->values();
+
+                // ===================== STAFF LOG: LOGIN =====================
+                StaffLog::record([
+                    'store_id'    => $permissionStoreId ?? ($stores->first()->id ?? null),
+                    'user_id'     => $admin->id,
+                    'username'    => $admin->email,
+                    'action'      => '(Successfully logged in)',
+                    'action_type' => 'login',
+                    'ip_address'  => $request->ip(),
+                ]);
 
                 return response()->json([
                     'status'      => true,

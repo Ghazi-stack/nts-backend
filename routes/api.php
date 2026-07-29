@@ -25,6 +25,7 @@ use App\Http\Controllers\api\Admin\{
     LogoController,
     ScriptController,
     CouponCodeController,
+    StaffLogController,
     StoreSettingController,
     UrlSettingController
 };
@@ -112,6 +113,9 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::put('/update-name', 'updateName');
         Route::post('/update-password', 'updatePassword');
     });
+
+   
+    Route::get('/staff-logs', [StaffLogController::class, 'index']);
 
     Route::get('/admin-users', [AuthController::class, 'getAdminUsers']);
     Route::get('/admin-users/{id}', [AuthController::class, 'getAdminUser']);
