@@ -466,6 +466,9 @@
                                                                     </tr>
                                                                     @endif
 
+                                                                    {{-- Sirf Shipped status pe yeh fields dikhengi --}}
+                                                                    @if($newStatus === 'Shipped')
+
                                                                     @if($order->tracking_number)
                                                                     <tr>
                                                                         <th style="width: 120px; padding-right: 30px;">
@@ -475,6 +478,28 @@
                                                                             <p><strong>{{ $order->tracking_number }}</strong></p>
                                                                         </th>
                                                                     </tr>
+                                                                    @endif
+
+                                                                    @if($shipment)
+                                                                    <tr>
+                                                                        <th style="width: 120px; padding-right: 30px;">
+                                                                            <p>Shipping Method:</p>
+                                                                        </th>
+                                                                        <th>
+                                                                            <p><strong>{{ $shipment->shipping_method ?? 'N/A' }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+
+                                                                    <tr>
+                                                                        <th style="width: 120px; padding-right: 30px;">
+                                                                            <p>Shipped By:</p>
+                                                                        </th>
+                                                                        <th>
+                                                                            <p><strong>{{ $shipment->shipped_by ?? 'N/A' }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+                                                                    @endif
+
                                                                     @endif
                                                                 </table>
                                                             </th>
