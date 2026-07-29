@@ -15,6 +15,8 @@ class Shipment extends Model
         'date_shipped',
         'shipping_method',
         'tracking_carrie',
+        'shipped_by',
+        'packing_slip_note',
         'tracking_number',
     ];
 

@@ -109,6 +109,8 @@ class ShipmentController extends Controller
             'shippedTo' => 'nullable|string|max:255',
             'shippingMethod' => 'nullable|string|max:255',
             'trackingCarrier' => 'nullable|string|max:255',
+            'shippedBy' => 'nullable|string|max:255',
+            'packingSlipNotes' => 'nullable|string|max:255',
             'dateShipped' => 'required|date',
             'trackingId' => 'required|string|max:255',
         ]);
@@ -139,6 +141,8 @@ class ShipmentController extends Controller
             'date_shipped'    => $validated['dateShipped'],
             'shipping_method'      => $validated['shippingMethod'] ?? null,
             'tracking_carrie'      => $validated['trackingCarrier'] ?? null,
+            'shipped_by'      => $validated['shippedBy'] ?? null,
+            'packing_slip_note'      => $validated['packingSlipNotes'] ?? null,
             'tracking_number'      => $validated['trackingId'] ?? null,
         ]);
 
@@ -149,6 +153,8 @@ class ShipmentController extends Controller
         OrderTimeline::addEvent($order->id, $storeId, 'shipment_created', 'Shipment created', [
             'tracking_number' => $shipment->tracking_number,
             'shipping_method' => $shipment->shipping_method,
+            'shipped_by' => $shipment->shipped_by,
+            'packing_slip_note' => $shipment->packing_slip_note,
             'shipped_to'      => $shipment->shipped_to,
             'date_shipped'    => $shipment->date_shipped,
         ], 'shipping');
@@ -181,6 +187,8 @@ class ShipmentController extends Controller
             'dateShipped'     => 'nullable|date',
             'shippingMethod'  => 'nullable|string|max:255',
             'trackingCarrier' => 'nullable|string|max:255',
+            'shippedBy' => 'nullable|string|max:255',
+            'packingSlipNotes' => 'nullable|string|max:255',
             'trackingId'      => 'required|string|max:255',
         ]);
 
@@ -189,6 +197,8 @@ class ShipmentController extends Controller
             'date_shipped'    => $validated['dateShipped'] ?? $shipment->date_shipped,
             'shipping_method' => $validated['shippingMethod'] ?? $shipment->shipping_method,
             'tracking_carrie' => $validated['trackingCarrier'] ?? $shipment->tracking_carrie,
+            'shipped_by' => $validated['shippedBy'] ?? $shipment->shipped_by,
+            'packing_slip_note' => $validated['packingSlipNotes'] ?? $shipment->packing_slip_note,
             'tracking_number' => $validated['trackingId'],
         ]);
 
@@ -196,6 +206,8 @@ class ShipmentController extends Controller
         OrderTimeline::addEvent($shipment->order_id, $storeId, 'tracking_updated', 'Tracking information updated', [
             'tracking_number'  => $shipment->tracking_number,
             'tracking_carrier' => $shipment->tracking_carrie,
+            'shipped_by' => $shipment->shipped_by,
+            'packing_slip_note' => $shipment->packing_slip_note,
             'shipping_method'  => $shipment->shipping_method,
             'shipped_to'       => $shipment->shipped_to,
         ], 'shipping');

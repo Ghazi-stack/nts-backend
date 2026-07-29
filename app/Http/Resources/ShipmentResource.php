@@ -15,6 +15,8 @@ class ShipmentResource extends JsonResource
             'dateShipped' => $this->date_shipped,
             'shippingMethod' => $this->shipping_method,
             'trackingCarrier' => $this->tracking_carrie,
+            'shippedBy' => $this->shipped_by,
+            'packingSlipNotes' => $this->packing_slip_note,
             'trackingNumber' => $this->tracking_number,
             'createdAt' => $this->created_at->format('M d, Y'),
             'orderDate' => optional($this->order)->created_at?->format('M d, Y'),
