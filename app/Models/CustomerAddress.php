@@ -20,7 +20,8 @@ class CustomerAddress extends Model
         'state',
         'zip',
         'country',
-        'is_default'
+        'is_default',
+        'type'
     ];
 
     public function customer()

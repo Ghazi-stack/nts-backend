@@ -122,27 +122,46 @@ class CustomerAddressController extends Controller
 
         if (!$storeId) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Store not selected or token invalid.'
             ], 400);
         }
 
+        $user = auth('sanctum')->user() ?? auth()->user();
+
         $validated = $request->validate([
-            'firstName' => 'required|string|max:100',
-            'lastName' => 'required|string|max:100',
-            'companyName' => 'nullable|string|max:255',
-            'phoneNumber' => 'required|string|max:30',
+            'firstName'    => 'required|string|max:100',
+            'lastName'     => 'required|string|max:100',
+            'companyName'  => 'nullable|string|max:255',
+            'phoneNumber'  => 'required|string|max:30',
             'addressLine1' => 'required|string|max:255',
             'addressLine2' => 'nullable|string|max:255',
-            'city' => 'required|string|max:100',
-            'state' => 'required|string|max:100',
-            'zip' => 'required|string|max:30',
-            'country' => 'required|string|max:100',
-            'is_default' => 'nullable|boolean',
+            'city'         => 'required|string|max:100',
+            'state'        => 'required|string|max:100',
+            'zip'          => 'required|string|max:30',
+            'country'      => 'required|string|max:100',
+            'is_default'   => 'nullable|boolean',
+            'type'         => 'nullable|in:Residential,Commercial',  // naya field
+            'customer_id'  => 'nullable|integer',                    // dashboard ke liye
         ]);
 
+        // Customer → apni ID
+        // Admin/Sub-user → request se customer_id
+        if ($user && (int) $user->userRole === 2) {
+            $customerId = $user->id;
+        } else {
+            if (empty($validated['customer_id'])) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'customer_id is required.'
+                ], 422);
+            }
+            $customerId = $validated['customer_id'];
+        }
+
+        // Default address handle
         if (!empty($validated['is_default'])) {
-            CustomerAddress::where('customer_id', auth()->id())
+            CustomerAddress::where('customer_id', $customerId)
                 ->where('store_id', $storeId)
                 ->update([
                     'is_default' => false
@@ -151,7 +170,7 @@ class CustomerAddressController extends Controller
 
         $data = [
             'store_id'       => $storeId,
-            'customer_id'    => auth()->id(),
+            'customer_id'    => $customerId,
             'first_name'     => $validated['firstName'],
             'last_name'      => $validated['lastName'],
             'company_name'   => $validated['companyName'] ?? null,
@@ -163,14 +182,15 @@ class CustomerAddressController extends Controller
             'zip'            => $validated['zip'],
             'country'        => $validated['country'],
             'is_default'     => $validated['is_default'] ?? false,
+            'type'           => $validated['type'] ?? 'Residential',  // default Residential
         ];
 
         $address = CustomerAddress::create($data);
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Address created successfully.',
-            'data' => $address
+            'data'    => $address
         ]);
     }
 
@@ -183,40 +203,51 @@ class CustomerAddressController extends Controller
 
         if (!$storeId) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Store not selected or token invalid.'
             ], 400);
         }
 
-        $address = CustomerAddress::where('id', $id)
-            ->where('customer_id', auth()->id())
-            ->where('store_id', $storeId)
-            ->first();
+        $user = auth('sanctum')->user() ?? auth()->user();
+
+        $query = CustomerAddress::where('id', $id)
+            ->where('store_id', $storeId);
+
+        // Customer → sirf apna address
+        // Admin/Sub-user → koi bhi address (us store ka)
+        if ($user && (int) $user->userRole === 2) {
+            $query->where('customer_id', $user->id);
+        }
+
+        $address = $query->first();
 
         if (!$address) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Address not found.'
             ], 404);
         }
 
         $validated = $request->validate([
-            'first_name' => 'required|string|max:100',
-            'last_name' => 'required|string|max:100',
-            'company_name' => 'nullable|string|max:255',
-            'phone_number' => 'required|string|max:30',
+            'first_name'     => 'required|string|max:100',
+            'last_name'      => 'required|string|max:100',
+            'company_name'   => 'nullable|string|max:255',
+            'phone_number'   => 'required|string|max:30',
             'address_line_1' => 'required|string|max:255',
             'address_line_2' => 'nullable|string|max:255',
-            'city' => 'required|string|max:100',
-            'state' => 'required|string|max:100',
-            'zip' => 'required|string|max:30',
-            'country' => 'required|string|max:100',
-            'is_default' => 'nullable|boolean'
+            'city'           => 'required|string|max:100',
+            'state'          => 'required|string|max:100',
+            'zip'            => 'required|string|max:30',
+            'country'        => 'required|string|max:100',
+            'is_default'     => 'nullable|boolean',
+            'type'           => 'nullable|in:Residential,Commercial',  // naya
         ]);
 
+        // Default address handle
         if (!empty($validated['is_default'])) {
-            CustomerAddress::where('customer_id', auth()->id())
+            CustomerAddress::where('customer_id', $address->customer_id)
                 ->where('store_id', $storeId)
+                ->where('id', '!=', $address->id)
                 ->update([
                     'is_default' => false
                 ]);
@@ -225,9 +256,9 @@ class CustomerAddressController extends Controller
         $address->update($validated);
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Address updated successfully.',
-            'data' => $address
+            'data'    => $address
         ]);
     }
 
@@ -240,19 +271,27 @@ class CustomerAddressController extends Controller
 
         if (!$storeId) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Store not selected or token invalid.'
             ], 400);
         }
 
-        $address = CustomerAddress::where('id', $id)
-            ->where('customer_id', auth()->id())
-            ->where('store_id', $storeId)
-            ->first();
+        $user = auth('sanctum')->user() ?? auth()->user();
+
+        $query = CustomerAddress::where('id', $id)
+            ->where('store_id', $storeId);
+
+        // Customer → sirf apna address delete
+        // Admin/Sub-user → koi bhi address (us store ka)
+        if ($user && (int) $user->userRole === 2) {
+            $query->where('customer_id', $user->id);
+        }
+
+        $address = $query->first();
 
         if (!$address) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Address not found.'
             ], 404);
         }
@@ -260,7 +299,7 @@ class CustomerAddressController extends Controller
         $address->delete();
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Address deleted successfully.'
         ]);
     }
