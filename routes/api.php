@@ -339,6 +339,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::delete('/delete/{id}', 'destroy');
         Route::get('/list', 'index');
         Route::get('/show/{id}', 'show');
+        Route::delete('/delete-multiple', 'destroyMultiple');
     });
 
     // ===================== STOREFRONT — LOGO =====================

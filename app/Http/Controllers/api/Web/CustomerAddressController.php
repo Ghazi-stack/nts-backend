@@ -303,4 +303,41 @@ class CustomerAddressController extends Controller
             'message' => 'Address deleted successfully.'
         ]);
     }
+
+    public function destroyMultiple(Request $request)
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Store not selected or token invalid.'
+            ], 400);
+        }
+
+        $user = auth('sanctum')->user() ?? auth()->user();
+
+        // Sirf Admin / Sub-user (dashboard)
+        if (!$user || (int) $user->userRole !== 1) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unauthorized. Only admin can bulk delete addresses.'
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'ids'   => 'required|array|min:1',
+            'ids.*' => 'integer|distinct',
+        ]);
+
+        $deleted = CustomerAddress::where('store_id', $storeId)
+            ->whereIn('id', $validated['ids'])
+            ->delete();
+
+        return response()->json([
+            'status'  => true,
+            'message' => $deleted . ' address(es) deleted successfully.',
+            'deleted_count' => $deleted,
+        ]);
+    }
 }
