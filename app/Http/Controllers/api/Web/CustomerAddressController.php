@@ -60,6 +60,7 @@ class CustomerAddressController extends Controller
                 'state'            => $address->state,
                 'zip'              => $address->zip,
                 'country'          => $address->country,
+                'address_type'          => $address->type,
                 'is_default'       => (bool) $address->is_default,
                 'created_at'       => optional($address->created_at)->toDateTimeString(),
                 'updated_at'       => optional($address->updated_at)->toDateTimeString(),
