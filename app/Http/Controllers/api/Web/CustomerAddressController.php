@@ -20,22 +20,31 @@ class CustomerAddressController extends Controller
 
         if (!$storeId) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Store not selected or token invalid.'
             ], 400);
         }
 
-        $user = auth('sanctum')->user();
+        $user = auth('sanctum')->user() ?? auth()->user();
 
-        $customerAddresses = CustomerAddress::where('store_id', $storeId)
-            ->where('customer_id', $user->id)
-            ->latest()
-            ->get();
+        $query = CustomerAddress::where('store_id', $storeId);
+
+        // Customer (userRole = 2) → sirf apne addresses
+        // Admin / Sub-user (userRole = 1) → customer_id optional (query param se)
+        if ($user && (int) $user->userRole === 2) {
+            $query->where('customer_id', $user->id);
+        } else {
+            // Admin side: specific customer ke addresses chahiye to ?customer_id=123
+            if ($request->filled('customer_id')) {
+                $query->where('customer_id', $request->customer_id);
+            }
+        }
+
+        $customerAddresses = $query->latest()->get();
 
         $result = [];
 
         foreach ($customerAddresses as $address) {
-
             $result[] = [
                 'type'             => 'customer_address',
                 'id'               => $address->id,
@@ -59,7 +68,7 @@ class CustomerAddressController extends Controller
 
         return response()->json([
             'status' => true,
-            'data' => [
+            'data'   => [
                 'customer_addresses' => $result
             ]
         ]);
@@ -73,26 +82,34 @@ class CustomerAddressController extends Controller
 
         if (!$storeId) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Store not selected or token invalid.'
             ], 400);
         }
 
-        $address = CustomerAddress::where('id', $id)
-            ->where('store_id', $storeId)
-            ->where('customer_id', auth()->id())
-            ->first();
+        $user = auth('sanctum')->user() ?? auth()->user();
+
+        $query = CustomerAddress::where('id', $id)
+            ->where('store_id', $storeId);
+
+        // Sirf customer login ho to apna address hi dekh sakta hai
+        // Admin/Sub-user (userRole = 1) ko customer_id check nahi lagega
+        if ($user && (int) $user->userRole === 2) {
+            $query->where('customer_id', $user->id);
+        }
+
+        $address = $query->first();
 
         if (!$address) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Address not found.'
             ], 404);
         }
 
         return response()->json([
             'status' => true,
-            'data' => $address
+            'data'   => $address
         ]);
     }
 
