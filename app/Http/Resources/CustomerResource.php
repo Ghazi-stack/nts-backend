@@ -33,6 +33,7 @@ class CustomerResource extends JsonResource
             'addressLine1'             => $this->address,
             'addressLine2'             => $this->address_line_2,
             'state'               => $this->state,
+            'userType'               => $this->user_type,
             'createdAt'               => $this->created_at,
             'updatedAt'               => $this->updated_at,
 

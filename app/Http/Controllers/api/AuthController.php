@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Validator;
 use Exception;
 use App\Models\Permission;
 use App\Mail\PasswordResetSuccessMail;
+use App\Models\Order;
 use App\Models\StaffLog;
 use App\Services\TwoFactorService;
 use Illuminate\Support\Carbon;
@@ -451,6 +452,12 @@ class AuthController extends Controller
             // ===================== CUSTOMER REGISTRATION =====================
             $storeId = current_store_id();
 
+            // Check if guest customer exists with same email
+            $existingGuestCustomer = Customer::where('store_id', $storeId)
+                ->where('email', $request->email)
+                ->where('user_type', 'guest')
+                ->first();
+
             $user = User::create([
                 'name'          => $request->firstName . ' ' . $request->lastName,
                 'email'         => $request->email,
@@ -463,41 +470,71 @@ class AuthController extends Controller
                 'store_id'      => $storeId,
             ]);
 
-            $customer = Customer::create([
-                'store_id'              => $storeId,
-                'first_name'            => $request->firstName,
-                'last_name'             => $request->lastName,
-                'email'                 => $request->email,
-                'phone'                 => $request->phoneNumber,
-                'company_name'          => $request->companyName,
-                'address'               => $request->addressLine1,
-                'address_line_2'        => $request->addressLine2,
-                'city'                  => $request->suburb,
-                'country'               => $request->country,
-                'state'                 => $request->state,
-                'zip'                   => $request->zip,
-                'store_credit'          => 0,
-                'receive_review_emails' => false,
-                'force_password_reset'  => false,
-            ]);
+            if ($existingGuestCustomer) {
+                // Guest customer exists — update it, don't create new
+                $existingGuestCustomer->update([
+                    'first_name'      => $request->firstName,
+                    'last_name'       => $request->lastName,
+                    'phone'           => $request->phoneNumber,
+                    'company_name'    => $request->companyName,
+                    'address'         => $request->addressLine1,
+                    'address_line_2'  => $request->addressLine2,
+                    'city'            => $request->suburb,
+                    'country'         => $request->country,
+                    'state'           => $request->state,
+                    'zip'             => $request->zip,
+                    'user_type'       => null, // guest → registered
+                ]);
+
+                $customer = $existingGuestCustomer;
+
+                // Update all guest orders for this email
+                Order::where('store_id', $storeId)
+                    ->where('customer_id', $customer->id)
+                    ->where('user_type', 'guest')
+                    ->update([
+                        'user_id'   => $user->id,
+                        'user_type' => null,
+                    ]);
+            } else {
+                $customer = Customer::create([
+                    'store_id'        => $storeId,
+                    'first_name'      => $request->firstName,
+                    'last_name'       => $request->lastName,
+                    'email'           => $request->email,
+                    'phone'           => $request->phoneNumber,
+                    'company_name'    => $request->companyName,
+                    'address'         => $request->addressLine1,
+                    'address_line_2'  => $request->addressLine2,
+                    'city'            => $request->suburb,
+                    'country'         => $request->country,
+                    'state'           => $request->state,
+                    'zip'             => $request->zip,
+                    'store_credit'    => 0,
+                    'receive_review_emails' => false,
+                    'force_password_reset'  => false,
+                ]);
+            }
 
             $user->customer_id = $customer->id;
             $user->save();
 
             DB::commit();
 
+            // Send Registration Email to Customer + Admin
             try {
                 Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
+
                 $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
                 Mail::to($adminEmail)->send(new UserRegistrationMail($user, $storeId));
             } catch (\Exception $mailError) {
                 Log::error('REGISTRATION EMAIL FAILED', [
-                    'error'      => $mailError->getMessage(),
+                    'error' => $mailError->getMessage(),
                     'user_email' => $user->email,
                 ]);
             }
 
-            $token    = $user->createToken('auth_token')->plainTextToken;
+            $token = $user->createToken('auth_token')->plainTextToken;
             $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
 
             return response()->json([

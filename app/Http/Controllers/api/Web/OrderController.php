@@ -774,7 +774,7 @@ class OrderController extends Controller
 
                 'shippingMethod' => 'nullable|string|max:100',
                 'shippingCost'   => 'nullable|numeric',
-                'shippingData'  => 'nullable',
+                'shippingData'   => 'nullable',
 
                 'comments'       => 'nullable|string|max:1000',
                 'discountAmount' => 'nullable|numeric',
@@ -798,9 +798,9 @@ class OrderController extends Controller
                 'destinations.*.zip'            => 'required|string|max:20',
                 'destinations.*.country'        => 'required|string|max:100',
 
-                'destinations.*.shippingMethod' => 'required|string|max:100',
+                'destinations.*.shippingMethod' => 'required',
                 'destinations.*.shippingCost'   => 'required|numeric',
-                'destinations.*.shippingData' => 'nullable',
+                'destinations.*.shippingData'   => 'nullable',
 
                 'destinations.*.products'       => 'required|array|min:1',
                 'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
@@ -840,11 +840,16 @@ class OrderController extends Controller
             // ===================== USER & CUSTOMER =====================
             $user = auth('sanctum')->user();
             $customer = null;
+            $isGuest = false;
 
             if ($user) {
                 $customer = $user->customer;
             } else {
-                $user = User::where('email', $validated['email'])->first();
+                // Guest user — check if user exists with this email
+                $user = User::where('email', $validated['email'])->where('userRole', 2)->where('store_id', $storeId)->first();
+                if (!$user) {
+                    $isGuest = true;
+                }
             }
 
             if ($user && !$customer) {
@@ -867,6 +872,7 @@ class OrderController extends Controller
                     'state'          => $primary['state'] ?? null,
                     'zip'            => $primary['zip'] ?? null,
                     'country'        => $primary['country'] ?? null,
+                    'user_type'      => $isGuest ? 'guest' : null,
                 ]);
 
                 if ($user) {
@@ -875,50 +881,34 @@ class OrderController extends Controller
                 }
             }
 
-            if (!$user) {
-
-                $plainPassword = Str::random(10);
-
-                $user = User::create([
-                    'name'        => trim($customer->first_name . ' ' . $customer->last_name),
-                    'email'       => $validated['email'],
-                    'password'    => Hash::make($plainPassword),
-                    'userRole'    => 2,
-                    'store_id'    => $storeId,
-                    'customer_id' => $customer->id,
-                ]);
-
-                // Generate password reset token
-                $token = app('auth.password.broker')->createToken($user);
-
-                $store = Store::find($storeId);
-
-                // Dynamic URL
-                $frontendUrl = rtrim($store?->base_url ?? '#', '/');
-
-                $resetLink = $frontendUrl .
-                    '/auth/reset-password?token=' . $token .
-                    '&email=' . urlencode($validated['email']);
-
+            // ===================== GUEST — NO USER CREATE, SEND ACCOUNT CREATE EMAIL =====================
+            if ($isGuest) {
+                // Don't create user — just send account creation email
                 try {
+                    $store = Store::find($storeId);
+                    $frontendUrl = rtrim($store?->base_url ?? '#', '/');
+                    $registerLink = $frontendUrl . '/auth/register';
 
                     Mail::to($validated['email'])->send(
-                        new WelcomeLoginMail(
+                        new \App\Mail\GuestAccountMail(
                             $customer->first_name,
                             $validated['email'],
-                            $resetLink,
+                            $registerLink,
                             $storeId
                         )
                     );
                 } catch (\Exception $mailEx) {
-
-                    Log::error('WELCOME LOGIN EMAIL FAILED', [
+                    Log::error('GUEST ACCOUNT EMAIL FAILED', [
                         'error' => $mailEx->getMessage(),
-                        'line'  => $mailEx->getLine(),
-                        'file'  => $mailEx->getFile(),
                         'email' => $validated['email'],
                     ]);
                 }
+            }
+
+            // ===================== LOGGED IN USER (existing) =====================
+            if (!$user && !$isGuest) {
+                // This case shouldn't happen but safety check
+                $user = User::where('email', $validated['email'])->first();
             }
 
             // ===================== ORDERS =====================
@@ -927,7 +917,7 @@ class OrderController extends Controller
             $discount = $validated['discountAmount'] ?? 0;
             $isMulti = $validated['isMultiAddress'];
 
-            // Common order fields for new keys
+            // Common order fields
             $commonOrderFields = [
                 'ip_address'                    => $validated['ipAddress'] ?? $request->ip(),
                 'is_save_address_for_shipping'  => $validated['isSaveAddressForShipping'] ?? false,
@@ -966,7 +956,7 @@ class OrderController extends Controller
 
                 $order = Order::create(array_merge([
                     'store_id'               => $storeId,
-                    'user_id'                => $user->id,
+                    'user_id'                => $user?->id ?? null,
                     'customer_id'            => $customer->id,
                     'order_number'           => '',
                     'billing_information_id' => $billing->id,
@@ -974,7 +964,7 @@ class OrderController extends Controller
                     'shipping_cost'          => $validated['shippingCost'],
                     'comments'               => $validated['comments'] ?? null,
                     'device_type'            => $validated['deviceType'] ?? null,
-                    'user_type'              => $validated['userType'] ?? null,
+                    'user_type'              => $isGuest ? 'guest' : ($validated['userType'] ?? null),
                     'total_amount'           => $totalAmount,
                     'discountAmount'         => $discount,
                     'is_multi_address'       => false,
@@ -984,6 +974,7 @@ class OrderController extends Controller
                 $order->update([
                     'order_number' => $order->id,
                 ]);
+
                 foreach ($validated['products'] as $item) {
                     $product = Product::find($item['product_id']);
                     if ($product) {
@@ -994,7 +985,7 @@ class OrderController extends Controller
                             'price'      => $product->price,
                         ]);
 
-                        // ── Stock Decrease ──
+                        // Stock Decrease
                         $product->decrement('current_stock', $item['quantity']);
                     }
                 }
@@ -1033,7 +1024,7 @@ class OrderController extends Controller
 
                     $order = Order::create(array_merge([
                         'store_id'               => $storeId,
-                        'user_id'                => $user->id,
+                        'user_id'                => $user?->id ?? null,
                         'customer_id'            => $customer->id,
                         'order_number'           => '',
                         'billing_information_id' => $billing->id,
@@ -1041,7 +1032,7 @@ class OrderController extends Controller
                         'shipping_cost'          => $dest['shippingCost'],
                         'comments'               => $validated['comments'] ?? null,
                         'device_type'            => $validated['deviceType'] ?? null,
-                        'user_type'              => $validated['userType'] ?? null,
+                        'user_type'              => $isGuest ? 'guest' : ($validated['userType'] ?? null),
                         'total_amount'           => $totalAmount,
                         'discountAmount'         => $discount,
                         'is_multi_address'       => true,
@@ -1051,6 +1042,7 @@ class OrderController extends Controller
                     $order->update([
                         'order_number' => $order->id,
                     ]);
+
                     foreach ($dest['products'] as $item) {
                         $product = Product::find($item['product_id']);
                         if ($product) {
@@ -1061,7 +1053,7 @@ class OrderController extends Controller
                                 'price'      => $product->price,
                             ]);
 
-                            // ── Stock Decrease ──
+                            // Stock Decrease
                             $product->decrement('current_stock', $item['quantity']);
                         }
                     }
@@ -1144,7 +1136,7 @@ class OrderController extends Controller
             }
 
             // ===================== SAVE SINGLE RECORD =====================
-            if ($shippingData || $billingData) {
+            if (($shippingData || $billingData) && $user) {
                 SavedAddress::create([
                     'store_id'         => $storeId,
                     'user_id'          => $user->id,
@@ -1188,33 +1180,29 @@ class OrderController extends Controller
             foreach ($orders as $ord) {
                 $ord->load('billingInformation');
 
-                // 1. Order Created
                 OrderTimeline::addEvent($ord->id, $storeId, 'order_created', 'Order created', [
                     'status' => $ord->status,
                 ], 'dot');
 
-                // 2. Status Changed (Incomplete → Awaiting Payment)
                 OrderTimeline::addEvent($ord->id, $storeId, 'status_changed', 'Order status changed', [
                     'previous_status' => 'Incomplete',
                     'new_status'      => $ord->status,
                 ], 'dot');
 
-                // 3. Shipping Quote
                 OrderTimeline::addEvent($ord->id, $storeId, 'shipping_quote', 'Shipping quote persisted', [
                     'shipping_cost'   => '$' . number_format($ord->shipping_cost, 2),
                     'shipping_method' => $ord->billingInformation->shipping_method ?? null,
                 ], 'dot');
 
-                // 4. Order Confirmed
                 OrderTimeline::addEvent($ord->id, $storeId, 'order_confirmed', 'Order confirmed', [], 'dot');
 
-                // 5. Payment Authorized
                 OrderTimeline::addEvent($ord->id, $storeId, 'payment_authorized', 'Payment authorized', [
                     'source'         => ucwords(str_replace('_', ' ', $validated['paymentMethod'] ?? 'N/A')),
                     'amount'         => '$' . number_format($ord->total_amount, 2),
                     'payment_intent' => $validated['paymentIntentId'] ?? null,
                 ], 'payment');
             }
+
             // Response
             foreach ($orders as $order) {
                 $order->load('items.product.images', 'billingInformation', 'customer');
