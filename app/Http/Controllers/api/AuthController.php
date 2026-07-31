@@ -282,11 +282,10 @@ class AuthController extends Controller
                             ->exists();
 
                         if ($alreadyInStore) {
-                            // Update permissions — remove old, add new
-                            DB::table('user_permissions')
-                                ->where('user_id', $existingUser->id)
-                                ->where('store_id', $storeId)
-                                ->delete();
+                            return response()->json([
+                                'status'  => false,
+                                'message' => 'This user already has access to this store.',
+                            ], 409);
                         }
 
                         // Assign selected permissions for this store
