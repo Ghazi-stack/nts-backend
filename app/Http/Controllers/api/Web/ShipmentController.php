@@ -80,7 +80,9 @@ class ShipmentController extends Controller
             'order_id' => 'required|exists:orders,id',
         ]);
 
-        $shipment = Shipment::with(['order.items.product'])
+        $shipment = Shipment::with([
+            'order.items.product.seo'
+        ])
             ->where('store_id', $storeId)
             ->where('order_id', $request->order_id)
             ->first();
