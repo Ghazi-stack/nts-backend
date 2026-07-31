@@ -30,6 +30,11 @@ class Customer extends Model
         'country',
         'state',
         'user_type',
+        // New
+        'analytics',
+        'functional',
+        'targeting',
+        'notes',
     ];
 
     protected $casts = [

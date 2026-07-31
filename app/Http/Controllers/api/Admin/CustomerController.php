@@ -412,6 +412,12 @@ class CustomerController extends Controller
                 'receiveReviewEmails'   => 'nullable|boolean',
                 'forcePasswordReset'    => 'nullable|boolean',
                 'password'              => 'nullable|string|confirmed',
+                // New Fields
+                'analytics'            => 'nullable|string|max:255',
+                'functional'           => 'nullable|string|max:255',
+                'targeting'            => 'nullable|string|max:255',
+                'notes'                => 'nullable|string',
+                
                 'addresses'             => 'nullable|array',
                 'addresses.*.id'        => 'nullable|exists:customer_addresses,id',
                 'addresses.*.addressLine1' => 'required|string|max:255',
