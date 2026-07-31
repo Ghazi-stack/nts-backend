@@ -266,61 +266,30 @@ class AuthController extends Controller
                     ], 201);
                 }
 
-                // ===================== SUB-USER REGISTRATION =====================
+                // ===================== SUB-USER REGISTRATION (storeId header) =====================
                 if ($isSubUser) {
 
-                    $loginUser = auth('sanctum')->user();
+                    // Check if sub-user already exists (multi-store)
+                    $existingUser = User::where('email', $request->email)
+                        ->where('userRole', 1)
+                        ->first();
 
-                    if (!$loginUser) {
-                        return response()->json([
-                            'status'  => false,
-                            'message' => 'Unauthorized.'
-                        ], 401);
-                    }
-
-                    $targetStore = Store::find($storeId);
-
-                    if (!$targetStore) {
-                        return response()->json([
-                            'status'  => false,
-                            'message' => 'Store not found.'
-                        ], 404);
-                    }
-
-                    $storeOwner = User::find($targetStore->user_id);
-
-                    $existingUser = User::where('email', $request->email)->first();
-
-                    // ---------- Additional Store Access for Existing Sub-User ----------
                     if ($existingUser) {
-
-                        if ($existingUser->userRole != 1) {
-                            return response()->json([
-                                'status'  => false,
-                                'message' => 'This email is already registered as a customer.',
-                            ], 422);
-                        }
-
-                        if (!Hash::check($request->password, $existingUser->password)) {
-                            return response()->json([
-                                'status'  => false,
-                                'message' => 'Invalid password. Use the original password of this user.',
-                            ], 401);
-                        }
-
-                        $alreadyHas = DB::table('user_permissions')
+                        // Check if already has permissions for this store
+                        $alreadyInStore = DB::table('user_permissions')
                             ->where('user_id', $existingUser->id)
                             ->where('store_id', $storeId)
                             ->exists();
 
-                        if ($alreadyHas) {
-                            return response()->json([
-                                'status'  => false,
-                                'message' => 'This user already has access to this store.',
-                            ], 422);
+                        if ($alreadyInStore) {
+                            // Update permissions — remove old, add new
+                            DB::table('user_permissions')
+                                ->where('user_id', $existingUser->id)
+                                ->where('store_id', $storeId)
+                                ->delete();
                         }
 
-                        // Add selected permissions for this store
+                        // Assign selected permissions for this store
                         $inserts = [];
                         foreach ($request->permissions as $permId) {
                             $inserts[] = [
@@ -335,6 +304,23 @@ class AuthController extends Controller
 
                         DB::commit();
 
+                        // Send forgot password email to existing user
+                        try {
+                            DB::table('password_reset_tokens')
+                                ->where('email', $existingUser->email)
+                                ->delete();
+
+                            Password::sendResetLink(
+                                ['email' => $existingUser->email]
+                            );
+                        } catch (\Exception $mailError) {
+                            Log::error('SUB-USER FORGOT PASSWORD EMAIL FAILED', [
+                                'error' => $mailError->getMessage(),
+                                'email' => $existingUser->email,
+                            ]);
+                        }
+
+                        // Get assigned permissions for response
                         $userPermissions = Permission::whereIn('id', $request->permissions)
                             ->orderBy('group')
                             ->orderBy('sort_order')
@@ -354,103 +340,112 @@ class AuthController extends Controller
                                 ];
                             })->values();
 
-                        try {
-                            Mail::to($existingUser->email)->send(new UserRegistrationMail($existingUser, $storeId));
-                            $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
-                            Mail::to($adminEmail)->send(new UserRegistrationMail($existingUser, $storeId));
-                        } catch (\Exception $mailError) {
-                            Log::error('REGISTRATION EMAIL FAILED', [
-                                'error'      => $mailError->getMessage(),
-                                'user_email' => $existingUser->email,
-                            ]);
-                        }
+                        // Get all stores for this user
+                        $storeIds = DB::table('user_permissions')
+                            ->where('user_id', $existingUser->id)
+                            ->distinct()
+                            ->pluck('store_id');
+                        $allStores = Store::whereIn('id', $storeIds)->get();
 
-                        $token    = $existingUser->createToken('auth_token')->plainTextToken;
+                        $token = $existingUser->createToken('auth_token')->plainTextToken;
                         $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
 
                         return response()->json([
                             'status'      => true,
-                            'message'     => 'Sub-user access added to store successfully',
+                            'message'     => 'Existing user added to store with permissions. Password reset email sent.',
                             'token'       => $token,
                             'expireAt'    => $expireAt,
                             'user'        => new UserResource($existingUser),
-                            'store'       => $targetStore,
+                            'store'       => Store::find($storeId),
+                            'stores'      => $allStores,
+                            'permissions' => $userPermissions,
+                            'isOwner'     => false,
+                        ], 201);
+                    } else {
+                        // New sub-user
+                        if (!$request->password) {
+                            return response()->json([
+                                'status' => false,
+                                'message' => 'Password is required for new registration.',
+                            ], 422);
+                        }
+
+                        $user = User::create([
+                            'name'          => $request->firstName . ' ' . $request->lastName,
+                            'email'         => $request->email,
+                            'password'      => bcrypt($request->password),
+                            'userRole'      => 1,
+                            'phone_number'  => $request->phoneNumber,
+                            'store_name'    => $request->storeName,
+                            'business_size' => $request->businessSize,
+                            'region'        => $request->region,
+                            'store_id'      => $storeId,
+                            'customer_id'   => null,
+                        ]);
+
+                        // Assign selected permissions
+                        $inserts = [];
+                        foreach ($request->permissions as $permId) {
+                            $inserts[] = [
+                                'user_id'       => $user->id,
+                                'permission_id' => $permId,
+                                'store_id'      => $storeId,
+                                'created_at'    => now(),
+                                'updated_at'    => now(),
+                            ];
+                        }
+                        DB::table('user_permissions')->insert($inserts);
+
+                        DB::commit();
+
+                        // Get assigned permissions for response
+                        $userPermissions = Permission::whereIn('id', $request->permissions)
+                            ->orderBy('group')
+                            ->orderBy('sort_order')
+                            ->get()
+                            ->groupBy('group')
+                            ->map(function ($items, $group) {
+                                return [
+                                    'group' => $group,
+                                    'permissions' => $items->map(function ($p) {
+                                        return [
+                                            'id'    => $p->id,
+                                            'name'  => $p->name,
+                                            'label' => $p->label,
+                                            'slug'  => $p->slug,
+                                        ];
+                                    })->values(),
+                                ];
+                            })->values();
+
+                        // Send Registration Email
+                        try {
+                            Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
+
+                            $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
+                            Mail::to($adminEmail)->send(new UserRegistrationMail($user, $storeId));
+                        } catch (\Exception $mailError) {
+                            Log::error('REGISTRATION EMAIL FAILED', [
+                                'error' => $mailError->getMessage(),
+                                'user_email' => $user->email,
+                            ]);
+                        }
+
+                        $token = $user->createToken('auth_token')->plainTextToken;
+                        $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+                        return response()->json([
+                            'status'      => true,
+                            'message'     => 'Sub-user registered successfully',
+                            'token'       => $token,
+                            'expireAt'    => $expireAt,
+                            'user'        => new UserResource($user),
+                            'store'       => Store::find($storeId),
+                            'stores'      => [Store::find($storeId)],
                             'permissions' => $userPermissions,
                             'isOwner'     => false,
                         ], 201);
                     }
-
-                    // ---------- First Time Sub-User Registration ----------
-                    $user = User::create([
-                        'name'          => $request->firstName . ' ' . $request->lastName,
-                        'email'         => $request->email,
-                        'password'      => bcrypt($request->password),
-                        'userRole'      => 1,
-                        'phone_number'  => $request->phoneNumber,
-                        'store_name'    => $storeOwner->store_name ?? $loginUser->store_name,
-                        'business_size' => $storeOwner->business_size ?? $loginUser->business_size,
-                        'region'        => $storeOwner->region ?? $loginUser->region,
-                        'store_id'      => $storeId,
-                        'customer_id'   => null,
-                    ]);
-
-                    $inserts = [];
-                    foreach ($request->permissions as $permId) {
-                        $inserts[] = [
-                            'user_id'       => $user->id,
-                            'permission_id' => $permId,
-                            'store_id'      => $storeId,
-                            'created_at'    => now(),
-                            'updated_at'    => now(),
-                        ];
-                    }
-                    DB::table('user_permissions')->insert($inserts);
-
-                    DB::commit();
-
-                    $userPermissions = Permission::whereIn('id', $request->permissions)
-                        ->orderBy('group')
-                        ->orderBy('sort_order')
-                        ->get()
-                        ->groupBy('group')
-                        ->map(function ($items, $group) {
-                            return [
-                                'group' => $group,
-                                'permissions' => $items->map(function ($p) {
-                                    return [
-                                        'id'    => $p->id,
-                                        'name'  => $p->name,
-                                        'label' => $p->label,
-                                        'slug'  => $p->slug,
-                                    ];
-                                })->values(),
-                            ];
-                        })->values();
-
-                    try {
-                        Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
-                        $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
-                        Mail::to($adminEmail)->send(new UserRegistrationMail($user, $storeId));
-                    } catch (\Exception $mailError) {
-                        Log::error('REGISTRATION EMAIL FAILED', [
-                            'error'      => $mailError->getMessage(),
-                            'user_email' => $user->email,
-                        ]);
-                    }
-
-                    $token    = $user->createToken('auth_token')->plainTextToken;
-                    $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
-
-                    return response()->json([
-                        'status'      => true,
-                        'message'     => 'Sub-user registered successfully',
-                        'token'       => $token,
-                        'expireAt'    => $expireAt,
-                        'user'        => new UserResource($user),
-                        'store'       => $targetStore,
-                        'permissions' => $userPermissions,
-                        'isOwner'     => false,
-                    ], 201);
                 }
             }
 
