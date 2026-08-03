@@ -22,6 +22,7 @@ class StoreShippingAddress extends Model
         'state_code',
         'phone_number',
         'is_active',
+        'store_id',
     ];
 
     protected $casts = [
