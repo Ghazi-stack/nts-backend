@@ -142,22 +142,14 @@ class CustomerAddressController extends Controller
             'zip'          => 'required|string|max:30',
             'country'      => 'required|string|max:100',
             'is_default'   => 'nullable|boolean',
-            'type'         => 'nullable|in:Residential,Commercial',  // naya field
-            'customer_id'  => 'nullable|integer',                    // dashboard ke liye
+            'type'         => 'nullable|in:Residential,Commercial',
+            'customer_id'  => 'nullable|integer',
         ]);
 
-        // Customer → apni ID
-        // Admin/Sub-user → request se customer_id
         if ($user && (int) $user->userRole === 2) {
             $customerId = $user->id;
         } else {
-            if (empty($validated['customer_id'])) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'customer_id is required.'
-                ], 422);
-            }
-            $customerId = $validated['customer_id'];
+            $customerId = $validated['customer_id'] ?? null;
         }
 
         // Default address handle
@@ -183,7 +175,7 @@ class CustomerAddressController extends Controller
             'zip'            => $validated['zip'],
             'country'        => $validated['country'],
             'is_default'     => $validated['is_default'] ?? false,
-            'type'           => $validated['type'] ?? 'Residential',  // default Residential
+            'type'           => $validated['type'] ?? 'Residential',
         ];
 
         $address = CustomerAddress::create($data);
