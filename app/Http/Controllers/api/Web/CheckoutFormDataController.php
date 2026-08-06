@@ -107,6 +107,12 @@ class CheckoutFormDataController extends Controller
             ], 422);
         }
 
+        // Check if expired (24 hours)
+        if ($checkout && $checkout->updated_at->diffInHours(now()) >= 24) {
+            $checkout->delete();
+            $checkout = null;
+        }
+
         return response()->json([
             'status' => true,
             'data' => $checkout

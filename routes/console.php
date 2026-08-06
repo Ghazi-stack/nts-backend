@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
+
 /*
 |--------------------------------------------------------------------------
 | Console Routes
@@ -22,3 +23,4 @@ Artisan::command('inspire', function () {
 
 
 Schedule::command('cart:send-abandoned-emails')->everyFifteenMinutes();
+Schedule::command('checkout:clean-expired')->hourly();
