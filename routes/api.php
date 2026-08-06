@@ -81,6 +81,7 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
 
 
 Route::post('/auth/login', [AuthController::class, 'login']);
+Route::post('/customer-login', [AuthController::class, 'customerLogin']);
 
 Route::prefix('2fa')->group(function () {
     Route::post('/verify',     [TwoFactorController::class, 'verify']);      // OTP verify → real token
@@ -114,7 +115,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/update-password', 'updatePassword');
     });
 
-   
+
     Route::get('/staff-logs', [StaffLogController::class, 'index']);
 
     Route::get('/admin-users', [AuthController::class, 'getAdminUsers']);
@@ -488,7 +489,6 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     //Newsletter
     Route::get('/subscribers/export', [NewsletterController::class, 'exportSubscribers']);
     Route::delete('/subscribers/delete-all', [NewsletterController::class, 'deleteAllSubscribers']);
-
 });
 
 
@@ -662,7 +662,7 @@ Route::prefix('web')->group(function () {
 
     //Newsletters
     Route::apiResource('newsletters', NewsletterController::class);
-    
+
     //VisitorSession
     Route::post('/visitor-session', [VisitorSessionController::class, 'store']);
 

@@ -589,133 +589,150 @@ class AuthController extends Controller
                 ->where('userRole', 1)
                 ->first();
 
-            if ($admin) {
-
-                if (!Hash::check($password, $admin->password)) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'Invalid email or password.',
-                    ], 401);
-                }
-
-                // ── 2FA CHECK ──────────────────────────────────────────
-                if ($admin->two_factor_enabled) {
-
-                    if ($admin->two_factor_type === 'email') {
-                        $this->twoFactorService->sendEmailOtp($admin);
-                    }
-
-                    $pendingToken = $this->twoFactorService->storePendingLogin($admin);
-
-                    return response()->json([
-                        'status'              => true,
-                        'two_factor_required' => true,
-                        'two_factor_type'     => $admin->two_factor_type,
-                        'pending_token'       => $pendingToken,
-                        'message'             => $admin->two_factor_type === 'email'
-                            ? 'OTP sent to your email. Please verify to continue.'
-                            : 'Please enter the code from your authenticator app.',
-                    ], 200);
-                }
-                // ── END 2FA ────────────────────────────────────────────
-
-                // ===================== GET ALL STORES =====================
-                $isOwner = false;
-
-                // Owned stores
-                $ownedStores = Store::where('user_id', $admin->id)->get();
-                if ($ownedStores->isNotEmpty()) {
-                    $isOwner = true;
-                }
-
-                // Stores from permissions (multi-store sub-user)
-                $permStoreIds = DB::table('user_permissions')
-                    ->where('user_id', $admin->id)
-                    ->distinct()
-                    ->pluck('store_id')
-                    ->filter()
-                    ->toArray();
-
-                $permStores = !empty($permStoreIds)
-                    ? Store::whereIn('id', $permStoreIds)->get()
-                    : collect();
-
-                $stores = $ownedStores->merge($permStores)->unique('id')->values();
-
-                // Fallback
-                if ($stores->isEmpty() && $admin->store_id) {
-                    $stores = Store::where('id', $admin->store_id)->get();
-                }
-
-                // ===================== TOKEN =====================
-                $tokenResult    = $admin->createToken('adminToken');
-                $plainTextToken = $tokenResult->plainTextToken;
-
-                $expireAt    = now()->addHours(24);
-                $accessToken = PersonalAccessToken::findToken($plainTextToken);
-
-                if ($accessToken) {
-                    $accessToken->expires_at = $expireAt;
-                    $accessToken->save();
-                }
-
-                // ===================== PERMISSIONS =====================
-                $permissionStoreId = $storeId ?: $admin->store_id;
-                if (!$permissionStoreId && $stores->isNotEmpty()) {
-                    $permissionStoreId = $stores->first()->id;
-                }
-
-                $adminPermissions = $admin->permissions()
-                    ->when($permissionStoreId, function ($q) use ($permissionStoreId) {
-                        $q->where('user_permissions.store_id', $permissionStoreId);
-                    })
-                    ->orderBy('group')
-                    ->orderBy('sort_order')
-                    ->get()
-                    ->groupBy('group')
-                    ->map(function ($items, $group) {
-                        return [
-                            'group' => $group,
-                            'permissions' => $items->map(function ($p) {
-                                return [
-                                    'id'    => $p->id,
-                                    'name'  => $p->name,
-                                    'label' => $p->label,
-                                    'slug'  => $p->slug,
-                                ];
-                            })->values(),
-                        ];
-                    })->values();
-
-                // ===================== STAFF LOG: LOGIN =====================
-                StaffLog::record([
-                    'store_id'    => $permissionStoreId ?? ($stores->first()->id ?? null),
-                    'user_id'     => $admin->id,
-                    'username'    => $admin->email,
-                    'action'      => '(Successfully logged in)',
-                    'action_type' => 'login',
-                    'ip_address'  => $request->ip(),
-                ]);
-
+            if (!$admin) {
                 return response()->json([
-                    'status'      => true,
-                    'message'     => $isOwner
-                        ? 'Admin logged in successfully.'
-                        : 'Sub-user logged in successfully.',
-                    'token'       => $plainTextToken,
-                    'expireAt'    => $expireAt->toDateTimeString(),
-                    'user'        => new UserResource($admin),
-                    'stores'      => StoreResource::collection($stores),
-                    'permissions' => $adminPermissions,
-                    'isOwner'     => $isOwner,
-                ]);
+                    'status'  => false,
+                    'message' => 'Invalid email or password.',
+                ], 401);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | CUSTOMER LOGIN (userRole = 2)
-        |--------------------------------------------------------------------------
-        */
+            if (!Hash::check($password, $admin->password)) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid email or password.',
+                ], 401);
+            }
+
+            // ── 2FA CHECK ──────────────────────────────────────────
+            if ($admin->two_factor_enabled) {
+
+                if ($admin->two_factor_type === 'email') {
+                    $this->twoFactorService->sendEmailOtp($admin);
+                }
+
+                $pendingToken = $this->twoFactorService->storePendingLogin($admin);
+
+                return response()->json([
+                    'status'              => true,
+                    'two_factor_required' => true,
+                    'two_factor_type'     => $admin->two_factor_type,
+                    'pending_token'       => $pendingToken,
+                    'message'             => $admin->two_factor_type === 'email'
+                        ? 'OTP sent to your email. Please verify to continue.'
+                        : 'Please enter the code from your authenticator app.',
+                ], 200);
+            }
+            // ── END 2FA ────────────────────────────────────────────
+
+            // ===================== GET ALL STORES =====================
+            $isOwner = false;
+
+            $ownedStores = Store::where('user_id', $admin->id)->get();
+            if ($ownedStores->isNotEmpty()) {
+                $isOwner = true;
+            }
+
+            $permStoreIds = DB::table('user_permissions')
+                ->where('user_id', $admin->id)
+                ->distinct()
+                ->pluck('store_id')
+                ->filter()
+                ->toArray();
+
+            $permStores = !empty($permStoreIds)
+                ? Store::whereIn('id', $permStoreIds)->get()
+                : collect();
+
+            $stores = $ownedStores->merge($permStores)->unique('id')->values();
+
+            if ($stores->isEmpty() && $admin->store_id) {
+                $stores = Store::where('id', $admin->store_id)->get();
+            }
+
+            // ===================== TOKEN =====================
+            $tokenResult    = $admin->createToken('adminToken');
+            $plainTextToken = $tokenResult->plainTextToken;
+
+            $expireAt    = now()->addHours(24);
+            $accessToken = PersonalAccessToken::findToken($plainTextToken);
+
+            if ($accessToken) {
+                $accessToken->expires_at = $expireAt;
+                $accessToken->save();
+            }
+
+            // ===================== PERMISSIONS =====================
+            $permissionStoreId = $storeId ?: $admin->store_id;
+            if (!$permissionStoreId && $stores->isNotEmpty()) {
+                $permissionStoreId = $stores->first()->id;
+            }
+
+            $adminPermissions = $admin->permissions()
+                ->when($permissionStoreId, function ($q) use ($permissionStoreId) {
+                    $q->where('user_permissions.store_id', $permissionStoreId);
+                })
+                ->orderBy('group')
+                ->orderBy('sort_order')
+                ->get()
+                ->groupBy('group')
+                ->map(function ($items, $group) {
+                    return [
+                        'group' => $group,
+                        'permissions' => $items->map(function ($p) {
+                            return [
+                                'id'    => $p->id,
+                                'name'  => $p->name,
+                                'label' => $p->label,
+                                'slug'  => $p->slug,
+                            ];
+                        })->values(),
+                    ];
+                })->values();
+
+            // ===================== STAFF LOG: LOGIN =====================
+            StaffLog::record([
+                'store_id'    => $permissionStoreId ?? ($stores->first()->id ?? null),
+                'user_id'     => $admin->id,
+                'username'    => $admin->email,
+                'action'      => '(Successfully logged in)',
+                'action_type' => 'login',
+                'ip_address'  => $request->ip(),
+            ]);
+
+            return response()->json([
+                'status'      => true,
+                'message'     => $isOwner
+                    ? 'Admin logged in successfully.'
+                    : 'Sub-user logged in successfully.',
+                'token'       => $plainTextToken,
+                'expireAt'    => $expireAt->toDateTimeString(),
+                'user'        => new UserResource($admin),
+                'stores'      => StoreResource::collection($stores),
+                'permissions' => $adminPermissions,
+                'isOwner'     => $isOwner,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Login failed: ' . $e->getMessage());
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong during login.',
+            ], 500);
+        }
+    }
+
+    public function customerLogin(Request $request)
+    {
+        try {
+            $request->validate([
+                'email'    => 'required|email',
+                'password' => 'required',
+            ]);
+
+            $email    = $request->email;
+            $password = $request->password;
+            $storeId  = $request->header('storeId', $request->input('storeId'));
+
             if (!$storeId) {
                 return response()->json([
                     'status'  => false,
@@ -800,7 +817,7 @@ class AuthController extends Controller
                 'permissions' => null,
             ]);
         } catch (\Exception $e) {
-            Log::error('Login failed: ' . $e->getMessage());
+            Log::error('Customer login failed: ' . $e->getMessage());
 
             return response()->json([
                 'status'  => false,
