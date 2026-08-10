@@ -82,6 +82,7 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
 
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/customer-login', [AuthController::class, 'customerLogin']);
+Route::post('/admin/forgot-password',[AuthController::class,'adminForgotPassword']);
 
 Route::prefix('2fa')->group(function () {
     Route::post('/verify',     [TwoFactorController::class, 'verify']);      // OTP verify → real token

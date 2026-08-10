@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use App\Http\Resources\StoreResource;
 use App\Http\Resources\CustomerResource;
+use App\Mail\AdminForgotPasswordMail;
 use App\Models\Store;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
@@ -1329,6 +1330,67 @@ class AuthController extends Controller
         }
     }
 
+    public function adminForgotPassword(Request $request)
+    {
+        try {
+
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $user = User::where('email', $request->email)->first();
+
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not found.'
+                ], 404);
+            }
+
+            DB::table('password_reset_tokens')
+                ->where('email', $user->email)
+                ->delete();
+
+            $plainToken = Str::random(64);
+
+            DB::table('password_reset_tokens')->insert([
+                'email' => $user->email,
+                'token' => Hash::make($plainToken),
+                'created_at' => Carbon::now(),
+            ]);
+
+            $resetLink = "https://admin-dashboard-nu-hazel-12.vercel.app/auth/reset-password?token={$plainToken}&email={$user->email}";
+
+            Mail::to($user->email)->send(
+                new AdminForgotPasswordMail(
+                    $user->name,
+                    $user->email,
+                    $resetLink,
+                    current_store_id()
+                )
+            );
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Password reset link sent successfully.'
+            ]);
+        } catch (\Exception $e) {
+
+            Log::error($e);
+
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
     public function resetPassword(Request $request)
     {
         try {
