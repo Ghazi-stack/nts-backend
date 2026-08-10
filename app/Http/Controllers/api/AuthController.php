@@ -1366,7 +1366,7 @@ class AuthController extends Controller
                 'created_at' => Carbon::now(),
             ]);
 
-            $resetLink = "https://admin-dashboard-nu-hazel-12.vercel.app/auth/reset-password?token={$plainToken}&email={$user->email}";
+            $resetLink = "https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token={$plainToken}&email={$user->email}";
 
             Mail::to($user->email)->send(
                 new AdminForgotPasswordMail(
