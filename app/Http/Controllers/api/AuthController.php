@@ -304,7 +304,7 @@ class AuthController extends Controller
 
                         DB::commit();
 
-                        // Send forgot password email to existing user
+                        // Send forgot password email
                         try {
                             DB::table('password_reset_tokens')
                                 ->where('email', $existingUser->email)
@@ -362,18 +362,11 @@ class AuthController extends Controller
                             'isOwner'     => false,
                         ], 201);
                     } else {
-                        // New sub-user
-                        if (!$request->password) {
-                            return response()->json([
-                                'status' => false,
-                                'message' => 'Password is required for new registration.',
-                            ], 422);
-                        }
-
+                        // New sub-user — random password, forgot email jayega
                         $user = User::create([
                             'name'          => $request->firstName . ' ' . $request->lastName,
                             'email'         => $request->email,
-                            'password'      => bcrypt($request->password),
+                            'password'      => bcrypt(Str::random(16)),
                             'userRole'      => 1,
                             'phone_number'  => $request->phoneNumber,
                             'store_name'    => $request->storeName,
@@ -398,6 +391,22 @@ class AuthController extends Controller
 
                         DB::commit();
 
+                        // Send forgot password email
+                        try {
+                            DB::table('password_reset_tokens')
+                                ->where('email', $user->email)
+                                ->delete();
+
+                            Password::sendResetLink(
+                                ['email' => $user->email]
+                            );
+                        } catch (\Exception $mailError) {
+                            Log::error('SUB-USER FORGOT PASSWORD EMAIL FAILED', [
+                                'error' => $mailError->getMessage(),
+                                'email' => $user->email,
+                            ]);
+                        }
+
                         // Get assigned permissions for response
                         $userPermissions = Permission::whereIn('id', $request->permissions)
                             ->orderBy('group')
@@ -418,25 +427,12 @@ class AuthController extends Controller
                                 ];
                             })->values();
 
-                        // Send Registration Email
-                        try {
-                            Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
-
-                            $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
-                            Mail::to($adminEmail)->send(new UserRegistrationMail($user, $storeId));
-                        } catch (\Exception $mailError) {
-                            Log::error('REGISTRATION EMAIL FAILED', [
-                                'error' => $mailError->getMessage(),
-                                'user_email' => $user->email,
-                            ]);
-                        }
-
                         $token = $user->createToken('auth_token')->plainTextToken;
                         $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
 
                         return response()->json([
                             'status'      => true,
-                            'message'     => 'Sub-user registered successfully',
+                            'message'     => 'Sub-user registered successfully. Password reset email sent.',
                             'token'       => $token,
                             'expireAt'    => $expireAt,
                             'user'        => new UserResource($user),
