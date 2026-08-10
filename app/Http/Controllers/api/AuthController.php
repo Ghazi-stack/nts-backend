@@ -1391,6 +1391,82 @@ class AuthController extends Controller
             ], 500);
         }
     }
+
+    public function adminResetPassword(Request $request)
+    {
+        try {
+
+            $request->validate([
+                'email' => 'required|email',
+                'token' => 'required',
+                'password' => 'required|min:8|confirmed',
+            ]);
+
+            $reset = DB::table('password_reset_tokens')
+                ->where('email', $request->email)
+                ->first();
+
+            if (!$reset) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid reset request.'
+                ], 400);
+            }
+
+            // Check Token
+            if (!Hash::check($request->token, $reset->token)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid or expired token.'
+                ], 400);
+            }
+
+            // Expire after 60 minutes
+            if (Carbon::parse($reset->created_at)->addMinutes(60)->isPast()) {
+
+                DB::table('password_reset_tokens')
+                    ->where('email', $request->email)
+                    ->delete();
+
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Reset link has expired.'
+                ], 400);
+            }
+
+            $user = User::where('email', $request->email)->first();
+
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not found.'
+                ], 404);
+            }
+
+            $user->update([
+                'password' => Hash::make($request->password)
+            ]);
+
+            DB::table('password_reset_tokens')
+                ->where('email', $request->email)
+                ->delete();
+
+            Mail::to($user->email)->send(
+                new PasswordResetSuccessMail($user)
+            );
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Password reset successfully.'
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
     public function resetPassword(Request $request)
     {
         try {
