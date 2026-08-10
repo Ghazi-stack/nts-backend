@@ -305,17 +305,23 @@ class AuthController extends Controller
 
                         DB::commit();
 
-                        // Send forgot password email
+                        // Send store access email
                         try {
-                            DB::table('password_reset_tokens')
-                                ->where('email', $existingUser->email)
-                                ->delete();
+                            $token = app('auth.password.broker')->createToken($existingUser);
 
-                            Password::sendResetLink(
-                                ['email' => $existingUser->email]
+                            $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/auth/reset-password?token=' . $token .
+                                '&email=' . urlencode($existingUser->email);
+
+                            Mail::to($existingUser->email)->send(
+                                new StoreAccessMail(
+                                    $existingUser->name,
+                                    $existingUser->email,
+                                    $resetLink,
+                                    $storeId
+                                )
                             );
                         } catch (\Exception $mailError) {
-                            Log::error('SUB-USER FORGOT PASSWORD EMAIL FAILED', [
+                            Log::error('SUB-USER STORE ACCESS EMAIL FAILED', [
                                 'error' => $mailError->getMessage(),
                                 'email' => $existingUser->email,
                             ]);
@@ -353,7 +359,7 @@ class AuthController extends Controller
 
                         return response()->json([
                             'status'      => true,
-                            'message'     => 'Existing user added to store with permissions. Password reset email sent.',
+                            'message'     => 'Existing user added to store with permissions. Store access email sent.',
                             'token'       => $token,
                             'expireAt'    => $expireAt,
                             'user'        => new UserResource($existingUser),
@@ -363,7 +369,7 @@ class AuthController extends Controller
                             'isOwner'     => false,
                         ], 201);
                     } else {
-                        // New sub-user — random password, forgot email jayega
+                        // New sub-user — random password, store access email jayega
                         $user = User::create([
                             'name'          => $request->firstName . ' ' . $request->lastName,
                             'email'         => $request->email,
@@ -392,17 +398,23 @@ class AuthController extends Controller
 
                         DB::commit();
 
-                        // Send forgot password email
+                        // Send store access email
                         try {
-                            DB::table('password_reset_tokens')
-                                ->where('email', $user->email)
-                                ->delete();
+                            $token = app('auth.password.broker')->createToken($user);
 
-                            Password::sendResetLink(
-                                ['email' => $user->email]
+                            $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/auth/reset-password?token=' . $token .
+                                '&email=' . urlencode($user->email);
+
+                            Mail::to($user->email)->send(
+                                new StoreAccessMail(
+                                    $request->firstName,
+                                    $user->email,
+                                    $resetLink,
+                                    $storeId
+                                )
                             );
                         } catch (\Exception $mailError) {
-                            Log::error('SUB-USER FORGOT PASSWORD EMAIL FAILED', [
+                            Log::error('SUB-USER STORE ACCESS EMAIL FAILED', [
                                 'error' => $mailError->getMessage(),
                                 'email' => $user->email,
                             ]);
@@ -433,7 +445,7 @@ class AuthController extends Controller
 
                         return response()->json([
                             'status'      => true,
-                            'message'     => 'Sub-user registered successfully. Password reset email sent.',
+                            'message'     => 'Sub-user registered successfully. Store access email sent.',
                             'token'       => $token,
                             'expireAt'    => $expireAt,
                             'user'        => new UserResource($user),
