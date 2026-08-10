@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Validator;
 use Exception;
 use App\Models\Permission;
 use App\Mail\PasswordResetSuccessMail;
+use App\Mail\StoreAccessMail;
 use App\Models\Order;
 use App\Models\StaffLog;
 use App\Services\TwoFactorService;
