@@ -311,7 +311,7 @@ class AuthController extends Controller
                         try {
                             $token = app('auth.password.broker')->createToken($existingUser);
 
-                            $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/auth/reset-password?token=' . $token .
+                            $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token=' . $token .
                                 '&email=' . urlencode($existingUser->email);
 
                             Mail::to($existingUser->email)->send(
@@ -404,7 +404,7 @@ class AuthController extends Controller
                         try {
                             $token = app('auth.password.broker')->createToken($user);
 
-                            $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/auth/reset-password?token=' . $token .
+                            $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token=' . $token .
                                 '&email=' . urlencode($user->email);
 
                             Mail::to($user->email)->send(
