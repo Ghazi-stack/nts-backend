@@ -257,6 +257,7 @@ class CartController extends Controller
     {
         try {
             $storeId = current_store_id();
+
             if (!$storeId) {
                 return response()->json([
                     'status'  => false,
@@ -279,10 +280,13 @@ class CartController extends Controller
             }
 
             $product = Product::find($validated['productId']);
+
             $quantity = (int) $validated['quantity'];
             $minQty = (int) $product->min_purchase_quantity;
             $maxQty = (int) $product->max_purchase_quantity;
+            $currentStock = (int) $product->current_stock;
 
+            // Minimum quantity validation
             if ($minQty > 0 && $quantity < $minQty) {
                 return response()->json([
                     'status'  => false,
@@ -290,6 +294,7 @@ class CartController extends Controller
                 ], 422);
             }
 
+            // Maximum quantity validation
             if ($maxQty > 0 && $quantity > $maxQty) {
                 return response()->json([
                     'status'  => false,
@@ -297,12 +302,33 @@ class CartController extends Controller
                 ], 422);
             }
 
+            // Check if product already exists in cart
             $existingCartItem = $this->cartQuery($user, $sessionId, $storeId)
                 ->where('product_id', $validated['productId'])
                 ->first();
 
+            /*
+        |--------------------------------------------------------------------------
+        | Stock Validation
+        |--------------------------------------------------------------------------
+        | If min_purchase_quantity = 0 and max_purchase_quantity = 0,
+        | then validate against current stock.
+        | Existing cart quantity is also considered.
+        |--------------------------------------------------------------------------
+        */
+            if ($minQty == 0 && $maxQty == 0) {
+                $totalQty = $quantity + ($existingCartItem?->quantity ?? 0);
+
+                if ($totalQty > $currentStock) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => "Only {$currentStock} item(s) available in stock.",
+                    ], 422);
+                }
+            }
+
             if ($existingCartItem) {
-                $existingCartItem->increment('quantity', $validated['quantity']);
+                $existingCartItem->increment('quantity', $quantity);
                 $cartItem = $existingCartItem->fresh();
             } else {
                 $cartItem = Cart::create([
@@ -310,7 +336,7 @@ class CartController extends Controller
                     'user_id'    => $user?->id,
                     'session_id' => $sessionId,
                     'product_id' => $validated['productId'],
-                    'quantity'   => $validated['quantity'],
+                    'quantity'   => $quantity,
                 ]);
             }
 
@@ -320,19 +346,19 @@ class CartController extends Controller
 
             return response()->json([
                 'status'  => true,
-                'message' => 'Item added to cart successfully',
+                'message' => 'Item added to cart successfully.',
                 'data'    => new CartResource($cartItem->load($this->productRelations())),
             ], 201);
         } catch (ValidationException $e) {
             return response()->json([
                 'status'  => false,
-                'message' => 'Validation failed',
+                'message' => 'Validation failed.',
                 'errors'  => $e->errors(),
             ], 422);
         } catch (Exception $e) {
             return response()->json([
                 'status'  => false,
-                'message' => 'Failed to add item to cart',
+                'message' => 'Failed to add item to cart.',
                 'error'   => $e->getMessage(),
             ], 500);
         }
