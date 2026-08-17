@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProductListResource;
 use App\Http\Resources\BrandResource;
+use App\Http\Resources\ProductResource;
 use Illuminate\Support\Facades\DB;
 
 class SearchController extends Controller
@@ -107,10 +108,13 @@ class SearchController extends Controller
 
         // ====================== PRODUCTS (paginated with eager loading) ======================
         $productsQuery = (clone $baseQuery)->with([
-            'brand:id,name',
-            'categories:id,name',
-           'images:id,product_id,path,is_primary',
-            'seo'
+            'brand',
+            'categories.parent',
+            'images',
+            'seo',
+            'content',
+            'identifiers',
+            'reviews.user',
         ]);
 
         // Sorting
@@ -150,7 +154,7 @@ class SearchController extends Controller
         $totalProducts = (clone $baseQuery)->count();
         $products = $productsQuery->paginate($perPage, ['*'], 'page', $page);
 
-      
+
         // ====================== CATEGORIES (combined: keyword search + product-based) ======================
         $this->visited = [];
 
@@ -202,11 +206,11 @@ class SearchController extends Controller
             'status' => true,
             'data' => [
                 'products' => [
-                    'count'       => $totalProducts,
-                    'items'       => ProductListResource::collection($products),
-                    'pagination'  => [
-                        'total'       => $totalProducts,
-                        'perPage'     => $perPage,
+                    'count' => $totalProducts,
+                    'items' => ProductResource::collection($products->getCollection()),
+                    'pagination' => [
+                        'total'       => $products->total(),
+                        'perPage'     => $products->perPage(),
                         'currentPage' => $products->currentPage(),
                         'lastPage'    => $products->lastPage(),
                     ]
