@@ -185,6 +185,8 @@ class OrderController extends Controller
                     'staffNotes' => $order->staff_notes,
                     'trackingNumber' => $order->tracking_number,
                     'shippedAt' => $order->shipped_at,
+                    'discountAmount' => $order->discountAmount,
+                    'couponCode'     => $order->coupon_code,
                     'totalAmount' => $order->total_amount,
                     'createdAt' => $order->created_at,
                     'updatedAt' => $order->updated_at,
