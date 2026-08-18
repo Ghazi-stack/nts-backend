@@ -1032,7 +1032,7 @@ class OrderController extends Controller
                     'user_type'              => $isGuest ? 'guest' : ($validated['userType'] ?? null),
                     'total_amount'           => $totalAmount,
                     'discountAmount'         => $discount,
-                    'couponCode'            => $coupon?->couponCode,
+                    'coupon_code'            => $validated['couponCode'] ?? null,
                     'is_multi_address'       => false,
                     'newsletter'             => $validated['newsletter'] ?? false,
                 ], $commonOrderFields));
@@ -1101,7 +1101,7 @@ class OrderController extends Controller
                         'user_type'              => $isGuest ? 'guest' : ($validated['userType'] ?? null),
                         'total_amount'           => $totalAmount,
                         'discountAmount'         => $discount,
-                        'couponCode'            => $coupon?->couponCode,
+                        'coupon_code'            => $validated['couponCode'] ?? null,
                         'is_multi_address'       => true,
                         'newsletter'             => $validated['newsletter'] ?? false,
                     ], $commonOrderFields));
