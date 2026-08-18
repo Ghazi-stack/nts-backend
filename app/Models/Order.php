@@ -38,6 +38,7 @@ class Order extends Model
         'comments',
         'total_amount',
         'discountAmount',
+        'coupon_code',
         'tracking_number',
         'tracking_carrier_code',
         'tracking_carrier_name',
