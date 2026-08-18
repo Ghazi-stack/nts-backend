@@ -170,7 +170,7 @@ class CouponCodeController extends Controller
         |--------------------------------------------------------------------------
         */
 
-            $userId = auth()->id();
+           $userId = auth('sanctum')->id();
 
             $sessionId = null;
 
