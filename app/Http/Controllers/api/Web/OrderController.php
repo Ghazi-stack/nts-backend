@@ -36,6 +36,8 @@ use App\Mail\OrderStatusUpdatedMail;
 use App\Models\SavedAddress;
 use App\Http\Resources\ReturnRequestResource;
 use App\Mail\OrderPlacedMail;
+use App\Models\CouponCode;
+use App\Models\CouponUsage;
 use App\Models\Logo;
 use App\Models\OrderTimeline;
 use App\Models\Store;
@@ -779,6 +781,7 @@ class OrderController extends Controller
                 'comments'       => 'nullable|string|max:1000',
                 'discountAmount' => 'nullable|numeric',
                 'paymentIntentId' => 'required|string',
+                'couponCode'     => 'nullable|string|max:255',
                 'isMultiAddress' => 'required|boolean',
 
                 'ipAddress'                  => 'nullable|string|max:45',
@@ -878,6 +881,66 @@ class OrderController extends Controller
                 if ($user) {
                     $user->customer_id = $customer->id;
                     $user->save();
+                }
+            }
+
+            // ===================== COUPON USAGE CHECK =====================
+            $coupon = null;
+
+            if (!empty($validated['couponCode'])) {
+
+                $coupon = CouponCode::where('store_id', $storeId)
+                    ->where('couponCode', $validated['couponCode'])
+                    ->first();
+
+                if (!$coupon) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Invalid coupon code.'
+                    ], 400);
+                }
+
+                $couponUsageQuery = CouponUsage::where('store_id', $storeId)
+                    ->where('coupon_id', $coupon->id);
+
+                /*
+    |--------------------------------------------------------------------------
+    | Logged-in User
+    |--------------------------------------------------------------------------
+    */
+                if ($user) {
+
+                    $couponUsageQuery->where('user_id', $user->id);
+                }
+                /*
+    |--------------------------------------------------------------------------
+    | Guest User
+    |--------------------------------------------------------------------------
+    */ else {
+
+                    $sessionId = $request->header('X-Session-ID');
+
+                    if (!$sessionId) {
+                        return response()->json([
+                            'status' => false,
+                            'message' => 'Session ID is required for guest coupon usage.'
+                        ], 400);
+                    }
+
+                    $couponUsageQuery->where('session_id', $sessionId);
+                }
+
+                /*
+    |--------------------------------------------------------------------------
+    | Already Used
+    |--------------------------------------------------------------------------
+    */
+                if ($couponUsageQuery->exists()) {
+
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'You have already used this coupon.'
+                    ], 400);
                 }
             }
 
@@ -1176,6 +1239,21 @@ class OrderController extends Controller
                 'payment_status'     => 'authorized',
             ], $riskData));
 
+            // ===================== SAVE COUPON USAGE =====================
+            if ($coupon) {
+
+                $couponUsageData = [
+                    'store_id'    => $storeId,
+                    'user_id'     => $user?->id ?? null,
+                    'session_id'  => $user
+                        ? null
+                        : $request->header('X-Session-ID'),
+                    'coupon_id'   => $coupon->id,
+                    'coupon_code' => $coupon->couponCode,
+                ];
+
+                CouponUsage::create($couponUsageData);
+            }
             // ===================== TIMELINE EVENTS =====================
             foreach ($orders as $ord) {
                 $ord->load('billingInformation');

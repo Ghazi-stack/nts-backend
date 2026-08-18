@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\CouponCode;
+use App\Models\CouponUsage;
 use Illuminate\Http\Request;
 use Exception;
 
@@ -131,18 +132,22 @@ class CouponCodeController extends Controller
     public function showWebCouponCode(Request $request, $id = null)
     {
         try {
+
             $storeId = $this->getStoreId();
 
             $query = CouponCode::where('store_id', $storeId);
 
-            // ✅ Agar request me couponCode aya hai
+            // Coupon code se fetch
             if ($request->filled('couponCode')) {
+
                 $query->where('couponCode', $request->couponCode);
             }
-            // ✅ Warna ID se fetch karo
+            // ID se fetch
             elseif ($id) {
+
                 $query->where('id', $id);
             } else {
+
                 return response()->json([
                     'status' => false,
                     'message' => 'CouponCode or ID is required'
@@ -152,26 +157,91 @@ class CouponCodeController extends Controller
             $coupon = $query->first();
 
             if (!$coupon) {
+
                 return response()->json([
                     'status' => false,
-                    'message' => 'Record not found'
+                    'message' => 'Invalid coupon code'
                 ], 404);
             }
 
-            // ✅ Decode categoryIds if exists
+            /*
+        |--------------------------------------------------------------------------
+        | Identify Customer
+        |--------------------------------------------------------------------------
+        */
+
+            $userId = auth()->id();
+
+            $sessionId = null;
+
+            if (!$userId) {
+                $sessionId = $request->header('X-Session-ID');
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | Check Coupon Already Used
+        |--------------------------------------------------------------------------
+        */
+
+            $usageQuery = CouponUsage::where('store_id', $storeId)
+                ->where('coupon_id', $coupon->id);
+
+            if ($userId) {
+
+                // Logged-in user
+                $usageQuery->where('user_id', $userId);
+            } else {
+
+                // Guest user
+                if (!$sessionId) {
+
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Session ID is required for guest users'
+                    ], 400);
+                }
+
+                $usageQuery->where('session_id', $sessionId);
+            }
+
+            $alreadyUsed = $usageQuery->exists();
+
+            if ($alreadyUsed) {
+
+                return response()->json([
+                    'status' => false,
+                    'message' => 'You have already used this coupon.'
+                ], 400);
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | Decode categoryIds
+        |--------------------------------------------------------------------------
+        */
+
             if (!empty($coupon->categoryIds)) {
                 $coupon->categoryIds = json_decode($coupon->categoryIds);
             }
 
+            /*
+        |--------------------------------------------------------------------------
+        | Return Coupon
+        |--------------------------------------------------------------------------
+        */
+
             return response()->json([
                 'status' => true,
-                'data'   => $coupon
+                'message' => 'Coupon is valid.',
+                'data' => $coupon
             ]);
         } catch (\Exception $e) {
+
             return response()->json([
                 'status' => false,
                 'message' => 'Something went wrong',
-                'error'   => $e->getMessage()
+                'error' => $e->getMessage()
             ], 500);
         }
     }
