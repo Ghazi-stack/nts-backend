@@ -596,32 +596,11 @@ class AuthController extends Controller
         | ADMIN / SUB-USER LOGIN (userRole = 1)
         |--------------------------------------------------------------------------
         */
-
             $admin = User::where('email', $email)
                 ->where('userRole', 1)
                 ->first();
 
-            /*
-        |--------------------------------------------------------------------------
-        | CUSTOMER BLOCK
-        |--------------------------------------------------------------------------
-        | If userRole is 2, this login API cannot be used.
-        |--------------------------------------------------------------------------
-        */
-
             if (!$admin) {
-
-                $customerUser = User::where('email', $email)
-                    ->where('userRole', 2)
-                    ->first();
-
-                if ($customerUser) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'Customers cannot login through admin login.',
-                    ], 403);
-                }
-
                 return response()->json([
                     'status'  => false,
                     'message' => 'Invalid email or password.',
@@ -660,7 +639,6 @@ class AuthController extends Controller
             $isOwner = false;
 
             $ownedStores = Store::where('user_id', $admin->id)->get();
-
             if ($ownedStores->isNotEmpty()) {
                 $isOwner = true;
             }
@@ -686,8 +664,7 @@ class AuthController extends Controller
             $tokenResult    = $admin->createToken('adminToken');
             $plainTextToken = $tokenResult->plainTextToken;
 
-            $expireAt = now()->addHours(24);
-
+            $expireAt    = now()->addHours(24);
             $accessToken = PersonalAccessToken::findToken($plainTextToken);
 
             if ($accessToken) {
@@ -697,7 +674,6 @@ class AuthController extends Controller
 
             // ===================== PERMISSIONS =====================
             $permissionStoreId = $storeId ?: $admin->store_id;
-
             if (!$permissionStoreId && $stores->isNotEmpty()) {
                 $permissionStoreId = $stores->first()->id;
             }
@@ -747,7 +723,6 @@ class AuthController extends Controller
                 'isOwner'     => $isOwner,
             ]);
         } catch (\Exception $e) {
-
             Log::error('Login failed: ' . $e->getMessage());
 
             return response()->json([
@@ -767,16 +742,11 @@ class AuthController extends Controller
 
             $email    = $request->email;
             $password = $request->password;
-
-            // storeId request/header se aaye to use karo
-            $storeId = $request->header('storeId', $request->input('storeId'));
+            $storeId  = $request->header('storeId', $request->input('storeId'));
 
             /*
         |--------------------------------------------------------------------------
-        | CUSTOMER LOGIN
-        |--------------------------------------------------------------------------
-        | First find customer by email + customer role.
-        | Store ID request mein na ho to customer ke store_id se use hoga.
+        | CUSTOMER LOGIN (userRole = 2)
         |--------------------------------------------------------------------------
         */
 
@@ -784,7 +754,14 @@ class AuthController extends Controller
                 ->where('userRole', 2)
                 ->first();
 
-            if (!$customer || !Hash::check($password, $customer->password)) {
+            if (!$customer) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid email or password.',
+                ], 401);
+            }
+
+            if (!Hash::check($password, $customer->password)) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'Invalid email or password.',
@@ -798,34 +775,11 @@ class AuthController extends Controller
         */
 
             if (!$storeId) {
-                $storeId = $customer->store_id;
-            }
-
-            if (!$storeId) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'Store ID is not assigned to this customer.',
+                    'message' => 'Store ID is required for customer login.',
                 ], 422);
             }
-
-            /*
-        |--------------------------------------------------------------------------
-        | CHECK CUSTOMER STORE
-        |--------------------------------------------------------------------------
-        */
-
-            if ((int) $customer->store_id !== (int) $storeId) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Customer does not belong to this store.',
-                ], 403);
-            }
-
-            /*
-        |--------------------------------------------------------------------------
-        | GET STORE
-        |--------------------------------------------------------------------------
-        */
 
             $store = Store::where('id', $storeId)->first();
 
