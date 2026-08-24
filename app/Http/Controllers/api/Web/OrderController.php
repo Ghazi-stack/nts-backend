@@ -65,7 +65,7 @@ class OrderController extends Controller
                 ], 403);
             }
 
-            $orders = Order::with(['items.product.images', 'customer', 'billingInformation', 'notes', 'payment', 'shipment'])
+            $orders = Order::with(['items.product.images', 'items.product.categories.parent.parent.parent', 'customer', 'billingInformation', 'notes', 'payment', 'shipment'])
                 ->withCount('messages')
                 ->where('store_id', $storeId)
                 ->where('is_draft', 0)
