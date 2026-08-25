@@ -72,7 +72,8 @@ class OrderController extends Controller
                                     $p->with([
                                         'images',
                                         'brand',
-                                        // 'categories:id',          // categoryIds ke liye
+                                        'categories:id',          // categoryIds ke liye
+
                                     ]);
                                 }
                             ]);
