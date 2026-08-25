@@ -46,7 +46,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class OrderController extends Controller
 {
-    
+
     public function index(Request $request)
     {
         try {
@@ -97,7 +97,7 @@ class OrderController extends Controller
                         $q->select('id', 'order_id', 'product_id', 'quantity', 'price')
                             ->with([
                                 'product' => function ($p) {
-                                    $p->select('id', 'name', 'sku', 'slug', 'price', 'status') // ProductResource ke liye jo columns chahiye wahi rakho
+                                    $p->select('id', 'name', 'sku', 'slug', 'price') // ProductResource ke liye jo columns chahiye wahi rakho
                                         ->with(['images' => function ($img) {
                                             $img->select('id', 'product_id', 'url', 'path', 'is_primary', 'sort_order');
                                         }]);
