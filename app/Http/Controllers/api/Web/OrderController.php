@@ -46,6 +46,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class OrderController extends Controller
 {
+    
     public function index(Request $request)
     {
         try {
@@ -179,7 +180,6 @@ class OrderController extends Controller
             ], 500);
         }
     }
-
 
     public function detail(Request $request)
     {
