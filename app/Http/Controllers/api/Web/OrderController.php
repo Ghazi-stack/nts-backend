@@ -99,7 +99,7 @@ class OrderController extends Controller
                                 'product' => function ($p) {
                                     $p->select('id', 'name', 'sku', 'slug', 'price') // ProductResource ke liye jo columns chahiye wahi rakho
                                         ->with(['images' => function ($img) {
-                                            $img->select('id', 'product_id', 'url', 'path', 'is_primary', 'sort_order');
+                                            $img->select('id', 'product_id', 'url', 'path', 'is_primary');
                                         }]);
                                 }
                             ]);
