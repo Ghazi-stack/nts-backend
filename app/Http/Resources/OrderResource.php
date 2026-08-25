@@ -111,12 +111,12 @@ class OrderResource extends JsonResource
                                 ? new BrandResource($product->brand)
                                 : null,
 
-                            'dimensions' => [
-                                'weight' => $dimensions['weight'] ?? 0,
-                                'width'  => $dimensions['width'] ?? 0,
-                                'height' => $dimensions['height'] ?? 0,
-                                'depth'  => $dimensions['depth'] ?? 0,
-                            ],
+                            // 'dimensions' => [
+                            //     'weight' => $dimensions['weight'] ?? 0,
+                            //     'width'  => $dimensions['width'] ?? 0,
+                            //     'height' => $dimensions['height'] ?? 0,
+                            //     'depth'  => $dimensions['depth'] ?? 0,
+                            // ],
 
                             'quantity' => $item->quantity,          // order item quantity
                             'price' => $item->price,                // order item price (override)
@@ -132,19 +132,19 @@ class OrderResource extends JsonResource
                             'sortOrder' => $product->sort_order,
                             'searchKeywords' => $product->search_keywords,
 
-                            'objectType' => $product->object_type,
-                            'useProductName' => (bool) $product->use_product_name,
-                            'graphDescription' => (bool) $product->graph_description,
-                            'useThumbnail' => (bool) $product->use_thumbnail,
-                            'dontUse' => (bool) $product->dont_use,
-                            'manageCustoms' => (bool) $product->manage_customs,
-                            'commodityDescription' => $product->commodity_description,
-                            'countryOfOrigin' => $product->country_of_origin,
-                            'hsCodes' => $product->hs_codes ?? [],
+                            // 'objectType' => $product->object_type,
+                            // 'useProductName' => (bool) $product->use_product_name,
+                            // 'graphDescription' => (bool) $product->graph_description,
+                            // 'useThumbnail' => (bool) $product->use_thumbnail,
+                            // 'dontUse' => (bool) $product->dont_use,
+                            // 'manageCustoms' => (bool) $product->manage_customs,
+                            // 'commodityDescription' => $product->commodity_description,
+                            // 'countryOfOrigin' => $product->country_of_origin,
+                            // 'hsCodes' => $product->hs_codes ?? [],
 
-                            'customFields' => collect($product->custom_fields ?? [])->mapWithKeys(function ($value, $key) {
-                                return [trim($key, "\"") => is_string($value) ? trim($value, "\"") : $value];
-                            }),
+                            // 'customFields' => collect($product->custom_fields ?? [])->mapWithKeys(function ($value, $key) {
+                            //     return [trim($key, "\"") => is_string($value) ? trim($value, "\"") : $value];
+                            // }),
 
                             'storeId' => $product->store_id,
                             'createdAt' => $product->created_at,
@@ -154,28 +154,28 @@ class OrderResource extends JsonResource
                                 ? ProductImageResource::collection($product->images)
                                 : [],
 
-                            'description' => optional($product->content)->description,
-                            'warranty' => optional($product->content)->warranty,
-                            'availabilityText' => optional($product->content)->availability_text,
-                            'templateLayout' => optional($product->content)->template_layout,
-                            'pageTitle' => optional($product->seo)->page_title,
-                            'productUrl' => optional($product->seo)->product_url,
-                            'metaDescription' => optional($product->seo)->meta_description,
-                            'mpn' => optional($product->identifiers)->mpn,
-                            'upc' => optional($product->identifiers)->upc,
-                            'gtin' => optional($product->identifiers)->gtin,
-                            'bpn' => optional($product->identifiers)->bpn,
+                            // 'description' => optional($product->content)->description,
+                            // 'warranty' => optional($product->content)->warranty,
+                            // 'availabilityText' => optional($product->content)->availability_text,
+                            // 'templateLayout' => optional($product->content)->template_layout,
+                            // 'pageTitle' => optional($product->seo)->page_title,
+                            // 'productUrl' => optional($product->seo)->product_url,
+                            // 'metaDescription' => optional($product->seo)->meta_description,
+                            // 'mpn' => optional($product->identifiers)->mpn,
+                            // 'upc' => optional($product->identifiers)->upc,
+                            // 'gtin' => optional($product->identifiers)->gtin,
+                            // 'bpn' => optional($product->identifiers)->bpn,
 
                             // categoryHierarchy intentionally removed for performance
                             // 'categoryHierarchy' => null,
 
-                            'purchasabilityStatus' => $product->purchasability_status,
-                            'minPurchaseQuantity' => $product->min_purchase_quantity,
-                            'maxPurchaseQuantity' => $product->max_purchase_quantity,
-                            'relatedProductsEnabled' => $product->related_products_enabled,
-                            'taxCode' => $product->tax_code,
-                            'discountType' => $product->discount_type,
-                            'bulkPricingTiers' => $product->bulk_pricing_tiers ?? [],
+                            // 'purchasabilityStatus' => $product->purchasability_status,
+                            // 'minPurchaseQuantity' => $product->min_purchase_quantity,
+                            // 'maxPurchaseQuantity' => $product->max_purchase_quantity,
+                            // 'relatedProductsEnabled' => $product->related_products_enabled,
+                            // 'taxCode' => $product->tax_code,
+                            // 'discountType' => $product->discount_type,
+                            // 'bulkPricingTiers' => $product->bulk_pricing_tiers ?? [],
                             // schema intentionally removed (very heavy)
                         ];
                     })->values();
