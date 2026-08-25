@@ -57,17 +57,15 @@ class CategoryController extends Controller
             ], 400);
         }
 
-        // Reset visited IDs for loop protection
         $this->visited = [];
 
-        // ⚡ Load categories WITHOUT products to avoid huge payloads
         $categories = Category::with(['childrenRecursive'])
-            ->withCount('products') // direct product count
-            ->where('store_id', "=", $storeId)
+            ->withCount('products')
+            ->where('store_id', $storeId)
             ->whereNull('parent_id')
+            ->where('is_visible', true)          // parent level filter
             ->get();
 
-        // ⚡ Transform each category safely
         $data = $categories->map(function ($category) {
             return $this->formatCategorySafe($category);
         })->filter()->values();
@@ -78,7 +76,6 @@ class CategoryController extends Controller
             'data' => $data
         ]);
     }
-
     private function formatCategorySafe($category)
     {
         // 🔥 Prevent infinite repeat loops
@@ -86,6 +83,11 @@ class CategoryController extends Controller
             return null;
         }
         $this->visited[$category->id] = true;
+
+        // Extra safety: agar kisi tarah is_visible false aa jaye to skip
+        if (!$category->is_visible) {
+            return null;
+        }
 
         return [
             'id' => $category->id,
@@ -115,7 +117,6 @@ class CategoryController extends Controller
                 ->values(),
         ];
     }
-
 
     private function formatCategoryWithCounts($category)
     {

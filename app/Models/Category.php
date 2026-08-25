@@ -11,7 +11,7 @@ class Category extends Model
 {
     use HasFactory;
 
-    protected $fillable = 
+    protected $fillable =
     [
 
         'store_id',
@@ -38,7 +38,7 @@ class Category extends Model
         'sort_order' => 'integer',
     ];
 
-     // 🔁 Recursive relationship for nested categories
+    // 🔁 Recursive relationship for nested categories
     public function parent()
     {
         return $this->belongsTo(Category::class, 'parent_id');
@@ -52,7 +52,10 @@ class Category extends Model
     public function childrenRecursive()
     {
         return $this->hasMany(Category::class, 'parent_id')
-            ->with('childrenRecursive');
+            ->where('is_visible', true)               // sirf visible children
+            ->with(['childrenRecursive' => function ($q) {
+                $q->where('is_visible', true);        // deeper levels bhi
+            }]);
     }
 
     // ✅ Many-to-many: Categories ↔ Products
@@ -66,7 +69,7 @@ class Category extends Model
         return $this->belongsTo(Store::class);
     }
 
-        public function seo()
+    public function seo()
     {
         return $this->hasOne(ProductSeo::class);
     }
