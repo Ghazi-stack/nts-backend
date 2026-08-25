@@ -46,6 +46,38 @@ class CategoryController extends Controller
     //     ]);
     // }
 
+    public function listCategory(Request $request)
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Missing store-id in headers.'
+            ], 400);
+        }
+
+        // Reset visited IDs for loop protection
+        $this->visited = [];
+
+        // ⚡ Load categories WITHOUT products to avoid huge payloads
+        $categories = Category::with(['childrenRecursive'])
+            ->withCount('products') // direct product count
+            ->where('store_id', "=", $storeId)
+            ->whereNull('parent_id')
+            ->get();
+
+        // ⚡ Transform each category safely
+        $data = $categories->map(function ($category) {
+            return $this->formatCategorySafe($category);
+        })->filter()->values();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Categories retrieved successfully',
+            'data' => $data
+        ]);
+    }
     public function index(Request $request)
     {
         $storeId = current_store_id();
@@ -76,6 +108,7 @@ class CategoryController extends Controller
             'data' => $data
         ]);
     }
+
     private function formatCategorySafe($category)
     {
         // 🔥 Prevent infinite repeat loops
@@ -117,6 +150,7 @@ class CategoryController extends Controller
                 ->values(),
         ];
     }
+
 
     private function formatCategoryWithCounts($category)
     {

@@ -262,7 +262,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
     // Products — Categories
     Route::prefix('categories')->middleware('permission:categories')->controller(CategoryController::class)->group(function () {
-        Route::get('/list-categories', 'index');
+        Route::get('/list-categories', 'listCategory');
         Route::get('/category/{id}', 'show');
         Route::get('/slug/{slug}', 'showBySlug');
         Route::post('/add-categories', 'storeCategory');
