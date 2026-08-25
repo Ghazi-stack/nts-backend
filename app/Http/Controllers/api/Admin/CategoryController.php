@@ -57,19 +57,16 @@ class CategoryController extends Controller
             ], 400);
         }
 
-        // Reset visited IDs for loop protection
         $this->visited = [];
 
-        // ⚡ Load categories WITHOUT products to avoid huge payloads
         $categories = Category::with(['childrenRecursive'])
-            ->withCount('products') // direct product count
-            ->where('store_id', "=", $storeId)
+            ->withCount('products')
+            ->where('store_id', $storeId)
             ->whereNull('parent_id')
-            ->get();
+            ->get(); // is_visible filter nahi lagaya
 
-        // ⚡ Transform each category safely
         $data = $categories->map(function ($category) {
-            return $this->formatCategorySafe($category);
+            return $this->formatCategorySafe($category, false); // false = dono dikhao
         })->filter()->values();
 
         return response()->json([
@@ -95,11 +92,11 @@ class CategoryController extends Controller
             ->withCount('products')
             ->where('store_id', $storeId)
             ->whereNull('parent_id')
-            ->where('is_visible', true)          // parent level filter
+            ->where('is_visible', true)
             ->get();
 
         $data = $categories->map(function ($category) {
-            return $this->formatCategorySafe($category);
+            return $this->formatCategorySafe($category, true); // true = only visible
         })->filter()->values();
 
         return response()->json([
@@ -109,16 +106,16 @@ class CategoryController extends Controller
         ]);
     }
 
-    private function formatCategorySafe($category)
+    private function formatCategorySafe($category, $onlyVisible = false)
     {
-        // 🔥 Prevent infinite repeat loops
+        // Prevent infinite loops
         if (isset($this->visited[$category->id])) {
             return null;
         }
         $this->visited[$category->id] = true;
 
-        // Extra safety: agar kisi tarah is_visible false aa jaye to skip
-        if (!$category->is_visible) {
+        // Agar onlyVisible true hai aur category hidden hai to skip
+        if ($onlyVisible && !$category->is_visible) {
             return null;
         }
 
@@ -131,7 +128,6 @@ class CategoryController extends Controller
             'is_visible' => $category->is_visible,
             'parent_id' => $category->parent_id,
 
-            // SEO fields
             'seo' => [
                 'page_title'       => $category->seo_home_title,
                 'meta_keywords'    => $category->seo_meta_keywords,
@@ -139,18 +135,16 @@ class CategoryController extends Controller
                 'search_keywords'  => $category->seo_search_keywords,
             ],
 
-            // ✔ Load counts directly (MUCH faster than loading products)
             'direct_products' => $category->products_count ?? 0,
             'total_products' => $category->products_count + ($category->subtree_products_count ?? 0),
             'in_subcategories' => $category->subtree_products_count ?? 0,
 
             'subcategories' => $category->childrenRecursive
-                ->map(fn($child) => $this->formatCategorySafe($child))
+                ->map(fn($child) => $this->formatCategorySafe($child, $onlyVisible))
                 ->filter()
                 ->values(),
         ];
     }
-
 
     private function formatCategoryWithCounts($category)
     {

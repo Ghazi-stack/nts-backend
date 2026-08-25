@@ -52,12 +52,8 @@ class Category extends Model
     public function childrenRecursive()
     {
         return $this->hasMany(Category::class, 'parent_id')
-            ->where('is_visible', true)               // sirf visible children
-            ->with(['childrenRecursive' => function ($q) {
-                $q->where('is_visible', true);        // deeper levels bhi
-            }]);
+            ->with('childrenRecursive');
     }
-
     // ✅ Many-to-many: Categories ↔ Products
     public function products()
     {
