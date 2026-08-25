@@ -53,6 +53,7 @@ class OrderController extends Controller
             $keyword   = $request->query('keyword');
             $status    = $request->query('status');
             $productId = $request->query('productId');
+            $page      = $request->query('page', 1);
 
             $storeId = current_store_id();
 
@@ -63,95 +64,159 @@ class OrderController extends Controller
                 ], 403);
             }
 
-            $orders = Order::query()
-                ->with([
-                    'items' => function ($q) {
-                        $q->select('id', 'order_id', 'product_id', 'quantity', 'price')
-                            ->with([
-                                'product' => function ($p) {
-                                    $p->with([
-                                        'images',
-                                        'brand',
-                                        'categories:id',          // categoryIds ke liye
-                                        'content',
-                                        'seo',
-                                        'identifiers',
-                                    ]);
-                                }
-                            ]);
-                    },
-                    'customer',
-                    'billingInformation',
-                    'notes:id,order_id,note',
-                    'payment',
-                    'shipment:id,order_id',
-                ])
-                ->withCount('messages')
-                ->where('store_id', $storeId)
-                ->where('is_draft', 0)
-                ->when($status, function ($q) use ($status) {
-                    if ($status === 'High Risk') {
-                        $q->whereHas('payment', function ($p) {
-                            $p->where('risk_level', 'highest');
-                        });
-                    } elseif ($status === 'Incomplete') {
-                        $q->where('status', 'Pending');
-                    } else {
-                        $q->where('status', $status);
-                    }
-                })
-                ->when($productId, function ($q) use ($productId) {
-                    $q->whereHas('items', function ($item) use ($productId) {
-                        $item->where('product_id', (int) $productId);
-                    });
-                })
-                ->when($keyword, function ($q) use ($keyword) {
-                    $keyword = trim($keyword);
-                    $q->where(function ($query) use ($keyword) {
-                        $query->where('id', 'like', "%{$keyword}%")
-                            ->orWhere('order_number', 'like', "%{$keyword}%")
-                            ->orWhere('status', 'like', "%{$keyword}%")
-                            ->orWhere('total_amount', 'like', "%{$keyword}%")
-                            ->orWhereExists(function ($sub) use ($keyword) {
-                                $sub->select(\DB::raw(1))
-                                    ->from('customers')
-                                    ->whereColumn('customers.id', 'orders.customer_id')
-                                    ->where(function ($c) use ($keyword) {
-                                        $c->where('first_name', 'like', "%{$keyword}%")
-                                            ->orWhere('last_name', 'like', "%{$keyword}%")
-                                            ->orWhere('email', 'like', "%{$keyword}%")
-                                            ->orWhere('phone', 'like', "%{$keyword}%");
-                                    });
-                            })
-                            ->orWhereExists(function ($sub) use ($keyword) {
-                                $sub->select(\DB::raw(1))
-                                    ->from('billing_information')
-                                    ->whereColumn('billing_information.order_id', 'orders.id')
-                                    ->where(function ($b) use ($keyword) {
-                                        $b->where('first_name', 'like', "%{$keyword}%")
-                                            ->orWhere('last_name', 'like', "%{$keyword}%")
-                                            ->orWhere('phone', 'like', "%{$keyword}%")
-                                            ->orWhere('payment_method', 'like', "%{$keyword}%")
-                                            ->orWhere('shipping_method', 'like', "%{$keyword}%");
-                                    });
-                            });
-                    });
-                })
-                ->latest('id')
-                ->paginate($perPage);
+            // ====================== CACHE KEY ======================
+            $cacheKey = "orders:store:{$storeId}:page:{$page}:per:{$perPage}:status:" . ($status ?? 'all') .
+                ":product:" . ($productId ?? 'all') . ":keyword:" . md5($keyword ?? '');
 
-            return response()->json([
-                'status'  => true,
-                'message' => 'Orders retrieved successfully',
-                'data'    => OrderResource::collection($orders),
-                'pagination' => [
-                    'total'       => $orders->total(),
-                    'count'       => $orders->count(),
-                    'perPage'     => $orders->perPage(),
-                    'currentPage' => $orders->currentPage(),
-                    'totalPages'  => $orders->lastPage(),
-                ],
-            ]);
+            // Cache for 45 seconds (adjust as needed)
+            $response = cache()->remember($cacheKey, 45, function () use (
+                $storeId,
+                $perPage,
+                $keyword,
+                $status,
+                $productId
+            ) {
+                $orders = Order::query()
+                    ->with([
+                        'items' => function ($q) {
+                            $q->select('id', 'order_id', 'product_id', 'quantity', 'price')
+                                ->with([
+                                    'product' => function ($p) {
+                                        $p->select([
+                                            'id',
+                                            'name',
+                                            'slug',
+                                            'sku',
+                                            'price',
+                                            'msrp',
+                                            'sold_count',
+                                            'condition',
+                                            'faq',
+                                            'cost_price',
+                                            'sale_price',
+                                            'fixed_shipping_cost',
+                                            'product_type',
+                                            'option_set',
+                                            'option_set_align',
+                                            'allow_purchase',
+                                            'stop_processing_rules',
+                                            'tax_class',
+                                            'tax_provider_code',
+                                            'brand_id',
+                                            'dimensions',
+                                            'track_inventory',
+                                            'current_stock',
+                                            'call_pricing',
+                                            'low_stock',
+                                            'is_featured',
+                                            'visible_on_storefront',
+                                            'show_condition',
+                                            'show_shipping',
+                                            'sort_order',
+                                            'search_keywords',
+                                            'object_type',
+                                            'use_product_name',
+                                            'graph_description',
+                                            'use_thumbnail',
+                                            'dont_use',
+                                            'manage_customs',
+                                            'commodity_description',
+                                            'country_of_origin',
+                                            'hs_codes',
+                                            'custom_fields',
+                                            'store_id',
+                                            'purchasability_status',
+                                            'min_purchase_quantity',
+                                            'max_purchase_quantity',
+                                            'related_products_enabled',
+                                            'tax_code',
+                                            'discount_type',
+                                            'bulk_pricing_tiers',
+                                            'created_at',
+                                            'updated_at'
+                                        ])
+                                            ->with([
+                                                'images',
+                                                'brand:id,name',
+                                                'categories:id',
+                                                'content:id,product_id,description,warranty,availability_text,template_layout',
+                                                'seo:id,product_id,page_title,product_url,meta_description',
+                                                'identifiers:id,product_id,mpn,upc,gtin,bpn',
+                                            ]);
+                                    }
+                                ]);
+                        },
+                        'customer',
+                        'billingInformation',
+                        'notes:id,order_id,note',
+                        'payment',
+                        'shipment:id,order_id',
+                    ])
+                    ->withCount('messages')
+                    ->where('store_id', $storeId)
+                    ->where('is_draft', 0)
+                    ->when($status, function ($q) use ($status) {
+                        if ($status === 'High Risk') {
+                            $q->whereHas('payment', fn($p) => $p->where('risk_level', 'highest'));
+                        } elseif ($status === 'Incomplete') {
+                            $q->where('status', 'Pending');
+                        } else {
+                            $q->where('status', $status);
+                        }
+                    })
+                    ->when($productId, function ($q) use ($productId) {
+                        $q->whereHas('items', fn($item) => $item->where('product_id', (int) $productId));
+                    })
+                    ->when($keyword, function ($q) use ($keyword) {
+                        $keyword = trim($keyword);
+                        $q->where(function ($query) use ($keyword) {
+                            $query->where('id', 'like', "%{$keyword}%")
+                                ->orWhere('order_number', 'like', "%{$keyword}%")
+                                ->orWhere('status', 'like', "%{$keyword}%")
+                                ->orWhere('total_amount', 'like', "%{$keyword}%")
+                                ->orWhereExists(function ($sub) use ($keyword) {
+                                    $sub->select(\DB::raw(1))
+                                        ->from('customers')
+                                        ->whereColumn('customers.id', 'orders.customer_id')
+                                        ->where(function ($c) use ($keyword) {
+                                            $c->where('first_name', 'like', "%{$keyword}%")
+                                                ->orWhere('last_name', 'like', "%{$keyword}%")
+                                                ->orWhere('email', 'like', "%{$keyword}%")
+                                                ->orWhere('phone', 'like', "%{$keyword}%");
+                                        });
+                                })
+                                ->orWhereExists(function ($sub) use ($keyword) {
+                                    $sub->select(\DB::raw(1))
+                                        ->from('billing_information')
+                                        ->whereColumn('billing_information.order_id', 'orders.id')
+                                        ->where(function ($b) use ($keyword) {
+                                            $b->where('first_name', 'like', "%{$keyword}%")
+                                                ->orWhere('last_name', 'like', "%{$keyword}%")
+                                                ->orWhere('phone', 'like', "%{$keyword}%")
+                                                ->orWhere('payment_method', 'like', "%{$keyword}%")
+                                                ->orWhere('shipping_method', 'like', "%{$keyword}%");
+                                        });
+                                });
+                        });
+                    })
+                    ->latest('id')
+                    ->paginate($perPage);
+
+                return [
+                    'status'  => true,
+                    'message' => 'Orders retrieved successfully',
+                    'data'    => OrderResource::collection($orders),
+                    'pagination' => [
+                        'total'       => $orders->total(),
+                        'count'       => $orders->count(),
+                        'perPage'     => $orders->perPage(),
+                        'currentPage' => $orders->currentPage(),
+                        'totalPages'  => $orders->lastPage(),
+                    ],
+                ];
+            });
+
+            return response()->json($response);
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
