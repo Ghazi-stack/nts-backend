@@ -524,7 +524,7 @@ class ProductController extends Controller
             $validated = $request->validate([
                 'name' => 'nullable|string|max:255',
                 'sku' => 'nullable|string|unique:products,sku,NULL,id,store_id,' . $storeId,
-                'brandId' => 'nullable|exists:brands,id',
+                'brandId' => 'nullable|string',
                 'categoryIds' => 'required|array|min:1',
                 'categoryIds.*' => 'exists:categories,id',
                 'condition' => 'nullable|string',
@@ -807,7 +807,8 @@ class ProductController extends Controller
             $validated = $request->validate([
                 'name' => 'nullable|string|max:255',
                 'sku' => 'nullable|string|unique:products,sku,' . $product->id . ',id,store_id,' . $storeId,
-                'brandId' => 'nullable|exists:brands,id',
+                'brandId' => 'nullable|string',
+                // 'brandId' => 'nullable|exists:brands,id',
                 'categoryIds' => 'required|array',
                 'categoryIds.*' => 'exists:categories,id',
                 'condition' => 'nullable|string',
