@@ -60,13 +60,14 @@ class CategoryController extends Controller
         $this->visited = [];
 
         $categories = Category::with(['childrenRecursive'])
-            ->withCount('products')
+            ->withCount('products') // direct products
             ->where('store_id', $storeId)
             ->whereNull('parent_id')
-            ->get(); // is_visible filter nahi lagaya
+            ->get();
 
+        // Har category ke liye recursive product count calculate karo
         $data = $categories->map(function ($category) {
-            return $this->formatCategorySafe($category, false); // false = dono dikhao
+            return $this->formatCategorySafe($category, false);
         })->filter()->values();
 
         return response()->json([
@@ -108,16 +109,29 @@ class CategoryController extends Controller
 
     private function formatCategorySafe($category, $onlyVisible = false)
     {
-        // Prevent infinite loops
         if (isset($this->visited[$category->id])) {
             return null;
         }
         $this->visited[$category->id] = true;
 
-        // Agar onlyVisible true hai aur category hidden hai to skip
         if ($onlyVisible && !$category->is_visible) {
             return null;
         }
+
+        // Subcategories pehle format karo
+        $subcategories = $category->childrenRecursive
+            ->map(fn($child) => $this->formatCategorySafe($child, $onlyVisible))
+            ->filter()
+            ->values();
+
+        // Direct products
+        $directProducts = $category->products_count ?? 0;
+
+        // Subcategories ke total products ka sum
+        $inSubcategories = $subcategories->sum('total_products');
+
+        // Total = direct + subcategories
+        $totalProducts = $directProducts + $inSubcategories;
 
         return [
             'id' => $category->id,
@@ -135,14 +149,11 @@ class CategoryController extends Controller
                 'search_keywords'  => $category->seo_search_keywords,
             ],
 
-            'direct_products' => $category->products_count ?? 0,
-            'total_products' => $category->products_count + ($category->subtree_products_count ?? 0),
-            'in_subcategories' => $category->subtree_products_count ?? 0,
+            'direct_products'   => $directProducts,
+            'total_products'    => $totalProducts,
+            'in_subcategories'  => $inSubcategories,
 
-            'subcategories' => $category->childrenRecursive
-                ->map(fn($child) => $this->formatCategorySafe($child, $onlyVisible))
-                ->filter()
-                ->values(),
+            'subcategories' => $subcategories,
         ];
     }
 
