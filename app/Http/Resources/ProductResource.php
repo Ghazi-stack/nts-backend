@@ -99,10 +99,10 @@ class ProductResource extends JsonResource
             'upc' => optional($this->identifiers)->upc,
             'gtin' => optional($this->identifiers)->gtin,
             'bpn' => optional($this->identifiers)->bpn,
-            // 'categoryHierarchy' => $this->whenLoaded('categories', function () {
-            //     $primaryCategory = $this->categories->first();
-            //     return $primaryCategory ? $this->buildCategoryHierarchy($primaryCategory) : null;
-            // }),
+            'categoryHierarchy' => $this->whenLoaded('categories', function () {
+                $primaryCategory = $this->categories->first();
+                return $primaryCategory ? $this->buildCategoryHierarchy($primaryCategory) : null;
+            }),
             // 'savingAmount' => $savings,
             // 'savingPercent' => $savingPercent,
             // 'profit' => $profit,
