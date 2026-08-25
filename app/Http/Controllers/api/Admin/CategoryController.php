@@ -485,7 +485,10 @@ class CategoryController extends Controller
         $storeId = current_store_id();
 
         if (!$storeId) {
-            return response()->json(['status' => false, 'message' => 'Missing store-id in headers.'], 400);
+            return response()->json([
+                'status' => false,
+                'message' => 'Missing store-id in headers.'
+            ], 400);
         }
 
         $request->validate([
@@ -497,8 +500,22 @@ class CategoryController extends Controller
 
         foreach ($request->ids as $id) {
             $category = Category::where('store_id', $storeId)->find($id);
+
             if ($category) {
+
+                // 1. products table mein category_id null kar do
+                \DB::table('products')
+                    ->where('category_id', $id)
+                    ->update(['category_id' => null]);
+
+                // 2. category_product pivot table se related records delete kar do
+                \DB::table('category_product')
+                    ->where('category_id', $id)
+                    ->delete();
+
+                // 3. Category delete kar do
                 $category->delete();
+
                 $deleted[] = $id;
             } else {
                 $notFound[] = $id;
