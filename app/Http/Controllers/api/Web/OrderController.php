@@ -53,7 +53,6 @@ class OrderController extends Controller
             $keyword   = $request->query('keyword');
             $status    = $request->query('status');
             $productId = $request->query('productId');
-            $page      = $request->query('page', 1);
 
             $storeId = current_store_id();
 
@@ -64,108 +63,92 @@ class OrderController extends Controller
                 ], 403);
             }
 
-            // ====================== CACHE KEY ======================
-            $cacheKey = "orders:list:store:{$storeId}:page:{$page}:per:{$perPage}:status:" . ($status ?? 'all') .
-                ":product:" . ($productId ?? 'all') . ":keyword:" . md5($keyword ?? '');
-
-            // 60 seconds cache
-            $response = cache()->remember($cacheKey, 60, function () use (
-                $storeId,
-                $perPage,
-                $keyword,
-                $status,
-                $productId
-            ) {
-
-                $orders = Order::query()
-                    ->with([
-                        'items' => function ($q) {
-                            $q->select('id', 'order_id', 'product_id', 'quantity', 'price')
-                                ->with([
-                                    'product' => function ($p) {
-                                        $p->with([
-                                            'images',
-                                            'brand',
-                                            'categories:id',
-                                        ]);
-                                    }
-                                ]);
-                        },
-                        'customer',
-                        'billingInformation',
-                        'notes:id,order_id,note',
-                        'payment',
-                        'shipment:id,order_id',
-                    ])
-                    ->withCount('messages')
-                    ->where('store_id', $storeId)
-                    ->where('is_draft', 0)
-                    ->when($status, function ($q) use ($status) {
-                        if ($status === 'High Risk') {
-                            $q->whereHas('payment', function ($p) {
-                                $p->where('risk_level', 'highest');
+            $orders = Order::query()
+                ->with([
+                    'items' => function ($q) {
+                        $q->select('id', 'order_id', 'product_id', 'quantity', 'price')
+                            ->with([
+                                'product' => function ($p) {
+                                    $p->with([
+                                        'images',
+                                        'brand',
+                                        'categories:id',          // categoryIds ke liye
+                                    ]);
+                                }
+                            ]);
+                    },
+                    'customer',
+                    'billingInformation',
+                    'notes:id,order_id,note',
+                    'payment',
+                    'shipment:id,order_id',
+                ])
+                ->withCount('messages')
+                ->where('store_id', $storeId)
+                ->where('is_draft', 0)
+                ->when($status, function ($q) use ($status) {
+                    if ($status === 'High Risk') {
+                        $q->whereHas('payment', function ($p) {
+                            $p->where('risk_level', 'highest');
+                        });
+                    } elseif ($status === 'Incomplete') {
+                        $q->where('status', 'Pending');
+                    } else {
+                        $q->where('status', $status);
+                    }
+                })
+                ->when($productId, function ($q) use ($productId) {
+                    $q->whereHas('items', function ($item) use ($productId) {
+                        $item->where('product_id', (int) $productId);
+                    });
+                })
+                ->when($keyword, function ($q) use ($keyword) {
+                    $keyword = trim($keyword);
+                    $q->where(function ($query) use ($keyword) {
+                        $query->where('id', 'like', "%{$keyword}%")
+                            ->orWhere('order_number', 'like', "%{$keyword}%")
+                            ->orWhere('status', 'like', "%{$keyword}%")
+                            ->orWhere('total_amount', 'like', "%{$keyword}%")
+                            ->orWhereExists(function ($sub) use ($keyword) {
+                                $sub->select(\DB::raw(1))
+                                    ->from('customers')
+                                    ->whereColumn('customers.id', 'orders.customer_id')
+                                    ->where(function ($c) use ($keyword) {
+                                        $c->where('first_name', 'like', "%{$keyword}%")
+                                            ->orWhere('last_name', 'like', "%{$keyword}%")
+                                            ->orWhere('email', 'like', "%{$keyword}%")
+                                            ->orWhere('phone', 'like', "%{$keyword}%");
+                                    });
+                            })
+                            ->orWhereExists(function ($sub) use ($keyword) {
+                                $sub->select(\DB::raw(1))
+                                    ->from('billing_information')
+                                    ->whereColumn('billing_information.order_id', 'orders.id')
+                                    ->where(function ($b) use ($keyword) {
+                                        $b->where('first_name', 'like', "%{$keyword}%")
+                                            ->orWhere('last_name', 'like', "%{$keyword}%")
+                                            ->orWhere('phone', 'like', "%{$keyword}%")
+                                            ->orWhere('payment_method', 'like', "%{$keyword}%")
+                                            ->orWhere('shipping_method', 'like', "%{$keyword}%");
+                                    });
                             });
-                        } elseif ($status === 'Incomplete') {
-                            $q->where('status', 'Pending');
-                        } else {
-                            $q->where('status', $status);
-                        }
-                    })
-                    ->when($productId, function ($q) use ($productId) {
-                        $q->whereHas('items', function ($item) use ($productId) {
-                            $item->where('product_id', (int) $productId);
-                        });
-                    })
-                    ->when($keyword, function ($q) use ($keyword) {
-                        $keyword = trim($keyword);
-                        $q->where(function ($query) use ($keyword) {
-                            $query->where('id', 'like', "%{$keyword}%")
-                                ->orWhere('order_number', 'like', "%{$keyword}%")
-                                ->orWhere('status', 'like', "%{$keyword}%")
-                                ->orWhere('total_amount', 'like', "%{$keyword}%")
-                                ->orWhereExists(function ($sub) use ($keyword) {
-                                    $sub->select(\DB::raw(1))
-                                        ->from('customers')
-                                        ->whereColumn('customers.id', 'orders.customer_id')
-                                        ->where(function ($c) use ($keyword) {
-                                            $c->where('first_name', 'like', "%{$keyword}%")
-                                                ->orWhere('last_name', 'like', "%{$keyword}%")
-                                                ->orWhere('email', 'like', "%{$keyword}%")
-                                                ->orWhere('phone', 'like', "%{$keyword}%");
-                                        });
-                                })
-                                ->orWhereExists(function ($sub) use ($keyword) {
-                                    $sub->select(\DB::raw(1))
-                                        ->from('billing_information')
-                                        ->whereColumn('billing_information.order_id', 'orders.id')
-                                        ->where(function ($b) use ($keyword) {
-                                            $b->where('first_name', 'like', "%{$keyword}%")
-                                                ->orWhere('last_name', 'like', "%{$keyword}%")
-                                                ->orWhere('phone', 'like', "%{$keyword}%")
-                                                ->orWhere('payment_method', 'like', "%{$keyword}%")
-                                                ->orWhere('shipping_method', 'like', "%{$keyword}%");
-                                        });
-                                });
-                        });
-                    })
-                    ->latest('id')
-                    ->paginate($perPage);
+                    });
+                })
+                ->latest('id')
+                ->paginate($perPage);
 
-                return [
-                    'status'  => true,
-                    'message' => 'Orders retrieved successfully',
-                    'data'    => OrderResource::collection($orders),
-                    'pagination' => [
-                        'total'       => $orders->total(),
-                        'count'       => $orders->count(),
-                        'perPage'     => $orders->perPage(),
-                        'currentPage' => $orders->currentPage(),
-                        'totalPages'  => $orders->lastPage(),
-                    ],
-                ];
-            });
-
-            return response()->json($response);
+            return response()->json([
+                'status'  => true,
+                'message' => 'Orders retrieved successfully',
+                'data'    => OrderResource::collection($orders),
+                'pagination' => [
+                    'total'       => $orders->total(),
+                    'count'       => $orders->count(),
+                    'perPage'     => $orders->perPage(),
+                    'currentPage' => $orders->currentPage(),
+                    'totalPages'  => $orders->lastPage(),
+                ],
+            ]);
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
