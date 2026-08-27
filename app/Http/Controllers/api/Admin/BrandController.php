@@ -12,6 +12,7 @@ use App\Http\Resources\BrandResource;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class BrandController extends Controller
 {
@@ -123,7 +124,11 @@ class BrandController extends Controller
                 ],
                 'logo' => 'nullable|image|mimes:jpg,jpeg,png,svg,webp|max:2048',
             ], [
-                'name.unique' => 'This brand already exists in this store.',
+                'name.required' => 'Brand name is required.',
+                'name.unique' => 'Brand already exists.',
+                'logo.image' => 'The logo must be an image.',
+                'logo.mimes' => 'The logo must be a jpg, jpeg, png, svg, or webp file.',
+                'logo.max' => 'The logo may not be greater than 2MB.',
             ]);
 
             $data = [
@@ -153,8 +158,16 @@ class BrandController extends Controller
                 'message' => 'Brand created successfully',
                 'brand' => new BrandResource($brand),
             ], 201);
+        } catch (ValidationException $e) {
+
+            return response()->json([
+                'status' => false,
+                'message' => $e->validator->errors()->first(),
+            ], 422);
         } catch (Exception $e) {
+
             Log::error('Error creating brand: ' . $e->getMessage());
+
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to create brand',
