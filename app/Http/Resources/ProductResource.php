@@ -51,7 +51,9 @@ class ProductResource extends JsonResource
             'taxProviderCode' => $this->tax_provider_code,
             'brandId' => (int) $this->brand_id,
             'categoryIds' => $this->categories->pluck('id')->map(fn($id) => (int)$id),
-            'brand' => new BrandResource($this->whenLoaded('brand')),
+            'brand' => $this->brand
+                ? new BrandResource($this->brand)
+                : null,
             //'categories' => CategoryResource::collection($this->whenLoaded('categories')),
             'dimensions' => [
                 'weight' => $dimensions['weight'] ?? 0,
