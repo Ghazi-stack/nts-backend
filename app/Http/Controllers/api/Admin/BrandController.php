@@ -187,7 +187,16 @@ class BrandController extends Controller
             }
 
             $validated = $request->validate([
-                'name'              => 'nullable|string|max:255',
+                'name' => [
+                    'nullable',
+                    'string',
+                    'max:255',
+                    Rule::unique('brands', 'name')
+                        ->ignore($id)
+                        ->where(function ($query) use ($storeId) {
+                            return $query->where('store_id', $storeId);
+                        }),
+                ],
                 'pageTitle'         => 'nullable|string|max:255',
                 'metaKeywords'      => 'nullable|string|max:255',
                 'metaDescription'   => 'nullable|string|max:1000',
@@ -195,6 +204,8 @@ class BrandController extends Controller
                 'brandURL'          => 'nullable|url|max:255',
                 'templateLayout'    => 'nullable|string|max:255',
                 'logo'              => 'nullable|image|mimes:jpg,jpeg,png,svg,webp|max:2048',
+            ], [
+                'name.unique' => 'Brand already exists.',
             ]);
 
             $brand = Brand::where('store_id', $storeId)->findOrFail($id);
@@ -235,6 +246,11 @@ class BrandController extends Controller
                 'message' => 'Brand updated successfully',
                 'brand'   => new \App\Http\Resources\BrandResource($brand->fresh())
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->validator->errors()->first(),
+            ], 422);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'status' => false,
