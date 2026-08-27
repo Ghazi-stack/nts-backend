@@ -29,53 +29,38 @@ class BrandController extends Controller
             $perPage = (int) $request->query('perPage', 20);
             $keyword = trim((string) $request->query('keyword', ''));
 
-            // Eager-load product count relation
-            $brandsWithProducts = Brand::withCount('products')
-                ->where('store_id', $storeId)
-                ->get();
+            $query = Brand::query()
+                ->withCount(['products' => function ($q) use ($storeId) {
+                    $q->where('store_id', $storeId);
+                }])
+                ->where('store_id', $storeId);
 
-            // Merge duplicated brand names and their product counts
-            $merged = $brandsWithProducts->groupBy('name')->map(function ($items, $name) {
-                return [
-                    'brand' => new BrandResource($items->first()),
-                    'productsCount' => $items->sum('products_count'),
-                    'latest_id' => $items->max('id'),
-                ];
-            })->values();
-
-            // Sort by newest first
-            $merged = $merged->sortByDesc('latest_id')->values();
-
-            // Apply keyword filtering
             if ($keyword !== '') {
-                $merged = $merged->filter(function ($item) use ($keyword) {
-                    return stripos($item['brand']['name'], $keyword) !== false;
-                })->sortBy(function ($item) use ($keyword) {
-                    return stripos($item['brand']['name'], $keyword) === 0 ? 0 : 1;
-                })->values();
+                $query->where('name', 'like', "%{$keyword}%")
+                    ->orderByRaw("CASE WHEN name LIKE ? THEN 0 ELSE 1 END", ["{$keyword}%"]);
+            } else {
+                $query->latest('id');
             }
 
-            // Paginate manually
-            $page = (int) $request->query('page', 1);
-            $paged = $merged->forPage($page, $perPage);
-            $total = $merged->count();
+            $brands = $query->paginate($perPage);
 
-            // Remove latest_id from final output
-            $paged = $paged->map(function ($item) {
-                unset($item['latest_id']);
-                return $item;
+            $data = $brands->getCollection()->map(function ($brand) {
+                return [
+                    'brand' => new BrandResource($brand),
+                    'productsCount' => $brand->products_count ?? 0,
+                ];
             });
 
             return response()->json([
                 'status' => true,
                 'message' => 'Brands retrieved successfully',
-                'data' => $paged->values(),
+                'data' => $data->values(),
                 'pagination' => [
-                    'total' => $total,
-                    'count' => $paged->count(),
-                    'perPage' => $perPage,
-                    'currentPage' => $page,
-                    'totalPages' => (int) ceil($total / $perPage),
+                    'total'       => $brands->total(),
+                    'count'       => $brands->count(),
+                    'perPage'     => $brands->perPage(),
+                    'currentPage' => $brands->currentPage(),
+                    'totalPages'  => $brands->lastPage(),
                 ]
             ], 200);
         } catch (Exception $e) {
@@ -252,7 +237,6 @@ class BrandController extends Controller
                 ], 400);
             }
 
-            // Convert comma-separated string to array
             $idArray = explode(',', $ids);
 
             if (empty($idArray)) {
@@ -262,7 +246,6 @@ class BrandController extends Controller
                 ], 422);
             }
 
-            // Fetch brands for deletion
             $brands = Brand::where('store_id', $storeId)
                 ->whereIn('id', $idArray)
                 ->get();
@@ -275,8 +258,15 @@ class BrandController extends Controller
             }
 
             foreach ($brands as $brand) {
-                // Delete logo from S3
+                // products table se brand unlink
+                \DB::table('products')
+                    ->where('brand_id', $brand->id)
+                    ->update(['brand_id' => null]);
+
+                // S3 se logo delete
                 $this->deleteOldLogoFromS3($brand->logo);
+
+                // brand delete
                 $brand->delete();
             }
 
