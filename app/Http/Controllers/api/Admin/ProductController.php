@@ -1227,7 +1227,9 @@ class ProductController extends Controller
                         'slug' => isset($fields['name']) ? Str::slug($fields['name']) . '-' . uniqid() : $product->slug,
                         'sku' => $fields['sku'] ?? $product->sku,
                         'brand_id' => $fields['brandId'] ?? $product->brand_id,
-                        'category_id' => isset($fields['categoryIds']) && is_array($fields['categoryIds']) ? (int)$fields['categoryIds'][0] : ($fields['categoryIds'] ?? $product->category_id),
+                        'category_id' => (!empty($fields['categoryIds']) && is_array($fields['categoryIds']))
+                            ? (int) $fields['categoryIds'][0]
+                            : ($product->category_id),
                         'condition' => $fields['condition'] ?? $product->condition,
                         'faq' => $fields['faq'] ?? $product->faq,
                         'price' => $fields['price'] ?? $product->price,
@@ -1503,21 +1505,22 @@ class ProductController extends Controller
                     ]);
 
                     // ✅ Add to response
-                    $updatedProducts[] = new ProductResource($product->load([
+                                      $updatedProducts[] = new ProductResource($product->load([
                         'categories',
                         'content',
                         'seo',
                         'identifiers',
                         'images'
                     ]));
-                }
+                } // inner foreach end
+            }     // outer foreach end
 
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Products updated successfully.',
-                    'data' => $updatedProducts,
-                ]);
-            }
+            return response()->json([
+                'status' => true,
+                'message' => 'Products updated successfully.',
+                'data' => $updatedProducts,
+            ]);
+            
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
