@@ -22,7 +22,7 @@ class Brand extends Model
         'template_layout',
         'store_id'
     ];
-    
+
     public function store()
     {
         return $this->belongsTo(Store::class);
@@ -30,6 +30,6 @@ class Brand extends Model
 
     public function products()
     {
-        return $this->hasMany(Product::class);
+        return $this->hasMany(Product::class, 'brand_id', 'id');
     }
 }
