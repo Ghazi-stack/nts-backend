@@ -525,7 +525,7 @@ class ProductController extends Controller
                 'name' => 'nullable|string|max:255',
                 'sku' => 'nullable|string|unique:products,sku,NULL,id,store_id,' . $storeId,
                 'brandId' => 'nullable|string',
-                'categoryIds' => 'nullable|array|min:1',
+                'categoryIds' => 'nullable|array',
                 'categoryIds.*' => 'exists:categories,id',
                 'condition' => 'nullable|string',
                 'faq' => 'nullable|string',
@@ -674,7 +674,7 @@ class ProductController extends Controller
 
             ]);
 
-            $product->categories()->sync($validated['categoryIds']);
+            $product->categories()->sync($validated['categoryIds'] ?? []);
 
             $hasPrimary = false;
 
@@ -935,7 +935,7 @@ class ProductController extends Controller
             ]);
 
             // Sync many-to-many categories
-            $product->categories()->sync($validated['categoryIds']);
+            $product->categories()->sync($validated['categoryIds'] ?? []);
 
             // // Remove old images only if new ones are provided
             // if (!empty($validated['image'])) {
