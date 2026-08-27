@@ -609,6 +609,7 @@ Route::prefix('web')->group(function () {
     Route::prefix('reviews')->controller(ReviewController::class)->group(function () {
         Route::get('/product/{productId}', 'index');
         Route::post('/add', 'store');
+        Route::post('/web/reviews', 'getReviews');
     });
 
     Route::prefix('checkout-form')

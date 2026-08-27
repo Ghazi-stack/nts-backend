@@ -134,6 +134,34 @@ class ReviewController extends Controller
         ]);
     }
 
+    public function getReviews(Request $request)
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Store not selected or token invalid.',
+            ], 400);
+        }
+
+        $request->validate([
+            'productId' => 'required|integer|exists:products,id',
+        ]);
+
+        $reviews = Review::where('store_id', $storeId)
+            ->where('product_id', $request->productId)
+            ->where('approved', 1)
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Reviews retrieved successfully',
+            'data'    => $reviews,
+        ]);
+    }
+
     // ✅ Admin: Approve reviews
     public function approveSelected(Request $request)
     {
