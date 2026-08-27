@@ -11,6 +11,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\BrandResource;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class BrandController extends Controller
 {
@@ -103,6 +104,7 @@ class BrandController extends Controller
     {
         try {
             $storeId = current_store_id();
+
             if (!$storeId) {
                 return response()->json([
                     'status' => false,
@@ -111,8 +113,17 @@ class BrandController extends Controller
             }
 
             $request->validate([
-                'name' => 'required|string|max:255',
+                'name' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    Rule::unique('brands', 'name')->where(function ($query) use ($storeId) {
+                        return $query->where('store_id', $storeId);
+                    }),
+                ],
                 'logo' => 'nullable|image|mimes:jpg,jpeg,png,svg,webp|max:2048',
+            ], [
+                'name.unique' => 'This brand already exists in this store.',
             ]);
 
             $data = [
