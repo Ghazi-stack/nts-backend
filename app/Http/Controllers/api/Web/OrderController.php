@@ -1875,20 +1875,18 @@ class OrderController extends Controller
     {
         $user = auth()->user();
 
-        $with = [
+        $query = ReturnRequest::with([
             'order.items.product.images',
             'user',
             'order.customer',
-        ];
+        ]);
 
         if ((int) $user->userrole === 1) {
-            // ADMIN — saari ReturnRequest rows, koi filter nahi
-            $requests = ReturnRequest::with($with)
-                ->latest()
-                ->paginate(20);
+            // admin: userid check nahi, table ka sara data
+            $requests = $query->latest()->paginate(20);
         } else {
-            // CUSTOMER — pehle jaisa
-            $requests = ReturnRequest::with($with)
+            // customer: pehle jaisa
+            $requests = $query
                 ->where('store_id', current_store_id())
                 ->whereHas('order', function ($q) use ($user) {
                     $q->where('user_id', $user->id);
