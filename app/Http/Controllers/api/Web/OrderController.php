@@ -1871,32 +1871,37 @@ class OrderController extends Controller
     }
 
 
-   public function listReturnRequestsForAdmin(Request $request)
-{
-    $user = auth()->user();
+    public function listReturnRequestsForAdmin(Request $request)
+    {
+        
+        $user = auth()->user();
 
-    $query = ReturnRequest::with([
+        // role column jo bhi ho, 1 = admin
+        $role = $user->userrole ?? $user->user_role ?? $user->role ?? $user->role_id ?? 0;
+        $isAdmin = (int) $role === 1;
+
+        $query = ReturnRequest::with([
             'order.items.product.images',
             'user',
-            'order.customer'
-        ])
-        ->where('store_id', current_store_id());
+            'order.customer',
+        ]);
 
-    // userrole 1 = admin → saara store data
-    // warna sirf us user ke orders ki returns
-    if ((int) $user->userrole !== 1) {
-        $query->whereHas('order', function ($q) use ($user) {
-            $q->where('user_id', $user->id);
-        });
+        if (!$isAdmin) {
+            // customer / staff — pehle jaisa
+            $query->where('store_id', current_store_id())
+                ->whereHas('order', function ($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                });
+        }
+        // admin: koi user_id filter nahi — saari customers ki returns
+
+        $requests = $query->latest()->paginate(20);
+
+        return response()->json([
+            'status' => true,
+            'data'   => ReturnRequestResource::collection($requests),
+        ]);
     }
-
-    $requests = $query->latest()->paginate(20);
-
-    return response()->json([
-        'status' => true,
-        'data'   => ReturnRequestResource::collection($requests),
-    ]);
-}
 
     public function cancelOrder(Request $request, $id)
     {
