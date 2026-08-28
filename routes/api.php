@@ -205,8 +205,8 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
     // Orders — Return Request
     Route::prefix('orders')->controller(OrderController::class)->group(function () {
-        Route::get('admin/return-requests', [OrderController::class, 'listReturnRequestsForAdmin']);
-        Route::get('customer/return-requests', [OrderController::class, 'listReturnRequestsForCustomer']);
+        Route::get('admin-return-requests', [OrderController::class, 'listReturnRequestsForAdmin']);
+        Route::get('customer-return-requests', [OrderController::class, 'listReturnRequestsForCustomer']);
     });
 
     // Orders — Tracking
