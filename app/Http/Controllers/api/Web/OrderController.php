@@ -980,7 +980,7 @@ class OrderController extends Controller
                 try {
                     $store = Store::find($storeId);
                     $frontendUrl = rtrim($store?->base_url ?? '#', '/');
-                    $registerLink = $frontendUrl . '/auth/register';
+                    $registerLink = $frontendUrl . '/auth/signup';
 
                     Mail::to($validated['email'])->send(
                         new \App\Mail\GuestAccountMail(
