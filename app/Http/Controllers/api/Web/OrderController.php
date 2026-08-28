@@ -1873,27 +1873,35 @@ class OrderController extends Controller
 
     public function listReturnRequestsForAdmin(Request $request)
     {
-        $user = auth()->user();
-
-        $query = ReturnRequest::with([
+        $requests = ReturnRequest::with([
             'order.items.product.images',
             'user',
             'order.customer',
-        ]);
+        ])
+            ->latest()
+            ->paginate(20);
 
-        if ((int) $user->userrole === 1) {
-            // admin: userid check nahi, table ka sara data
-            $requests = $query->latest()->paginate(20);
-        } else {
-            // customer: pehle jaisa
-            $requests = $query
-                ->where('store_id', current_store_id())
-                ->whereHas('order', function ($q) use ($user) {
-                    $q->where('user_id', $user->id);
-                })
-                ->latest()
-                ->paginate(20);
-        }
+        return response()->json([
+            'status' => true,
+            'data'   => ReturnRequestResource::collection($requests),
+        ]);
+    }
+
+    public function listReturnRequestsForCustomer(Request $request)
+    {
+        $user = auth()->user();
+
+        $requests = ReturnRequest::with([
+            'order.items.product.images',
+            'user',
+            'order.customer',
+        ])
+            ->where('store_id', current_store_id())
+            ->whereHas('order', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            })
+            ->latest()
+            ->paginate(20);
 
         return response()->json([
             'status' => true,

@@ -82,7 +82,7 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
 
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/customer-login', [AuthController::class, 'customerLogin']);
-Route::post('/admin/forgot-password',[AuthController::class,'adminForgotPassword']);
+Route::post('/admin/forgot-password', [AuthController::class, 'adminForgotPassword']);
 Route::post('/admin/reset-password', [AuthController::class, 'adminResetPassword']);
 
 Route::prefix('2fa')->group(function () {
@@ -205,7 +205,8 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
     // Orders — Return Request
     Route::prefix('orders')->controller(OrderController::class)->group(function () {
-        Route::get('/get-return-order', 'listReturnRequestsForAdmin');
+        Route::get('admin/return-requests', [OrderController::class, 'listReturnRequestsForAdmin']);
+        Route::get('customer/return-requests', [OrderController::class, 'listReturnRequestsForCustomer']);
     });
 
     // Orders — Tracking
