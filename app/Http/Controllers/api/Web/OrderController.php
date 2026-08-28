@@ -1873,29 +1873,29 @@ class OrderController extends Controller
 
     public function listReturnRequestsForAdmin(Request $request)
     {
-        
         $user = auth()->user();
 
-        // role column jo bhi ho, 1 = admin
-        $role = $user->userrole ?? $user->user_role ?? $user->role ?? $user->role_id ?? 0;
-        $isAdmin = (int) $role === 1;
-
-        $query = ReturnRequest::with([
+        $with = [
             'order.items.product.images',
             'user',
             'order.customer',
-        ]);
+        ];
 
-        if (!$isAdmin) {
-            // customer / staff — pehle jaisa
-            $query->where('store_id', current_store_id())
+        if ((int) $user->userrole === 1) {
+            // ADMIN — saari ReturnRequest rows, koi filter nahi
+            $requests = ReturnRequest::with($with)
+                ->latest()
+                ->paginate(20);
+        } else {
+            // CUSTOMER — pehle jaisa
+            $requests = ReturnRequest::with($with)
+                ->where('store_id', current_store_id())
                 ->whereHas('order', function ($q) use ($user) {
                     $q->where('user_id', $user->id);
-                });
+                })
+                ->latest()
+                ->paginate(20);
         }
-        // admin: koi user_id filter nahi — saari customers ki returns
-
-        $requests = $query->latest()->paginate(20);
 
         return response()->json([
             'status' => true,
