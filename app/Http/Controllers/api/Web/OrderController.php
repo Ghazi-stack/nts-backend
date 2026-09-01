@@ -2625,7 +2625,7 @@ class OrderController extends Controller
                         'first_name'     => $formAddress['firstName'] ?? null,
                         'last_name'      => $formAddress['lastName'] ?? null,
                         'company_name'   => $formAddress['companyName'] ?? null,
-                        'phone'          => $formAddress['phone'] ?? null,
+                        'phone_number'   => $formAddress['phone'] ?? $customer->phone ?? '',
                         'address_line_1' => $formAddress['addressLine1'] ?? null,
                         'address_line_2' => $formAddress['addressLine2'] ?? null,
                         'city'           => $formAddress['city'] ?? null,
