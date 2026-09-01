@@ -420,6 +420,56 @@ class ProductController extends Controller
         }
     }
 
+    public function showProductsByIds(Request $request, $id = null)
+    {
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected.'
+            ], 400);
+        }
+
+        $ids = $id ?? $request->get('ids');
+
+        if (is_string($ids)) {
+            $ids = explode(',', $ids);
+        }
+
+        $ids = array_filter(array_map('intval', (array) $ids));
+
+        if (empty($ids)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Product id required.'
+            ], 422);
+        }
+
+        $products = Product::whereIn('id', $ids)
+            ->where('store_id', $storeId)
+            ->where('visible_on_storefront', 1)
+            ->with([
+                'brand:id,name,logo',
+                'images:id,product_id,path,is_primary',
+                'content',
+                'identifiers',
+                'seo'
+            ])
+            ->get();
+
+        if ($products->isEmpty()) {
+            return response()->json([
+                'status' => false,
+                'error' => 'Product not found'
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Product Retrieved',
+            'data' => ProductResource::collection($products)
+        ]);
+    }
     public function showProductByUrl($slug, Request $request)
     {
         $storeId = current_store_id();
@@ -1505,7 +1555,7 @@ class ProductController extends Controller
                     ]);
 
                     // ✅ Add to response
-                                      $updatedProducts[] = new ProductResource($product->load([
+                    $updatedProducts[] = new ProductResource($product->load([
                         'categories',
                         'content',
                         'seo',
@@ -1520,7 +1570,6 @@ class ProductController extends Controller
                 'message' => 'Products updated successfully.',
                 'data' => $updatedProducts,
             ]);
-            
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
