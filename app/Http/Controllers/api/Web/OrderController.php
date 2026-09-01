@@ -2482,12 +2482,15 @@ class OrderController extends Controller
 
                 'shippingMethod' => 'nullable|array',
                 'shippingMethod.provider' => 'nullable|string',
-                'shippingMethod.method' => 'nullable|string',
+                'shippingMethod.method' => 'nullable',
                 'shippingMethod.cost' => 'nullable|string',
                 'shippingMethod.data' => 'nullable|string',
             ]);
         } catch (ValidationException $e) {
-            return response()->json(['status' => false, 'errors' => $e->errors()], 422);
+            return response()->json([
+                'status' => false,
+                'errors' => $e->errors(),
+            ], 422);
         }
 
         try {
@@ -2521,12 +2524,19 @@ class OrderController extends Controller
 
             $comments   = $validated['comments'] ?? $billingInput['comments'] ?? null;
             $staffNotes = $validated['staffNotes'] ?? $billingInput['staffNotes'] ?? null;
-            $saveToAddressBook = (bool) ($formAddress['saveToAddressBook'] ?? $validated['isSaveAddressForBilling'] ?? false);
+            $saveToAddressBook = (bool) (
+                $formAddress['saveToAddressBook']
+                ?? $validated['isSaveAddressForBilling']
+                ?? false
+            );
 
-            $shippingMethod     = $validated['shippingMethod'] ?? [];
-            $shippingMethodName = ($shippingMethod['method'] ?? null) ?: ($shippingMethod['provider'] ?? null);
-            $shippingCost       = (float) ($shippingMethod['cost'] ?? 0);
-            $shippingData       = $shippingMethod['data'] ?? $shippingMethodName;
+            $shippingMethod   = $validated['shippingMethod'] ?? [];
+            $shippingMethodId = is_numeric($shippingMethod['method'] ?? null)
+                ? (int) $shippingMethod['method']
+                : null;
+            $shippingProvider = $shippingMethod['provider'] ?? null;
+            $shippingCost     = (float) ($shippingMethod['cost'] ?? 0);
+            $shippingData     = $shippingMethod['data'] ?? $shippingProvider;
 
             if (!empty($validated['shippingDestinations'])) {
                 $shippingDestinations = $validated['shippingDestinations'];
@@ -2541,6 +2551,7 @@ class OrderController extends Controller
 
             $ordersResponse = [];
             $requiresAction = null;
+            $intent = null;
 
             foreach ($shippingDestinations as $destination) {
                 $destAddress = $destination['address'] ?? $billingInformation;
@@ -2561,7 +2572,7 @@ class OrderController extends Controller
                     'zip'             => $destAddress['zip'] ?? null,
                     'country'         => $destAddress['country'] ?? null,
                     'payment_method'  => $validated['paymentMethod']['method'] ?? null,
-                    'shipping_method' => $shippingMethodName,
+                    'shipping_method' => $shippingProvider,
                     'shipping_data'   => $shippingData,
                 ], $user, $customer);
 
@@ -2597,12 +2608,11 @@ class OrderController extends Controller
                     'is_save_address_for_shipping' => $validated['isSaveAddressForShipping'] ?? false,
                     'newsletter'                   => $validated['newsletter'] ?? $validated['receiveOffers'] ?? false,
                     'shipping_cost'                => $shippingCost,
-                    'shipping_provider'            => $shippingMethod['provider'] ?? null,
-                    'shipping_method'              => $shippingMethodName,
+                    'shipping_provider'            => $shippingProvider,
+                    'shipping_method'              => $shippingMethodId,
                     'comments'                     => $comments,
                     'staff_notes'                  => $staffNotes,
                     'total_amount'                 => 0,
-                    'discount_amount'              => 0,
                     'billing_address'              => $billingAddressJson,
                 ]);
 
@@ -2623,6 +2633,7 @@ class OrderController extends Controller
                         'zip'            => $formAddress['zip'] ?? null,
                         'country'        => $formAddress['country'] ?? null,
                     ];
+
                     if (method_exists($customer, 'addresses')) {
                         $customer->addresses()->create($book);
                     } elseif (class_exists(\App\Models\CustomerAddress::class)) {
@@ -2634,6 +2645,7 @@ class OrderController extends Controller
                 foreach ($destination['products'] as $item) {
                     $product = Product::where('store_id', $storeId)->findOrFail($item['productId']);
                     $lineTotal = $product->price * $item['quantity'];
+
                     OrderItem::create([
                         'order_id'   => $order->id,
                         'product_id' => $product->id,
@@ -2642,11 +2654,14 @@ class OrderController extends Controller
                         'total'      => $lineTotal,
                         'store_id'   => $storeId,
                     ]);
+
                     $total += $lineTotal;
                 }
+
                 $order->update(['total_amount' => $total + $shippingCost]);
 
                 $paymentMethodId = $validated['paymentMethod']['paymentMethodId'] ?? null;
+                $intent = null;
 
                 if ($paymentMethodId) {
                     \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
@@ -2681,9 +2696,11 @@ class OrderController extends Controller
                     } else {
                         $riskScore = null;
                         $riskLevel = null;
+
                         $charge = $intent->latest_charge
                             ? \Stripe\Charge::retrieve($intent->latest_charge)
                             : null;
+
                         if ($charge && $charge->outcome) {
                             $riskScore = $charge->outcome->risk_score ?? null;
                             $riskLevel = $charge->outcome->risk_level ?? null;
@@ -2733,10 +2750,16 @@ class OrderController extends Controller
             ]);
         } catch (\Stripe\Exception\CardException $e) {
             DB::rollBack();
-            return response()->json(['status' => false, 'message' => $e->getError()->message], 402);
+            return response()->json([
+                'status'  => false,
+                'message' => $e->getError()->message,
+            ], 402);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+            return response()->json([
+                'status'  => false,
+                'message' => $e->getMessage(),
+            ], 500);
         }
     }
 
