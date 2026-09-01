@@ -14,5 +14,6 @@ class CouponUsage extends Model
         'session_id',
         'coupon_id',
         'coupon_code',
+        'email',
     ];
 }

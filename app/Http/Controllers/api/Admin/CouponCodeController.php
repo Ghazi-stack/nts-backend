@@ -170,8 +170,8 @@ class CouponCodeController extends Controller
         |--------------------------------------------------------------------------
         */
 
-           $userId = auth('sanctum')->id();
-
+            $user = auth('sanctum')->user();
+            $userId = $user?->id;
             $sessionId = null;
 
             if (!$userId) {
@@ -189,11 +189,19 @@ class CouponCodeController extends Controller
 
             if ($userId) {
 
-                // Logged-in user
-                $usageQuery->where('user_id', $userId);
+                // Logged-in user — user_id ya usi user ka email
+                $userEmail = strtolower(trim($user->email ?? ''));
+
+                $usageQuery->where(function ($q) use ($userId, $userEmail) {
+                    $q->where('user_id', $userId);
+
+                    if ($userEmail) {
+                        $q->orWhereRaw('LOWER(email) = ?', [$userEmail]);
+                    }
+                });
             } else {
 
-                // Guest user
+                // Guest — yahan email nahi aati, session se check
                 if (!$sessionId) {
 
                     return response()->json([

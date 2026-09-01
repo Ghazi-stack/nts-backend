@@ -852,6 +852,8 @@ class OrderController extends Controller
                 return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
             }
 
+            $orderEmail = strtolower(trim($validated['email']));
+
             // ===================== IMPROVED PAYMENT CHECK =====================
             $existingPayment = Payment::where('stripe_session_id', $validated['paymentIntentId'])->first();
 
@@ -881,7 +883,6 @@ class OrderController extends Controller
             if ($user) {
                 $customer = $user->customer;
             } else {
-                // Guest user — check if user exists with this email
                 $user = User::where('email', $validated['email'])->where('userRole', 2)->where('store_id', $storeId)->first();
                 if (!$user) {
                     $isGuest = true;
@@ -965,10 +966,17 @@ class OrderController extends Controller
 
                 /*
     |--------------------------------------------------------------------------
-    | Already Used
+    | Already Used — user/session OR same email
     |--------------------------------------------------------------------------
     */
-                if ($couponUsageQuery->exists()) {
+                $alreadyUsedByUserOrSession = $couponUsageQuery->exists();
+
+                $alreadyUsedByEmail = CouponUsage::where('store_id', $storeId)
+                    ->where('coupon_id', $coupon->id)
+                    ->whereRaw('LOWER(email) = ?', [$orderEmail])
+                    ->exists();
+
+                if ($alreadyUsedByUserOrSession || $alreadyUsedByEmail) {
 
                     return response()->json([
                         'status' => false,
@@ -979,7 +987,6 @@ class OrderController extends Controller
 
             // ===================== GUEST — NO USER CREATE, SEND ACCOUNT CREATE EMAIL =====================
             if ($isGuest) {
-                // Don't create user — just send account creation email
                 try {
                     $store = Store::find($storeId);
                     $frontendUrl = rtrim($store?->base_url ?? '#', '/');
@@ -1003,7 +1010,6 @@ class OrderController extends Controller
 
             // ===================== LOGGED IN USER (existing) =====================
             if (!$user && !$isGuest) {
-                // This case shouldn't happen but safety check
                 $user = User::where('email', $validated['email'])->first();
             }
 
@@ -1013,7 +1019,6 @@ class OrderController extends Controller
             $discount = $validated['discountAmount'] ?? 0;
             $isMulti = $validated['isMultiAddress'];
 
-            // Common order fields
             $commonOrderFields = [
                 'ip_address'                    => $validated['ipAddress'] ?? $request->ip(),
                 'is_save_address_for_shipping'  => $validated['isSaveAddressForShipping'] ?? false,
@@ -1022,7 +1027,6 @@ class OrderController extends Controller
             ];
 
             if (!$isMulti) {
-                // Single Address
                 $cartTotal = 0;
                 foreach ($validated['products'] as $item) {
                     $product = Product::find($item['product_id']);
@@ -1082,7 +1086,6 @@ class OrderController extends Controller
                             'price'      => $product->price,
                         ]);
 
-                        // Stock Decrease
                         $product->decrement('current_stock', $item['quantity']);
                     }
                 }
@@ -1090,7 +1093,6 @@ class OrderController extends Controller
                 $orders[] = $order;
                 $totalOrderAmount = $totalAmount;
             } else {
-                // Multi Address
                 foreach ($validated['destinations'] as $dest) {
                     $cartTotal = 0;
                     foreach ($dest['products'] as $item) {
@@ -1151,7 +1153,6 @@ class OrderController extends Controller
                                 'price'      => $product->price,
                             ]);
 
-                            // Stock Decrease
                             $product->decrement('current_stock', $item['quantity']);
                         }
                     }
@@ -1189,7 +1190,6 @@ class OrderController extends Controller
                 Log::warning('Could not fetch Stripe billing details: ' . $stripeEx->getMessage());
             }
 
-            // Save billing_address JSON in orders table
             if ($stripeBillingDetails) {
                 foreach ($orders as $ord) {
                     $ord->update(['billing_address' => $stripeBillingDetails]);
@@ -1233,7 +1233,6 @@ class OrderController extends Controller
                 ];
             }
 
-            // ===================== SAVE SINGLE RECORD =====================
             if (($shippingData || $billingData) && $user) {
                 SavedAddress::create([
                     'store_id'         => $storeId,
@@ -1244,7 +1243,7 @@ class OrderController extends Controller
                 ]);
             }
 
-            // ===================== PAYMENT (with risk data from Stripe) =====================
+            // ===================== PAYMENT =====================
             $riskData = [];
             try {
                 if (!isset($stripeIntent)) {
@@ -1274,21 +1273,18 @@ class OrderController extends Controller
                 'payment_status'     => 'authorized',
             ], $riskData));
 
-            // ===================== SAVE COUPON USAGE =====================
+            // ===================== SAVE COUPON USAGE (EMAIL) =====================
             if ($coupon) {
-
-                $couponUsageData = [
+                CouponUsage::create([
                     'store_id'    => $storeId,
                     'user_id'     => $user?->id ?? null,
-                    'session_id'  => $user
-                        ? null
-                        : $request->header('X-Session-ID'),
+                    'session_id'  => $user ? null : $request->header('X-Session-ID'),
                     'coupon_id'   => $coupon->id,
                     'coupon_code' => $coupon->couponCode,
-                ];
-
-                CouponUsage::create($couponUsageData);
+                    'email'       => $orderEmail,
+                ]);
             }
+
             // ===================== TIMELINE EVENTS =====================
             foreach ($orders as $ord) {
                 $ord->load('billingInformation');
@@ -1316,7 +1312,6 @@ class OrderController extends Controller
                 ], 'payment');
             }
 
-            // Response
             foreach ($orders as $order) {
                 $order->load('items.product.images', 'billingInformation', 'customer');
             }
@@ -1326,10 +1321,8 @@ class OrderController extends Controller
                 foreach ($orders as $ord) {
                     $ord->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
 
-                    // Email to customer
                     Mail::to($validated['email'])->send(new OrderPlacedMail($ord, $customer, $storeId));
 
-                    // Email to admin
                     $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
                     Mail::to($adminEmail)->send(new OrderPlacedMail($ord, $customer, $storeId));
                 }

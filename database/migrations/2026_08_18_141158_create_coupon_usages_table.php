@@ -26,11 +26,15 @@ return new class extends Migration
             $table->unsignedBigInteger('coupon_id');
             $table->string('coupon_code');
 
+            // Order email (guest + login dono)
+            $table->string('email')->nullable();
+
             $table->timestamps();
 
             $table->index(['store_id', 'user_id']);
             $table->index(['store_id', 'session_id']);
             $table->index(['store_id', 'coupon_id']);
+            $table->index(['store_id', 'coupon_id', 'email']);
 
             $table->foreign('coupon_id')
                 ->references('id')
