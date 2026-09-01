@@ -145,25 +145,12 @@ class ReviewController extends Controller
             ], 400);
         }
 
-        $productIds = $request->input('productId');
-
-        if (!is_array($productIds)) {
-            $productIds = is_string($productIds)
-                ? array_filter(array_map('trim', explode(',', $productIds)))
-                : [$productIds];
-        }
-
-        $productIds = array_values(array_unique(array_filter(array_map('intval', $productIds))));
-
-        $request->merge(['productIds' => $productIds]);
-
         $request->validate([
-            'productIds'   => 'required|array|min:1',
-            'productIds.*' => 'integer|exists:products,id',
+            'productId' => 'required|integer|exists:products,id',
         ]);
 
         $reviews = Review::where('store_id', $storeId)
-            ->whereIn('product_id', $productIds)
+            ->where('product_id', $request->productId)
             ->where('approved', 1)
             ->latest()
             ->get();
