@@ -2601,7 +2601,7 @@ class OrderController extends Controller
                     'is_draft'                     => $validated['isDraft'] ?? false,
                     'device_type'                  => $validated['deviceType'] ?? null,
                     'channel'                      => 'admin-panel',
-                    'user_type'                    => $validated['userType'] ?? $customer->user_type ?? null,
+                    //'user_type'                    => $validated['userType'] ?? $customer->user_type ?? null,
                     'ip_address'                   => $request->ip(),
                     'billing_same'                 => $billingSame,
                     'is_save_address_for_billing'  => $saveToAddressBook,
