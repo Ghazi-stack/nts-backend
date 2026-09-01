@@ -219,6 +219,9 @@ class OrderController extends Controller
                     'createdAt' => $order->created_at,
                     'updatedAt' => $order->updated_at,
 
+                    // order table ka JSON column — poora array/object yahan aayega
+                    'billingAddress' => $order->billing_address,
+
                     'customer' => $order->customer ? [
                         'id' => $order->customer->id,
                         'storeId' => $order->customer->store_id,
