@@ -547,7 +547,7 @@ Route::prefix('web')->group(function () {
         Route::get('/popular-products', 'popularProducts');
         Route::get('/last-week-orders', 'lastWeekOrderedProducts');
         Route::get('/last-week-product', 'lastWeekProducts');
-        Route::get('products/by-ids/{id?}', 'showProductsByIds')
+        Route::get('/product-byIds/{id?}', 'showProductsByIds')
         ->where('id', '[0-9]+');
     });
     // 🛒 Cart (Guest + Auth dono)
