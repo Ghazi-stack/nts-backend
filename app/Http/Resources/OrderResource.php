@@ -55,7 +55,8 @@ class OrderResource extends JsonResource
                 ? new BillingInformationResource($this->billingInformation)
                 : null,
 
-            'billingAddress' => $this->billing_address,
+            'billingAddress' => $this->resolveBillingAddress(),
+
 
             'notes' => $this->whenLoaded('notes', function () {
                 return $this->notes->pluck('note');
@@ -189,6 +190,51 @@ class OrderResource extends JsonResource
 
             'createdAt' => $this->created_at?->toDateTimeString(),
             'updatedAt' => $this->updated_at?->toDateTimeString(),
+        ];
+    }
+
+    protected function resolveBillingAddress(): ?array
+    {
+        $saved = $this->billing_address;
+        if (is_string($saved)) {
+            $saved = json_decode($saved, true);
+        }
+        if (is_array($saved) && collect($saved)->filter(fn($v) => $v !== null && $v !== '')->isNotEmpty()) {
+            return $this->mapBillingAddress($saved);
+        }
+        $info = $this->billingInformation;
+        if (!$info) {
+            return null;
+        }
+        return $this->mapBillingAddress([
+            'name'         => trim(($info->first_name ?? '') . ' ' . ($info->last_name ?? '')),
+            'email'        => $info->email,
+            'phone'        => $info->phone,
+            'addressLine1' => $info->address_line_1,
+            'addressLine2' => $info->address_line_2,
+            'city'         => $info->city,
+            'state'        => $info->state,
+            'zip'          => $info->zip,
+            'country'      => $info->country,
+        ]);
+    }
+
+    protected function mapBillingAddress($address): array
+    {
+        $first = data_get($address, 'first_name', data_get($address, 'firstName'));
+        $last  = data_get($address, 'last_name', data_get($address, 'lastName'));
+        $name  = data_get($address, 'name') ?: trim(($first ?? '') . ' ' . ($last ?? ''));
+
+        return [
+            'name'         => $name ?: null,
+            'email'        => data_get($address, 'email'),
+            'phone'        => data_get($address, 'phone'),
+            'addressLine1' => data_get($address, 'address_line_1', data_get($address, 'addressLine1')),
+            'addressLine2' => data_get($address, 'address_line_2', data_get($address, 'addressLine2')),
+            'city'         => data_get($address, 'city'),
+            'state'        => data_get($address, 'state'),
+            'zip'          => data_get($address, 'zip'),
+            'country'      => data_get($address, 'country'),
         ];
     }
 }

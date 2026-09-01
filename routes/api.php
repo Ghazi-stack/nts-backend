@@ -530,7 +530,7 @@ Route::prefix('web')->group(function () {
     Route::prefix('brands')->controller(BrandController::class)->group(function () {
         Route::get('/brands', 'index');
         Route::get('/brands/{id}', 'showBrands');
-    });
+    }); 
     // 🏷️ Public Brands
     Route::prefix('webpages')->controller(WebPageController::class)->group(function () {
         Route::get('/web-pages', 'index');
