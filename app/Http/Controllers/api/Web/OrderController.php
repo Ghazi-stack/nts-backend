@@ -3128,243 +3128,239 @@ class OrderController extends Controller
     }
 
 
-   public function storeNewCustomerOrder(Request $request)
-{
-    $storeId = current_store_id();
+    public function storeNewCustomerOrder(Request $request)
+    {
+        $storeId = current_store_id();
 
-    $validated = $request->validate([
-        'email' => 'required|email|unique:customers,email',
-        'password' => 'required|string|min:6|confirmed',
-        'firstName' => 'required|string|max:255',
-        'lastName' => 'required|string|max:255',
-        'companyName' => 'nullable|string|max:255',
-        'phone' => 'nullable|string|max:20',
-        'receiveOffers' => 'nullable|boolean',
-        'customerGroup' => 'nullable|string|max:255',
-        'comments' => 'nullable|string|max:1000',
-        'staffNotes' => 'nullable|string|max:1000',
-        'isDraft' => 'nullable|boolean',
-        'deviceType' => 'nullable|string|max:255',
+        $validated = $request->validate([
+            'email' => 'required|email|unique:customers,email',
+            'password' => 'required|string|min:6|confirmed',
+            'firstName' => 'required|string|max:255',
+            'lastName' => 'required|string|max:255',
+            'companyName' => 'nullable|string|max:255',
+            'phone' => 'nullable|string|max:20',
+            'receiveOffers' => 'nullable|boolean',
+            'customerGroup' => 'nullable|string|max:255',
+            'comments' => 'nullable|string|max:1000',
+            'staffNotes' => 'nullable|string|max:1000',
+            'isDraft' => 'nullable|boolean',
+            'deviceType' => 'nullable|string|max:255',
 
-        'billingAddress' => 'nullable|array',
-        'billingAddress.firstName' => 'nullable|string|max:255',
-        'billingAddress.lastName' => 'nullable|string|max:255',
-        'billingAddress.email' => 'nullable|email',
-        'billingAddress.phone' => 'nullable|string|max:20',
-        'billingAddress.companyName' => 'nullable|string|max:255',
-        'billingAddress.addressLine1' => 'nullable|string|max:255',
-        'billingAddress.addressLine2' => 'nullable|string|max:255',
-        'billingAddress.city' => 'nullable|string|max:100',
-        'billingAddress.state' => 'nullable|string|max:100',
-        'billingAddress.zip' => 'nullable|string|max:20',
-        'billingAddress.country' => 'nullable|string|max:100',
-        'billingAddress.saveToAddressBook' => 'nullable|boolean',
+            'billingAddress' => 'nullable|array',
+            'billingAddress.firstName' => 'nullable|string|max:255',
+            'billingAddress.lastName' => 'nullable|string|max:255',
+            'billingAddress.email' => 'nullable|email',
+            'billingAddress.phone' => 'nullable|string|max:20',
+            'billingAddress.companyName' => 'nullable|string|max:255',
+            'billingAddress.addressLine1' => 'nullable|string|max:255',
+            'billingAddress.addressLine2' => 'nullable|string|max:255',
+            'billingAddress.city' => 'nullable|string|max:100',
+            'billingAddress.state' => 'nullable|string|max:100',
+            'billingAddress.zip' => 'nullable|string|max:20',
+            'billingAddress.country' => 'nullable|string|max:100',
+            'billingAddress.saveToAddressBook' => 'nullable|boolean',
 
-        'billingInformation' => 'required|array',
-        'billingInformation.firstName' => 'nullable|string|max:255',
-        'billingInformation.lastName' => 'nullable|string|max:255',
-        'billingInformation.phone' => 'nullable|string|max:20',
-        'billingInformation.companyName' => 'nullable|string|max:255',
-        'billingInformation.addressLine1' => 'nullable|string|max:255',
-        'billingInformation.addressLine2' => 'nullable|string|max:255',
-        'billingInformation.city' => 'nullable|string|max:100',
-        'billingInformation.state' => 'nullable|string|max:100',
-        'billingInformation.zip' => 'nullable|string|max:20',
-        'billingInformation.country' => 'nullable|string|max:100',
-        'billingInformation.email' => 'nullable|email',
-        'billingInformation.paymentMethod' => 'nullable|string',
-        'billingInformation.shippingMethod' => 'nullable|string',
+            'billingInformation' => 'required|array',
+            'billingInformation.firstName' => 'nullable|string|max:255',
+            'billingInformation.lastName' => 'nullable|string|max:255',
+            'billingInformation.phone' => 'nullable|string|max:20',
+            'billingInformation.companyName' => 'nullable|string|max:255',
+            'billingInformation.addressLine1' => 'nullable|string|max:255',
+            'billingInformation.addressLine2' => 'nullable|string|max:255',
+            'billingInformation.city' => 'nullable|string|max:100',
+            'billingInformation.state' => 'nullable|string|max:100',
+            'billingInformation.zip' => 'nullable|string|max:20',
+            'billingInformation.country' => 'nullable|string|max:100',
+            'billingInformation.email' => 'nullable|email',
+            'billingInformation.paymentMethod' => 'nullable|string',
+            'billingInformation.shippingMethod' => 'nullable|string',
 
-        'paymentMethod' => 'nullable|array',
-        'paymentMethod.method' => 'nullable|string',
-        'paymentMethod.paymentMethodId' => 'nullable|string',
-        'paymentMethod.emailInvoice' => 'nullable|boolean',
+            'paymentMethod' => 'nullable|array',
+            'paymentMethod.method' => 'nullable|string',
+            'paymentMethod.paymentMethodId' => 'nullable|string',
+            'paymentMethod.emailInvoice' => 'nullable|boolean',
 
-        'products' => 'required|array|min:1',
-        'products.*.productId' => 'required|exists:products,id',
-        'products.*.quantity' => 'required|integer|min:1',
+            'products' => 'required|array|min:1',
+            'products.*.productId' => 'required|exists:products,id',
+            'products.*.quantity' => 'required|integer|min:1',
 
-        'shippingDestinations' => 'nullable|array',
-        'shippingDestinations.*.address' => 'required|array',
-        'shippingDestinations.*.products' => 'required|array',
+            'shippingDestinations' => 'nullable|array',
+            'shippingDestinations.*.address' => 'required|array',
+            'shippingDestinations.*.products' => 'required|array',
 
-        'shippingMethod' => 'nullable|array',
-        'shippingMethod.provider' => 'nullable|string',
-        'shippingMethod.cost' => 'nullable|string',
-        'shippingMethod.method' => 'nullable',
-        'shippingMethod.data' => 'nullable|string',
-    ]);
-
-    try {
-        DB::beginTransaction();
-
-        $user = auth('sanctum')->user();
-
-        $customer = Customer::create([
-            'store_id'              => $storeId,
-            'first_name'            => $validated['firstName'],
-            'last_name'             => $validated['lastName'],
-            'company_name'          => $validated['companyName'] ?? null,
-            'phone'                 => $validated['phone'] ?? null,
-            'email'                 => $validated['email'],
-            'password'              => bcrypt($validated['password']),
-            'customer_group'        => $validated['customerGroup'] ?? null,
-            'receive_review_emails' => $validated['receiveOffers'] ?? true,
+            'shippingMethod' => 'nullable|array',
+            'shippingMethod.provider' => 'nullable|string',
+            'shippingMethod.cost' => 'nullable|string',
+            'shippingMethod.method' => 'nullable',
+            'shippingMethod.data' => 'nullable|string',
         ]);
 
-        $formAddress  = $validated['billingAddress'] ?? [];
-        $billingInput = $validated['billingInformation'];
+        try {
+            DB::beginTransaction();
 
-        $shippingMethod   = $validated['shippingMethod'] ?? [];
-        $shippingMethodId = is_numeric($shippingMethod['method'] ?? null)
-            ? (int) $shippingMethod['method']
-            : null;
-        $shippingProvider = $shippingMethod['provider'] ?? null;
-        $shippingCost     = (float) ($shippingMethod['cost'] ?? 0);
-        $shippingData     = $shippingMethod['data'] ?? $billingInput['shippingMethod'] ?? $shippingProvider;
+            $user = auth('sanctum')->user();
 
-        $shippingDestinations = $validated['shippingDestinations'] ?? [];
-        if (empty($shippingDestinations)) {
-            $shippingDestinations = [[
-                'address'    => $billingInput,
-                'products'   => $validated['products'],
-                'staffNotes' => '',
-            ]];
-        }
-
-        $orders = [];
-
-        foreach ($shippingDestinations as $destination) {
-            $address  = $destination['address'] ?? $billingInput;
-            $products = $destination['products'] ?? $validated['products'];
-
-            $billing = $this->saveBillingInformation([
-                'store_id'        => $storeId,
-                'customer_id'     => $customer->id,
-                'user_id'         => $user?->id,
-                'first_name'      => $address['firstName'] ?? null,
-                'last_name'       => $address['lastName'] ?? null,
-                'company_name'    => $address['companyName'] ?? null,
-                'email'           => $address['email'] ?? $customer->email,
-                'phone'           => $address['phone'] ?? null,
-                'address_line_1'  => $address['addressLine1'] ?? null,
-                'address_line_2'  => $address['addressLine2'] ?? null,
-                'city'            => $address['city'] ?? null,
-                'state'           => $address['state'] ?? null,
-                'zip'             => $address['zip'] ?? null,
-                'country'         => $address['country'] ?? null,
-                'payment_method'  => $validated['paymentMethod']['method'] ?? $address['paymentMethod'] ?? null,
-                'shipping_method' => $shippingProvider ?? $address['shippingMethod'] ?? null,
-                'shipping_data'   => $shippingData,
-            ], $user, $customer);
-
-            $src = !empty($formAddress) ? $formAddress : $address;
-            $first = $src['firstName'] ?? $customer->first_name;
-            $last  = $src['lastName'] ?? $customer->last_name;
-
-            $billingAddressJson = [
-                'name'         => trim(($first ?? '') . ' ' . ($last ?? '')) ?: null,
-                'firstName'    => $first,
-                'lastName'     => $last,
-                'companyName'  => $src['companyName'] ?? $customer->company_name,
-                'email'        => $src['email'] ?? $customer->email,
-                'phone'        => $src['phone'] ?? $customer->phone,
-                'addressLine1' => $src['addressLine1'] ?? null,
-                'addressLine2' => $src['addressLine2'] ?? null,
-                'city'         => $src['city'] ?? null,
-                'state'        => $src['state'] ?? null,
-                'zip'          => $src['zip'] ?? null,
-                'country'      => $src['country'] ?? null,
-            ];
-
-            $order = Order::create([
-                'store_id'                     => $storeId,
-                'customer_id'                  => $customer->id,
-                'user_id'                      => $user?->id,
-                'billing_information_id'       => $billing->id,
-                'order_number'                 => '',
-                'status'                       => 'Awaiting Payment',
-                'is_draft'                     => $validated['isDraft'] ?? false,
-                'device_type'                  => $validated['deviceType'] ?? null,
-                'channel'                      => 'admin-panel',
-                'ip_address'                   => $request->ip(),
-                'billing_same'                 => empty($validated['shippingDestinations']),
-                'is_save_address_for_billing'  => (bool) ($formAddress['saveToAddressBook'] ?? false),
-                'shipping_cost'                => $shippingCost,
-                'shipping_provider'            => $shippingProvider,
-                'shipping_method'              => $shippingMethodId,
-                'comments'                     => $validated['comments'] ?? null,
-                'staff_notes'                  => $validated['staffNotes'] ?? $destination['staffNotes'] ?? null,
-                'total_amount'                 => 0,
-                'billing_address'              => $billingAddressJson,
+            $customer = Customer::create([
+                'store_id'              => $storeId,
+                'first_name'            => $validated['firstName'],
+                'last_name'             => $validated['lastName'],
+                'company_name'          => $validated['companyName'] ?? null,
+                'phone'                 => $validated['phone'] ?? null,
+                'email'                 => $validated['email'],
+                'password'              => bcrypt($validated['password']),
+                'customer_group'        => $validated['customerGroup'] ?? null,
+                'receive_review_emails' => $validated['receiveOffers'] ?? true,
             ]);
 
-            $order->update(['order_number' => $order->id]);
+            $formAddress  = $validated['billingAddress'] ?? [];
+            $billingInput = $validated['billingInformation'];
 
-            $total = 0;
-            foreach ($products as $item) {
-                $product   = Product::where('store_id', $storeId)->findOrFail($item['productId']);
-                $qty       = $item['quantity'];
-                $lineTotal = $product->price * $qty;
+            $shippingMethod   = $validated['shippingMethod'] ?? [];
+            $shippingMethodId = is_numeric($shippingMethod['method'] ?? null)
+                ? (int) $shippingMethod['method']
+                : null;
+            $shippingProvider = $shippingMethod['provider'] ?? null;
+            $shippingCost     = (float) ($shippingMethod['cost'] ?? 0);
+            $shippingData     = $shippingMethod['data'] ?? $billingInput['shippingMethod'] ?? $shippingProvider;
 
-                OrderItem::create([
-                    'order_id'   => $order->id,
-                    'product_id' => $product->id,
-                    'quantity'   => $qty,
-                    'price'      => $product->price,
-                    'total'      => $lineTotal,
-                    'store_id'   => $storeId,
+            $shippingDestinations = $validated['shippingDestinations'] ?? [];
+            if (empty($shippingDestinations)) {
+                $shippingDestinations = [[
+                    'address'    => $billingInput,
+                    'products'   => $validated['products'],
+                    'staffNotes' => '',
+                ]];
+            }
+
+            $orders = [];
+
+            foreach ($shippingDestinations as $destination) {
+                $address  = $destination['address'] ?? $billingInput;
+                $products = $destination['products'] ?? $validated['products'];
+
+                $billing = $this->saveBillingInformation([
+                    'store_id'        => $storeId,
+                    'customer_id'     => $customer->id,
+                    'user_id'         => $user?->id,
+                    'first_name'      => $address['firstName'] ?? null,
+                    'last_name'       => $address['lastName'] ?? null,
+                    'company_name'    => $address['companyName'] ?? null,
+                    'email'           => $address['email'] ?? $customer->email,
+                    'phone'           => $address['phone'] ?? null,
+                    'address_line_1'  => $address['addressLine1'] ?? null,
+                    'address_line_2'  => $address['addressLine2'] ?? null,
+                    'city'            => $address['city'] ?? null,
+                    'state'           => $address['state'] ?? null,
+                    'zip'             => $address['zip'] ?? null,
+                    'country'         => $address['country'] ?? null,
+                    'payment_method'  => $validated['paymentMethod']['method'] ?? $address['paymentMethod'] ?? null,
+                    'shipping_method' => $shippingProvider ?? $address['shippingMethod'] ?? null,
+                    'shipping_data'   => $shippingData,
+                ], $user, $customer);
+
+                $src = !empty($formAddress) ? $formAddress : $address;
+                $first = $src['firstName'] ?? $customer->first_name;
+                $last  = $src['lastName'] ?? $customer->last_name;
+
+                $billingAddressJson = [
+                    'name'         => trim(($first ?? '') . ' ' . ($last ?? '')) ?: null,
+                    'firstName'    => $first,
+                    'lastName'     => $last,
+                    'companyName'  => $src['companyName'] ?? $customer->company_name,
+                    'email'        => $src['email'] ?? $customer->email,
+                    'phone'        => $src['phone'] ?? $customer->phone,
+                    'addressLine1' => $src['addressLine1'] ?? null,
+                    'addressLine2' => $src['addressLine2'] ?? null,
+                    'city'         => $src['city'] ?? null,
+                    'state'        => $src['state'] ?? null,
+                    'zip'          => $src['zip'] ?? null,
+                    'country'      => $src['country'] ?? null,
+                ];
+
+                $order = Order::create([
+                    'store_id'                     => $storeId,
+                    'customer_id'                  => $customer->id,
+                    'user_id'                      => $user?->id,
+                    'billing_information_id'       => $billing->id,
+                    'order_number'                 => '',
+                    'status'                       => 'Awaiting Payment',
+                    'is_draft'                     => $validated['isDraft'] ?? false,
+                    'device_type'                  => $validated['deviceType'] ?? null,
+                    'channel'                      => 'admin-panel',
+                    'ip_address'                   => $request->ip(),
+                    'billing_same'                 => empty($validated['shippingDestinations']),
+                    'is_save_address_for_billing'  => (bool) ($formAddress['saveToAddressBook'] ?? false),
+                    'shipping_cost'                => $shippingCost,
+                    'shipping_provider'            => $shippingProvider,
+                    'shipping_method'              => $shippingMethodId,
+                    'comments'                     => $validated['comments'] ?? null,
+                    'staff_notes'                  => $validated['staffNotes'] ?? $destination['staffNotes'] ?? null,
+                    'total_amount'                 => 0,
+                    'billing_address'              => $billingAddressJson,
                 ]);
 
-                $product->increment('sold_count', $qty);
-                $total += $lineTotal;
+                $order->update(['order_number' => $order->id]);
+
+                $total = 0;
+                foreach ($products as $item) {
+                    $product   = Product::where('store_id', $storeId)->findOrFail($item['productId']);
+                    $qty       = $item['quantity'];
+                    $lineTotal = $product->price * $qty;
+
+                    OrderItem::create([
+                        'order_id'   => $order->id,
+                        'product_id' => $product->id,
+                        'quantity'   => $qty,
+                        'price'      => $product->price,
+                        'total'      => $lineTotal,
+                        'store_id'   => $storeId,
+                    ]);
+
+                    $product->increment('sold_count', $qty);
+                    $total += $lineTotal;
+                }
+
+                $order->update(['total_amount' => $total + $shippingCost]);
+
+                $orders[] = [
+                    'order'       => $order,
+                    'destination' => $destination,
+                ];
             }
 
-            $order->update(['total_amount' => $total + $shippingCost]);
+            DB::commit();
 
-            $orders[] = [
-                'order'       => $order,
-                'destination' => $destination,
-            ];
-        }
+            $ordersResponse = [];
+            foreach ($orders as $entry) {
+                $order = $entry['order'];
+                $orderData = [
+                    'id'          => $order->id,
+                    'orderNumber' => $order->order_number,
+                    'status'      => $order->status,
+                    'totalAmount' => $order->total_amount,
+                ];
+                $ordersResponse[] = $orderData;
 
-        DB::commit();
-
-        $ordersResponse = [];
-        foreach ($orders as $entry) {
-            $order = $entry['order'];
-            $orderData = [
-                'id'          => $order->id,
-                'orderNumber' => $order->order_number,
-                'status'      => $order->status,
-                'totalAmount' => $order->total_amount,
-            ];
-            $ordersResponse[] = $orderData;
-
-            $email = $entry['destination']['address']['email'] ?? $customer->email;
-            if ($email) {
-                Mail::to($email)->send(new OrderPlacedMail($orderData, $customer));
+                $email = $entry['destination']['address']['email'] ?? $customer->email;
+                if ($email) {
+                    Mail::to($email)->send(new OrderPlacedMail($orderData, $customer));
+                }
             }
-        }
 
-        return response()->json([
-            'status'  => true,
-            'message' => 'New customer created and orders placed successfully.',
-            'orders'  => $ordersResponse,
-        ]);
-    } catch (\Exception $e) {
-        DB::rollBack();
-        return response()->json([
-            'status'  => false,
-            'message' => 'Order creation failed.',
-            'error'   => $e->getMessage(),
-        ], 500);
+            return response()->json([
+                'status'  => true,
+                'message' => 'New customer created and orders placed successfully.',
+                'orders'  => $ordersResponse,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status'  => false,
+                'message' => 'Order creation failed.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
     }
-}
-
-
-
-
 
     // public function updateFromDashboard(Request $request, $id)
     // {
