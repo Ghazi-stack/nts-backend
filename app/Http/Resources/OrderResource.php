@@ -207,7 +207,9 @@ class OrderResource extends JsonResource
             return null;
         }
         return $this->mapBillingAddress([
-            'name'         => trim(($info->first_name ?? '') . ' ' . ($info->last_name ?? '')),
+            'firstName'    => $info->first_name,
+            'lastName'     => $info->last_name,
+            'companyName'  => $info->company_name,
             'email'        => $info->email,
             'phone'        => $info->phone,
             'addressLine1' => $info->address_line_1,
@@ -227,6 +229,9 @@ class OrderResource extends JsonResource
 
         return [
             'name'         => $name ?: null,
+            'firstName'    => $first,
+            'lastName'     => $last,
+            'companyName'  => data_get($address, 'company_name', data_get($address, 'companyName')),
             'email'        => data_get($address, 'email'),
             'phone'        => data_get($address, 'phone'),
             'addressLine1' => data_get($address, 'address_line_1', data_get($address, 'addressLine1')),

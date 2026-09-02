@@ -2579,9 +2579,12 @@ class OrderController extends Controller
 
                 $addressName = $formAddress['name']
                     ?? trim(($formAddress['firstName'] ?? '') . ' ' . ($formAddress['lastName'] ?? ''));
-
+                    
                 $billingAddressJson = [
                     'name'         => $addressName ?: null,
+                    'firstName'    => $formAddress['firstName'] ?? $destAddress['firstName'] ?? null,
+                    'lastName'     => $formAddress['lastName'] ?? $destAddress['lastName'] ?? null,
+                    'companyName'  => $formAddress['companyName'] ?? $destAddress['companyName'] ?? null,
                     'email'        => $formAddress['email'] ?? $destAddress['email'] ?? $customer->email ?? null,
                     'phone'        => $formAddress['phone'] ?? $destAddress['phone'] ?? null,
                     'addressLine1' => $formAddress['addressLine1'] ?? $destAddress['addressLine1'] ?? null,
