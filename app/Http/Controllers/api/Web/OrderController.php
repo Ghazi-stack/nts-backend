@@ -334,6 +334,7 @@ class OrderController extends Controller
                 "customerGroup" => $customer->customer_group ?? null,
                 "receiveOffers" => $customer->receive_review_emails ?? null,
                 "customer" => $customer ? new CustomerResource($customer) : null,
+                "billingAddress" => $order->billing_address,
                 "billingInformation" => [
                     "firstName" => $order->billingInformation->first_name ?? null,
                     "lastName" => $order->billingInformation->last_name ?? null,

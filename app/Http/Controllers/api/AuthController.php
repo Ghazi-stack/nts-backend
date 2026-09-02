@@ -68,7 +68,7 @@ class AuthController extends Controller
                 'firstName'     => 'required|string|max:100',
                 'lastName'      => 'nullable|string|max:100',
                 'email'         => $emailRules,
-                'phoneNumber'   => 'nullable|string|max:20|unique:customers,phone',
+                'phoneNumber'   => 'nullable|string|max:20',
                 'password'      => $isSubUser ? 'nullable|string|min:6' : 'required|string|min:6',
                 'companyName'   => 'nullable|string|max:255',
                 'addressLine1'  => 'nullable|string|max:255',
