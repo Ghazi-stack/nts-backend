@@ -112,6 +112,12 @@ class ProductController extends Controller
                     'brand_id',
                     'current_stock',
                     'is_featured',
+                    'sale_price',
+                    'free_shipping',
+                    'track_inventory',
+                    'low_stock',
+                    'price',
+                    'allow_purchase',
                     'visible_on_storefront',
                     'store_id'
                 ])
@@ -121,7 +127,7 @@ class ProductController extends Controller
                 $query->where('is_featured', $request->boolean('isFeatured'));
             }
             if ($request->has('freeShipping')) {
-                $query->where('show_shipping', $request->boolean('freeShipping'));
+                $query->where('free_shipping', $request->boolean('freeShipping'));
             }
 
             if ($request->has('outOfStock') && $request->boolean('outOfStock')) {

@@ -27,8 +27,15 @@ class ProductListResource extends JsonResource
             // Only primary image
             'image' => ProductImageResource::collection($this->whenLoaded('images')),
 
-            // Stock & visibility
-            'currentStock' => $this->current_stock,
+            // Stock & visibility    
+
+            'salePrice' => $this->sale_price,
+            'freeShipping' => $this->free_shipping,
+            'trackInventory' => $this->track_inventory,
+            'lowStock' => $this->low_stock,
+            'Price' => $this->price,
+            'allowPurchase' => $this->allow_purchase,
+        
             'callPricing' => $this->call_pricing,
             'isFeatured'   => $this->is_featured,
             'isVisible'    => $this->visible_on_storefront,
