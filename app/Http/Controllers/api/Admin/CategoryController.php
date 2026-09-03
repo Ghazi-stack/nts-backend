@@ -124,11 +124,10 @@ class CategoryController extends Controller
 
         $directProducts = (int) ($category->products_count ?? 0);
 
+        // sirf children ke products, khud ke nahi
         $inSubcategories = (int) $subcategories->sum(function ($child) {
-            return ($child['direct_products'] ?? 0) + ($child['in_subcategories'] ?? 0);
+            return (int) ($child['direct_products'] ?? 0) + (int) ($child['in_subcategories'] ?? 0);
         });
-
-        $totalProducts = $directProducts + $inSubcategories;
 
         return [
             'id' => $category->id,
@@ -147,8 +146,8 @@ class CategoryController extends Controller
             ],
 
             'direct_products'  => $directProducts,
-            'total_products'   => $totalProducts,
-            'in_subcategories' => $inSubcategories > 0 ? $inSubcategories : null,
+            'total_products'   => $directProducts + $inSubcategories,
+            'in_subcategories' => $inSubcategories,
 
             'subcategories' => $subcategories,
         ];

@@ -46,14 +46,13 @@ class Category extends Model
 
     public function children()
     {
-        return $this->hasMany(Category::class, 'parent_id');
+        return $this->hasMany(Category::class, 'parent_id')
+            ->withCount('products');
     }
 
     public function childrenRecursive()
     {
-        return $this->hasMany(Category::class, 'parent_id')
-            ->withCount('products')
-            ->with('childrenRecursive');
+        return $this->children()->with('childrenRecursive');
     }
     // ✅ Many-to-many: Categories ↔ Products
     public function products()
