@@ -60,12 +60,11 @@ class CategoryController extends Controller
         $this->visited = [];
 
         $categories = Category::with(['childrenRecursive'])
-            ->withCount('products') // direct products
+            ->withCount('products')
             ->where('store_id', $storeId)
             ->whereNull('parent_id')
             ->get();
 
-        // Har category ke liye recursive product count calculate karo
         $data = $categories->map(function ($category) {
             return $this->formatCategorySafe($category, false);
         })->filter()->values();
@@ -118,19 +117,17 @@ class CategoryController extends Controller
             return null;
         }
 
-        // Subcategories pehle format karo
         $subcategories = $category->childrenRecursive
             ->map(fn($child) => $this->formatCategorySafe($child, $onlyVisible))
             ->filter()
             ->values();
 
-        // Direct products
-        $directProducts = $category->products_count ?? 0;
+        $directProducts = (int) ($category->products_count ?? 0);
 
-        // Subcategories ke total products ka sum
-        $inSubcategories = $subcategories->sum('total_products');
+        $inSubcategories = (int) $subcategories->sum(function ($child) {
+            return ($child['direct_products'] ?? 0) + ($child['in_subcategories'] ?? 0);
+        });
 
-        // Total = direct + subcategories
         $totalProducts = $directProducts + $inSubcategories;
 
         return [
@@ -149,9 +146,9 @@ class CategoryController extends Controller
                 'search_keywords'  => $category->seo_search_keywords,
             ],
 
-            'direct_products'   => $directProducts,
-            'total_products'    => $totalProducts,
-            'in_subcategories'  => $inSubcategories,
+            'direct_products'  => $directProducts,
+            'total_products'   => $totalProducts,
+            'in_subcategories' => $inSubcategories > 0 ? $inSubcategories : null,
 
             'subcategories' => $subcategories,
         ];
