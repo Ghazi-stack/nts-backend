@@ -19,6 +19,7 @@ class ReviewResource extends JsonResource
             'product' => [
                 'id'   => $this->product_id,
                 'name' => $this->product?->name,
+                'product_url' => $this->product?->seo?->product_url,
             ],
 
             'rating'     => $this->rating,

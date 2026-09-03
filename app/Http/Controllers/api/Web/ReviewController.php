@@ -103,7 +103,7 @@ class ReviewController extends Controller
         $perPage = (int) $request->input('perPage', 50);
         $keyword = $request->query('keyword');
 
-        $query = Review::with(['user', 'product'])
+        $query = Review::with(['user', 'product.seo'])
             ->where('store_id', current_store_id())
             ->latest();
 
