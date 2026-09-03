@@ -576,7 +576,7 @@ class ProductController extends Controller
                 'sku' => 'nullable|string|unique:products,sku,NULL,id,store_id,' . $storeId,
                 'brandId' => 'nullable|string',
                 'categoryIds' => 'nullable|array',
-                'categoryIds.*' => 'exists:categories,id',
+                'categoryIds.*' => 'nullable|integer',
                 'condition' => 'nullable|string',
                 'faq' => 'nullable|string',
                 'price' => 'required|numeric',
@@ -641,7 +641,6 @@ class ProductController extends Controller
                 'taxClass' => 'nullable|string',
                 'taxProviderCode' => 'nullable|string',
 
-
                 'taxCode' => 'nullable|string|max:255',
                 'discountType' => 'nullable|string|max:255',
                 'bulkPricingTiers' => 'nullable|array',
@@ -661,7 +660,6 @@ class ProductController extends Controller
                 'hsCodes' => 'nullable|array',
                 'hsCodes.*.country' => 'nullable|string',
                 'hsCodes.*.code' => 'nullable|string',
-
             ]);
 
             // ---------------- PRODUCT ----------------
@@ -669,16 +667,16 @@ class ProductController extends Controller
                 'store_id' => $storeId,
                 'name' => $validated['name'],
                 'slug' => Str::slug($validated['name']) . '-' . uniqid(),
-                'sku' => $validated['sku'],
+                'sku' => $validated['sku'] ?? null,
                 'price' => $validated['price'],
                 'quantity' => $validated['quantity'] ?? null,
                 'msrp' => $validated['msrp'] ?? null,
                 'cost_price' => $validated['costPrice'] ?? null,
                 'sale_price' => $validated['salePrice'] ?? null,
-                'brand_id' => $validated['brandId'],
+                'brand_id' => $validated['brandId'] ?? null,
                 'condition' => $validated['condition'] ?? null,
                 'faq' => $validated['faq'] ?? null,
-                'dimensions' => $validated['dimensions'] ?? [],
+                'dimensions' => $validated['dimensions'] ?? null,
                 'track_inventory' => $validated['trackInventory'] ?? false,
                 'current_stock' => $validated['currentStock'] ?? 0,
                 'low_stock' => $validated['lowStock'] ?? 0,
@@ -694,37 +692,39 @@ class ProductController extends Controller
                 'max_purchase_quantity' => $validated['maxPurchaseQuantity'] ?? null,
                 'related_products_enabled' => $validated['relatedProducts'] ?? false,
                 'fixed_shipping_cost' => $validated['fixedShippingCost'] ?? 0,
-                'product_type' => $validated['productType'] ?? '',
-                'option_set' => $validated['optionSet'] ?? '',
-                'option_set_align' => $validated['optionSetAlign'] ?? '',
+                'product_type' => $validated['productType'] ?? null,
+                'option_set' => $validated['optionSet'] ?? null,
+                'option_set_align' => $validated['optionSetAlign'] ?? null,
                 'allow_purchase' => $validated['allowPurchase'] ?? true,
                 'stop_processing_rules' => $validated['stopProcessingRules'] ?? false,
-                'tax_class' => $validated['taxClass'] ?? '',
-                'tax_provider_code' => $validated['taxProviderCode'] ?? '',
-
-
+                'tax_class' => $validated['taxClass'] ?? null,
+                'tax_provider_code' => $validated['taxProviderCode'] ?? null,
                 'tax_code' => $validated['taxCode'] ?? null,
                 'discount_type' => $validated['discountType'] ?? null,
                 'bulk_pricing_tiers' => $validated['bulkPricingTiers'] ?? [],
-
                 'object_type' => $validated['objectType'] ?? null,
                 'use_product_name' => $validated['useProductName'] ?? false,
                 'graph_description' => $validated['graphDescription'] ?? false,
                 'use_thumbnail' => $validated['useThumbnail'] ?? false,
                 'dont_use' => $validated['dontUse'] ?? false,
                 'manage_customs' => $validated['manageCustoms'] ?? false,
-
                 'call_pricing' => $validated['callForPricing'] ?? false,
-
                 'commodity_description' => $validated['commodityDescription'] ?? null,
                 'country_of_origin' => $validated['countryOfOrigin'] ?? null,
-
                 'hs_codes' => $validated['hsCodes'] ?? [],
-
-
             ]);
 
-            $product->categories()->sync($validated['categoryIds'] ?? []);
+            $categoryIds = collect($validated['categoryIds'] ?? [])
+                ->filter()
+                ->map(fn($id) => (int) $id)
+                ->unique()
+                ->values();
+
+            $validCategoryIds = $categoryIds->isEmpty()
+                ? []
+                : \App\Models\Category::whereIn('id', $categoryIds)->pluck('id')->all();
+
+            $product->categories()->sync($validCategoryIds);
 
             $hasPrimary = false;
 
@@ -788,6 +788,7 @@ class ProductController extends Controller
                     ]);
                 }
             }
+
             // ---------------- CONTENT ----------------
             ProductContent::create([
                 'store_id' => $storeId,
