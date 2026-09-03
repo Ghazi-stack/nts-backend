@@ -573,7 +573,7 @@ class ProductController extends Controller
 
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
-                'sku' => 'nullable|string|unique:products,sku,NULL,id,store_id,' . $storeId,
+                'sku' => 'required|string|unique:products,sku,NULL,id,store_id,' . $storeId,
                 'brandId' => 'nullable|string',
                 'categoryIds' => 'nullable|array',
                 'categoryIds.*' => 'nullable|integer',
