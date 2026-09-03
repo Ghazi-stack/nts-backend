@@ -128,8 +128,9 @@ class ProductController extends Controller
                 $query->where('current_stock', '<=', 0);
             }
 
-            if ($request->has('inventoryLow')) {
-                $query->whereColumn('current_stock', '<=', 'low_stock');
+            if ($request->has('inventoryLow') && $request->boolean('inventoryLow')) {
+                $query->whereColumn('current_stock', '<=', 'low_stock')
+                    ->where('current_stock', '>', 0);
             }
 
             if ($request->has('search')) {
@@ -166,7 +167,6 @@ class ProductController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
-
     public function filterProducts(Request $request)
     {
         try {
