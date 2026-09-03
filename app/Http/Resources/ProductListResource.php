@@ -33,6 +33,7 @@ class ProductListResource extends JsonResource
             'freeShipping' => $this->free_shipping,
             'trackInventory' => $this->track_inventory,
             'lowStock' => $this->low_stock,
+            'currentStock' => $this->current_stock,
             'Price' => $this->price,
             'allowPurchase' => $this->allow_purchase,
         
