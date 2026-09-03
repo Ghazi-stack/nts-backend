@@ -336,52 +336,60 @@ class ShipmentController extends Controller
     {
         $storeId = current_store_id();
 
+        $keyword = $request->input('keyword', $request->input('searchKeywords'));
+
+        // UI default "0" ko empty treat karo
+        if ($keyword === 0 || $keyword === '0') {
+            $keyword = null;
+        }
+
         $query = Shipment::with(['order.items.product'])
             ->where('store_id', $storeId)
-            ->where(function ($mainQuery) use ($request) {
+            ->where(function ($mainQuery) use ($request, $keyword) {
                 $filtersApplied = false;
 
-                // ✅ Keyword search (in shipped_to, tracking_number, or ID)
-                if ($request->filled('keyword')) {
+                // Shipper name, Shipment ID, Tracking number
+                if ($keyword !== null && $keyword !== '') {
                     $filtersApplied = true;
-                    $keyword = $request->keyword;
 
                     $mainQuery->where(function ($q) use ($keyword) {
-                        $q->where('shipped_to', 'like', "%$keyword%")
-                            ->orWhere('tracking_number', 'like', "%$keyword%")
-                            ->orWhere('id', $keyword); // ID search
+                        $q->where('shipper_name', 'like', "%{$keyword}%")
+                            ->orWhere('shipped_to', 'like', "%{$keyword}%")
+                            ->orWhere('tracking_number', 'like', "%{$keyword}%")
+                            ->orWhere('id', $keyword)
+                            ->orWhere('id', 'like', "%{$keyword}%");
                     });
                 }
 
-                // ✅ Shipment ID Range
-                if ($request->filled('shipmentIdFrom')) {
+                // Shipment ID Range
+                if ($request->filled('shipmentIdFrom') && $request->shipmentIdFrom != 0) {
                     $filtersApplied = true;
                     $mainQuery->where('id', '>=', $request->shipmentIdFrom);
                 }
 
-                if ($request->filled('shipmentIdTo')) {
+                if ($request->filled('shipmentIdTo') && $request->shipmentIdTo != 0) {
                     $filtersApplied = true;
                     $mainQuery->where('id', '<=', $request->shipmentIdTo);
                 }
 
-                // ✅ Order ID Range
-                if ($request->filled('orderIdFrom')) {
+                // Order ID Range
+                if ($request->filled('orderIdFrom') && $request->orderIdFrom != 0) {
                     $filtersApplied = true;
                     $mainQuery->where('order_id', '>=', $request->orderIdFrom);
                 }
 
-                if ($request->filled('orderIdTo')) {
+                if ($request->filled('orderIdTo') && $request->orderIdTo != 0) {
                     $filtersApplied = true;
                     $mainQuery->where('order_id', '<=', $request->orderIdTo);
                 }
 
-                // ✅ Shipping Date (date_shipped column)
+                // Shipping Date
                 if ($request->filled('shippingDate')) {
                     $filtersApplied = true;
                     $mainQuery->whereDate('date_shipped', $request->shippingDate);
                 }
 
-                // ✅ Order Date (from orders table)
+                // Order Date
                 if ($request->filled('orderDate')) {
                     $filtersApplied = true;
                     $mainQuery->whereHas('order', function ($q) use ($request) {
@@ -389,18 +397,15 @@ class ShipmentController extends Controller
                     });
                 }
 
-                // ❌ No filters at all? Return no results
                 if (!$filtersApplied) {
                     $mainQuery->whereRaw('0 = 1');
                 }
             });
 
-        // ✅ Sorting
-        $sortField = $request->get('sortField', 'id');
-        $sortDirection = $request->get('sortDirection', 'asc');
+        $sortField = $request->get('sortField', $request->get('sortBy', 'id'));
+        $sortDirection = $request->get('sortDirection', $request->get('sortOrder', 'asc'));
         $query->orderBy($sortField, $sortDirection);
 
-        // ✅ Pagination
         $shipments = $query->paginate($request->get('pageSize', 20));
 
         return response()->json([
