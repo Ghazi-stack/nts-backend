@@ -13,7 +13,12 @@ class ReturnRequestResource extends JsonResource
             'orderId'       => $this->order_id,
             'orderNumber'   => optional($this->order)->order_number,
             'customerId'    => optional($this->order?->customer)->id,
-            'customerName'  => optional($this->order?->customer)->name,
+            'customerName'  => optional($this->order?->customer)->name
+                ?? trim(implode(' ', array_filter([
+                    optional($this->order?->customer)->first_name,
+                    optional($this->order?->customer)->last_name,
+                ])))
+                ?: optional($this->user)->name,
             'reason'        => $this->reason,
             'returnAction'  => $this->returnAction,
             'comments'      => $this->comments,
@@ -21,8 +26,7 @@ class ReturnRequestResource extends JsonResource
             'is_submit'     => (bool) $this->is_submit,
             'createdAt'     => $this->created_at?->format('Y-m-d H:i:s'),
 
-            // ✅ PRODUCT AS ARRAY WITH OBJECT INSIDE
-         'product' => $this->order
+            'product' => $this->order
                 ? $this->order->items->map(function ($item) {
                     return new ProductResource(
                         $item->product->load([
