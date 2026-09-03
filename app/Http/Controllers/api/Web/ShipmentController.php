@@ -353,14 +353,16 @@ class ShipmentController extends Controller
                     $filtersApplied = true;
 
                     $mainQuery->where(function ($q) use ($keyword) {
-                        $q->where('shipped_by', 'like', "%{$keyword}%")
-                            ->orWhere('shipped_to', 'like', "%{$keyword}%")
-                            ->orWhere('tracking_number', 'like', "%{$keyword}%")
-                            ->orWhere('tracking_carrie', 'like', "%{$keyword}%")
-                            ->orWhere('shipping_method', 'like', "%{$keyword}%");
-
                         if (is_numeric($keyword)) {
-                            $q->orWhere('id', $keyword);
+                            $q->where('id', $keyword)
+                                ->orWhere('tracking_number', $keyword)
+                                ->orWhere('order_id', $keyword);
+                        } else {
+                            $q->where('shipped_by', 'like', "%{$keyword}%")
+                                ->orWhere('shipped_to', 'like', "%{$keyword}%")
+                                ->orWhere('tracking_number', 'like', "%{$keyword}%")
+                                ->orWhere('tracking_carrie', 'like', "%{$keyword}%")
+                                ->orWhere('shipping_method', 'like', "%{$keyword}%");
                         }
                     });
                 }
