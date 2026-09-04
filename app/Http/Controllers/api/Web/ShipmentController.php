@@ -113,8 +113,8 @@ class ShipmentController extends Controller
             'trackingCarrier' => 'nullable|string|max:255',
             'shippedBy' => 'nullable|string|max:255',
             'packingSlipNotes' => 'nullable|string|max:255',
-            'dateShipped' => 'required|date',
-            'trackingId' => 'required|string|max:255',
+            'dateShipped' => 'nullable|date',
+            'trackingId' => 'nullable|string|max:255',
         ]);
 
         $storeId = current_store_id();
