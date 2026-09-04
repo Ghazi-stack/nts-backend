@@ -3725,6 +3725,11 @@ class OrderController extends Controller
                     if ($billingIds->isNotEmpty()) {
                         $q->orWhereIn('billing_information_id', $billingIds);
                     }
+
+                    $q->orWhereHas('items.product', function ($p) use ($keywords) {
+                        $p->where('name', 'like', "%{$keywords}%")
+                            ->orWhere('sku', 'like', "%{$keywords}%");
+                    });
                 });
             }
 
