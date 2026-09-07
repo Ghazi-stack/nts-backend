@@ -508,6 +508,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 Route::prefix('web')->group(function () {
 
     Route::middleware('auth:sanctum')->get('/customer-profile', [AuthController::class, 'getCustomerProfile']);
+    Route::post('/customer/check-token', [AuthController::class, 'checkCustomerToken']);
 
     Route::prefix('shipments')->controller(ShipmentController::class)->group(function () {
         Route::get('/', 'index');      // View only their orders' shipments

@@ -890,6 +890,84 @@ class AuthController extends Controller
         }
     }
 
+    public function checkCustomerToken(Request $request)
+    {
+        try {
+            $storeId = $request->header('storeId', $request->input('storeId'));
+            $token   = $request->bearerToken()
+                ?? $request->header('token')
+                ?? $request->input('token');
+
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store ID is required.',
+                ], 422);
+            }
+
+            if (!$token) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Token expired',
+                ], 401);
+            }
+
+            $store = Store::where('id', $storeId)->first();
+
+            if (!$store) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid store.',
+                ], 404);
+            }
+
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            if (!$accessToken) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Token expired',
+                ], 401);
+            }
+
+            if ($accessToken->expires_at && $accessToken->expires_at->isPast()) {
+                $accessToken->delete();
+
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Token expired',
+                ], 401);
+            }
+
+            $user = $accessToken->tokenable;
+
+            if (
+                !$user ||
+                $user->userRole != 2 ||
+                $accessToken->name !== 'customerToken'
+            ) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Token expired',
+                ], 401);
+            }
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Already existed',
+                'store'   => new StoreResource($store),
+                'customer' => $user->customer ? new CustomerResource($user->customer) : null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Customer token check failed: ' . $e->getMessage());
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong during token check.',
+            ], 500);
+        }
+    }
+
     // public function login(Request $request)
     // {
     //     try {
