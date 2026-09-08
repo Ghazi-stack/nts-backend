@@ -30,25 +30,27 @@ class CustomerResource extends JsonResource
             'forcePasswordReset'  => (bool) $this->force_password_reset,
             'taxExemptCode'       => $this->tax_exempt_code,
             'country'             => $this->country,
-            'addressLine1'             => $this->address,
-            'addressLine2'             => $this->address_line_2,
+            'addressLine1'        => $this->address,
+            'addressLine2'        => $this->address_line_2,
             'state'               => $this->state,
             'analytics'           => $this->analytics,
             'functional'          => $this->functional,
             'targeting'           => $this->targeting,
             'notes'               => $this->notes,
-            'userType'               => $this->user_type,
-            'createdAt'               => $this->created_at,
-            'updatedAt'               => $this->updated_at,
+            'userType'            => $this->user_type,
+            'createdAt'           => $this->created_at,
+            'updatedAt'           => $this->updated_at,
 
-            // ✅ Multiple addresses
+            'totalOrders'         => (int) (
+                $this->total_orders
+                ?? ($this->relationLoaded('orders')
+                    ? $this->orders->where('is_draft', 0)->count()
+                    : $this->orders()->where('is_draft', 0)->count())
+            ),
+            'joinDate'            => optional($this->created_at)->format('M d, Y'),
+
             'addresses'           => AddressResource::collection($this->whenLoaded('addresses')),
-
-            // ✅ Billing information
             'billingInformation'  => BillingInformationResource::collection($this->whenLoaded('billingInformations')),
-
-            // 'createdAt'           => $this->created_at?->toDateTimeString(),
-            // 'updatedAt'           => $this->updated_at?->toDateTimeString(),
         ];
     }
 }
