@@ -255,6 +255,9 @@ class CustomerController extends Controller
     //         return response()->json(['error' => $e->getMessage()], 500);
     //     }
     // }
+
+
+    
     public function store(Request $request)
     {
         try {
@@ -294,6 +297,8 @@ class CustomerController extends Controller
                 'addresses.*.state'        => 'nullable|string|max:100',
                 'addresses.*.zip'          => 'nullable|string|max:20',
                 'addresses.*.country'      => 'nullable|string|max:100',
+                'addresses.*.firstName'    => 'nullable|string|max:255',
+                'addresses.*.lastName'     => 'nullable|string|max:255',
             ]);
 
             $validated['store_id'] = $storeId;
@@ -331,9 +336,14 @@ class CustomerController extends Controller
 
             $customer = Customer::create($validated);
 
+            $firstName = $customer->first_name ?? '';
+            $lastName  = $customer->last_name ?? '';
+
             if ($flatAddress) {
                 $customer->addresses()->create([
                     'store_id'       => $storeId,
+                    'first_name'     => $firstName,
+                    'last_name'      => $lastName,
                     'address_line_1' => $flatAddress,
                     'address_line_2' => '',
                     'city'           => $city ?? '',
@@ -348,6 +358,8 @@ class CustomerController extends Controller
             foreach ($addresses as $addr) {
                 $customer->addresses()->create([
                     'store_id'       => $storeId,
+                    'first_name'     => $addr['firstName'] ?? $firstName,
+                    'last_name'      => $addr['lastName'] ?? $lastName,
                     'address_line_1' => $addr['addressLine1'] ?? '',
                     'address_line_2' => $addr['addressLine2'] ?? '',
                     'city'           => $addr['city'] ?? '',
