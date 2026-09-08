@@ -3386,68 +3386,117 @@ class OrderController extends Controller
     {
         $storeId = current_store_id();
 
-        $validated = $request->validate([
-            'email' => 'required|email|unique:customers,email',
-            'password' => 'required|string|min:6|confirmed',
-            'firstName' => 'required|string|max:255',
-            'lastName' => 'required|string|max:255',
-            'companyName' => 'nullable|string|max:255',
-            'phone' => 'nullable|string|max:20',
-            'receiveOffers' => 'nullable|boolean',
-            'customerGroup' => 'nullable|string|max:255',
-            'comments' => 'nullable|string|max:1000',
-            'staffNotes' => 'nullable|string|max:1000',
-            'isDraft' => 'nullable|boolean',
-            'deviceType' => 'nullable|string|max:255',
+        try {
+            $validated = $request->validate([
+                'email' => 'required|email|unique:customers,email',
+                'password' => 'required|string|min:6|confirmed',
+                'firstName' => 'required|string|max:255',
+                'lastName' => 'required|string|max:255',
+                'companyName' => 'nullable|string|max:255',
+                'phone' => 'nullable|string|max:20',
+                'receiveOffers' => 'nullable|boolean',
+                'customerGroup' => 'nullable|string|max:255',
+                'comments' => 'nullable|string|max:1000',
+                'staffNotes' => 'nullable|string|max:1000',
+                'isDraft' => 'nullable|boolean',
+                'deviceType' => 'nullable|string|max:255',
 
-            'billingAddress' => 'nullable|array',
-            'billingAddress.firstName' => 'nullable|string|max:255',
-            'billingAddress.lastName' => 'nullable|string|max:255',
-            'billingAddress.email' => 'nullable|email',
-            'billingAddress.phone' => 'nullable|string|max:20',
-            'billingAddress.companyName' => 'nullable|string|max:255',
-            'billingAddress.addressLine1' => 'nullable|string|max:255',
-            'billingAddress.addressLine2' => 'nullable|string|max:255',
-            'billingAddress.city' => 'nullable|string|max:100',
-            'billingAddress.state' => 'nullable|string|max:100',
-            'billingAddress.zip' => 'nullable|string|max:20',
-            'billingAddress.country' => 'nullable|string|max:100',
-            'billingAddress.saveToAddressBook' => 'nullable|boolean',
+                'billingAddress' => 'nullable|array',
+                'billingAddress.firstName' => 'nullable|string|max:255',
+                'billingAddress.lastName' => 'nullable|string|max:255',
+                'billingAddress.email' => 'nullable|email',
+                'billingAddress.phone' => 'nullable|string|max:20',
+                'billingAddress.companyName' => 'nullable|string|max:255',
+                'billingAddress.addressLine1' => 'nullable|string|max:255',
+                'billingAddress.addressLine2' => 'nullable|string|max:255',
+                'billingAddress.city' => 'nullable|string|max:100',
+                'billingAddress.state' => 'nullable|string|max:100',
+                'billingAddress.zip' => 'nullable|string|max:20',
+                'billingAddress.country' => 'nullable|string|max:100',
+                'billingAddress.saveToAddressBook' => 'nullable|boolean',
 
-            'billingInformation' => 'required|array',
-            'billingInformation.firstName' => 'nullable|string|max:255',
-            'billingInformation.lastName' => 'nullable|string|max:255',
-            'billingInformation.phone' => 'nullable|string|max:20',
-            'billingInformation.companyName' => 'nullable|string|max:255',
-            'billingInformation.addressLine1' => 'nullable|string|max:255',
-            'billingInformation.addressLine2' => 'nullable|string|max:255',
-            'billingInformation.city' => 'nullable|string|max:100',
-            'billingInformation.state' => 'nullable|string|max:100',
-            'billingInformation.zip' => 'nullable|string|max:20',
-            'billingInformation.country' => 'nullable|string|max:100',
-            'billingInformation.email' => 'nullable|email',
-            'billingInformation.paymentMethod' => 'nullable|string',
-            'billingInformation.shippingMethod' => 'nullable|string',
+                'billingInformation' => 'required|array',
+                'billingInformation.firstName' => 'nullable|string|max:255',
+                'billingInformation.lastName' => 'nullable|string|max:255',
+                'billingInformation.phone' => 'nullable|string|max:20',
+                'billingInformation.companyName' => 'nullable|string|max:255',
+                'billingInformation.addressLine1' => 'nullable|string|max:255',
+                'billingInformation.addressLine2' => 'nullable|string|max:255',
+                'billingInformation.city' => 'nullable|string|max:100',
+                'billingInformation.state' => 'nullable|string|max:100',
+                'billingInformation.zip' => 'nullable|string|max:20',
+                'billingInformation.country' => 'nullable|string|max:100',
+                'billingInformation.email' => 'nullable|email',
+                'billingInformation.paymentMethod' => 'nullable|string',
+                'billingInformation.shippingMethod' => 'nullable|string',
 
-            'paymentMethod' => 'nullable|array',
-            'paymentMethod.method' => 'nullable|string',
-            'paymentMethod.paymentMethodId' => 'nullable|string',
-            'paymentMethod.emailInvoice' => 'nullable|boolean',
+                'paymentMethod' => 'required_unless:isDraft,true,1|array',
+                'paymentMethod.method' => 'required_unless:isDraft,true,1|string',
+                'paymentMethod.paymentMethodId' => 'nullable|string',
+                'paymentMethod.emailInvoice' => 'nullable|boolean',
+                'paymentMethod.cardholderName' => 'required_if:paymentMethod.method,credit_card|string|min:2|max:80|regex:/^[a-zA-Z][a-zA-Z\s\.\'\-]{1,}$/',
+                'paymentMethod.creditCardNo' => 'required_if:paymentMethod.method,credit_card|string',
+                'paymentMethod.ccv2Value' => 'required_if:paymentMethod.method,credit_card|string',
+                'paymentMethod.expirationMonth' => 'required_if:paymentMethod.method,credit_card|string',
+                'paymentMethod.expirationYear' => 'required_if:paymentMethod.method,credit_card|string',
 
-            'products' => 'required|array|min:1',
-            'products.*.productId' => 'required|exists:products,id',
-            'products.*.quantity' => 'required|integer|min:1',
+                'products' => 'required|array|min:1',
+                'products.*.productId' => 'required|exists:products,id',
+                'products.*.quantity' => 'required|integer|min:1',
 
-            'shippingDestinations' => 'nullable|array',
-            'shippingDestinations.*.address' => 'required|array',
-            'shippingDestinations.*.products' => 'required|array',
+                'shippingDestinations' => 'nullable|array',
+                'shippingDestinations.*.address' => 'required|array',
+                'shippingDestinations.*.products' => 'required|array',
 
-            'shippingMethod' => 'nullable|array',
-            'shippingMethod.provider' => 'nullable|string',
-            'shippingMethod.cost' => 'nullable|string',
-            'shippingMethod.method' => 'nullable',
-            'shippingMethod.data' => 'nullable|string',
-        ]);
+                'shippingMethod' => 'nullable|array',
+                'shippingMethod.provider' => 'nullable|string',
+                'shippingMethod.cost' => 'nullable|string',
+                'shippingMethod.method' => 'nullable',
+                'shippingMethod.data' => 'nullable|string',
+            ], [
+                'paymentMethod.required_unless' => 'Payment method is required.',
+                'paymentMethod.method.required_unless' => 'Please select a payment method.',
+                'paymentMethod.cardholderName.required_if' => 'Cardholder name is required.',
+                'paymentMethod.cardholderName.regex' => 'Cardholder name is invalid. Use letters only.',
+                'paymentMethod.creditCardNo.required_if' => 'Card number is required.',
+                'paymentMethod.ccv2Value.required_if' => 'CVC is required.',
+                'paymentMethod.expirationMonth.required_if' => 'Expiration month is required.',
+                'paymentMethod.expirationYear.required_if' => 'Expiration year is required.',
+            ]);
+
+            $isDraft = (bool) ($validated['isDraft'] ?? false);
+            $method  = $validated['paymentMethod']['method'] ?? null;
+
+            if (!$isDraft && $method === 'credit_card' && empty($validated['paymentMethod']['paymentMethodId'])) {
+                $cardErrors = $this->validateStripeCard($validated['paymentMethod']);
+
+                if (!empty($cardErrors)) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => collect($cardErrors)->flatten()->first(),
+                        'errors'  => $cardErrors,
+                    ], 422);
+                }
+
+                $stripeResult = $this->createStripePaymentMethod($validated['paymentMethod']);
+
+                if (!$stripeResult['ok']) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => $stripeResult['message'],
+                        'errors'  => $stripeResult['errors'],
+                    ], 422);
+                }
+
+                $validated['paymentMethod']['paymentMethodId'] = $stripeResult['payment_method_id'];
+            }
+        } catch (ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => collect($e->errors())->flatten()->first(),
+                'errors'  => $e->errors(),
+            ], 422);
+        }
 
         try {
             DB::beginTransaction();
@@ -3487,6 +3536,8 @@ class OrderController extends Controller
             }
 
             $orders = [];
+            $requiresAction = null;
+            $intent = null;
 
             foreach ($shippingDestinations as $destination) {
                 $address  = $destination['address'] ?? $billingInput;
@@ -3576,9 +3627,69 @@ class OrderController extends Controller
 
                 $order->update(['total_amount' => $total + $shippingCost]);
 
+                $paymentMethodId = $validated['paymentMethod']['paymentMethodId'] ?? null;
+                $intent = null;
+
+                if ($paymentMethodId) {
+                    \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+
+                    $intent = \Stripe\PaymentIntent::create([
+                        'amount'               => (int) round(((float) $order->total_amount) * 100),
+                        'currency'             => 'usd',
+                        'payment_method'       => $paymentMethodId,
+                        'confirmation_method'  => 'manual',
+                        'payment_method_types' => ['card'],
+                        'confirm'              => true,
+                        'capture_method'       => 'manual',
+                        'metadata'             => [
+                            'user_id'      => $user?->id,
+                            'order_id'     => $order->id,
+                            'order_number' => $order->order_number,
+                            'channel'      => 'admin-panel',
+                            'store_id'     => $storeId,
+                        ],
+                    ], [
+                        'idempotency_key' => uniqid('dashboard_new_customer_payment_', true),
+                    ]);
+
+                    if (in_array($intent->status, ['requires_action', 'requires_source_action'])) {
+                        $requiresAction = $intent->client_secret;
+                    } elseif ($intent->status !== 'requires_capture') {
+                        DB::rollBack();
+                        return response()->json([
+                            'status'  => false,
+                            'message' => 'Payment authorization failed. Status: ' . $intent->status,
+                        ], 400);
+                    } else {
+                        $riskScore = null;
+                        $riskLevel = null;
+
+                        $charge = $intent->latest_charge
+                            ? \Stripe\Charge::retrieve($intent->latest_charge)
+                            : null;
+
+                        if ($charge && $charge->outcome) {
+                            $riskScore = $charge->outcome->risk_score ?? null;
+                            $riskLevel = $charge->outcome->risk_level ?? null;
+                        }
+
+                        Payment::create([
+                            'order_id'          => $order->id,
+                            'store_id'          => $storeId,
+                            'stripe_session_id' => $intent->id,
+                            'amount'            => $order->total_amount,
+                            'discountAmount'    => 0,
+                            'payment_status'    => 'authorized',
+                            'risk_score'        => $riskScore,
+                            'risk_level'        => $riskLevel,
+                        ]);
+                    }
+                }
+
                 $orders[] = [
                     'order'       => $order,
                     'destination' => $destination,
+                    'intent_id'   => $intent->id ?? null,
                 ];
             }
 
@@ -3588,10 +3699,11 @@ class OrderController extends Controller
             foreach ($orders as $entry) {
                 $order = $entry['order'];
                 $orderData = [
-                    'id'          => $order->id,
-                    'orderNumber' => $order->order_number,
-                    'status'      => $order->status,
-                    'totalAmount' => $order->total_amount,
+                    'id'                => $order->id,
+                    'orderNumber'       => $order->order_number,
+                    'status'            => $order->status,
+                    'totalAmount'       => $order->total_amount,
+                    'payment_intent_id' => $entry['intent_id'],
                 ];
                 $ordersResponse[] = $orderData;
 
@@ -3601,11 +3713,25 @@ class OrderController extends Controller
                 }
             }
 
+            if ($requiresAction) {
+                return response()->json([
+                    'status'                       => 'requires_action',
+                    'payment_intent_client_secret' => $requiresAction,
+                    'orders'                       => $ordersResponse,
+                ]);
+            }
+
             return response()->json([
                 'status'  => true,
                 'message' => 'New customer created and orders placed successfully.',
                 'orders'  => $ordersResponse,
             ]);
+        } catch (\Stripe\Exception\CardException $e) {
+            DB::rollBack();
+            return response()->json([
+                'status'  => false,
+                'message' => $e->getError()->message,
+            ], 402);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
