@@ -2471,9 +2471,15 @@ class OrderController extends Controller
                 'billingInformation.comments' => 'nullable|string',
                 'billingInformation.staffNotes' => 'nullable|string',
 
-                'paymentMethod' => 'nullable|array',
-                'paymentMethod.method' => 'nullable|string',
+                'paymentMethod' => 'required_unless:isDraft,true,1|array',
+                'paymentMethod.method' => 'required_unless:isDraft,true,1|string',
                 'paymentMethod.paymentMethodId' => 'nullable|string',
+                'paymentMethod.emailInvoice' => 'nullable|boolean',
+                'paymentMethod.cardholderName' => 'required_if:paymentMethod.method,credit_card|string|min:2|max:80|regex:/^[a-zA-Z][a-zA-Z\s\.\'\-]{1,}$/',
+                'paymentMethod.creditCardNo' => 'required_if:paymentMethod.method,credit_card|string',
+                'paymentMethod.ccv2Value' => 'required_if:paymentMethod.method,credit_card|string',
+                'paymentMethod.expirationMonth' => 'required_if:paymentMethod.method,credit_card|string',
+                'paymentMethod.expirationYear' => 'required_if:paymentMethod.method,credit_card|string',
 
                 'products' => 'required|array|min:1',
                 'products.*.productId' => 'required|exists:products,id',
@@ -2486,11 +2492,48 @@ class OrderController extends Controller
                 'shippingMethod.method' => 'nullable',
                 'shippingMethod.cost' => 'nullable|string',
                 'shippingMethod.data' => 'nullable|string',
+            ], [
+                'paymentMethod.required_unless' => 'Payment method is required.',
+                'paymentMethod.method.required_unless' => 'Please select a payment method.',
+                'paymentMethod.cardholderName.required_if' => 'Cardholder name is required.',
+                'paymentMethod.cardholderName.regex' => 'Cardholder name is invalid. Use letters only.',
+                'paymentMethod.creditCardNo.required_if' => 'Card number is required.',
+                'paymentMethod.ccv2Value.required_if' => 'CVC is required.',
+                'paymentMethod.expirationMonth.required_if' => 'Expiration month is required.',
+                'paymentMethod.expirationYear.required_if' => 'Expiration year is required.',
             ]);
+
+            $isDraft = (bool) ($validated['isDraft'] ?? false);
+            $method  = $validated['paymentMethod']['method'] ?? null;
+
+            if (!$isDraft && $method === 'credit_card' && empty($validated['paymentMethod']['paymentMethodId'])) {
+                $cardErrors = $this->validateStripeCard($validated['paymentMethod']);
+
+                if (!empty($cardErrors)) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => collect($cardErrors)->flatten()->first(),
+                        'errors'  => $cardErrors,
+                    ], 422);
+                }
+
+                $stripeResult = $this->createStripePaymentMethod($validated['paymentMethod']);
+
+                if (!$stripeResult['ok']) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => $stripeResult['message'],
+                        'errors'  => $stripeResult['errors'],
+                    ], 422);
+                }
+
+                $validated['paymentMethod']['paymentMethodId'] = $stripeResult['payment_method_id'];
+            }
         } catch (ValidationException $e) {
             return response()->json([
-                'status' => false,
-                'errors' => $e->errors(),
+                'status'  => false,
+                'message' => collect($e->errors())->flatten()->first(),
+                'errors'  => $e->errors(),
             ], 422);
         }
 
@@ -2605,7 +2648,6 @@ class OrderController extends Controller
                     'is_draft'                     => $validated['isDraft'] ?? false,
                     'device_type'                  => $validated['deviceType'] ?? null,
                     'channel'                      => 'admin-panel',
-                    //'user_type'                    => $validated['userType'] ?? $customer->user_type ?? null,
                     'ip_address'                   => $request->ip(),
                     'billing_same'                 => $billingSame,
                     'is_save_address_for_billing'  => $saveToAddressBook,
@@ -2765,6 +2807,218 @@ class OrderController extends Controller
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function validateStripeCard(array $pm): array
+    {
+        $errors = [];
+
+        $number = preg_replace('/\s+/', '', (string) ($pm['creditCardNo'] ?? ''));
+        $cvc    = preg_replace('/\s+/', '', (string) ($pm['ccv2Value'] ?? ''));
+        $name   = trim((string) ($pm['cardholderName'] ?? ''));
+        $month  = $this->parseExpiryMonth($pm['expirationMonth'] ?? null);
+        $year   = $this->parseExpiryYear($pm['expirationYear'] ?? null);
+
+        if ($name === '' || !preg_match("/^[a-zA-Z][a-zA-Z\s\.'\-]{1,79}$/", $name) || preg_match('/\d/', $name)) {
+            $errors['paymentMethod.cardholderName'][] = 'Cardholder name is invalid.';
+        }
+
+        if (!preg_match('/^[0-9]{13,19}$/', $number) || !$this->isValidLuhn($number)) {
+            $errors['paymentMethod.creditCardNo'][] = 'Your card number is invalid.';
+        } else {
+            $brand = $this->detectCardBrand($number);
+
+            $validLengths = [
+                'visa'       => [13, 16, 19],
+                'mastercard' => [16],
+                'amex'       => [15],
+                'discover'   => [16, 19],
+                'diners'     => [14, 16],
+                'jcb'        => [16],
+                'unionpay'   => [16, 17, 18, 19],
+            ];
+
+            if (!$brand) {
+                $errors['paymentMethod.creditCardNo'][] = 'Your card brand is not supported.';
+            } elseif (!in_array(strlen($number), $validLengths[$brand], true)) {
+                $errors['paymentMethod.creditCardNo'][] = 'Your card number is invalid.';
+            }
+
+            $cvcLen = $brand === 'amex' ? 4 : 3;
+            if (!preg_match('/^[0-9]+$/', $cvc) || strlen($cvc) !== $cvcLen) {
+                $errors['paymentMethod.ccv2Value'][] = $brand === 'amex'
+                    ? 'Amex CVC must be 4 digits.'
+                    : 'CVC must be 3 digits.';
+            }
+        }
+
+        if (!$month) {
+            $errors['paymentMethod.expirationMonth'][] = 'Your card\'s expiration month is invalid.';
+        }
+
+        if (!$year) {
+            $errors['paymentMethod.expirationYear'][] = 'Your card\'s expiration year is invalid.';
+        }
+
+        if ($month && $year) {
+            $exp = \Carbon\Carbon::create($year, $month, 1)->endOfMonth();
+            if ($exp->lt(now())) {
+                $errors['paymentMethod.expirationYear'][] = 'Your card has expired.';
+            }
+        }
+
+        return $errors;
+    }
+
+    private function createStripePaymentMethod(array $pm): array
+    {
+        \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+
+        $number = preg_replace('/\s+/', '', $pm['creditCardNo']);
+        $cvc    = preg_replace('/\s+/', '', $pm['ccv2Value']);
+        $month  = $this->parseExpiryMonth($pm['expirationMonth']);
+        $year   = $this->parseExpiryYear($pm['expirationYear']);
+
+        try {
+            $paymentMethod = \Stripe\PaymentMethod::create([
+                'type' => 'card',
+                'card' => [
+                    'number'    => $number,
+                    'exp_month' => $month,
+                    'exp_year'  => $year,
+                    'cvc'       => $cvc,
+                ],
+                'billing_details' => [
+                    'name' => $pm['cardholderName'],
+                ],
+            ]);
+
+            return [
+                'ok'                => true,
+                'payment_method_id' => $paymentMethod->id,
+                'message'           => null,
+                'errors'            => [],
+            ];
+        } catch (\Stripe\Exception\CardException $e) {
+            $code = $e->getError()->code ?? '';
+            $msg  = $e->getError()->message ?? 'Your card was declined.';
+
+            $field = match ($code) {
+                'invalid_number', 'incorrect_number' => 'paymentMethod.creditCardNo',
+                'invalid_cvc', 'incorrect_cvc'       => 'paymentMethod.ccv2Value',
+                'invalid_expiry_month'               => 'paymentMethod.expirationMonth',
+                'invalid_expiry_year', 'expired_card' => 'paymentMethod.expirationYear',
+                default                              => 'paymentMethod.creditCardNo',
+            };
+
+            return [
+                'ok'                => false,
+                'payment_method_id' => null,
+                'message'           => $msg,
+                'errors'            => [$field => [$msg]],
+            ];
+        } catch (\Stripe\Exception\ApiErrorException $e) {
+            return [
+                'ok'                => false,
+                'payment_method_id' => null,
+                'message'           => $e->getMessage(),
+                'errors'            => ['paymentMethod' => [$e->getMessage()]],
+            ];
+        }
+    }
+
+    private function detectCardBrand(string $number): ?string
+    {
+        $patterns = [
+            'amex'       => '/^3[47]/',
+            'diners'     => '/^3(0[0-5]|[68])/',
+            'visa'       => '/^4/',
+            'mastercard' => '/^(5[1-5]|2[2-7])/',
+            'discover'   => '/^(6011|65|64[4-9]|622)/',
+            'jcb'        => '/^35/',
+            'unionpay'   => '/^62/',
+        ];
+
+        foreach ($patterns as $brand => $regex) {
+            if (preg_match($regex, $number)) {
+                return $brand;
+            }
+        }
+
+        return null;
+    }
+
+    private function parseExpiryMonth($month): ?int
+    {
+        if ($month === null || $month === '') {
+            return null;
+        }
+
+        $map = [
+            'jan' => 1,
+            'january' => 1,
+            'feb' => 2,
+            'february' => 2,
+            'mar' => 3,
+            'march' => 3,
+            'apr' => 4,
+            'april' => 4,
+            'may' => 5,
+            'jun' => 6,
+            'june' => 6,
+            'jul' => 7,
+            'july' => 7,
+            'aug' => 8,
+            'august' => 8,
+            'sep' => 9,
+            'september' => 9,
+            'oct' => 10,
+            'october' => 10,
+            'nov' => 11,
+            'november' => 11,
+            'dec' => 12,
+            'december' => 12,
+        ];
+
+        $key = strtolower(trim((string) $month));
+        $num = $map[$key] ?? (int) $month;
+
+        return ($num >= 1 && $num <= 12) ? $num : null;
+    }
+
+    private function parseExpiryYear($year): ?int
+    {
+        if ($year === null || $year === '') {
+            return null;
+        }
+
+        $year = (int) $year;
+
+        if ($year < 100) {
+            $year += 2000;
+        }
+
+        return ($year >= 2000 && $year <= 2100) ? $year : null;
+    }
+
+    private function isValidLuhn(string $number): bool
+    {
+        $sum = 0;
+        $alt = false;
+
+        for ($i = strlen($number) - 1; $i >= 0; $i--) {
+            $n = (int) $number[$i];
+            if ($alt) {
+                $n *= 2;
+                if ($n > 9) {
+                    $n -= 9;
+                }
+            }
+            $sum += $n;
+            $alt = !$alt;
+        }
+
+        return $sum % 10 === 0;
     }
 
     // getDraftOrders Api
