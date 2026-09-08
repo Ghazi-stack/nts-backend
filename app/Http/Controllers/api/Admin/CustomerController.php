@@ -261,7 +261,7 @@ class CustomerController extends Controller
             $storeId = current_store_id();
             if (!$storeId) {
                 return response()->json([
-                    'status' => false,
+                    'status'  => false,
                     'message' => 'Store not selected or token invalid.'
                 ], 400);
             }
@@ -280,6 +280,7 @@ class CustomerController extends Controller
                 'storeCredit'           => 'nullable|numeric',
                 'country'               => 'nullable|string|max:100',
                 'state'                 => 'nullable|string|max:100',
+                'city'                  => 'nullable|string|max:100',
                 'address'               => 'nullable|string|max:255',
                 'taxExemptCode'         => 'nullable|string|max:50',
                 'receiveReviewEmails'   => 'nullable|boolean',
@@ -296,14 +297,13 @@ class CustomerController extends Controller
 
             $validated['store_id'] = $storeId;
 
-            // Rename camelCase to DB columns
             $map = [
-                'firstName' => 'first_name',
-                'lastName' => 'last_name',
-                'companyName' => 'company_name',
-                'customerGroup' => 'customer_group',
-                'storeCredit' => 'store_credit',
-                'taxExemptCode' => 'tax_exempt_code',
+                'firstName'           => 'first_name',
+                'lastName'            => 'last_name',
+                'companyName'         => 'company_name',
+                'customerGroup'       => 'customer_group',
+                'storeCredit'         => 'store_credit',
+                'taxExemptCode'       => 'tax_exempt_code',
                 'receiveReviewEmails' => 'receive_review_emails',
                 'forcePasswordReset'  => 'force_password_reset',
             ];
@@ -321,56 +321,56 @@ class CustomerController extends Controller
             $addresses = $validated['addresses'] ?? [];
             unset($validated['addresses']);
 
-            // Agar flat address aaya to customer table mein save karo
             $flatAddress = $validated['address'] ?? null;
             unset($validated['address']);
 
+            $city    = $validated['city'] ?? null;
+            $state   = $validated['state'] ?? null;
+            $country = $validated['country'] ?? null;
+
             $customer = Customer::create($validated);
 
-            // Flat address se bhi address record banao
             if ($flatAddress) {
                 $customer->addresses()->create([
                     'address_line_1' => $flatAddress,
-                    'address_line_2' => null,
-                    'city'           => null,
-                    'state'          => $validated['state'] ?? null,
-                    'zip'            => null,
-                    'country'        => $validated['country'] ?? null,
+                    'address_line_2' => '',
+                    'city'           => $city ?? '',
+                    'state'          => $state ?? '',
+                    'zip'            => '',
+                    'country'        => $country ?? '',
                 ]);
 
-                // Customer table mein bhi save karo
                 $customer->update(['address' => $flatAddress]);
             }
 
-            // Multiple addresses array se bhi banao
             foreach ($addresses as $addr) {
                 $customer->addresses()->create([
-                    'address_line_1' => $addr['addressLine1'] ?? null,
-                    'address_line_2' => $addr['addressLine2'] ?? null,
-                    'city'           => $addr['city'] ?? null,
-                    'state'          => $addr['state'] ?? null,
-                    'zip'            => $addr['zip'] ?? null,
-                    'country'        => $addr['country'] ?? null,
+                    'address_line_1' => $addr['addressLine1'] ?? '',
+                    'address_line_2' => $addr['addressLine2'] ?? '',
+                    'city'           => $addr['city'] ?? '',
+                    'state'          => $addr['state'] ?? '',
+                    'zip'            => $addr['zip'] ?? '',
+                    'country'        => $addr['country'] ?? '',
                 ]);
             }
 
-            // Create User if email and password provided
             if (!empty($customer->email) && $rawPassword) {
                 User::create([
                     'name'        => trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
                     'email'       => $customer->email,
                     'password'    => Hash::make($rawPassword),
                     'customer_id' => $customer->id,
-                    'store_id'    => $storeId
+                    'store_id'    => $storeId,
+                    'userRole'    => 2,
                 ]);
             }
 
             $customer = Customer::with('addresses')->find($customer->id);
 
             return response()->json([
-                'status' => true,
+                'status'  => true,
                 'message' => 'Customer created successfully',
-                'data' => new CustomerResource($customer)
+                'data'    => new CustomerResource($customer)
             ], 201);
         } catch (ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
@@ -417,7 +417,7 @@ class CustomerController extends Controller
                 'functional'           => 'nullable|string|max:255',
                 'targeting'            => 'nullable|string|max:255',
                 'notes'                => 'nullable|string',
-                
+
                 'addresses'             => 'nullable|array',
                 'addresses.*.id'        => 'nullable|exists:customer_addresses,id',
                 'addresses.*.addressLine1' => 'required|string|max:255',
