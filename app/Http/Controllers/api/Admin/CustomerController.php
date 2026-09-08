@@ -257,7 +257,7 @@ class CustomerController extends Controller
     // }
 
 
-    
+
     public function store(Request $request)
     {
         try {
@@ -299,6 +299,10 @@ class CustomerController extends Controller
                 'addresses.*.country'      => 'nullable|string|max:100',
                 'addresses.*.firstName'    => 'nullable|string|max:255',
                 'addresses.*.lastName'     => 'nullable|string|max:255',
+                'addresses.*.phone'        => 'nullable|string|max:20',
+                'addresses.*.companyName'  => 'nullable|string|max:255',
+                'addresses.*.type'         => 'nullable|string|max:50',
+                'addresses.*.isDefault'    => 'nullable|boolean',
             ]);
 
             $validated['store_id'] = $storeId;
@@ -330,9 +334,11 @@ class CustomerController extends Controller
             $flatAddress = $validated['address'] ?? null;
             unset($validated['address']);
 
-            $city    = $validated['city'] ?? null;
-            $state   = $validated['state'] ?? null;
-            $country = $validated['country'] ?? null;
+            $city        = $validated['city'] ?? '';
+            $state       = $validated['state'] ?? '';
+            $country     = $validated['country'] ?? '';
+            $phone       = $validated['phone'] ?? '';
+            $companyName = $validated['company_name'] ?? '';
 
             $customer = Customer::create($validated);
 
@@ -344,28 +350,36 @@ class CustomerController extends Controller
                     'store_id'       => $storeId,
                     'first_name'     => $firstName,
                     'last_name'      => $lastName,
+                    'company_name'   => $companyName,
+                    'phone_number'   => $phone,
                     'address_line_1' => $flatAddress,
                     'address_line_2' => '',
-                    'city'           => $city ?? '',
-                    'state'          => $state ?? '',
+                    'city'           => $city,
+                    'state'          => $state,
                     'zip'            => '',
-                    'country'        => $country ?? '',
+                    'country'        => $country,
+                    'is_default'     => true,
+                    'type'           => 'shipping',
                 ]);
 
                 $customer->update(['address' => $flatAddress]);
             }
 
-            foreach ($addresses as $addr) {
+            foreach ($addresses as $index => $addr) {
                 $customer->addresses()->create([
                     'store_id'       => $storeId,
                     'first_name'     => $addr['firstName'] ?? $firstName,
                     'last_name'      => $addr['lastName'] ?? $lastName,
+                    'company_name'   => $addr['companyName'] ?? $companyName,
+                    'phone_number'   => $addr['phone'] ?? $phone,
                     'address_line_1' => $addr['addressLine1'] ?? '',
                     'address_line_2' => $addr['addressLine2'] ?? '',
                     'city'           => $addr['city'] ?? '',
                     'state'          => $addr['state'] ?? '',
                     'zip'            => $addr['zip'] ?? '',
                     'country'        => $addr['country'] ?? '',
+                    'is_default'     => $addr['isDefault'] ?? ($index === 0 && !$flatAddress),
+                    'type'           => $addr['type'] ?? 'shipping',
                 ]);
             }
 
