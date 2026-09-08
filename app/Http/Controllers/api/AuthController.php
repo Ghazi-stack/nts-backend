@@ -1613,13 +1613,13 @@ class AuthController extends Controller
     {
         try {
             $request->validate([
-                'email' => 'required|email|exists:users,email',
+                'email'    => 'required|email|exists:users,email',
                 'password' => 'required|min:8',
-                'token' => 'required'
+                'token'    => 'required',
             ]);
 
             $request->merge([
-                'password_confirmation' => $request->password
+                'password_confirmation' => $request->password,
             ]);
 
             $status = Password::reset(
@@ -1633,18 +1633,33 @@ class AuthController extends Controller
 
             if ($status === Password::PASSWORD_RESET) {
                 $user = \App\Models\User::where('email', $request->email)->first();
+
                 if ($user) {
                     Mail::to($user->email)->send(new PasswordResetSuccessMail($user));
+
+                    $customerId = $user->customer_id ?? null;
+
+                    if (!$customerId && $user->customer) {
+                        $customerId = $user->customer->id;
+                    }
+
+                    if ($customerId) {
+                        \App\Models\Customer::where('id', $customerId)
+                            ->where('force_password_reset', 1)
+                            ->update([
+                                'force_password_reset' => 0,
+                            ]);
+                    }
                 }
             }
 
             return response()->json([
-                'status' => $status === Password::PASSWORD_RESET,
+                'status'  => $status === Password::PASSWORD_RESET,
                 'message' => __($status),
             ], $status === Password::PASSWORD_RESET ? 200 : 400);
         } catch (\Exception $e) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => $e->getMessage(),
             ], 500);
         }
