@@ -258,11 +258,12 @@ class CustomerController extends Controller
     public function store(Request $request)
     {
         try {
-            $storeId = current_store_id();
+            $storeId = $request->header('storeId', $request->input('storeId')) ?: current_store_id();
+
             if (!$storeId) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'Store not selected or token invalid.'
+                    'message' => 'Store ID is required.',
                 ], 400);
             }
 
@@ -332,6 +333,7 @@ class CustomerController extends Controller
 
             if ($flatAddress) {
                 $customer->addresses()->create([
+                    'store_id'       => $storeId,
                     'address_line_1' => $flatAddress,
                     'address_line_2' => '',
                     'city'           => $city ?? '',
@@ -345,6 +347,7 @@ class CustomerController extends Controller
 
             foreach ($addresses as $addr) {
                 $customer->addresses()->create([
+                    'store_id'       => $storeId,
                     'address_line_1' => $addr['addressLine1'] ?? '',
                     'address_line_2' => $addr['addressLine2'] ?? '',
                     'city'           => $addr['city'] ?? '',
@@ -378,7 +381,6 @@ class CustomerController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
-
 
     public function update(Request $request, $id)
     {
