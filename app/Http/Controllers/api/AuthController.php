@@ -843,14 +843,9 @@ class AuthController extends Controller
         | SINGLE SESSION — purana token expire
         |--------------------------------------------------------------------------
         */
-
-            $customer->tokens()->where('name', 'customerToken')->delete();
-
-            /*
-        |--------------------------------------------------------------------------
-        | TOKEN
-        |--------------------------------------------------------------------------
-        */
+            $customer->tokens()
+                ->whereIn('name', ['customerToken', 'customer_login'])
+                ->delete();
 
             $tokenResult    = $customer->createToken('customerToken');
             $plainTextToken = $tokenResult->plainTextToken;
@@ -939,13 +934,29 @@ class AuthController extends Controller
                 ], 401);
             }
 
+            $allowedTokenNames = ['customerToken', 'customer_login'];
+
+            if (!in_array($accessToken->name, $allowedTokenNames, true)) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Token expired',
+                ], 401);
+            }
+
             $user = $accessToken->tokenable;
 
-            if (
-                !$user ||
-                $user->userRole != 2 ||
-                $accessToken->name !== 'customerToken'
-            ) {
+            if (!$user) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Token expired',
+                ], 401);
+            }
+
+            // Normal customer (userRole = 2) ya login-as user (customer_id + store)
+            $isNormalCustomer = (int) $user->userRole === 2;
+            $isLoginAsUser    = !empty($user->customer_id) && (int) $user->store_id === (int) $storeId;
+
+            if (!$isNormalCustomer && !$isLoginAsUser) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'Token expired',
@@ -953,9 +964,9 @@ class AuthController extends Controller
             }
 
             return response()->json([
-                'status'  => true,
-                'message' => 'Already existed',
-                'store'   => new StoreResource($store),
+                'status'   => true,
+                'message'  => 'Already existed',
+                'store'    => new StoreResource($store),
                 'customer' => $user->customer ? new CustomerResource($user->customer) : null,
             ]);
         } catch (\Exception $e) {
@@ -1832,8 +1843,8 @@ class AuthController extends Controller
             $storeId = current_store_id();
             if (!$storeId) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'Store not selected.'
+                    'status'  => false,
+                    'message' => 'Store not selected.',
                 ], 400);
             }
 
@@ -1843,21 +1854,36 @@ class AuthController extends Controller
 
             if (!$user) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'Customer user not found.'
+                    'status'  => false,
+                    'message' => 'Customer user not found.',
                 ], 404);
             }
 
-            $token = $user->createToken('customer_login')->plainTextToken;
+            // Purani sari customer sessions expire
+            $user->tokens()
+                ->whereIn('name', ['customerToken', 'customer_login'])
+                ->delete();
+
+            $tokenResult    = $user->createToken('customer_login');
+            $plainTextToken = $tokenResult->plainTextToken;
+
+            $expireAt    = now()->addHours(24);
+            $accessToken = PersonalAccessToken::findToken($plainTextToken);
+
+            if ($accessToken) {
+                $accessToken->expires_at = $expireAt;
+                $accessToken->save();
+            }
 
             return response()->json([
-                'status' => true,
-                'message' => 'Customer logged in successfully.',
-                'token'  => $token,
+                'status'   => true,
+                'message'  => 'Customer logged in successfully.',
+                'token'    => $plainTextToken,
+                'expireAt' => $expireAt->toDateTimeString(),
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => $e->getMessage(),
             ], 500);
         }
