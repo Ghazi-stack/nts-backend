@@ -84,7 +84,7 @@ class OrderController extends Controller
                     'billingInformation',
                     'notes:id,order_id,note',
                     'payment',
-                    'shipment:id,order_id',
+                    'shipment:id,tracking_number,order_id',
                 ])
                 ->withCount('messages')
                 ->where('store_id', $storeId)
