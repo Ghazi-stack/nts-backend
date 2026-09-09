@@ -30,6 +30,7 @@ class ProductListResource extends JsonResource
             // Stock & visibility    
 
             'salePrice' => $this->sale_price,
+             'costPrice' => $this->cost_price,
             'freeShipping' => $this->free_shipping,
             'trackInventory' => $this->track_inventory,
             'lowStock' => $this->low_stock,
