@@ -19,6 +19,14 @@
             background-color: #fff;
         }
 
+        .slip-wrap {
+            page-break-after: always;
+        }
+
+        .slip-wrap:last-child {
+            page-break-after: auto;
+        }
+
         .logo-section {
             text-align: left;
             margin-bottom: 5px;
@@ -145,118 +153,133 @@
 
 <body>
 
-    {{-- Logo --}}
-    <div class="logo-section">
-        @if($logoBase64)
-        <img src="{{ $logoBase64 }}" alt="{{ $store?->name ?? 'Store' }} Logo">
-        @else
-        <span class="store-name">{{ $store?->name ?? 'Store' }}</span>
+    @php
+    $slipList = (isset($shipments) && count($shipments)) ? $shipments : collect([$shipment]);
+    @endphp
+
+    @foreach ($slipList as $shipment)
+    @php
+    $order = $shipment->order;
+    @endphp
+
+    <div class="slip-wrap">
+
+        {{-- Logo --}}
+        <div class="logo-section">
+            @if($logoBase64)
+            <img src="{{ $logoBase64 }}" alt="{{ $store?->name ?? 'Store' }} Logo">
+            @else
+            <span class="store-name">{{ $store?->name ?? 'Store' }}</span>
+            @endif
+        </div>
+
+        {{-- Packing Slip Title Bar --}}
+        <div class="slip-bar">
+            {{ $store?->name ?? 'Store' }} packing slip for order #{{ $order->order_number }}
+        </div>
+
+        {{-- Store Address --}}
+        @php
+        $storeAddress = $store->store_address ?? [];
+        @endphp
+
+        @if(!empty($storeAddress))
+        <div class="store-address">
+            <strong>Address:</strong><br>
+            @if(!empty($storeAddress['line1'])){{ $storeAddress['line1'] }}<br>@endif
+            @if(!empty($storeAddress['line2'])){{ $storeAddress['line2'] }}<br>@endif
+            {{ $storeAddress['city'] ?? '' }}{{ !empty($storeAddress['state']) ? ', ' . $storeAddress['state'] : '' }} {{ $storeAddress['zip'] ?? '' }}
+        </div>
         @endif
-    </div>
 
-    {{-- Packing Slip Title Bar --}}
-    <div class="slip-bar">
-        {{ $store?->name ?? 'Store' }} packing slip for order #{{ $order->order_number }}
-    </div>
+        {{-- Billing & Shipping Side by Side --}}
+        @php
+        $billing = $order->billing_address ?? [];
+        $shipping = $order->billingInformation;
+        @endphp
 
-    {{-- Store Address --}}
-    @php
-    $storeAddress = $store->store_address ?? [];
-    @endphp
-
-    @if(!empty($storeAddress))
-    <div class="store-address">
-        <strong>Address:</strong><br>
-        @if(!empty($storeAddress['line1'])){{ $storeAddress['line1'] }}<br>@endif
-        @if(!empty($storeAddress['line2'])){{ $storeAddress['line2'] }}<br>@endif
-        {{ $storeAddress['city'] ?? '' }}{{ !empty($storeAddress['state']) ? ', ' . $storeAddress['state'] : '' }} {{ $storeAddress['zip'] ?? '' }}
-    </div>
-    @endif
-
-    {{-- Billing & Shipping Side by Side --}}
-    @php
-    $billing = $order->billing_address ?? [];
-    $shipping = $order->billingInformation;
-    @endphp
-
-    <table class="two-column">
-        <tr>
-            <td>
-                <div class="section-title">Billing Details</div>
-                <div class="address-block">
-                    @if(!empty($billing))
-                    <strong>{{ $billing['name'] ?? '' }}</strong><br>
-                    @if(!empty($billing['company'])){{ $billing['company'] }}<br>@endif
-                    {{ $billing['addressLine1'] ?? '' }}<br>
-                    @if(!empty($billing['addressLine2'])){{ $billing['addressLine2'] }}<br>@endif
-                    {{ $billing['city'] ?? '' }}{{ !empty($billing['state']) ? ', ' . $billing['state'] : '' }} {{ $billing['zip'] ?? '' }}<br>
-                    {{ $billing['country'] ?? '' }}<br>
-                    @if(!empty($billing['phone']))Phone: {{ $billing['phone'] }}@endif
-                    @else
-                    <strong>{{ $shipping->first_name ?? '' }} {{ $shipping->last_name ?? '' }}</strong><br>
-                    @if($shipping->company_name){{ $shipping->company_name }}<br>@endif
-                    {{ $shipping->address_line_1 ?? '' }}<br>
-                    @if($shipping->address_line_2){{ $shipping->address_line_2 }}<br>@endif
-                    {{ $shipping->city ?? '' }}{{ $shipping->state ? ', ' . $shipping->state : '' }} {{ $shipping->zip ?? '' }}<br>
-                    {{ $shipping->country ?? '' }}<br>
-                    @if($shipping->phone)Phone: {{ $shipping->phone }}@endif
-                    @endif
-                </div>
-            </td>
-            <td>
-                <div class="section-title">Shipping Details</div>
-                <div class="address-block">
-                    <strong>{{ $shipping->first_name ?? '' }} {{ $shipping->last_name ?? '' }}</strong><br>
-                    @if($shipping->company_name){{ $shipping->company_name }}<br>@endif
-                    {{ $shipping->address_line_1 ?? '' }}<br>
-                    @if($shipping->address_line_2){{ $shipping->address_line_2 }}<br>@endif
-                    {{ $shipping->city ?? '' }}{{ $shipping->state ? ', ' . $shipping->state : '' }} {{ $shipping->zip ?? '' }}<br>
-                    {{ $shipping->country ?? '' }}<br>
-                    @if($shipping->phone)Phone: {{ $shipping->phone }}@endif
-                </div>
-            </td>
-        </tr>
-    </table>
-
-    {{-- Order Info --}}
-    <table class="order-info">
-        <tr>
-            <td><strong>Order:</strong></td>
-            <td>#{{ $order->order_number }}</td>
-            <td><strong>Shipping Method:</strong></td>
-            <td>{{ $shipping->shipping_method ?? 'N/A' }}</td>
-        </tr>
-        <tr>
-            <td><strong>Order Date:</strong></td>
-            <td>{{ optional($order->created_at)->format('M d, Y') }}</td>
-            <td>&nbsp;</td>
-            <td>&nbsp;</td>
-        </tr>
-    </table>
-
-    {{-- Shipped Items --}}
-    <div class="items-title">Shipped Items</div>
-
-    <table class="items-table">
-        <thead>
+        <table class="two-column">
             <tr>
-                <th class="text-center" style="width: 35px;">Qty</th>
-                <th style="width: 90px;">Code/SKU</th>
-                <th>Product Name</th>
-                <th class="text-right" style="width: 80px;">Bin Picking No.</th>
+                <td>
+                    <div class="section-title">Billing Details</div>
+                    <div class="address-block">
+                        @if(!empty($billing))
+                        <strong>{{ $billing['name'] ?? '' }}</strong><br>
+                        @if(!empty($billing['company'])){{ $billing['company'] }}<br>@endif
+                        {{ $billing['addressLine1'] ?? '' }}<br>
+                        @if(!empty($billing['addressLine2'])){{ $billing['addressLine2'] }}<br>@endif
+                        {{ $billing['city'] ?? '' }}{{ !empty($billing['state']) ? ', ' . $billing['state'] : '' }} {{ $billing['zip'] ?? '' }}<br>
+                        {{ $billing['country'] ?? '' }}<br>
+                        @if(!empty($billing['phone']))Phone: {{ $billing['phone'] }}@endif
+                        @else
+                        <strong>{{ $shipping->first_name ?? '' }} {{ $shipping->last_name ?? '' }}</strong><br>
+                        @if($shipping->company_name){{ $shipping->company_name }}<br>@endif
+                        {{ $shipping->address_line_1 ?? '' }}<br>
+                        @if($shipping->address_line_2){{ $shipping->address_line_2 }}<br>@endif
+                        {{ $shipping->city ?? '' }}{{ $shipping->state ? ', ' . $shipping->state : '' }} {{ $shipping->zip ?? '' }}<br>
+                        {{ $shipping->country ?? '' }}<br>
+                        @if($shipping->phone)Phone: {{ $shipping->phone }}@endif
+                        @endif
+                    </div>
+                </td>
+                <td>
+                    <div class="section-title">Shipping Details</div>
+                    <div class="address-block">
+                        <strong>{{ $shipping->first_name ?? '' }} {{ $shipping->last_name ?? '' }}</strong><br>
+                        @if($shipping->company_name){{ $shipping->company_name }}<br>@endif
+                        {{ $shipping->address_line_1 ?? '' }}<br>
+                        @if($shipping->address_line_2){{ $shipping->address_line_2 }}<br>@endif
+                        {{ $shipping->city ?? '' }}{{ $shipping->state ? ', ' . $shipping->state : '' }} {{ $shipping->zip ?? '' }}<br>
+                        {{ $shipping->country ?? '' }}<br>
+                        @if($shipping->phone)Phone: {{ $shipping->phone }}@endif
+                    </div>
+                </td>
             </tr>
-        </thead>
-        <tbody>
-            @foreach ($order->items as $item)
+        </table>
+
+        {{-- Order Info --}}
+        <table class="order-info">
             <tr>
-                <td class="text-center">{{ $item->quantity }}</td>
-                <td>{{ $item->product->sku ?? 'N/A' }}</td>
-                <td>{{ $item->product->name ?? 'N/A' }}</td>
-                <td class="text-right">{{ $item->product->identifiers->bpn ?? 'N/A' }}</td>
+                <td><strong>Order:</strong></td>
+                <td>#{{ $order->order_number }}</td>
+                <td><strong>Shipping Method:</strong></td>
+                <td>{{ $shipping->shipping_method ?? 'N/A' }}</td>
             </tr>
-            @endforeach
-        </tbody>
-    </table>
+            <tr>
+                <td><strong>Order Date:</strong></td>
+                <td>{{ optional($order->created_at)->format('M d, Y') }}</td>
+                <td>&nbsp;</td>
+                <td>&nbsp;</td>
+            </tr>
+        </table>
+
+        {{-- Shipped Items --}}
+        <div class="items-title">Shipped Items</div>
+
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th class="text-center" style="width: 35px;">Qty</th>
+                    <th style="width: 90px;">Code/SKU</th>
+                    <th>Product Name</th>
+                    <th class="text-right" style="width: 80px;">Bin Picking No.</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($order->items as $item)
+                <tr>
+                    <td class="text-center">{{ $item->quantity }}</td>
+                    <td>{{ $item->product->sku ?? 'N/A' }}</td>
+                    <td>{{ $item->product->name ?? 'N/A' }}</td>
+                    <td class="text-right">{{ $item->product->identifiers->bpn ?? 'N/A' }}</td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+
+    </div>
+
+    @endforeach
 
 </body>
 

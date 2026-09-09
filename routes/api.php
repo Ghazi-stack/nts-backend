@@ -199,7 +199,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/add-shipment', 'store');
         Route::put('/update-shipment/{id}', 'update');
         Route::delete('/destroy-shipment', 'destroy');
-        Route::get('/packing-slip/{id}', 'printPackingSlip');
+        Route::get('/packing-slip/{ids}', 'printPackingSlip');
         Route::post('/advanced-search', 'advancedSearch');
     });
 
@@ -531,7 +531,7 @@ Route::prefix('web')->group(function () {
     Route::prefix('brands')->controller(BrandController::class)->group(function () {
         Route::get('/brands', 'index');
         Route::get('/brands/{id}', 'showBrands');
-    }); 
+    });
     // 🏷️ Public Brands
     Route::prefix('webpages')->controller(WebPageController::class)->group(function () {
         Route::get('/web-pages', 'index');
@@ -549,7 +549,7 @@ Route::prefix('web')->group(function () {
         Route::get('/last-week-orders', 'lastWeekOrderedProducts');
         Route::get('/last-week-product', 'lastWeekProducts');
         Route::get('/product-byIds/{id?}', 'showProductsByIds')
-        ->where('id', '[0-9]+');
+            ->where('id', '[0-9]+');
     });
     // 🛒 Cart (Guest + Auth dono)
     Route::prefix('cart')->controller(CartController::class)->group(function () {

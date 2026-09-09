@@ -266,17 +266,28 @@ class ShipmentController extends Controller
      */
 
 
-    public function printPackingSlip($id)
+    public function printPackingSlip($ids)
     {
         $storeId = current_store_id();
 
-        $shipment = Shipment::with(['order.items.product.identifiers', 'order.billingInformation'])
-            ->where('store_id', $storeId)
-            ->where('order_id', $id)
-            ->latest()
-            ->first();
+        $idList = array_values(array_unique(array_filter(array_map('intval', explode(',', (string) $ids)))));
 
-        if (!$shipment) {
+        if (empty($idList)) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Please provide at least one order id.',
+            ], 422);
+        }
+
+        $shipments = Shipment::with(['order.items.product.identifiers', 'order.billingInformation'])
+            ->where('store_id', $storeId)
+            ->whereIn('order_id', $idList)
+            ->latest()
+            ->get()
+            ->unique('order_id')
+            ->values();
+
+        if ($shipments->isEmpty()) {
             return response()->json([
                 'status'  => false,
                 'message' => 'No shipment found for this order. Please create a shipment first.',
@@ -313,15 +324,19 @@ class ShipmentController extends Controller
             }
         }
 
-        // Generate PDF
         $pdf = Pdf::loadView('pdf.packing-slip', [
-            'shipment'   => $shipment,
-            'order'      => $shipment->order,
+            'shipments'  => $shipments,
+            'shipment'   => $shipments->first(),
+            'order'      => $shipments->first()->order,
             'logoBase64' => $logoBase64,
             'store'      => $store,
         ]);
 
-        return $pdf->download('packing-slip-' . $shipment->id . '.pdf');
+        if ($shipments->count() === 1) {
+            return $pdf->download('packing-slip-' . $shipments->first()->id . '.pdf');
+        }
+
+        return $pdf->download('packing-slips-' . now()->format('Ymd-His') . '.pdf');
     }
 
     /**
