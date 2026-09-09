@@ -279,20 +279,39 @@ class ShipmentController extends Controller
             ], 422);
         }
 
-        $shipments = Shipment::with(['order.items.product.identifiers', 'order.billingInformation'])
+        $orders = Order::with(['items.product.identifiers', 'billingInformation', 'shipments'])
             ->where('store_id', $storeId)
-            ->whereIn('order_id', $idList)
+            ->whereIn('id', $idList)
             ->latest()
             ->get()
-            ->unique('order_id')
+            ->unique('id')
             ->values();
 
-        if ($shipments->isEmpty()) {
+        if ($orders->isEmpty()) {
             return response()->json([
                 'status'  => false,
-                'message' => 'No shipment found for this order. Please create a shipment first.',
+                'message' => 'No order found.',
             ], 404);
         }
+
+        // Shipment ho to latest use karo, na ho to order se temporary shipment object
+        // taake existing packing-slip view break na ho
+        $shipments = $orders->map(function ($order) {
+            $shipment = $order->shipments->sortByDesc('id')->first();
+
+            if ($shipment) {
+                $shipment->setRelation('order', $order);
+                return $shipment;
+            }
+
+            $temp = new Shipment();
+            $temp->id = $order->id;
+            $temp->order_id = $order->id;
+            $temp->store_id = $order->store_id;
+            $temp->setRelation('order', $order);
+
+            return $temp;
+        })->values();
 
         $store = Store::find($storeId);
 
