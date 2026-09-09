@@ -4288,13 +4288,18 @@ class OrderController extends Controller
     }
 
 
-    public function downloadInvoice($id)
+    public function downloadInvoice($ids)
     {
         $storeId = current_store_id();
 
-        $order = Order::with(['items.product.images', 'billingInformation', 'customer', 'payment'])
-            ->where('store_id', $storeId)
-            ->findOrFail($id);
+        $idList = array_values(array_unique(array_filter(array_map('intval', explode(',', (string) $ids)))));
+
+        if (empty($idList)) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Please provide at least one order id.',
+            ], 422);
+        }
 
         $store = Store::find($storeId);
 
@@ -4322,13 +4327,27 @@ class OrderController extends Controller
             }
         }
 
+        $orders = Order::with(['items.product.images', 'billingInformation', 'customer', 'payment'])
+            ->where('store_id', $storeId)
+            ->whereIn('id', $idList)
+            ->get();
+
+        if ($orders->isEmpty()) {
+            abort(404);
+        }
+
         $pdf = Pdf::loadView('pdf.invoice', [
-            'order'      => $order,
+            'orders'     => $orders,
+            'order'      => $orders->first(),
             'logoBase64' => $logoBase64,
             'store'      => $store,
         ]);
 
-        return $pdf->download('invoice-' . $order->order_number . '.pdf');
+        if ($orders->count() === 1) {
+            return $pdf->download('invoice-' . $orders->first()->order_number . '.pdf');
+        }
+
+        return $pdf->download('invoices-' . now()->format('Ymd-His') . '.pdf');
     }
 
     public function sendPaymentInvoice($orderId)

@@ -19,6 +19,14 @@
             background-color: #fff;
         }
 
+        .invoice-wrap {
+            page-break-after: always;
+        }
+
+        .invoice-wrap:last-child {
+            page-break-after: auto;
+        }
+
         .logo-section {
             text-align: left;
             margin-bottom: 5px;
@@ -170,6 +178,14 @@
 </head>
 
 <body>
+
+@php
+    $invoiceList = (isset($orders) && count($orders)) ? $orders : collect([$order]);
+@endphp
+
+@foreach ($invoiceList as $order)
+
+    <div class="invoice-wrap">
 
     {{-- Logo --}}
     <div class="logo-section">
@@ -331,6 +347,10 @@
             <td class="value">${{ number_format($order->total_amount ?? 0, 2) }} USD</td>
         </tr>
     </table>
+
+    </div>
+
+@endforeach
 
 </body>
 
