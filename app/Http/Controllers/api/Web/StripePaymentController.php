@@ -158,88 +158,151 @@ class StripePaymentController extends Controller
     public function capturePayment(Request $request)
     {
         $request->validate([
-            'payment_intent_id' => 'required|string',
-            'amount_to_capture' => 'nullable|integer',
+            'payment_intent_id'  => 'nullable',
+            'payment_intent_ids' => 'nullable|array',
+            'amount_to_capture'  => 'nullable|integer',
         ]);
+
+        $intentIds = [];
+
+        if ($request->filled('payment_intent_id')) {
+            $single = $request->input('payment_intent_id');
+            $intentIds = is_array($single) ? $single : [$single];
+        }
+
+        if ($request->filled('payment_intent_ids') && is_array($request->payment_intent_ids)) {
+            $intentIds = array_merge($intentIds, $request->payment_intent_ids);
+        }
+
+        $intentIds = array_values(array_unique(array_filter(array_map('trim', $intentIds))));
+
+        if (empty($intentIds)) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Please provide payment_intent_id.',
+            ], 422);
+        }
 
         Stripe::setApiKey(config('services.stripe.secret'));
 
-        try {
-            $payment = Payment::where('stripe_session_id', $request->payment_intent_id)->first();
+        $results      = [];
+        $successCount = 0;
+        $failedCount  = 0;
 
-            if (!$payment) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Payment record not found.',
-                ], 404);
+        foreach ($intentIds as $intentId) {
+            try {
+                $payment = Payment::where('stripe_session_id', $intentId)->first();
+
+                if (!$payment) {
+                    $failedCount++;
+                    $results[] = [
+                        'payment_intent_id' => $intentId,
+                        'status'            => false,
+                        'message'           => 'Payment record not found.',
+                    ];
+                    continue;
+                }
+
+                if ($payment->payment_status === 'completed') {
+                    $failedCount++;
+                    $results[] = [
+                        'payment_intent_id' => $intentId,
+                        'order_id'          => $payment->order_id,
+                        'status'            => false,
+                        'message'           => 'Payment already captured.',
+                    ];
+                    continue;
+                }
+
+                $intent = PaymentIntent::retrieve($intentId);
+
+                if ($intent->status !== 'requires_capture') {
+                    $failedCount++;
+                    $results[] = [
+                        'payment_intent_id' => $intentId,
+                        'order_id'          => $payment->order_id,
+                        'status'            => false,
+                        'message'           => 'Payment cannot be captured. Current status: ' . $intent->status,
+                    ];
+                    continue;
+                }
+
+                $captureParams = [];
+                if (count($intentIds) === 1 && $request->has('amount_to_capture') && $request->amount_to_capture > 0) {
+                    $captureParams['amount_to_capture'] = $request->amount_to_capture;
+                }
+
+                $captured = $intent->capture($captureParams);
+
+                $payment->update([
+                    'payment_status' => 'completed',
+                ]);
+
+                $storeId = current_store_id();
+
+                OrderTimeline::addEvent($payment->order_id, $storeId, 'payment_captured', 'Capture request successfully processed for the order #' . ($payment->order->order_number ?? $payment->order_id), [
+                    'source'         => 'Credit Card (via Stripe)',
+                    'payment_intent' => $intentId,
+                    'amount'         => '$' . number_format($captured->amount_received / 100, 2),
+                ], 'payment');
+
+                $order = $payment->order;
+                if ($order) {
+                    $previousStatus = $order->status;
+                    $order->update(['status' => 'Awaiting Fulfillment']);
+
+                    OrderTimeline::addEvent($order->id, $storeId, 'status_changed', 'Order status changed', [
+                        'previous_status' => $previousStatus,
+                        'new_status'      => 'Awaiting Fulfillment',
+                    ], 'dot');
+                }
+
+                $successCount++;
+                $results[] = [
+                    'payment_intent_id' => $intentId,
+                    'order_id'          => $payment->order_id,
+                    'status'            => true,
+                    'message'           => 'Payment captured successfully.',
+                    'amount_captured'   => $captured->amount_received,
+                    'payment_status'    => $captured->status,
+                ];
+            } catch (\Stripe\Exception\CardException $e) {
+                $failedCount++;
+                $results[] = [
+                    'payment_intent_id' => $intentId,
+                    'status'            => false,
+                    'message'           => $e->getError()->message,
+                ];
+            } catch (\Exception $e) {
+                $failedCount++;
+                $results[] = [
+                    'payment_intent_id' => $intentId,
+                    'status'            => false,
+                    'message'           => $e->getMessage(),
+                ];
             }
-
-            if ($payment->payment_status === 'completed') {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Payment already captured.',
-                ], 409);
-            }
-
-            $intent = PaymentIntent::retrieve($request->payment_intent_id);
-
-            if ($intent->status !== 'requires_capture') {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Payment cannot be captured. Current status: ' . $intent->status,
-                ], 400);
-            }
-
-            $captureParams = [];
-            if ($request->has('amount_to_capture') && $request->amount_to_capture > 0) {
-                $captureParams['amount_to_capture'] = $request->amount_to_capture;
-            }
-
-            $captured = $intent->capture($captureParams);
-
-            $payment->update([
-                'payment_status' => 'completed',
-            ]);
-
-            // ===================== TIMELINE: PAYMENT CAPTURED =====================
-            $storeId = current_store_id();
-
-            OrderTimeline::addEvent($payment->order_id, $storeId, 'payment_captured', 'Capture request successfully processed for the order #' . ($payment->order->order_number ?? $payment->order_id), [
-                'source'         => 'Credit Card (via Stripe)',
-                'payment_intent' => $request->payment_intent_id,
-                'amount'         => '$' . number_format($captured->amount_received / 100, 2),
-            ], 'payment');
-
-            $order = $payment->order;
-            if ($order) {
-                $previousStatus = $order->status;
-                $order->update(['status' => 'Awaiting Fulfillment']);
-
-                // Timeline: Status Changed
-                OrderTimeline::addEvent($order->id, $storeId, 'status_changed', 'Order status changed', [
-                    'previous_status' => $previousStatus,
-                    'new_status'      => 'Awaiting Fulfillment',
-                ], 'dot');
-            }
-
-            return response()->json([
-                'status'          => true,
-                'message'         => 'Payment captured successfully.',
-                'amount_captured' => $captured->amount_received,
-                'payment_status'  => $captured->status,
-                'order_id'        => $payment->order_id,
-            ]);
-        } catch (\Stripe\Exception\CardException $e) {
-            return response()->json([
-                'status'  => false,
-                'message' => $e->getError()->message,
-            ], 402);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status'  => false,
-                'message' => $e->getMessage(),
-            ], 500);
         }
+
+        $isSingle = count($intentIds) === 1;
+        $first    = $results[0];
+
+        if ($isSingle) {
+            return response()->json([
+                'status'          => $first['status'],
+                'message'         => $first['message'],
+                'amount_captured' => $first['amount_captured'] ?? null,
+                'payment_status'  => $first['payment_status'] ?? null,
+                'order_id'        => $first['order_id'] ?? null,
+            ], $first['status'] ? 200 : 400);
+        }
+
+        return response()->json([
+            'status'         => $failedCount === 0,
+            'message'        => $successCount . ' captured, ' . $failedCount . ' failed.',
+            'success_count'  => $successCount,
+            'failed_count'   => $failedCount,
+            'data'           => $results,
+        ]);
     }
 
     /**

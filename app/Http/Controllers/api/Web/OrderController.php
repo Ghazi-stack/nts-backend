@@ -1613,71 +1613,71 @@ class OrderController extends Controller
                 'new_status'      => $newStatus,
             ], 'dot');
 
-            // ===================== STRIPE CAPTURE =====================
-            if ($newStatus === 'Awaiting Fulfillment') {
-                $payment = Payment::where('order_id', $order->id)->first();
+            // // ===================== STRIPE CAPTURE =====================
+            // if ($newStatus === 'Awaiting Fulfillment') {
+            //     $payment = Payment::where('order_id', $order->id)->first();
 
-                if ($payment && $payment->stripe_session_id && $payment->payment_status === 'authorized') {
-                    try {
-                        \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-                        $intent = \Stripe\PaymentIntent::retrieve($payment->stripe_session_id);
+            //     if ($payment && $payment->stripe_session_id && $payment->payment_status === 'authorized') {
+            //         try {
+            //             \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+            //             $intent = \Stripe\PaymentIntent::retrieve($payment->stripe_session_id);
 
-                        if ($intent->status === 'requires_capture') {
-                            $intent->capture();
-                            $payment->update(['payment_status' => 'completed']);
+            //             if ($intent->status === 'requires_capture') {
+            //                 $intent->capture();
+            //                 $payment->update(['payment_status' => 'completed']);
 
-                            OrderTimeline::addEvent($order->id, $storeId, 'payment_captured', 'Capture request successfully processed for the order #' . $order->order_number, [
-                                'source'         => 'Credit Card (via Stripe)',
-                                'payment_intent' => $payment->stripe_session_id,
-                                'amount'         => '$' . number_format($payment->amount, 2),
-                            ], 'payment');
-                        }
-                    } catch (\Exception $captureError) {
-                        \Log::error('STRIPE CAPTURE FAILED', [
-                            'order_id'       => $order->id,
-                            'payment_intent' => $payment->stripe_session_id,
-                            'error'          => $captureError->getMessage(),
-                        ]);
-                    }
-                }
-            }
+            //                 OrderTimeline::addEvent($order->id, $storeId, 'payment_captured', 'Capture request successfully processed for the order #' . $order->order_number, [
+            //                     'source'         => 'Credit Card (via Stripe)',
+            //                     'payment_intent' => $payment->stripe_session_id,
+            //                     'amount'         => '$' . number_format($payment->amount, 2),
+            //                 ], 'payment');
+            //             }
+            //         } catch (\Exception $captureError) {
+            //             \Log::error('STRIPE CAPTURE FAILED', [
+            //                 'order_id'       => $order->id,
+            //                 'payment_intent' => $payment->stripe_session_id,
+            //                 'error'          => $captureError->getMessage(),
+            //             ]);
+            //         }
+            //     }
+            // }
 
-            // ===================== STRIPE CANCEL/REFUND =====================
-            if ($newStatus === 'Cancelled') {
-                $payment = Payment::where('order_id', $order->id)->first();
+            // // ===================== STRIPE CANCEL/REFUND =====================
+            // if ($newStatus === 'Cancelled') {
+            //     $payment = Payment::where('order_id', $order->id)->first();
 
-                if ($payment && $payment->stripe_session_id) {
-                    try {
-                        \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-                        $intent = \Stripe\PaymentIntent::retrieve($payment->stripe_session_id);
+            //     if ($payment && $payment->stripe_session_id) {
+            //         try {
+            //             \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+            //             $intent = \Stripe\PaymentIntent::retrieve($payment->stripe_session_id);
 
-                        if ($intent->status === 'requires_capture') {
-                            $intent->cancel();
-                            $payment->update(['payment_status' => 'cancelled']);
+            //             if ($intent->status === 'requires_capture') {
+            //                 $intent->cancel();
+            //                 $payment->update(['payment_status' => 'cancelled']);
 
-                            OrderTimeline::addEvent($order->id, $storeId, 'payment_cancelled', 'Payment cancelled for order #' . $order->order_number, [
-                                'payment_intent' => $payment->stripe_session_id,
-                            ], 'payment');
-                        } elseif ($intent->status === 'succeeded') {
-                            \Stripe\Refund::create([
-                                'payment_intent' => $payment->stripe_session_id,
-                            ]);
-                            $payment->update(['payment_status' => 'refunded']);
+            //                 OrderTimeline::addEvent($order->id, $storeId, 'payment_cancelled', 'Payment cancelled for order #' . $order->order_number, [
+            //                     'payment_intent' => $payment->stripe_session_id,
+            //                 ], 'payment');
+            //             } elseif ($intent->status === 'succeeded') {
+            //                 \Stripe\Refund::create([
+            //                     'payment_intent' => $payment->stripe_session_id,
+            //                 ]);
+            //                 $payment->update(['payment_status' => 'refunded']);
 
-                            OrderTimeline::addEvent($order->id, $storeId, 'payment_refunded', 'Payment refunded for order #' . $order->order_number, [
-                                'payment_intent' => $payment->stripe_session_id,
-                                'amount'         => '$' . number_format($payment->amount, 2),
-                            ], 'payment');
-                        }
-                    } catch (\Exception $stripeError) {
-                        \Log::error('STRIPE CANCEL/REFUND FAILED', [
-                            'order_id' => $order->id,
-                            'payment_intent' => $payment->stripe_session_id,
-                            'error' => $stripeError->getMessage(),
-                        ]);
-                    }
-                }
-            }
+            //                 OrderTimeline::addEvent($order->id, $storeId, 'payment_refunded', 'Payment refunded for order #' . $order->order_number, [
+            //                     'payment_intent' => $payment->stripe_session_id,
+            //                     'amount'         => '$' . number_format($payment->amount, 2),
+            //                 ], 'payment');
+            //             }
+            //         } catch (\Exception $stripeError) {
+            //             \Log::error('STRIPE CANCEL/REFUND FAILED', [
+            //                 'order_id' => $order->id,
+            //                 'payment_intent' => $payment->stripe_session_id,
+            //                 'error' => $stripeError->getMessage(),
+            //             ]);
+            //         }
+            //     }
+            // }
 
             // ===================== SEND STATUS UPDATE EMAIL =====================
             $emailStatuses = [
@@ -1693,7 +1693,6 @@ class OrderController extends Controller
             if (in_array($newStatus, $emailStatuses)) {
                 $order->load('billingInformation', 'customer');
 
-                // Shipment load karo (Shipped status ke liye)
                 $shipment = null;
                 if ($newStatus === 'Shipped') {
                     $shipment = \App\Models\Shipment::where('order_id', $order->id)
@@ -1708,14 +1707,11 @@ class OrderController extends Controller
 
                 if ($customerEmail) {
                     try {
-                        // Email to customer
                         Mail::to($customerEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId, $shipment));
 
-                        // Email to admin
                         $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
                         Mail::to($adminEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId, $shipment));
 
-                        // Timeline: Email Sent
                         OrderTimeline::addEvent($order->id, $storeId, 'email_sent', 'Status update email sent', [
                             'email'  => $customerEmail,
                             'status' => $newStatus,
