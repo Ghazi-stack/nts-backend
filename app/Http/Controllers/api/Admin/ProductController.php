@@ -174,6 +174,7 @@ class ProductController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+    
     public function filterProducts(Request $request)
     {
         try {
@@ -185,12 +186,13 @@ class ProductController extends Controller
 
             $hasCategory = $request->has('isCategory') && !empty($request->isCategory);
             $hasSku      = $request->has('isSku') && !empty($request->isSku);
+            $hasName     = $request->has('isName') && !empty($request->isName);
+            $hasTitle    = $request->has('isTitle') && !empty($request->isTitle);
 
-            // ✅ If neither filter provided
-            if (!$hasCategory && !$hasSku) {
+            if (!$hasCategory && !$hasSku && !$hasName && !$hasTitle) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'Please provide at least one filter: isCategory or isSku.'
+                    'message' => 'Please provide at least one filter: isCategory, isSku, isName or isTitle.'
                 ], 422);
             }
 
@@ -217,7 +219,6 @@ class ProductController extends Controller
                 ])
                 ->where('store_id', $storeId);
 
-            // ✅ Validate category IDs
             if ($hasCategory) {
                 $categoryIds = array_filter(array_map('intval', explode(',', $request->isCategory)));
 
@@ -229,89 +230,78 @@ class ProductController extends Controller
                 }
             }
 
-            // ✅ Both filters — run separately then merge
-            if ($hasCategory && $hasSku) {
+            $buckets = [];
 
-                $categoryProducts = (clone $baseQuery)
+            if ($hasCategory) {
+                $buckets['Category'] = (clone $baseQuery)
                     ->whereIn('category_id', $categoryIds)
                     ->orderBy('id', 'desc')
                     ->get();
+            }
 
-                $skuProducts = (clone $baseQuery)
+            if ($hasSku) {
+                $buckets['SKU'] = (clone $baseQuery)
                     ->where('sku', $request->isSku)
                     ->orderBy('id', 'desc')
                     ->get();
-
-                $categoryFound = $categoryProducts->isNotEmpty();
-                $skuFound      = $skuProducts->isNotEmpty();
-
-                // ✅ Neither found
-                if (!$categoryFound && !$skuFound) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'No product found against this SKU and Category.',
-                        'data'    => []
-                    ], 404);
-                }
-
-                // ✅ Merge both (unique by id — same product won't duplicate)
-                $merged = $categoryProducts->merge($skuProducts)->unique('id')->values();
-
-                // ✅ Category found, SKU not found — return category data + SKU message
-                if ($categoryFound && !$skuFound) {
-                    return response()->json([
-                        'status'  => true,
-                        'message' => 'Products fetched from Category. No product found against this SKU.',
-                        'data'    => ProductListResource::collection($merged),
-                    ]);
-                }
-
-                // ✅ SKU found, Category not found — return SKU data + Category message
-                if ($skuFound && !$categoryFound) {
-                    return response()->json([
-                        'status'  => true,
-                        'message' => 'Products fetched from SKU. No product found against this Category.',
-                        'data'    => ProductListResource::collection($merged),
-                    ]);
-                }
-
-                // ✅ Both found — merge, deduplicate by id
-                return response()->json([
-                    'status'  => true,
-                    'message' => 'Filtered products fetched successfully.',
-                    'data'    => ProductListResource::collection($merged),
-                ]);
             }
 
-            // ✅ Only Category filter
-            if ($hasCategory) {
-                $baseQuery->whereIn('category_id', $categoryIds);
+            if ($hasName) {
+                $name = trim($request->isName);
+                $buckets['Name'] = (clone $baseQuery)
+                    ->where('name', 'like', '%' . $name . '%')
+                    ->orderBy('id', 'desc')
+                    ->get();
             }
 
-            // ✅ Only SKU filter
-            if ($hasSku) {
-                $baseQuery->where('sku', $request->isSku);
+            if ($hasTitle) {
+                $title = trim($request->isTitle);
+                $buckets['Title'] = (clone $baseQuery)
+                    ->where(function ($q) use ($title) {
+                        $q->where('name', 'like', '%' . $title . '%')
+                            ->orWhereHas('seo', function ($seo) use ($title) {
+                                $seo->where('page_title', 'like', '%' . $title . '%');
+                            });
+                    })
+                    ->orderBy('id', 'desc')
+                    ->get();
             }
 
-            $products = $baseQuery->orderBy('id', 'desc')->get();
+            $merged  = collect();
+            $found   = [];
+            $missing = [];
 
-            // ✅ Single filter not found messages
-            if ($products->isEmpty()) {
-                $message = $hasSku
-                    ? 'No product found against this SKU.'
-                    : 'No product found against this Category.';
+            foreach ($buckets as $label => $items) {
+                if ($items->isNotEmpty()) {
+                    $found[] = $label;
+                    $merged  = $merged->merge($items);
+                } else {
+                    $missing[] = $label;
+                }
+            }
 
+            $merged = $merged->unique('id')->values();
+
+            if ($merged->isEmpty()) {
+                $labels = implode(' and ', $missing);
                 return response()->json([
                     'status'  => false,
-                    'message' => $message,
+                    'message' => 'No product found against this ' . $labels . '.',
                     'data'    => []
                 ], 404);
             }
 
+            $message = 'Filtered products fetched successfully.';
+
+            if (!empty($missing) && !empty($found)) {
+                $message = 'Products fetched from ' . implode(', ', $found)
+                    . '. No product found against this ' . implode(', ', $missing) . '.';
+            }
+
             return response()->json([
                 'status'  => true,
-                'message' => 'Filtered products fetched successfully.',
-                'data'    => ProductListResource::collection($products),
+                'message' => $message,
+                'data'    => ProductListResource::collection($merged),
             ]);
         } catch (\Exception $e) {
             return response()->json(['status' => false, 'error' => $e->getMessage()], 500);
