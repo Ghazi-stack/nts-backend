@@ -161,6 +161,84 @@ class OrderController extends Controller
         }
     }
 
+    public function overview(Request $request)
+    {
+        try {
+            $perPage = min((int) $request->query('perPage', 20), 50);
+            $status  = strtolower(trim((string) $request->query('status', 'recent')));
+
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not found or unauthorized.',
+                ], 403);
+            }
+
+            $statusMap = [
+                'pending'   => ['Awaiting Payment', 'Awaiting Fulfillment'],
+                'completed' => ['Shipped', 'Completed'],
+                'refunded'  => ['Refunded', 'Partially Refunded'],
+            ];
+
+            if (!in_array($status, ['recent', 'pending', 'completed', 'refunded'], true)) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid status. Use recent, pending, completed or refunded.',
+                ], 422);
+            }
+
+            $orders = Order::query()
+                ->with([
+                    'items' => function ($q) {
+                        $q->select('id', 'order_id', 'product_id', 'quantity', 'price')
+                            ->with([
+                                'product' => function ($p) {
+                                    $p->with([
+                                        'images',
+                                        'brand',
+                                        'categories:id',
+                                    ]);
+                                }
+                            ]);
+                    },
+                    'customer',
+                    'billingInformation',
+                    'notes:id,order_id,note',
+                    'payment',
+                    'shipment:id,order_id,tracking_number,tracking_carrie,date_shipped,shipping_method,shipped_by,packing_slip_note',
+                ])
+                ->withCount('messages')
+                ->where('store_id', $storeId)
+                ->where('is_draft', 0)
+                ->when($status !== 'recent', function ($q) use ($status, $statusMap) {
+                    $q->whereIn('status', $statusMap[$status]);
+                })
+                ->latest('id')
+                ->paginate($perPage);
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Orders retrieved successfully',
+                'data'    => OrderResource::collection($orders),
+                'pagination' => [
+                    'total'       => $orders->total(),
+                    'count'       => $orders->count(),
+                    'perPage'     => $orders->perPage(),
+                    'currentPage' => $orders->currentPage(),
+                    'totalPages'  => $orders->lastPage(),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to retrieve orders',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function detail(Request $request)
     {
         try {
@@ -269,6 +347,7 @@ class OrderController extends Controller
             ], 500);
         }
     }
+    
     public function show(Request $request, $id)
     {
         try {

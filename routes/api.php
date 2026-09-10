@@ -152,6 +152,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     // ===================== ORDERS =====================
     Route::prefix('orders')->middleware('permission:all_orders')->controller(OrderController::class)->group(function () {
         Route::get('/list-orders', 'index');
+        Route::get('/orders/overview', 'overview');
         Route::get('/show-order/{id}', 'show');
         Route::patch('/update-status/{id}', 'updateOrderStatus');
         Route::get('/export-orders', 'exportToExcel');
