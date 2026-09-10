@@ -2422,89 +2422,81 @@ class OrderController extends Controller
     public function storeFromDashboard(Request $request)
     {
         $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
+        }
 
         try {
             $validated = $request->validate([
-                'customerId' => 'required|exists:customers,id',
-                'isDraft' => 'nullable|boolean',
-                'deviceType' => 'nullable|string|max:255',
-                'comments' => 'nullable|string|max:1000',
-                'staffNotes' => 'nullable|string|max:1000',
-                'billingSame' => 'nullable|boolean',
-                'isSaveAddressForBilling' => 'nullable|boolean',
+                'customerId'   => 'required|exists:customers,id',
+                'isDraft'      => 'nullable|boolean',
+                'deviceType'   => 'nullable|string|max:1000',
+                'comments'     => 'nullable|string|max:1000',
+                'staffNotes'   => 'nullable|string|max:1000',
+                'billingSame'  => 'nullable|boolean',
+                'isSaveAddressForBilling'  => 'nullable|boolean',
                 'isSaveAddressForShipping' => 'nullable|boolean',
-                'newsletter' => 'nullable|boolean',
+                'newsletter'   => 'nullable|boolean',
                 'receiveOffers' => 'nullable|boolean',
-                'userType' => 'nullable|string|max:50',
+                'userType'     => 'nullable|string|max:50',
+                'couponCode'   => 'nullable|string|max:255',
+                'discountAmount' => 'nullable|numeric',
+                'ipAddress'    => 'nullable|string|max:45',
 
                 'billingAddress' => 'nullable|array',
-                'billingAddress.firstName' => 'nullable|string',
-                'billingAddress.lastName' => 'nullable|string',
-                'billingAddress.name' => 'nullable|string',
-                'billingAddress.email' => 'nullable|email',
-                'billingAddress.phone' => 'nullable|string',
-                'billingAddress.companyName' => 'nullable|string',
+                'billingAddress.firstName'    => 'nullable|string',
+                'billingAddress.lastName'     => 'nullable|string',
+                'billingAddress.name'         => 'nullable|string',
+                'billingAddress.email'        => 'nullable|email',
+                'billingAddress.phone'        => 'nullable|string',
+                'billingAddress.companyName'  => 'nullable|string',
                 'billingAddress.addressLine1' => 'nullable|string',
                 'billingAddress.addressLine2' => 'nullable|string',
-                'billingAddress.city' => 'nullable|string',
-                'billingAddress.state' => 'nullable|string',
-                'billingAddress.zip' => 'nullable|string',
-                'billingAddress.country' => 'nullable|string',
-                'billingAddress.saveToAddressBook' => 'nullable|boolean',
+                'billingAddress.city'         => 'nullable|string',
+                'billingAddress.state'        => 'nullable|string',
+                'billingAddress.zip'          => 'nullable|string',
+                'billingAddress.country'      => 'nullable|string',
 
                 'billingInformation' => 'nullable|array',
-                'billingInformation.firstName' => 'nullable|string',
-                'billingInformation.lastName' => 'nullable|string',
-                'billingInformation.email' => 'nullable|email',
-                'billingInformation.phone' => 'nullable|string',
-                'billingInformation.companyName' => 'nullable|string',
-                'billingInformation.addressLine1' => 'nullable|string',
-                'billingInformation.addressLine2' => 'nullable|string',
-                'billingInformation.city' => 'nullable|string',
-                'billingInformation.state' => 'nullable|string',
-                'billingInformation.zip' => 'nullable|string',
-                'billingInformation.country' => 'nullable|string',
-                'billingInformation.comments' => 'nullable|string',
-                'billingInformation.staffNotes' => 'nullable|string',
 
                 'paymentMethod' => 'required_unless:isDraft,true,1|array',
-                'paymentMethod.method' => 'required_unless:isDraft,true,1|string',
-                'paymentMethod.paymentMethodId' => 'nullable|string',
-                'paymentMethod.emailInvoice' => 'nullable|boolean',
-                'paymentMethod.cardholderName' => 'required_if:paymentMethod.method,credit_card|string|min:2|max:80|regex:/^[a-zA-Z][a-zA-Z\s\.\'\-]{1,}$/',
-                'paymentMethod.creditCardNo' => 'required_if:paymentMethod.method,credit_card|string',
-                'paymentMethod.ccv2Value' => 'required_if:paymentMethod.method,credit_card|string',
-                'paymentMethod.expirationMonth' => 'required_if:paymentMethod.method,credit_card|string',
-                'paymentMethod.expirationYear' => 'required_if:paymentMethod.method,credit_card|string',
+                'paymentMethod.method'           => 'required_unless:isDraft,true,1|string',
+                'paymentMethod.paymentMethodId'  => 'nullable|string',
+                'paymentMethod.cardholderName'   => 'nullable|string',
+                'paymentMethod.creditCardNo'     => 'nullable|string',
+                'paymentMethod.ccv2Value'        => 'nullable|string',
+                'paymentMethod.expirationMonth'  => 'nullable|string',
+                'paymentMethod.expirationYear'   => 'nullable|string',
+                'paymentMethod.cardType'         => 'nullable|string',
+                'paymentMethod.emailInvoice'     => 'nullable|boolean',
 
-                'products' => 'required|array|min:1',
-                'products.*.productId' => 'required|exists:products,id',
-                'products.*.quantity' => 'required|integer|min:1',
+                'products'              => 'required|array|min:1',
+                'products.*.productId'  => 'required_without:products.*.product_id|integer|exists:products,id',
+                'products.*.product_id' => 'required_without:products.*.productId|integer|exists:products,id',
+                'products.*.quantity'   => 'required|integer|min:1',
 
-                'shippingDestinations' => 'nullable|array',
-
-                'shippingMethod' => 'nullable|array',
+                'shippingDestinations'  => 'nullable|array',
+                'shippingMethod'        => 'nullable|array',
                 'shippingMethod.provider' => 'nullable|string',
-                'shippingMethod.method' => 'nullable',
-                'shippingMethod.cost' => 'nullable|string',
-                'shippingMethod.data' => 'nullable|string',
-            ], [
-                'paymentMethod.required_unless' => 'Payment method is required.',
-                'paymentMethod.method.required_unless' => 'Please select a payment method.',
-                'paymentMethod.cardholderName.required_if' => 'Cardholder name is required.',
-                'paymentMethod.cardholderName.regex' => 'Cardholder name is invalid. Use letters only.',
-                'paymentMethod.creditCardNo.required_if' => 'Card number is required.',
-                'paymentMethod.ccv2Value.required_if' => 'CVC is required.',
-                'paymentMethod.expirationMonth.required_if' => 'Expiration month is required.',
-                'paymentMethod.expirationYear.required_if' => 'Expiration year is required.',
+                'shippingMethod.method'   => 'nullable',
+                'shippingMethod.cost'     => 'nullable',
+                'shippingMethod.data'     => 'nullable',
             ]);
 
             $isDraft = (bool) ($validated['isDraft'] ?? false);
-            $method  = $validated['paymentMethod']['method'] ?? null;
+            $rawMethod = strtolower((string) ($validated['paymentMethod']['method'] ?? ''));
+            $isCard = in_array($rawMethod, [
+                'stripe',
+                'credit_card',
+                'card',
+                'credit card',
+                'credit card (via stripe)',
+            ], true);
 
-            if (!$isDraft && $method === 'credit_card' && empty($validated['paymentMethod']['paymentMethodId'])) {
+            $paymentMethodId = $validated['paymentMethod']['paymentMethodId'] ?? null;
+
+            if (!$isDraft && $isCard && empty($paymentMethodId)) {
                 $cardErrors = $this->validateStripeCard($validated['paymentMethod']);
-
                 if (!empty($cardErrors)) {
                     return response()->json([
                         'status'  => false,
@@ -2514,18 +2506,18 @@ class OrderController extends Controller
                 }
 
                 $stripeResult = $this->createStripePaymentMethod($validated['paymentMethod']);
-
                 if (!$stripeResult['ok']) {
                     return response()->json([
                         'status'  => false,
                         'message' => $stripeResult['message'],
-                        'errors'  => $stripeResult['errors'],
+                        'errors'  => $stripeResult['errors'] ?? null,
                     ], 422);
                 }
-
-                $validated['paymentMethod']['paymentMethodId'] = $stripeResult['payment_method_id'];
+                $paymentMethodId = $stripeResult['payment_method_id'];
             }
-        } catch (ValidationException $e) {
+
+            $validated['paymentMethod']['paymentMethodId'] = $paymentMethodId;
+        } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'status'  => false,
                 'message' => collect($e->errors())->flatten()->first(),
@@ -2550,11 +2542,11 @@ class OrderController extends Controller
                 'email'        => $formAddress['email'] ?? $customer->email ?? null,
                 'phone'        => $formAddress['phone'] ?? $customer->phone ?? null,
                 'companyName'  => $formAddress['companyName'] ?? $customer->company_name ?? null,
-                'addressLine1' => $formAddress['addressLine1'] ?? $customer->address_line_1 ?? null,
+                'addressLine1' => $formAddress['addressLine1'] ?? $customer->address ?? $customer->address_line_1 ?? null,
                 'addressLine2' => $formAddress['addressLine2'] ?? $customer->address_line_2 ?? null,
-                'city'         => $formAddress['city'] ?? null,
+                'city'         => $formAddress['city'] ?? $customer->city ?? null,
                 'state'        => $formAddress['state'] ?? $customer->state ?? null,
-                'zip'          => $formAddress['zip'] ?? null,
+                'zip'          => $formAddress['zip'] ?? $customer->zip ?? null,
                 'country'      => $formAddress['country'] ?? $customer->country ?? null,
             ], array_filter($billingInput, fn($v) => $v !== null && $v !== ''));
 
@@ -2564,231 +2556,263 @@ class OrderController extends Controller
 
             $comments   = $validated['comments'] ?? $billingInput['comments'] ?? null;
             $staffNotes = $validated['staffNotes'] ?? $billingInput['staffNotes'] ?? null;
-            $saveToAddressBook = (bool) (
-                $formAddress['saveToAddressBook']
-                ?? $validated['isSaveAddressForBilling']
-                ?? false
-            );
+            $saveBilling  = (bool) ($validated['isSaveAddressForBilling'] ?? false);
+            $saveShipping = (bool) ($validated['isSaveAddressForShipping'] ?? false);
 
             $shippingMethod   = $validated['shippingMethod'] ?? [];
-            $shippingMethodId = is_numeric($shippingMethod['method'] ?? null)
-                ? (int) $shippingMethod['method']
-                : null;
-            $shippingProvider = $shippingMethod['provider'] ?? null;
             $shippingCost     = (float) ($shippingMethod['cost'] ?? 0);
+            $shippingProvider = $shippingMethod['provider'] ?? ($shippingMethod['method'] ?? null);
             $shippingData     = $shippingMethod['data'] ?? $shippingProvider;
+            $discount         = (float) ($validated['discountAmount'] ?? 0);
 
-            if (!empty($validated['shippingDestinations'])) {
-                $shippingDestinations = $validated['shippingDestinations'];
-                $billingSame = $validated['billingSame'] ?? false;
-            } else {
-                $shippingDestinations = [[
-                    'address'  => $billingInformation,
-                    'products' => $validated['products'],
-                ]];
-                $billingSame = $validated['billingSame'] ?? true;
-            }
-
-            $ordersResponse = [];
-            $requiresAction = null;
-            $intent = null;
-
-            foreach ($shippingDestinations as $destination) {
-                $destAddress = $destination['address'] ?? $billingInformation;
-
-                $billing = $this->saveBillingInformation([
-                    'store_id'        => $storeId,
-                    'customer_id'     => $customer->id,
-                    'user_id'         => $user?->id,
-                    'first_name'      => $destAddress['firstName'] ?? null,
-                    'last_name'       => $destAddress['lastName'] ?? null,
-                    'email'           => $destAddress['email'] ?? null,
-                    'phone'           => $destAddress['phone'] ?? null,
-                    'company_name'    => $destAddress['companyName'] ?? null,
-                    'address_line_1'  => $destAddress['addressLine1'] ?? null,
-                    'address_line_2'  => $destAddress['addressLine2'] ?? null,
-                    'city'            => $destAddress['city'] ?? null,
-                    'state'           => $destAddress['state'] ?? null,
-                    'zip'             => $destAddress['zip'] ?? null,
-                    'country'         => $destAddress['country'] ?? null,
-                    'payment_method'  => $validated['paymentMethod']['method'] ?? null,
-                    'shipping_method' => $shippingProvider,
-                    'shipping_data'   => $shippingData,
-                ], $user, $customer);
-
-                $addressName = $formAddress['name']
-                    ?? trim(($formAddress['firstName'] ?? '') . ' ' . ($formAddress['lastName'] ?? ''));
-
-                $billingAddressJson = [
-                    'name'         => $addressName ?: null,
-                    'firstName'    => $formAddress['firstName'] ?? $destAddress['firstName'] ?? null,
-                    'lastName'     => $formAddress['lastName'] ?? $destAddress['lastName'] ?? null,
-                    'companyName'  => $formAddress['companyName'] ?? $destAddress['companyName'] ?? null,
-                    'email'        => $formAddress['email'] ?? $destAddress['email'] ?? $customer->email ?? null,
-                    'phone'        => $formAddress['phone'] ?? $destAddress['phone'] ?? null,
-                    'addressLine1' => $formAddress['addressLine1'] ?? $destAddress['addressLine1'] ?? null,
-                    'addressLine2' => $formAddress['addressLine2'] ?? $destAddress['addressLine2'] ?? null,
-                    'city'         => $formAddress['city'] ?? $destAddress['city'] ?? null,
-                    'state'        => $formAddress['state'] ?? $destAddress['state'] ?? null,
-                    'zip'          => $formAddress['zip'] ?? $destAddress['zip'] ?? null,
-                    'country'      => $formAddress['country'] ?? $destAddress['country'] ?? null,
+            $products = collect($validated['products'])->map(function ($item) {
+                return [
+                    'product_id' => $item['product_id'] ?? $item['productId'],
+                    'quantity'   => (int) $item['quantity'],
                 ];
+            })->all();
 
-                $order = Order::create([
-                    'store_id'                     => $storeId,
-                    'customer_id'                  => $customer->id,
-                    'user_id'                      => $user?->id,
-                    'billing_information_id'       => $billing->id,
-                    'order_number'                 => '',
-                    'status'                       => 'Awaiting Payment',
-                    'is_draft'                     => $validated['isDraft'] ?? false,
-                    'device_type'                  => $validated['deviceType'] ?? null,
-                    'channel'                      => 'admin-panel',
-                    'ip_address'                   => $request->ip(),
-                    'billing_same'                 => $billingSame,
-                    'is_save_address_for_billing'  => $saveToAddressBook,
-                    'is_save_address_for_shipping' => $validated['isSaveAddressForShipping'] ?? false,
-                    'newsletter'                   => $validated['newsletter'] ?? $validated['receiveOffers'] ?? false,
-                    'shipping_cost'                => $shippingCost,
-                    'shipping_provider'            => $shippingProvider,
-                    'shipping_method'              => $shippingMethodId,
-                    'comments'                     => $comments,
-                    'staff_notes'                  => $staffNotes,
-                    'total_amount'                 => 0,
-                    'billing_address'              => $billingAddressJson,
+            $cartTotal = 0;
+            foreach ($products as $item) {
+                $product = Product::where('store_id', $storeId)->findOrFail($item['product_id']);
+                $cartTotal += ((float) $product->price) * $item['quantity'];
+            }
+            $totalAmount = $cartTotal + $shippingCost - $discount;
+
+            $displayPaymentMethod = $isCard
+                ? 'Credit Card (Via Stripe)'
+                : ($validated['paymentMethod']['method'] ?? 'N/A');
+
+            $intent = null;
+            $riskData = [];
+
+            if (!$isDraft && $paymentMethodId) {
+                \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+
+                $intent = \Stripe\PaymentIntent::create([
+                    'amount'               => (int) round($totalAmount * 100),
+                    'currency'             => 'usd',
+                    'payment_method'       => $paymentMethodId,
+                    'confirmation_method'  => 'manual',
+                    'payment_method_types' => ['card'],
+                    'confirm'              => true,
+                    'capture_method'       => 'manual',
+                    'metadata'             => [
+                        'user_id'  => $user?->id,
+                        'channel'  => 'admin-panel',
+                        'store_id' => $storeId,
+                        'products' => json_encode($products),
+                    ],
+                ], [
+                    'idempotency_key' => uniqid('dashboard_payment_', true),
                 ]);
 
-                $order->update(['order_number' => $order->id]);
-
-                if ($saveToAddressBook) {
-                    $book = [
-                        'store_id'       => $storeId,
-                        'customer_id'    => $customer->id,
-                        'first_name'     => $formAddress['firstName'] ?? null,
-                        'last_name'      => $formAddress['lastName'] ?? null,
-                        'company_name'   => $formAddress['companyName'] ?? null,
-                        'phone_number'   => $formAddress['phone'] ?? $customer->phone ?? '',
-                        'address_line_1' => $formAddress['addressLine1'] ?? null,
-                        'address_line_2' => $formAddress['addressLine2'] ?? null,
-                        'city'           => $formAddress['city'] ?? null,
-                        'state'          => $formAddress['state'] ?? null,
-                        'zip'            => $formAddress['zip'] ?? null,
-                        'country'        => $formAddress['country'] ?? null,
-                    ];
-
-                    if (method_exists($customer, 'addresses')) {
-                        $customer->addresses()->create($book);
-                    } elseif (class_exists(\App\Models\CustomerAddress::class)) {
-                        \App\Models\CustomerAddress::create($book);
-                    }
+                if (in_array($intent->status, ['requires_action', 'requires_source_action'])) {
+                    DB::rollBack();
+                    return response()->json([
+                        'status'                       => 'requires_action',
+                        'payment_intent_client_secret' => $intent->client_secret,
+                    ]);
                 }
 
-                $total = 0;
-                foreach ($destination['products'] as $item) {
-                    $product = Product::where('store_id', $storeId)->findOrFail($item['productId']);
-                    $lineTotal = $product->price * $item['quantity'];
-
-                    OrderItem::create([
-                        'order_id'   => $order->id,
-                        'product_id' => $product->id,
-                        'quantity'   => $item['quantity'],
-                        'price'      => $product->price,
-                        'total'      => $lineTotal,
-                        'store_id'   => $storeId,
-                    ]);
-
-                    $total += $lineTotal;
+                if ($intent->status !== 'requires_capture') {
+                    DB::rollBack();
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Payment authorization failed. Status: ' . $intent->status,
+                    ], 400);
                 }
 
-                $order->update(['total_amount' => $total + $shippingCost]);
-
-                $paymentMethodId = $validated['paymentMethod']['paymentMethodId'] ?? null;
-                $intent = null;
-
-                if ($paymentMethodId) {
-                    \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-
-                    $intent = \Stripe\PaymentIntent::create([
-                        'amount'               => (int) round(((float) $order->total_amount) * 100),
-                        'currency'             => 'usd',
-                        'payment_method'       => $paymentMethodId,
-                        'confirmation_method'  => 'manual',
-                        'payment_method_types' => ['card'],
-                        'confirm'              => true,
-                        'capture_method'       => 'manual',
-                        'metadata'             => [
-                            'user_id'      => $user?->id,
-                            'order_id'     => $order->id,
-                            'order_number' => $order->order_number,
-                            'channel'      => 'admin-panel',
-                            'store_id'     => $storeId,
-                        ],
-                    ], [
-                        'idempotency_key' => uniqid('dashboard_payment_', true),
-                    ]);
-
-                    if (in_array($intent->status, ['requires_action', 'requires_source_action'])) {
-                        $requiresAction = $intent->client_secret;
-                    } elseif ($intent->status !== 'requires_capture') {
-                        DB::rollBack();
+                $existingPayment = Payment::where('stripe_session_id', $intent->id)->first();
+                if ($existingPayment) {
+                    DB::rollBack();
+                    if ($existingPayment->payment_status === 'completed') {
+                        $order = Order::with('items.product.images', 'billingInformation', 'customer')
+                            ->find($existingPayment->order_id);
                         return response()->json([
-                            'status'  => false,
-                            'message' => 'Payment authorization failed. Status: ' . $intent->status,
-                        ], 400);
-                    } else {
-                        $riskScore = null;
-                        $riskLevel = null;
-
-                        $charge = $intent->latest_charge
-                            ? \Stripe\Charge::retrieve($intent->latest_charge)
-                            : null;
-
-                        if ($charge && $charge->outcome) {
-                            $riskScore = $charge->outcome->risk_score ?? null;
-                            $riskLevel = $charge->outcome->risk_level ?? null;
-                        }
-
-                        Payment::create([
-                            'order_id'          => $order->id,
-                            'store_id'          => $storeId,
-                            'stripe_session_id' => $intent->id,
-                            'amount'            => $order->total_amount,
-                            'discountAmount'    => 0,
-                            'payment_status'    => 'authorized',
-                            'risk_score'        => $riskScore,
-                            'risk_level'        => $riskLevel,
+                            'status'  => true,
+                            'message' => 'Order already placed successfully.',
+                            'data'    => new OrderResource($order),
                         ]);
                     }
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'This payment is already being processed.',
+                    ], 409);
                 }
 
-                $orderData = [
-                    'orderNumber'       => $order->order_number,
-                    'totalAmount'       => $order->total_amount,
-                    'status'            => $order->status,
-                    'payment_intent_id' => $intent->id ?? null,
-                ];
-                $ordersResponse[] = $orderData;
+                $charge = $intent->latest_charge
+                    ? \Stripe\Charge::retrieve($intent->latest_charge)
+                    : null;
 
+                if ($charge && $charge->outcome) {
+                    $riskData = [
+                        'risk_score' => $charge->outcome->risk_score ?? null,
+                        'risk_level' => $charge->outcome->risk_level ?? null,
+                    ];
+                }
+            }
+
+            $billing = BillingInformation::create([
+                'store_id'        => $storeId,
+                'customer_id'     => $customer->id,
+                'user_id'         => $user?->id,
+                'first_name'      => $billingInformation['firstName'] ?? null,
+                'last_name'       => $billingInformation['lastName'] ?? null,
+                'email'           => $billingInformation['email'] ?? $customer->email,
+                'phone'           => $billingInformation['phone'] ?? null,
+                'company_name'    => $billingInformation['companyName'] ?? null,
+                'address_line_1'  => $billingInformation['addressLine1'] ?? null,
+                'address_line_2'  => $billingInformation['addressLine2'] ?? null,
+                'city'            => $billingInformation['city'] ?? null,
+                'state'           => $billingInformation['state'] ?? null,
+                'zip'             => $billingInformation['zip'] ?? null,
+                'country'         => $billingInformation['country'] ?? null,
+                'payment_method'  => $displayPaymentMethod,
+                'shipping_method' => $shippingProvider,
+                'shipping_data'   => $shippingData,
+            ]);
+
+            $addressName = $formAddress['name']
+                ?? trim(($billingInformation['firstName'] ?? '') . ' ' . ($billingInformation['lastName'] ?? ''));
+
+            $billingAddressJson = [
+                'name'         => $addressName ?: null,
+                'firstName'    => $billingInformation['firstName'] ?? null,
+                'lastName'     => $billingInformation['lastName'] ?? null,
+                'companyName'  => $billingInformation['companyName'] ?? null,
+                'email'        => $billingInformation['email'] ?? $customer->email,
+                'phone'        => $billingInformation['phone'] ?? null,
+                'addressLine1' => $billingInformation['addressLine1'] ?? null,
+                'addressLine2' => $billingInformation['addressLine2'] ?? null,
+                'city'         => $billingInformation['city'] ?? null,
+                'state'        => $billingInformation['state'] ?? null,
+                'zip'          => $billingInformation['zip'] ?? null,
+                'country'      => $billingInformation['country'] ?? null,
+            ];
+
+            if ($intent && $intent->payment_method) {
+                try {
+                    $pm = \Stripe\PaymentMethod::retrieve($intent->payment_method);
+                    if ($pm->billing_details) {
+                        $bd = $pm->billing_details;
+                        $billingAddressJson = [
+                            'name'         => $bd->name ?? $billingAddressJson['name'],
+                            'firstName'    => $billingAddressJson['firstName'],
+                            'lastName'     => $billingAddressJson['lastName'],
+                            'companyName'  => $billingAddressJson['companyName'],
+                            'email'        => $bd->email ?? $billingAddressJson['email'],
+                            'phone'        => $bd->phone ?? $billingAddressJson['phone'],
+                            'addressLine1' => $bd->address->line1 ?? $billingAddressJson['addressLine1'],
+                            'addressLine2' => $bd->address->line2 ?? $billingAddressJson['addressLine2'],
+                            'city'         => $bd->address->city ?? $billingAddressJson['city'],
+                            'state'        => $bd->address->state ?? $billingAddressJson['state'],
+                            'zip'          => $bd->address->postal_code ?? $billingAddressJson['zip'],
+                            'country'      => $bd->address->country ?? $billingAddressJson['country'],
+                        ];
+                    }
+                } catch (\Exception $e) {
+                    \Log::warning('Could not fetch Stripe billing details: ' . $e->getMessage());
+                }
+            }
+
+            $order = Order::create([
+                'store_id'                     => $storeId,
+                'customer_id'                  => $customer->id,
+                'user_id'                      => $user?->id,
+                'billing_information_id'       => $billing->id,
+                'order_number'                 => '',
+                'status'                       => 'Awaiting Payment',
+                'is_draft'                     => $isDraft,
+                'device_type'                  => $validated['deviceType'] ?? 'desktop',
+                'channel'                      => 'admin-panel',
+                'ip_address'                   => $validated['ipAddress'] ?? $request->ip(),
+                'billing_same'                 => $validated['billingSame'] ?? true,
+                'is_save_address_for_billing'  => $saveBilling,
+                'is_save_address_for_shipping' => $saveShipping,
+                'newsletter'                   => $validated['newsletter'] ?? $validated['receiveOffers'] ?? false,
+                'shipping_cost'                => $shippingCost,
+                'comments'                     => $comments,
+                'staff_notes'                  => $staffNotes,
+                'total_amount'                 => $totalAmount,
+                'discountAmount'               => $discount,
+                'coupon_code'                  => $validated['couponCode'] ?? null,
+                'is_multi_address'             => false,
+                'user_type'                    => $validated['userType'] ?? null,
+                'billing_address'              => $billingAddressJson,
+            ]);
+
+            $order->update(['order_number' => $order->id]);
+
+            foreach ($products as $item) {
+                $product = Product::where('store_id', $storeId)->findOrFail($item['product_id']);
+                $order->items()->create([
+                    'store_id'   => $storeId,
+                    'product_id' => $product->id,
+                    'quantity'   => $item['quantity'],
+                    'price'      => $product->price,
+                ]);
+                if ($product->track_inventory ?? $product->trackInventory ?? false) {
+                    $product->decrement('current_stock', $item['quantity']);
+                }
+            }
+
+            if ($intent) {
+                Payment::create(array_merge([
+                    'order_id'          => $order->id,
+                    'store_id'          => $storeId,
+                    'stripe_session_id' => $intent->id,
+                    'amount'            => $totalAmount,
+                    'discountAmount'    => $discount,
+                    'payment_status'    => 'authorized',
+                ], $riskData));
+            }
+
+            $order->load('billingInformation');
+
+            OrderTimeline::addEvent($order->id, $storeId, 'order_created', 'Order created', [
+                'status' => $order->status,
+            ], 'dot');
+
+            OrderTimeline::addEvent($order->id, $storeId, 'status_changed', 'Order status changed', [
+                'previous_status' => 'Incomplete',
+                'new_status'      => $order->status,
+            ], 'dot');
+
+            OrderTimeline::addEvent($order->id, $storeId, 'shipping_quote', 'Shipping quote persisted', [
+                'shipping_cost'   => '$' . number_format((float) $order->shipping_cost, 2),
+                'shipping_method' => $order->billingInformation->shipping_method ?? $shippingProvider,
+            ], 'dot');
+
+            OrderTimeline::addEvent($order->id, $storeId, 'order_confirmed', 'Order confirmed', [], 'dot');
+
+            if ($intent) {
+                OrderTimeline::addEvent($order->id, $storeId, 'payment_authorized', 'Payment authorized', [
+                    'source'         => $displayPaymentMethod,
+                    'amount'         => '$' . number_format((float) $order->total_amount, 2),
+                    'payment_intent' => $intent->id,
+                ], 'payment');
+            }
+
+            $order->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
+
+            try {
                 $email = $billingAddressJson['email'] ?? $customer->email;
                 if ($email) {
-                    Mail::to($email)->send(new OrderPlacedMail($orderData, $customer));
+                    Mail::to($email)->send(new OrderPlacedMail($order, $customer, $storeId));
                 }
+                $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
+                Mail::to($adminEmail)->send(new OrderPlacedMail($order, $customer, $storeId));
+            } catch (\Exception $mailError) {
+                \Log::error('DASHBOARD ORDER EMAIL FAILED', ['error' => $mailError->getMessage()]);
             }
 
             DB::commit();
 
-            if ($requiresAction) {
-                return response()->json([
-                    'status'                       => 'requires_action',
-                    'payment_intent_client_secret' => $requiresAction,
-                    'orders'                       => $ordersResponse,
-                ]);
-            }
-
             return response()->json([
                 'status'  => true,
-                'message' => 'Order placed successfully',
-                'orders'  => $ordersResponse,
+                'message' => 'Order placed successfully.',
+                'data'    => new OrderResource($order),
             ]);
         } catch (\Stripe\Exception\CardException $e) {
             DB::rollBack();
@@ -2801,6 +2825,8 @@ class OrderController extends Controller
             return response()->json([
                 'status'  => false,
                 'message' => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
             ], 500);
         }
     }
