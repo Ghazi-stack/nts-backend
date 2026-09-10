@@ -2896,22 +2896,35 @@ class OrderController extends Controller
     {
         \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
 
-        $number = preg_replace('/\s+/', '', $pm['creditCardNo']);
-        $cvc    = preg_replace('/\s+/', '', $pm['ccv2Value']);
-        $month  = $this->parseExpiryMonth($pm['expirationMonth']);
-        $year   = $this->parseExpiryYear($pm['expirationYear']);
+        if (!empty($pm['paymentMethodId'])) {
+            return [
+                'ok'                => true,
+                'payment_method_id' => $pm['paymentMethodId'],
+                'message'           => null,
+                'errors'            => [],
+            ];
+        }
+
+        $token = $pm['stripeToken'] ?? $this->mapTestCardToStripeToken($pm['creditCardNo'] ?? '');
+
+        if (!$token) {
+            $msg = 'Raw card numbers cannot be sent to Stripe from the server. Use test card 4242424242424242 or send paymentMethodId from Stripe.js.';
+            return [
+                'ok'                => false,
+                'payment_method_id' => null,
+                'message'           => $msg,
+                'errors'            => ['paymentMethod.creditCardNo' => [$msg]],
+            ];
+        }
 
         try {
             $paymentMethod = \Stripe\PaymentMethod::create([
                 'type' => 'card',
                 'card' => [
-                    'number'    => $number,
-                    'exp_month' => $month,
-                    'exp_year'  => $year,
-                    'cvc'       => $cvc,
+                    'token' => $token,
                 ],
                 'billing_details' => [
-                    'name' => $pm['cardholderName'],
+                    'name' => $pm['cardholderName'] ?? null,
                 ],
             ]);
 
@@ -2947,6 +2960,31 @@ class OrderController extends Controller
                 'errors'            => ['paymentMethod' => [$e->getMessage()]],
             ];
         }
+    }
+
+    private function mapTestCardToStripeToken(?string $cardNumber): ?string
+    {
+        $num = preg_replace('/\s+/', '', (string) $cardNumber);
+
+        $map = [
+            '4242424242424242' => 'tok_visa',
+            '4000056655665556' => 'tok_visa_debit',
+            '5555555555554444' => 'tok_mastercard',
+            '2223003122003222' => 'tok_mastercard',
+            '378282246310005'  => 'tok_amex',
+            '6011111111111117' => 'tok_discover',
+            '4000000000000002' => 'tok_chargeDeclined',
+            '4000000000009995' => 'tok_chargeDeclinedInsufficientFunds',
+            '4000000000009987' => 'tok_chargeDeclinedLostCard',
+            '4000000000009979' => 'tok_chargeDeclinedStolenCard',
+            '4000000000000069' => 'tok_chargeDeclinedExpiredCard',
+            '4000000000000127' => 'tok_chargeDeclinedIncorrectCvc',
+            '4000000000000119' => 'tok_chargeDeclinedProcessingError',
+            '4000000000003220' => 'tok_threeDSecure2Required',
+            '4000002500003155' => 'tok_threeDSecure2Required',
+        ];
+
+        return $map[$num] ?? null;
     }
 
     private function detectCardBrand(string $number): ?string
@@ -3489,7 +3527,10 @@ class OrderController extends Controller
             $isDraft = (bool) ($validated['isDraft'] ?? false);
             $method  = $validated['paymentMethod']['method'] ?? null;
 
-            if (!$isDraft && $method === 'credit_card' && empty($validated['paymentMethod']['paymentMethodId'])) {
+            $method = strtolower((string) ($validated['paymentMethod']['method'] ?? ''));
+            $isCard = in_array($method, ['stripe', 'credit_card', 'card', 'credit card', 'credit card (via stripe)'], true);
+
+            if (!$isDraft && $isCard && empty($validated['paymentMethod']['paymentMethodId'])) {
                 $cardErrors = $this->validateStripeCard($validated['paymentMethod']);
 
                 if (!empty($cardErrors)) {
