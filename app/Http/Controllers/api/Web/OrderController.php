@@ -176,9 +176,9 @@ class OrderController extends Controller
                     'message' => 'Store not found or unauthorized.',
                 ], 403);
             }
-
+// 'Partially Shipped', 'Awaiting Shipment'
             $statusMap = [
-                'pending'   => ['Awaiting Payment', 'Pending', 'Awaiting Pickup', 'Awaiting Fulfillment', 'Partially Shipped', 'Awaiting Shipment'],
+                'pending'   => ['Awaiting Payment', 'Pending', 'Awaiting Pickup', 'Awaiting Fulfillment'],
                 'completed' => ['Shipped', 'Completed'],
                 'refunded'  => ['Refunded', 'Cancelled', 'Declined', 'Disputed', 'Partially Refunded'],
             ];
