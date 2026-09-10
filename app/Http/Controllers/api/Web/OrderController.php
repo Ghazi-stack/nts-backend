@@ -39,6 +39,7 @@ use App\Mail\OrderPlacedMail;
 use App\Models\CouponCode;
 use App\Models\CouponUsage;
 use App\Models\Logo;
+use App\Models\ManualDiscount;
 use App\Models\OrderTimeline;
 use App\Models\Store;
 use Illuminate\Validation\ValidationException;
@@ -179,7 +180,7 @@ class OrderController extends Controller
             $statusMap = [
                 'pending'   => ['Awaiting Payment', 'Pending', 'Awaiting Pickup', 'Awaiting Fulfillment', 'Partially Shipped', 'Awaiting Shipment'],
                 'completed' => ['Shipped', 'Completed'],
-                'refunded'  => ['Refunded', 'Cancelled', 'Declined', 'Disputed','Partially Refunded'],
+                'refunded'  => ['Refunded', 'Cancelled', 'Declined', 'Disputed', 'Partially Refunded'],
             ];
 
             if (!in_array($status, ['recent', 'pending', 'completed', 'refunded'], true)) {
@@ -2520,6 +2521,7 @@ class OrderController extends Controller
                 'userType'     => 'nullable|string|max:50',
                 'couponCode'   => 'nullable|string|max:255',
                 'discountAmount' => 'nullable|numeric',
+                'manualDiscount' => 'nullable|numeric|min:0',
                 'ipAddress'    => 'nullable|string|max:45',
 
                 'billingAddress' => 'nullable|array',
@@ -2845,6 +2847,23 @@ class OrderController extends Controller
                     'discountAmount'    => $discount,
                     'payment_status'    => 'authorized',
                 ], $riskData));
+            }
+
+            // ===== MANUAL DISCOUNT =====
+            $manualUserId     = $user?->id ?? null;
+            $manualCustomerId = $customer->id ?? ($validated['customerId'] ?? null);
+            $manualDiscount   = (float) ($validated['manualDiscount'] ?? $request->input('manualDiscount', 0));
+
+            foreach ($products as $item) {
+                ManualDiscount::create([
+                    'store_id'        => $storeId ?: null,
+                    'user_id'         => $manualUserId,
+                    'customer_id'     => $manualCustomerId ?: null,
+                    'order_id'        => $order->id,
+                    'product_id'      => $item['product_id'] ?? null,
+                    'discount_amount' => $manualDiscount,
+                    'total_amount'    => $totalAmount,
+                ]);
             }
 
             $order->load('billingInformation');
