@@ -2726,7 +2726,7 @@ class OrderController extends Controller
                 'is_draft'                     => $isDraft,
                 'device_type'                  => $validated['deviceType'] ?? 'desktop',
                 'channel'                      => 'admin-panel',
-                'ip_address'                   => $validated['ipAddress'] ?? $request->ip(),
+                'ip_address'                   => $validated['ipAddress'] ?? null,
                 'billing_same'                 => $validated['billingSame'] ?? true,
                 'is_save_address_for_billing'  => $saveBilling,
                 'is_save_address_for_shipping' => $saveShipping,
