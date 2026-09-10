@@ -2555,6 +2555,7 @@ class OrderController extends Controller
                 'products.*.productId'  => 'required_without:products.*.product_id|integer|exists:products,id',
                 'products.*.product_id' => 'required_without:products.*.productId|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
+                'products.*.price' => 'required|numeric|min:0',
 
                 'shippingDestinations'  => 'nullable|array',
                 'shippingMethod'        => 'nullable|array',
@@ -2651,13 +2652,14 @@ class OrderController extends Controller
                 return [
                     'product_id' => $item['product_id'] ?? $item['productId'],
                     'quantity'   => (int) $item['quantity'],
+                    'price'      => (float) $item['price'],
                 ];
             })->all();
 
             $cartTotal = 0;
             foreach ($products as $item) {
-                $product = Product::where('store_id', $storeId)->findOrFail($item['product_id']);
-                $cartTotal += ((float) $product->price) * $item['quantity'];
+                Product::where('store_id', $storeId)->findOrFail($item['product_id']);
+                $cartTotal += $item['price'] * $item['quantity'];
             }
 
             $totalAmount = $cartTotal + $shippingCost - $discount - $manualDiscount;
@@ -2836,7 +2838,7 @@ class OrderController extends Controller
                     'store_id'   => $storeId,
                     'product_id' => $product->id,
                     'quantity'   => $item['quantity'],
-                    'price'      => $product->price,
+                    'price'      => $item['price'],
                 ]);
                 if ($product->track_inventory ?? $product->trackInventory ?? false) {
                     $product->decrement('current_stock', $item['quantity']);
