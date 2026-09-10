@@ -174,7 +174,7 @@ class ProductController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
-    
+
     public function filterProducts(Request $request)
     {
         try {
@@ -209,11 +209,13 @@ class ProductController extends Controller
                     'slug',
                     'sku',
                     'price',
+                    'quantity',
                     'msrp',
                     'brand_id',
                     'category_id',
                     'current_stock',
                     'is_featured',
+                    'dimensions',
                     'visible_on_storefront',
                     'store_id'
                 ])

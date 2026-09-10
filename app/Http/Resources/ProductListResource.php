@@ -13,6 +13,7 @@ class ProductListResource extends JsonResource
             'name'       => $this->name,
             'sku'        => $this->sku,
             'price'      => $this->price,
+            'quantity'   => $this->quantity,
             'msrp'       => $this->msrp,
             'brand'      => new BrandResource($this->whenLoaded('brand')),
 
@@ -24,6 +25,12 @@ class ProductListResource extends JsonResource
             ])
             ),
 
+            'dimensions' => [
+                'weight' => $dimensions['weight'] ?? 0,
+                'width'  => $dimensions['width'] ?? 0,
+                'height' => $dimensions['height'] ?? 0,
+                'depth'  => $dimensions['depth'] ?? 0,
+            ],
             // Only primary image
             'image' => ProductImageResource::collection($this->whenLoaded('images')),
 
