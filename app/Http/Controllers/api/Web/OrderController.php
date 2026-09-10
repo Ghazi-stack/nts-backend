@@ -179,7 +179,7 @@ class OrderController extends Controller
             $statusMap = [
                 'pending'   => ['Awaiting Payment', 'Pending', 'Awaiting Pickup', 'Awaiting Fulfillment', 'Partially Shipped', 'Awaiting Shipment'],
                 'completed' => ['Shipped', 'Completed'],
-                'refunded'  => ['Refunded', 'Cancelled', 'Declined', 'Disputed'],
+                'refunded'  => ['Refunded', 'Cancelled', 'Declined', 'Disputed','Partially Refunded'],
             ];
 
             if (!in_array($status, ['recent', 'pending', 'completed', 'refunded'], true)) {
