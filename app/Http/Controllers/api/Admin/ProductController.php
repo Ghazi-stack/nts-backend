@@ -216,7 +216,6 @@ class ProductController extends Controller
                     'current_stock',
                     'is_featured',
                     'dimensions',
-                    'additional',
                     'sale_price',
                     'cost_price',
                     'free_shipping',
