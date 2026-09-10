@@ -2644,7 +2644,8 @@ class OrderController extends Controller
             $shippingCost     = (float) ($shippingMethod['cost'] ?? 0);
             $shippingProvider = $shippingMethod['provider'] ?? ($shippingMethod['method'] ?? null);
             $shippingData     = $shippingMethod['data'] ?? $shippingProvider;
-            $discount         = (float) ($validated['discountAmount'] ?? 0);
+            $discount        = (float) ($validated['discountAmount'] ?? 0);
+            $manualDiscount  = (float) ($validated['manualDiscount'] ?? $request->input('manualDiscount', 0));
 
             $products = collect($validated['products'])->map(function ($item) {
                 return [
@@ -2658,7 +2659,11 @@ class OrderController extends Controller
                 $product = Product::where('store_id', $storeId)->findOrFail($item['product_id']);
                 $cartTotal += ((float) $product->price) * $item['quantity'];
             }
-            $totalAmount = $cartTotal + $shippingCost - $discount;
+
+            $totalAmount = $cartTotal + $shippingCost - $discount - $manualDiscount;
+            if ($totalAmount < 0) {
+                $totalAmount = 0;
+            }
 
             $displayPaymentMethod = $isCard
                 ? 'Credit Card (Via Stripe)'
@@ -2852,7 +2857,6 @@ class OrderController extends Controller
             // ===== MANUAL DISCOUNT =====
             $manualUserId     = $user?->id ?? null;
             $manualCustomerId = $customer->id ?? ($validated['customerId'] ?? null);
-            $manualDiscount   = (float) ($validated['manualDiscount'] ?? $request->input('manualDiscount', 0));
 
             foreach ($products as $item) {
                 ManualDiscount::create([
@@ -2861,8 +2865,8 @@ class OrderController extends Controller
                     'customer_id'     => $manualCustomerId ?: null,
                     'order_id'        => $order->id,
                     'product_id'      => $item['product_id'] ?? null,
-                    'discount_amount' => $manualDiscount,
-                    'total_amount'    => $totalAmount,
+                    'discount_amount' => $manualDiscount,  // user ne jo dala
+                    'total_amount'    => $totalAmount,     // minus ke baad final total
                 ]);
             }
 
