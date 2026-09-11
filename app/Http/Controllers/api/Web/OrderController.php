@@ -3758,7 +3758,7 @@ class OrderController extends Controller
             $formAddress  = $validated['billingAddress'] ?? [];
             $billingInput = $validated['billingInformation'] ?? [];
 
-            $shippingMethod   = $validated['shippingMethod'] ?? $request->input('shippingMethod', []);
+            $shippingMethod   = $request->input('shippingMethod', $validated['shippingMethod'] ?? []);
             $shippingMethodId = is_numeric($shippingMethod['method'] ?? null)
                 ? (int) $shippingMethod['method']
                 : null;
@@ -3823,14 +3823,19 @@ class OrderController extends Controller
                     $totalAmount = 0;
                 }
 
-                $billing = $this->saveBillingInformation([
+                $shippingLabel = $shippingMethod['display_name']
+                    ?? $shippingMethod['data']
+                    ?? $shippingMethod['method']
+                    ?? $shippingProvider;
+
+                $billing = BillingInformation::create([
                     'store_id'        => $storeId,
                     'customer_id'     => $customer->id,
                     'user_id'         => $user?->id,
                     'first_name'      => $shippingAddress['firstName'] ?? $validated['firstName'] ?? null,
                     'last_name'       => $shippingAddress['lastName'] ?? $validated['lastName'] ?? null,
                     'company_name'    => $shippingAddress['companyName'] ?? $validated['companyName'] ?? null,
-                    'email'           => $shippingAddress['email'] ?? $customer->email,
+                    'email'           => $shippingAddress['email'] ?? $validated['email'] ?? $customer->email,
                     'phone'           => $shippingAddress['phone'] ?? $validated['phone'] ?? null,
                     'address_line_1'  => $shippingAddress['addressLine1'] ?? null,
                     'address_line_2'  => $shippingAddress['addressLine2'] ?? null,
@@ -3841,11 +3846,11 @@ class OrderController extends Controller
                     'payment_method'  => $displayPaymentMethod,
                     'shipping_method' => $shippingProvider ?? $shippingAddress['shippingMethod'] ?? null,
                     'shipping_data'   => [
-                    'display_name' => $shippingMethod['display_name'] ?? $shippingData,
-                    'label'        => $shippingData,
-                    'data'         => $shippingMethod['data'] ?? $shippingData,
+                        'display_name' => $shippingLabel,
+                        'label'        => $shippingLabel,
+                        'data'         => $shippingMethod['data'] ?? $shippingLabel,
                     ],
-                ], $user, $customer);
+                ]);
 
                 $billFirst = $formAddress['firstName'] ?? $validated['firstName'] ?? $customer->first_name;
                 $billLast  = $formAddress['lastName'] ?? $validated['lastName'] ?? $customer->last_name;
