@@ -2673,8 +2673,14 @@ class OrderController extends Controller
                 ?? $request->input('shippingMethod.total_charge')
                 ?? 0
             );
-            $shippingProvider = $shippingMethod['provider'] ?? ($shippingMethod['method'] ?? null);
-            $shippingData     = $shippingMethod['data'] ?? $shippingProvider;
+            $shippingProvider = $shippingMethod['provider']
+                ?? $shippingMethod['method']
+                ?? $shippingMethod['display_name']
+                ?? null;
+            $shippingData     = $shippingMethod['data']
+                ?? $shippingMethod['display_name']
+                ?? $shippingMethod['method']
+                ?? $shippingProvider;
             $discount         = (float) ($validated['discountAmount'] ?? 0);
             $manualDiscount   = (float) ($validated['manualDiscount'] ?? $request->input('manualDiscount', 0));
 
@@ -2788,7 +2794,7 @@ class OrderController extends Controller
                 'country'         => $shippingInfo['country'],
                 'payment_method'  => $displayPaymentMethod,
                 'shipping_method' => $shippingProvider,
-                'shipping_data'   => $shippingData,
+                'shipping_data'   => $shippingData !== null ? ['label' => $shippingData] : null,
             ]);
 
             $addressName = $billingInfo['name']
