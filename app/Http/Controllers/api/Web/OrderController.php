@@ -3758,13 +3758,26 @@ class OrderController extends Controller
             $formAddress  = $validated['billingAddress'] ?? [];
             $billingInput = $validated['billingInformation'] ?? [];
 
-            $shippingMethod   = $validated['shippingMethod'] ?? [];
+            $shippingMethod   = $validated['shippingMethod'] ?? $request->input('shippingMethod', []);
             $shippingMethodId = is_numeric($shippingMethod['method'] ?? null)
                 ? (int) $shippingMethod['method']
                 : null;
-            $shippingProvider = $shippingMethod['provider'] ?? ($shippingMethod['method'] ?? null);
-            $shippingCost     = (float) ($shippingMethod['cost'] ?? 0);
-            $shippingData     = $shippingMethod['data'] ?? $billingInput['shippingMethod'] ?? $shippingProvider;
+            $shippingCost     = (float) (
+                $shippingMethod['cost']
+                ?? $shippingMethod['total_charge']
+                ?? $request->input('shippingMethod.cost')
+                ?? $request->input('shippingMethod.total_charge')
+                ?? 0
+            );
+            $shippingProvider = $shippingMethod['provider']
+                ?? $shippingMethod['method']
+                ?? $shippingMethod['display_name']
+                ?? null;
+            $shippingData     = $shippingMethod['data']
+                ?? $shippingMethod['display_name']
+                ?? $shippingMethod['method']
+                ?? $billingInput['shippingMethod']
+                ?? $shippingProvider;
 
             $discount       = (float) ($validated['discountAmount'] ?? 0);
             $manualDiscount = (float) ($validated['manualDiscount'] ?? $request->input('manualDiscount', 0));
@@ -3827,7 +3840,11 @@ class OrderController extends Controller
                     'country'         => $shippingAddress['country'] ?? null,
                     'payment_method'  => $displayPaymentMethod,
                     'shipping_method' => $shippingProvider ?? $shippingAddress['shippingMethod'] ?? null,
-                    'shipping_data'   => $shippingData,
+                    'shipping_data'   => [
+                    'display_name' => $shippingMethod['display_name'] ?? $shippingData,
+                    'label'        => $shippingData,
+                    'data'         => $shippingMethod['data'] ?? $shippingData,
+                    ],
                 ], $user, $customer);
 
                 $billFirst = $formAddress['firstName'] ?? $validated['firstName'] ?? $customer->first_name;
