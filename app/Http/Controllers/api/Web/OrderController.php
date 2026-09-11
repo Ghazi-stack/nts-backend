@@ -2537,8 +2537,21 @@ class OrderController extends Controller
                 'billingAddress.state'        => 'nullable|string',
                 'billingAddress.zip'          => 'nullable|string',
                 'billingAddress.country'      => 'nullable|string',
+                'billingAddress.saveToAddressBook' => 'nullable|boolean',
 
                 'billingInformation' => 'nullable|array',
+                'billingInformation.firstName'    => 'nullable|string',
+                'billingInformation.lastName'     => 'nullable|string',
+                'billingInformation.email'        => 'nullable|email',
+                'billingInformation.phone'        => 'nullable|string',
+                'billingInformation.companyName'  => 'nullable|string',
+                'billingInformation.addressLine1' => 'nullable|string',
+                'billingInformation.addressLine2' => 'nullable|string',
+                'billingInformation.city'         => 'nullable|string',
+                'billingInformation.state'        => 'nullable|string',
+                'billingInformation.zip'          => 'nullable|string',
+                'billingInformation.country'      => 'nullable|string',
+                'billingInformation.saveToAddressBook' => 'nullable|boolean',
 
                 'paymentMethod' => 'required_unless:isDraft,true,1|array',
                 'paymentMethod.method'           => 'required_unless:isDraft,true,1|string',
@@ -2555,7 +2568,7 @@ class OrderController extends Controller
                 'products.*.productId'  => 'required_without:products.*.product_id|integer|exists:products,id',
                 'products.*.product_id' => 'required_without:products.*.productId|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
-                'products.*.price' => 'required|numeric|min:0',
+                'products.*.price'      => 'required|numeric|min:0',
 
                 'shippingDestinations'  => 'nullable|array',
                 'shippingMethod'        => 'nullable|array',
@@ -2618,35 +2631,46 @@ class OrderController extends Controller
             $formAddress  = $validated['billingAddress'] ?? [];
             $billingInput = $validated['billingInformation'] ?? [];
 
-            $billingInformation = array_merge([
+            $shippingInfo = [
+                'firstName'    => $billingInput['firstName'] ?? $formAddress['firstName'] ?? $customer->first_name ?? null,
+                'lastName'     => $billingInput['lastName'] ?? $formAddress['lastName'] ?? $customer->last_name ?? null,
+                'email'        => $billingInput['email'] ?? $formAddress['email'] ?? $customer->email ?? null,
+                'phone'        => $billingInput['phone'] ?? $formAddress['phone'] ?? $customer->phone ?? null,
+                'companyName'  => $billingInput['companyName'] ?? $formAddress['companyName'] ?? $customer->company_name ?? null,
+                'addressLine1' => $billingInput['addressLine1'] ?? $customer->address ?? $customer->address_line_1 ?? null,
+                'addressLine2' => $billingInput['addressLine2'] ?? $customer->address_line_2 ?? null,
+                'city'         => $billingInput['city'] ?? $customer->city ?? null,
+                'state'        => $billingInput['state'] ?? $customer->state ?? null,
+                'zip'          => $billingInput['zip'] ?? $customer->zip ?? null,
+                'country'      => $billingInput['country'] ?? $customer->country ?? null,
+            ];
+
+            $billingInfo = [
                 'firstName'    => $formAddress['firstName'] ?? $customer->first_name ?? null,
                 'lastName'     => $formAddress['lastName'] ?? $customer->last_name ?? null,
+                'name'         => $formAddress['name'] ?? null,
                 'email'        => $formAddress['email'] ?? $customer->email ?? null,
                 'phone'        => $formAddress['phone'] ?? $customer->phone ?? null,
                 'companyName'  => $formAddress['companyName'] ?? $customer->company_name ?? null,
-                'addressLine1' => $formAddress['addressLine1'] ?? $customer->address ?? $customer->address_line_1 ?? null,
-                'addressLine2' => $formAddress['addressLine2'] ?? $customer->address_line_2 ?? null,
-                'city'         => $formAddress['city'] ?? $customer->city ?? null,
-                'state'        => $formAddress['state'] ?? $customer->state ?? null,
-                'zip'          => $formAddress['zip'] ?? $customer->zip ?? null,
-                'country'      => $formAddress['country'] ?? $customer->country ?? null,
-            ], array_filter($billingInput, fn($v) => $v !== null && $v !== ''));
+                'addressLine1' => $formAddress['addressLine1'] ?? null,
+                'addressLine2' => $formAddress['addressLine2'] ?? null,
+                'city'         => $formAddress['city'] ?? null,
+                'state'        => $formAddress['state'] ?? null,
+                'zip'          => $formAddress['zip'] ?? null,
+                'country'      => $formAddress['country'] ?? null,
+            ];
 
-            if (empty($formAddress)) {
-                $formAddress = $billingInformation;
-            }
-
-            $comments   = $validated['comments'] ?? $billingInput['comments'] ?? null;
-            $staffNotes = $validated['staffNotes'] ?? $billingInput['staffNotes'] ?? null;
-            $saveBilling  = (bool) ($validated['isSaveAddressForBilling'] ?? false);
-            $saveShipping = (bool) ($validated['isSaveAddressForShipping'] ?? false);
+            $comments     = $validated['comments'] ?? $billingInput['comments'] ?? null;
+            $staffNotes   = $validated['staffNotes'] ?? $billingInput['staffNotes'] ?? null;
+            $saveBilling  = (bool) ($validated['isSaveAddressForBilling'] ?? $formAddress['saveToAddressBook'] ?? false);
+            $saveShipping = (bool) ($validated['isSaveAddressForShipping'] ?? $billingInput['saveToAddressBook'] ?? false);
 
             $shippingMethod   = $validated['shippingMethod'] ?? [];
             $shippingCost     = (float) ($shippingMethod['cost'] ?? 0);
             $shippingProvider = $shippingMethod['provider'] ?? ($shippingMethod['method'] ?? null);
             $shippingData     = $shippingMethod['data'] ?? $shippingProvider;
-            $discount        = (float) ($validated['discountAmount'] ?? 0);
-            $manualDiscount  = (float) ($validated['manualDiscount'] ?? $request->input('manualDiscount', 0));
+            $discount         = (float) ($validated['discountAmount'] ?? 0);
+            $manualDiscount   = (float) ($validated['manualDiscount'] ?? $request->input('manualDiscount', 0));
 
             $products = collect($validated['products'])->map(function ($item) {
                 return [
@@ -2671,7 +2695,7 @@ class OrderController extends Controller
                 ? 'Credit Card (Via Stripe)'
                 : ($validated['paymentMethod']['method'] ?? 'N/A');
 
-            $intent = null;
+            $intent   = null;
             $riskData = [];
 
             if (!$isDraft && $paymentMethodId) {
@@ -2745,64 +2769,39 @@ class OrderController extends Controller
                 'store_id'        => $storeId,
                 'customer_id'     => $customer->id,
                 'user_id'         => $user?->id,
-                'first_name'      => $billingInformation['firstName'] ?? null,
-                'last_name'       => $billingInformation['lastName'] ?? null,
-                'email'           => $billingInformation['email'] ?? $customer->email,
-                'phone'           => $billingInformation['phone'] ?? null,
-                'company_name'    => $billingInformation['companyName'] ?? null,
-                'address_line_1'  => $billingInformation['addressLine1'] ?? null,
-                'address_line_2'  => $billingInformation['addressLine2'] ?? null,
-                'city'            => $billingInformation['city'] ?? null,
-                'state'           => $billingInformation['state'] ?? null,
-                'zip'             => $billingInformation['zip'] ?? null,
-                'country'         => $billingInformation['country'] ?? null,
+                'first_name'      => $shippingInfo['firstName'],
+                'last_name'       => $shippingInfo['lastName'],
+                'email'           => $shippingInfo['email'] ?? $customer->email,
+                'phone'           => $shippingInfo['phone'],
+                'company_name'    => $shippingInfo['companyName'],
+                'address_line_1'  => $shippingInfo['addressLine1'],
+                'address_line_2'  => $shippingInfo['addressLine2'],
+                'city'            => $shippingInfo['city'],
+                'state'           => $shippingInfo['state'],
+                'zip'             => $shippingInfo['zip'],
+                'country'         => $shippingInfo['country'],
                 'payment_method'  => $displayPaymentMethod,
                 'shipping_method' => $shippingProvider,
                 'shipping_data'   => $shippingData,
             ]);
 
-            $addressName = $formAddress['name']
-                ?? trim(($billingInformation['firstName'] ?? '') . ' ' . ($billingInformation['lastName'] ?? ''));
+            $addressName = $billingInfo['name']
+                ?? trim(($billingInfo['firstName'] ?? '') . ' ' . ($billingInfo['lastName'] ?? ''));
 
             $billingAddressJson = [
                 'name'         => $addressName ?: null,
-                'firstName'    => $billingInformation['firstName'] ?? null,
-                'lastName'     => $billingInformation['lastName'] ?? null,
-                'companyName'  => $billingInformation['companyName'] ?? null,
-                'email'        => $billingInformation['email'] ?? $customer->email,
-                'phone'        => $billingInformation['phone'] ?? null,
-                'addressLine1' => $billingInformation['addressLine1'] ?? null,
-                'addressLine2' => $billingInformation['addressLine2'] ?? null,
-                'city'         => $billingInformation['city'] ?? null,
-                'state'        => $billingInformation['state'] ?? null,
-                'zip'          => $billingInformation['zip'] ?? null,
-                'country'      => $billingInformation['country'] ?? null,
+                'firstName'    => $billingInfo['firstName'],
+                'lastName'     => $billingInfo['lastName'],
+                'companyName'  => $billingInfo['companyName'],
+                'email'        => $billingInfo['email'] ?? $customer->email,
+                'phone'        => $billingInfo['phone'],
+                'addressLine1' => $billingInfo['addressLine1'],
+                'addressLine2' => $billingInfo['addressLine2'],
+                'city'         => $billingInfo['city'],
+                'state'        => $billingInfo['state'],
+                'zip'          => $billingInfo['zip'],
+                'country'      => $billingInfo['country'],
             ];
-
-            if ($intent && $intent->payment_method) {
-                try {
-                    $pm = \Stripe\PaymentMethod::retrieve($intent->payment_method);
-                    if ($pm->billing_details) {
-                        $bd = $pm->billing_details;
-                        $billingAddressJson = [
-                            'name'         => $bd->name ?? $billingAddressJson['name'],
-                            'firstName'    => $billingAddressJson['firstName'],
-                            'lastName'     => $billingAddressJson['lastName'],
-                            'companyName'  => $billingAddressJson['companyName'],
-                            'email'        => $bd->email ?? $billingAddressJson['email'],
-                            'phone'        => $bd->phone ?? $billingAddressJson['phone'],
-                            'addressLine1' => $bd->address->line1 ?? $billingAddressJson['addressLine1'],
-                            'addressLine2' => $bd->address->line2 ?? $billingAddressJson['addressLine2'],
-                            'city'         => $bd->address->city ?? $billingAddressJson['city'],
-                            'state'        => $bd->address->state ?? $billingAddressJson['state'],
-                            'zip'          => $bd->address->postal_code ?? $billingAddressJson['zip'],
-                            'country'      => $bd->address->country ?? $billingAddressJson['country'],
-                        ];
-                    }
-                } catch (\Exception $e) {
-                    \Log::warning('Could not fetch Stripe billing details: ' . $e->getMessage());
-                }
-            }
 
             $order = Order::create([
                 'store_id'                     => $storeId,
@@ -2856,7 +2855,6 @@ class OrderController extends Controller
                 ], $riskData));
             }
 
-            // ===== MANUAL DISCOUNT =====
             $manualUserId     = $user?->id ?? null;
             $manualCustomerId = $customer->id ?? ($validated['customerId'] ?? null);
 
@@ -2867,8 +2865,8 @@ class OrderController extends Controller
                     'customer_id'     => $manualCustomerId ?: null,
                     'order_id'        => $order->id,
                     'product_id'      => $item['product_id'] ?? null,
-                    'discount_amount' => $manualDiscount,  // user ne jo dala
-                    'total_amount'    => $totalAmount,     // minus ke baad final total
+                    'discount_amount' => $manualDiscount,
+                    'total_amount'    => $totalAmount,
                 ]);
             }
 
@@ -3606,6 +3604,7 @@ class OrderController extends Controller
                 'billingInformation.email'         => 'nullable|email',
                 'billingInformation.paymentMethod' => 'nullable|string',
                 'billingInformation.shippingMethod' => 'nullable|string',
+                'billingInformation.saveToAddressBook' => 'nullable|boolean',
 
                 'paymentMethod'                      => 'required_unless:isDraft,true,1|array',
                 'paymentMethod.method'               => 'required_unless:isDraft,true,1|string',
@@ -3767,7 +3766,7 @@ class OrderController extends Controller
             $shippingDestinations = $validated['shippingDestinations'] ?? [];
             if (empty($shippingDestinations)) {
                 $shippingDestinations = [[
-                    'address'    => !empty($formAddress) ? $formAddress : $billingInput,
+                    'address'    => $billingInput,
                     'products'   => $validated['products'],
                     'staffNotes' => '',
                 ]];
@@ -3781,8 +3780,8 @@ class OrderController extends Controller
             $requiresAction = null;
 
             foreach ($shippingDestinations as $destination) {
-                $address  = $destination['address'] ?? $billingInput;
-                $products = $mapProducts($destination['products'] ?? $validated['products']);
+                $shippingAddress = $destination['address'] ?? $billingInput;
+                $products        = $mapProducts($destination['products'] ?? $validated['products']);
 
                 $cartTotal = 0;
                 foreach ($products as $item) {
@@ -3799,39 +3798,38 @@ class OrderController extends Controller
                     'store_id'        => $storeId,
                     'customer_id'     => $customer->id,
                     'user_id'         => $user?->id,
-                    'first_name'      => $address['firstName'] ?? $validated['firstName'] ?? null,
-                    'last_name'       => $address['lastName'] ?? $validated['lastName'] ?? null,
-                    'company_name'    => $address['companyName'] ?? $validated['companyName'] ?? null,
-                    'email'           => $address['email'] ?? $customer->email,
-                    'phone'           => $address['phone'] ?? $validated['phone'] ?? null,
-                    'address_line_1'  => $address['addressLine1'] ?? null,
-                    'address_line_2'  => $address['addressLine2'] ?? null,
-                    'city'            => $address['city'] ?? null,
-                    'state'           => $address['state'] ?? null,
-                    'zip'             => $address['zip'] ?? null,
-                    'country'         => $address['country'] ?? null,
+                    'first_name'      => $shippingAddress['firstName'] ?? $validated['firstName'] ?? null,
+                    'last_name'       => $shippingAddress['lastName'] ?? $validated['lastName'] ?? null,
+                    'company_name'    => $shippingAddress['companyName'] ?? $validated['companyName'] ?? null,
+                    'email'           => $shippingAddress['email'] ?? $customer->email,
+                    'phone'           => $shippingAddress['phone'] ?? $validated['phone'] ?? null,
+                    'address_line_1'  => $shippingAddress['addressLine1'] ?? null,
+                    'address_line_2'  => $shippingAddress['addressLine2'] ?? null,
+                    'city'            => $shippingAddress['city'] ?? null,
+                    'state'           => $shippingAddress['state'] ?? null,
+                    'zip'             => $shippingAddress['zip'] ?? null,
+                    'country'         => $shippingAddress['country'] ?? null,
                     'payment_method'  => $displayPaymentMethod,
-                    'shipping_method' => $shippingProvider ?? $address['shippingMethod'] ?? null,
+                    'shipping_method' => $shippingProvider ?? $shippingAddress['shippingMethod'] ?? null,
                     'shipping_data'   => $shippingData,
                 ], $user, $customer);
 
-                $src   = !empty($formAddress) ? $formAddress : $address;
-                $first = $src['firstName'] ?? $customer->first_name;
-                $last  = $src['lastName'] ?? $customer->last_name;
+                $billFirst = $formAddress['firstName'] ?? $validated['firstName'] ?? $customer->first_name;
+                $billLast  = $formAddress['lastName'] ?? $validated['lastName'] ?? $customer->last_name;
 
                 $billingAddressJson = [
-                    'name'         => trim(($first ?? '') . ' ' . ($last ?? '')) ?: null,
-                    'firstName'    => $first,
-                    'lastName'     => $last,
-                    'companyName'  => $src['companyName'] ?? $customer->company_name,
-                    'email'        => $src['email'] ?? $customer->email,
-                    'phone'        => $src['phone'] ?? $customer->phone,
-                    'addressLine1' => $src['addressLine1'] ?? null,
-                    'addressLine2' => $src['addressLine2'] ?? null,
-                    'city'         => $src['city'] ?? null,
-                    'state'        => $src['state'] ?? null,
-                    'zip'          => $src['zip'] ?? null,
-                    'country'      => $src['country'] ?? null,
+                    'name'         => $formAddress['name'] ?? (trim(($billFirst ?? '') . ' ' . ($billLast ?? '')) ?: null),
+                    'firstName'    => $billFirst,
+                    'lastName'     => $billLast,
+                    'companyName'  => $formAddress['companyName'] ?? $validated['companyName'] ?? $customer->company_name,
+                    'email'        => $formAddress['email'] ?? $validated['email'] ?? $customer->email,
+                    'phone'        => $formAddress['phone'] ?? $validated['phone'] ?? $customer->phone,
+                    'addressLine1' => $formAddress['addressLine1'] ?? null,
+                    'addressLine2' => $formAddress['addressLine2'] ?? null,
+                    'city'         => $formAddress['city'] ?? null,
+                    'state'        => $formAddress['state'] ?? null,
+                    'zip'          => $formAddress['zip'] ?? null,
+                    'country'      => $formAddress['country'] ?? null,
                 ];
 
                 $intent   = null;
@@ -3878,26 +3876,6 @@ class OrderController extends Controller
                             ];
                         }
                     }
-
-                    if ($intent && $intent->payment_method) {
-                        try {
-                            $pm = \Stripe\PaymentMethod::retrieve($intent->payment_method);
-                            if ($pm->billing_details) {
-                                $bd = $pm->billing_details;
-                                $billingAddressJson['name']         = $bd->name ?? $billingAddressJson['name'];
-                                $billingAddressJson['email']        = $bd->email ?? $billingAddressJson['email'];
-                                $billingAddressJson['phone']        = $bd->phone ?? $billingAddressJson['phone'];
-                                $billingAddressJson['addressLine1'] = $bd->address->line1 ?? $billingAddressJson['addressLine1'];
-                                $billingAddressJson['addressLine2'] = $bd->address->line2 ?? $billingAddressJson['addressLine2'];
-                                $billingAddressJson['city']         = $bd->address->city ?? $billingAddressJson['city'];
-                                $billingAddressJson['state']        = $bd->address->state ?? $billingAddressJson['state'];
-                                $billingAddressJson['zip']          = $bd->address->postal_code ?? $billingAddressJson['zip'];
-                                $billingAddressJson['country']      = $bd->address->country ?? $billingAddressJson['country'];
-                            }
-                        } catch (\Exception $e) {
-                            \Log::warning('Could not fetch Stripe billing details: ' . $e->getMessage());
-                        }
-                    }
                 }
 
                 $order = Order::create([
@@ -3913,7 +3891,7 @@ class OrderController extends Controller
                     'ip_address'                   => $validated['ipAddress'] ?? null,
                     'billing_same'                 => $validated['billingSame'] ?? empty($validated['shippingDestinations']),
                     'is_save_address_for_billing'  => (bool) ($formAddress['saveToAddressBook'] ?? $validated['isSaveAddressForBilling'] ?? false),
-                    'is_save_address_for_shipping' => (bool) ($validated['isSaveAddressForShipping'] ?? false),
+                    'is_save_address_for_shipping' => (bool) ($billingInput['saveToAddressBook'] ?? $validated['isSaveAddressForShipping'] ?? false),
                     'newsletter'                   => $validated['newsletter'] ?? $validated['receiveOffers'] ?? false,
                     'shipping_cost'                => $shippingCost,
                     'shipping_provider'            => $shippingProvider,
