@@ -14,6 +14,15 @@ class OrderResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $couponDiscount = (float) ($this->discountAmount ?? 0);
+        $manualDiscount = $this->relationLoaded('manualDiscounts')
+            ? (float) ($this->manualDiscounts->first()->discount_amount ?? 0)
+            : 0;
+
+        $subtotal = $this->relationLoaded('items')
+            ? round($this->items->sum(fn($item) => ((float) $item->price) * ((int) $item->quantity)), 2)
+            : 0;
+
         return [
             'id'             => $this->id,
             'orderNumber'    => $this->order_number,
@@ -24,6 +33,11 @@ class OrderResource extends JsonResource
             'isDraft'            => (bool) $this->is_draft,
             'deviceType'         => $this->device_type,
             'userType'           => $this->user_type,
+            'subtotal'           => $subtotal,
+            'couponCode'         => $this->coupon_code,
+            'couponDiscount'     => $couponDiscount,
+            'manualDiscount'     => $manualDiscount,
+            'totalDiscount'      => $couponDiscount + $manualDiscount,
             'totalAmount'        => $this->total_amount,
             'discountAmount'     => $this->discountAmount,
             'newsletter'         => $this->newsletter,
@@ -60,12 +74,10 @@ class OrderResource extends JsonResource
 
             'billingAddress' => $this->resolveBillingAddress(),
 
-
             'notes' => $this->whenLoaded('notes', function () {
                 return $this->notes->pluck('note');
             }),
 
-            // ====================== OPTIMIZED PRODUCTS (NO ProductResource) ======================
             'products' => $this->whenLoaded('items', function () {
                 return $this->items
                     ->filter(fn($item) => $item->product)
@@ -115,15 +127,8 @@ class OrderResource extends JsonResource
                                 ? new BrandResource($product->brand)
                                 : null,
 
-                            // 'dimensions' => [
-                            //     'weight' => $dimensions['weight'] ?? 0,
-                            //     'width'  => $dimensions['width'] ?? 0,
-                            //     'height' => $dimensions['height'] ?? 0,
-                            //     'depth'  => $dimensions['depth'] ?? 0,
-                            // ],
-
-                            'quantity' => $item->quantity,          // order item quantity
-                            'price' => $item->price,                // order item price (override)
+                            'quantity' => $item->quantity,
+                            'price' => $item->price,
 
                             'trackInventory' => $product->track_inventory,
                             'currentStock' => $product->current_stock,
@@ -135,20 +140,6 @@ class OrderResource extends JsonResource
                             'freeShipping' => $product->show_shipping,
                             'sortOrder' => $product->sort_order,
                             'searchKeywords' => $product->search_keywords,
-
-                            // 'objectType' => $product->object_type,
-                            // 'useProductName' => (bool) $product->use_product_name,
-                            // 'graphDescription' => (bool) $product->graph_description,
-                            // 'useThumbnail' => (bool) $product->use_thumbnail,
-                            // 'dontUse' => (bool) $product->dont_use,
-                            // 'manageCustoms' => (bool) $product->manage_customs,
-                            // 'commodityDescription' => $product->commodity_description,
-                            // 'countryOfOrigin' => $product->country_of_origin,
-                            // 'hsCodes' => $product->hs_codes ?? [],
-
-                            // 'customFields' => collect($product->custom_fields ?? [])->mapWithKeys(function ($value, $key) {
-                            //     return [trim($key, "\"") => is_string($value) ? trim($value, "\"") : $value];
-                            // }),
 
                             'storeId' => $product->store_id,
                             'createdAt' => $product->created_at,
@@ -169,18 +160,6 @@ class OrderResource extends JsonResource
                             'upc' => optional($product->identifiers)->upc,
                             'gtin' => optional($product->identifiers)->gtin,
                             'bpn' => optional($product->identifiers)->bpn,
-
-                            // categoryHierarchy intentionally removed for performance
-                            // 'categoryHierarchy' => null,
-
-                            // 'purchasabilityStatus' => $product->purchasability_status,
-                            // 'minPurchaseQuantity' => $product->min_purchase_quantity,
-                            // 'maxPurchaseQuantity' => $product->max_purchase_quantity,
-                            // 'relatedProductsEnabled' => $product->related_products_enabled,
-                            // 'taxCode' => $product->tax_code,
-                            // 'discountType' => $product->discount_type,
-                            // 'bulkPricingTiers' => $product->bulk_pricing_tiers ?? [],
-                            // schema intentionally removed (very heavy)
                         ];
                     })->values();
             }),
