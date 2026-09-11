@@ -2794,7 +2794,11 @@ class OrderController extends Controller
                 'country'         => $shippingInfo['country'],
                 'payment_method'  => $displayPaymentMethod,
                 'shipping_method' => $shippingProvider,
-                'shipping_data'   => $shippingData !== null ? ['label' => $shippingData] : null,
+                'shipping_data'   => [
+                    'display_name' => $shippingMethod['display_name'] ?? $shippingData,
+                    'label'        => $shippingData,
+                    'data'         => $shippingMethod['data'] ?? $shippingData,
+                ],
             ]);
 
             $addressName = $billingInfo['name']

@@ -7,13 +7,17 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class BillingInformationResource extends JsonResource
 {
-    /**
-     * Transform the resource into an array.
-     *
-     * @return array<string, mixed>
-     */
     public function toArray(Request $request): array
     {
+        $shippingData = $this->shipping_data;
+
+        if (is_array($shippingData)) {
+            $shippingData = $shippingData['display_name']
+                ?? $shippingData['label']
+                ?? $shippingData['data']
+                ?? $this->shipping_method;
+        }
+
         return [
             'id'              => $this->id,
             'storeId'         => $this->store_id,
@@ -32,7 +36,7 @@ class BillingInformationResource extends JsonResource
             'country'         => $this->country,
             'paymentMethod'   => $this->payment_method,
             'shippingMethod'  => $this->shipping_method,
-            'shippingData'    => $this->shipping_data['display_name'] ?? null,
+            'shippingData'    => $shippingData,
             'createdAt'       => $this->created_at,
             'updatedAt'       => $this->updated_at,
         ];
