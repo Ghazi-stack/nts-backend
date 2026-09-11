@@ -2896,7 +2896,7 @@ class OrderController extends Controller
                 ], 'payment');
             }
 
-            $order->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer','payment', 'manualDiscounts');
+            $order->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
 
             try {
                 $email = $billingAddressJson['email'] ?? $customer->email;

@@ -77,10 +77,6 @@ class Order extends Model
         return $this->hasOne(Shipment::class)->latest();
     }
 
-    public function manualDiscounts()
-    {
-        return $this->hasMany(ManualDiscount::class);
-    }
     public function messages()
     {
         return $this->hasMany(\App\Models\CustomerMessage::class, 'order_id');
