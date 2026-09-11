@@ -26,6 +26,9 @@ class OrderResource extends JsonResource
             'userType'           => $this->user_type,
             'totalAmount'        => $this->total_amount,
             'discountAmount'     => $this->discountAmount,
+            'manualDiscount'     => $this->whenLoaded('manualDiscounts')
+                ? (float) $this->manualDiscounts->sum('discount_amount')
+                : 0,
             'newsletter'         => $this->newsletter,
             'ipAddress'          => $this->ip_address,
             'isSaveAddressForShipping' => (bool) $this->is_save_address_for_shipping,
