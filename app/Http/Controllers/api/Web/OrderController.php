@@ -2666,7 +2666,7 @@ class OrderController extends Controller
             $saveShipping = (bool) ($validated['isSaveAddressForShipping'] ?? $billingInput['saveToAddressBook'] ?? false);
 
             $shippingMethod   = $validated['shippingMethod'] ?? [];
-            $shippingCost     = (float) ($shippingMethod['cost'] ?? 0);
+            $shippingCost     = (float) ($shippingMethod['total_charge'] ?? 0);
             $shippingProvider = $shippingMethod['provider'] ?? ($shippingMethod['method'] ?? null);
             $shippingData     = $shippingMethod['data'] ?? $shippingProvider;
             $discount         = (float) ($validated['discountAmount'] ?? 0);
