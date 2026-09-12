@@ -33,6 +33,12 @@ class FedExRateService
         $payload = $this->buildRateRequestPayload($config, $shipmentData);
 
         try {
+
+        Log::info('FedEx Rate API request payload', [
+            'config_id' => $config->id,
+            'api_url' => $config->api_base_url . '/rate/v1/rates/quotes',
+            'payload' => $payload,
+        ]);
             $response = Http::withToken($token)
                 ->withHeaders([
                     'Content-Type'              => 'application/json',
