@@ -57,6 +57,8 @@ class ProductListResource extends JsonResource
             'currentStock' => $this->current_stock,
             'Price' => $this->price,
             'allowPurchase' => $this->allow_purchase,
+            'isDuplicate' => $this->is_duplicate,
+            'isRedirect' => $this->is_redirect,
 
             'callPricing' => $this->call_pricing,
             'isFeatured'   => $this->is_featured,
