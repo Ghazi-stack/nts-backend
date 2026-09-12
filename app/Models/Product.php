@@ -76,7 +76,9 @@ class Product extends Model
         'commodity_description',
         'country_of_origin',
         'condition',
-        'faq'
+        'faq',
+        'is_redirect',
+        'is_duplicate'
     ];
 
     protected $casts = [
@@ -88,6 +90,8 @@ class Product extends Model
         'track_inventory' => 'boolean',
         'show_condition' => 'boolean',
         'show_shipping' => 'boolean',
+        'is_redirect' => 'boolean',
+        'is_duplicate' => 'boolean',
         'allow_purchase' => 'boolean',
         'stop_processing_rules' => 'boolean',
         'free_shipping' => 'boolean',

@@ -666,6 +666,8 @@ class ProductController extends Controller
                 'hsCodes' => 'nullable|array',
                 'hsCodes.*.country' => 'nullable|string',
                 'hsCodes.*.code' => 'nullable|string',
+                'isDuplicate' => 'nullable|boolean',
+                'isRedirect' => 'nullable|boolean',
             ]);
 
             // ---------------- PRODUCT ----------------
@@ -718,6 +720,8 @@ class ProductController extends Controller
                 'commodity_description' => $validated['commodityDescription'] ?? null,
                 'country_of_origin' => $validated['countryOfOrigin'] ?? null,
                 'hs_codes' => $validated['hsCodes'] ?? [],
+                'is_duplicate' => $validated['isDuplicate'] ?? false,
+                'is_redirect' => $validated['isRedirect'] ?? false,
             ]);
 
             $categoryIds = collect($validated['categoryIds'] ?? [])
@@ -934,6 +938,8 @@ class ProductController extends Controller
                 'hsCodes' => 'nullable|array',
                 'hsCodes.*.country' => 'nullable|string',
                 'hsCodes.*.code' => 'nullable|string',
+                'isDuplicate' => 'nullable|boolean',
+                'isRedirect' => 'nullable|boolean',
             ]);
 
             $product->update([
@@ -989,6 +995,8 @@ class ProductController extends Controller
                 'country_of_origin' => $validated['countryOfOrigin'] ?? null,
 
                 'hs_codes' => $validated['hsCodes'] ?? [],
+                'is_duplicate' => $validated['isDuplicate'] ?? false,
+                'is_redirect' => $validated['isRedirect'] ?? false,
             ]);
 
             // Sync many-to-many categories
@@ -1320,6 +1328,8 @@ class ProductController extends Controller
                         'tax_code' => $fields['taxCode'] ?? $product->tax_code,
                         'discount_type' => $fields['discountType'] ?? $product->discount_type,
                         'bulk_pricing_tiers' => $fields['bulkPricingTiers'] ?? $product->bulk_pricing_tiers,
+                        'is_duplicate' => $fields['isDuplicate'] ?? $product->is_duplicate,
+                        'is_redirect' => $fields['isRedirect'] ?? $product->is_redirect,
                     ])->save();
 
                     // ✅ Sync Categories
