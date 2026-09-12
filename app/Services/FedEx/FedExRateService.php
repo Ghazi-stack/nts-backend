@@ -105,7 +105,8 @@ class FedExRateService
                     ],
                 ],
                 'pickupType'      => $pickupType,
-                'rateRequestType' => [$config->rate_type === 'ACCOUNT' ? 'ACCOUNT' : 'LIST'],
+                'packagingType' => $config->packaging_type ?: 'YOUR_PACKAGING',
+                'rateRequestType' => strtoupper($config->rate_type ?: 'LIST'),
                 'requestedPackageLineItems' => $this->buildPackageLineItems($config, $data),
             ],
         ];
