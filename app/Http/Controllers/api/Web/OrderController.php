@@ -2524,6 +2524,8 @@ class OrderController extends Controller
                 'discountAmount' => 'nullable|numeric',
                 'manualDiscount' => 'nullable|numeric|min:0',
                 'ipAddress'    => 'nullable|string|max:45',
+                'emailInvoice' => 'nullable|boolean',
+
 
                 'billingAddress' => 'nullable|array',
                 'billingAddress.firstName'    => 'nullable|string',
@@ -2831,6 +2833,7 @@ class OrderController extends Controller
                 'device_type'                  => $validated['deviceType'] ?? 'desktop',
                 'channel'                      => 'admin-panel',
                 'ip_address'                   => $validated['ipAddress'] ?? null,
+                'email_invoice'                => $validated['emailInvoice'] ?? true,
                 'billing_same'                 => $validated['billingSame'] ?? true,
                 'is_save_address_for_billing'  => $saveBilling,
                 'is_save_address_for_shipping' => $saveShipping,
@@ -3591,6 +3594,7 @@ class OrderController extends Controller
                 'isSaveAddressForBilling'  => 'nullable|boolean',
                 'isSaveAddressForShipping' => 'nullable|boolean',
                 'newsletter'     => 'nullable|boolean',
+                'emailInvoice' => 'nullable|boolean',
 
                 'billingAddress' => 'nullable|array',
                 'billingAddress.firstName'    => 'nullable|string|max:255',
@@ -3928,6 +3932,7 @@ class OrderController extends Controller
                     'device_type'                  => $validated['deviceType'] ?? null,
                     'channel'                      => 'admin-panel',
                     'ip_address'                   => $validated['ipAddress'] ?? null,
+                    'email_invoice'                => $validated['emailInvoice'] ?? true,
                     'billing_same'                 => $validated['billingSame'] ?? empty($validated['shippingDestinations']),
                     'is_save_address_for_billing'  => (bool) ($formAddress['saveToAddressBook'] ?? $validated['isSaveAddressForBilling'] ?? false),
                     'is_save_address_for_shipping' => (bool) ($billingInput['saveToAddressBook'] ?? $validated['isSaveAddressForShipping'] ?? false),
