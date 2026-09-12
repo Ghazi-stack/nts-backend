@@ -27,6 +27,7 @@ class OrderResource extends JsonResource
             'emailInvoice'       => $this->email_invoice,
             'totalAmount'        => $this->total_amount,
             'discountAmount'     => $this->discountAmount,
+            'couponCode'         => $this->coupon_code,
             'manualDiscount'     => $this->whenLoaded('manualDiscounts')
                 ? (float) $this->manualDiscounts->sum('discount_amount')
                 : 0,
