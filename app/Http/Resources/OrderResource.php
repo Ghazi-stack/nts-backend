@@ -24,8 +24,10 @@ class OrderResource extends JsonResource
             'isDraft'            => (bool) $this->is_draft,
             'deviceType'         => $this->device_type,
             'userType'           => $this->user_type,
+            'emailInvoice'       => $this->email_invoice,
             'totalAmount'        => $this->total_amount,
             'discountAmount'     => $this->discountAmount,
+            'couponCode'         => $this->coupon_code,
             'manualDiscount'     => $this->whenLoaded('manualDiscounts')
                 ? (float) $this->manualDiscounts->sum('discount_amount')
                 : 0,
