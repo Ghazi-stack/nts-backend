@@ -2943,15 +2943,21 @@ class OrderController extends Controller
 
             $order->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
 
-            try {
-                $email = $billingAddressJson['email'] ?? $customer->email;
-                if ($email) {
-                    Mail::to($email)->send(new OrderPlacedMail($order, $customer, $storeId));
+            $emailInvoice = (bool) ($validated['emailInvoice'] ?? true);
+
+            if ($emailInvoice) {
+                try {
+                    $email = $billingAddressJson['email'] ?? $customer->email;
+                    if ($email) {
+                        Mail::to($email)->send(new OrderPlacedMail($order, $customer, $storeId));
+                    }
+                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
+                    Mail::to($adminEmail)->send(new OrderPlacedMail($order, $customer, $storeId));
+                } catch (\Exception $mailError) {
+                    \Log::error('DASHBOARD ORDER EMAIL FAILED', [
+                        'error' => $mailError->getMessage(),
+                    ]);
                 }
-                $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
-                Mail::to($adminEmail)->send(new OrderPlacedMail($order, $customer, $storeId));
-            } catch (\Exception $mailError) {
-                \Log::error('DASHBOARD ORDER EMAIL FAILED', ['error' => $mailError->getMessage()]);
             }
 
             DB::commit();
@@ -4068,17 +4074,21 @@ class OrderController extends Controller
 
                 $order->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
 
-                try {
-                    $email = $billingAddressJson['email'] ?? $customer->email;
-                    if ($email) {
-                        Mail::to($email)->send(new OrderPlacedMail($order, $customer, $storeId));
+                $emailInvoice = (bool) ($validated['emailInvoice'] ?? true);
+
+                if ($emailInvoice) {
+                    try {
+                        $email = $billingAddressJson['email'] ?? $customer->email;
+                        if ($email) {
+                            Mail::to($email)->send(new OrderPlacedMail($order, $customer, $storeId));
+                        }
+                        $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
+                        Mail::to($adminEmail)->send(new OrderPlacedMail($order, $customer, $storeId));
+                    } catch (\Exception $mailError) {
+                        \Log::error('NEW CUSTOMER ORDER EMAIL FAILED', [
+                            'error' => $mailError->getMessage(),
+                        ]);
                     }
-                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
-                    Mail::to($adminEmail)->send(new OrderPlacedMail($order, $customer, $storeId));
-                } catch (\Exception $mailError) {
-                    \Log::error('NEW CUSTOMER ORDER EMAIL FAILED', [
-                        'error' => $mailError->getMessage(),
-                    ]);
                 }
 
                 $orders[] = $order;
