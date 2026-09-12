@@ -2851,8 +2851,6 @@ class OrderController extends Controller
 
             $order->update(['order_number' => $order->id]);
 
-            $order->update(['order_number' => $order->id]);
-
             if ($saveBilling || $saveShipping) {
                 $shippingAddressJson = [
                     'name'         => trim(($shippingInfo['firstName'] ?? '') . ' ' . ($shippingInfo['lastName'] ?? '')) ?: null,
@@ -2877,7 +2875,7 @@ class OrderController extends Controller
                     'shipping_address'  => $saveShipping ? $shippingAddressJson : null,
                 ]);
             }
-            
+
             foreach ($products as $item) {
                 $product = Product::where('store_id', $storeId)->findOrFail($item['product_id']);
                 $order->items()->create([
@@ -3977,6 +3975,34 @@ class OrderController extends Controller
                 ]);
 
                 $order->update(['order_number' => $order->id]);
+
+                $saveBilling  = (bool) ($formAddress['saveToAddressBook'] ?? $validated['isSaveAddressForBilling'] ?? false);
+                $saveShipping = (bool) ($billingInput['saveToAddressBook'] ?? $validated['isSaveAddressForShipping'] ?? false);
+
+                if ($saveBilling || $saveShipping) {
+                    $shippingAddressJson = [
+                        'name'         => trim(($shippingAddress['firstName'] ?? '') . ' ' . ($shippingAddress['lastName'] ?? '')) ?: null,
+                        'firstName'    => $shippingAddress['firstName'] ?? $validated['firstName'] ?? null,
+                        'lastName'     => $shippingAddress['lastName'] ?? $validated['lastName'] ?? null,
+                        'companyName'  => $shippingAddress['companyName'] ?? $validated['companyName'] ?? null,
+                        'email'        => $shippingAddress['email'] ?? $validated['email'] ?? $customer->email,
+                        'phone'        => $shippingAddress['phone'] ?? $validated['phone'] ?? null,
+                        'addressLine1' => $shippingAddress['addressLine1'] ?? null,
+                        'addressLine2' => $shippingAddress['addressLine2'] ?? null,
+                        'city'         => $shippingAddress['city'] ?? null,
+                        'state'        => $shippingAddress['state'] ?? null,
+                        'zip'          => $shippingAddress['zip'] ?? null,
+                        'country'      => $shippingAddress['country'] ?? null,
+                    ];
+
+                    SavedAddress::create([
+                        'store_id'         => $storeId,
+                        'user_id'          => $user?->id,
+                        'order_id'         => $order->id,
+                        'billing_address'  => $saveBilling ? $billingAddressJson : null,
+                        'shipping_address' => $saveShipping ? $shippingAddressJson : null,
+                    ]);
+                }
 
                 foreach ($products as $item) {
                     $product = Product::where('store_id', $storeId)->findOrFail($item['product_id']);
