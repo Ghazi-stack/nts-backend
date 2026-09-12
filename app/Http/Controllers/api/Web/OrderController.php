@@ -2851,6 +2851,33 @@ class OrderController extends Controller
 
             $order->update(['order_number' => $order->id]);
 
+            $order->update(['order_number' => $order->id]);
+
+            if ($saveBilling || $saveShipping) {
+                $shippingAddressJson = [
+                    'name'         => trim(($shippingInfo['firstName'] ?? '') . ' ' . ($shippingInfo['lastName'] ?? '')) ?: null,
+                    'firstName'    => $shippingInfo['firstName'] ?? null,
+                    'lastName'     => $shippingInfo['lastName'] ?? null,
+                    'companyName'  => $shippingInfo['companyName'] ?? null,
+                    'email'        => $shippingInfo['email'] ?? $customer->email,
+                    'phone'        => $shippingInfo['phone'] ?? null,
+                    'addressLine1' => $shippingInfo['addressLine1'] ?? null,
+                    'addressLine2' => $shippingInfo['addressLine2'] ?? null,
+                    'city'         => $shippingInfo['city'] ?? null,
+                    'state'        => $shippingInfo['state'] ?? null,
+                    'zip'          => $shippingInfo['zip'] ?? null,
+                    'country'      => $shippingInfo['country'] ?? null,
+                ];
+
+                SavedAddress::create([
+                    'store_id'          => $storeId,
+                    'user_id'           => $user?->id,
+                    'order_id'          => $order->id,
+                    'billing_address'   => $saveBilling ? $billingAddressJson : null,
+                    'shipping_address'  => $saveShipping ? $shippingAddressJson : null,
+                ]);
+            }
+            
             foreach ($products as $item) {
                 $product = Product::where('store_id', $storeId)->findOrFail($item['product_id']);
                 $order->items()->create([
