@@ -120,6 +120,8 @@ class ProductController extends Controller
                     'price',
                     'allow_purchase',
                     'visible_on_storefront',
+                    'min_purchase_quantity',
+                    'max_purchase_quantity',
                     'store_id'
                 ])
                 ->where('store_id', current_store_id());
@@ -224,6 +226,8 @@ class ProductController extends Controller
                     'allow_purchase',
                     'call_pricing',
                     'visible_on_storefront',
+                    'min_purchase_quantity',
+                    'max_purchase_quantity',
                     'store_id',
                 ])
                 ->where('store_id', $storeId);
