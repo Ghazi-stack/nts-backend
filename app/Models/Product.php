@@ -78,6 +78,7 @@ class Product extends Model
         'condition',
         'faq',
         'is_redirect',
+        'parent_id',
         'is_duplicate'
     ];
 
@@ -117,6 +118,16 @@ class Product extends Model
     public function categories()
     {
         return $this->belongsToMany(Category::class, 'category_product');
+    }
+
+    public function parentProduct()
+    {
+        return $this->belongsTo(Product::class, 'parent_id');
+    }
+
+    public function duplicateProducts()
+    {
+        return $this->hasMany(Product::class, 'parent_id');
     }
 
     public function images()

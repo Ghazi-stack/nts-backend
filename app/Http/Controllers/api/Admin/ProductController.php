@@ -120,6 +120,11 @@ class ProductController extends Controller
                     'price',
                     'allow_purchase',
                     'visible_on_storefront',
+                    'min_purchase_quantity',
+                    'max_purchase_quantity',
+                    'is_redirect',
+                    'is_duplicate',
+                    'parent_id',
                     'store_id'
                 ])
                 ->where('store_id', current_store_id());
@@ -224,6 +229,11 @@ class ProductController extends Controller
                     'allow_purchase',
                     'call_pricing',
                     'visible_on_storefront',
+                    'min_purchase_quantity',
+                    'max_purchase_quantity',
+                    'is_redirect',
+                    'is_duplicate',
+                    'parent_id',
                     'store_id',
                 ])
                 ->where('store_id', $storeId);
@@ -666,8 +676,8 @@ class ProductController extends Controller
                 'hsCodes' => 'nullable|array',
                 'hsCodes.*.country' => 'nullable|string',
                 'hsCodes.*.code' => 'nullable|string',
-                'isDuplicate' => 'nullable|boolean',
                 'isRedirect' => 'nullable|boolean',
+                'parentId' => 'nullable|integer',
             ]);
 
             // ---------------- PRODUCT ----------------
@@ -720,9 +730,15 @@ class ProductController extends Controller
                 'commodity_description' => $validated['commodityDescription'] ?? null,
                 'country_of_origin' => $validated['countryOfOrigin'] ?? null,
                 'hs_codes' => $validated['hsCodes'] ?? [],
-                'is_duplicate' => $validated['isDuplicate'] ?? false,
+                'is_duplicate' => false,
                 'is_redirect' => $validated['isRedirect'] ?? false,
+                'parent_id' => $validated['parentId'] ?? null,
             ]);
+            if (!empty($validated['parentId'])) {
+                Product::where('store_id', $storeId)
+                    ->where('id', $validated['parentId'])
+                    ->update(['is_duplicate' => true]);
+            }
 
             $categoryIds = collect($validated['categoryIds'] ?? [])
                 ->filter()
@@ -938,8 +954,8 @@ class ProductController extends Controller
                 'hsCodes' => 'nullable|array',
                 'hsCodes.*.country' => 'nullable|string',
                 'hsCodes.*.code' => 'nullable|string',
-                'isDuplicate' => 'nullable|boolean',
                 'isRedirect' => 'nullable|boolean',
+                'parentId' => 'nullable|integer',
             ]);
 
             $product->update([
@@ -995,10 +1011,34 @@ class ProductController extends Controller
                 'country_of_origin' => $validated['countryOfOrigin'] ?? null,
 
                 'hs_codes' => $validated['hsCodes'] ?? [],
-                'is_duplicate' => $validated['isDuplicate'] ?? false,
                 'is_redirect' => $validated['isRedirect'] ?? false,
+                'parent_id' => array_key_exists('parentId', $validated)
+                    ? ($validated['parentId'] ? (int) $validated['parentId'] : null)
+                    : $product->parent_id,
             ]);
 
+            if (array_key_exists('parentId', $validated)) {
+                $oldParentId = $original['parent_id'] ?? null;
+                $newParentId = $validated['parentId'] ? (int) $validated['parentId'] : null;
+
+                if ($newParentId) {
+                    Product::where('store_id', $storeId)
+                        ->where('id', $newParentId)
+                        ->update(['is_duplicate' => true]);
+                }
+
+                if ($oldParentId && (int) $oldParentId !== (int) $newParentId) {
+                    $stillHasChildren = Product::where('store_id', $storeId)
+                        ->where('parent_id', $oldParentId)
+                        ->exists();
+
+                    if (!$stillHasChildren) {
+                        Product::where('store_id', $storeId)
+                            ->where('id', $oldParentId)
+                            ->update(['is_duplicate' => false]);
+                    }
+                }
+            }
             // Sync many-to-many categories
             $product->categories()->sync($validated['categoryIds'] ?? []);
 
@@ -1328,9 +1368,34 @@ class ProductController extends Controller
                         'tax_code' => $fields['taxCode'] ?? $product->tax_code,
                         'discount_type' => $fields['discountType'] ?? $product->discount_type,
                         'bulk_pricing_tiers' => $fields['bulkPricingTiers'] ?? $product->bulk_pricing_tiers,
-                        'is_duplicate' => $fields['isDuplicate'] ?? $product->is_duplicate,
                         'is_redirect' => $fields['isRedirect'] ?? $product->is_redirect,
+                        'parent_id' => array_key_exists('parentId', $fields)
+                            ? ($fields['parentId'] ? (int) $fields['parentId'] : null)
+                            : $product->parent_id,
                     ])->save();
+
+                    if (array_key_exists('parentId', $fields)) {
+                        $oldParentId = $original['parent_id'] ?? null;
+                        $newParentId = $fields['parentId'] ? (int) $fields['parentId'] : null;
+
+                        if ($newParentId) {
+                            Product::where('store_id', $storeId)
+                                ->where('id', $newParentId)
+                                ->update(['is_duplicate' => true]);
+                        }
+
+                        if ($oldParentId && (int) $oldParentId !== (int) $newParentId) {
+                            $stillHasChildren = Product::where('store_id', $storeId)
+                                ->where('parent_id', $oldParentId)
+                                ->exists();
+
+                            if (!$stillHasChildren) {
+                                Product::where('store_id', $storeId)
+                                    ->where('id', $oldParentId)
+                                    ->update(['is_duplicate' => false]);
+                            }
+                        }
+                    }
 
                     // ✅ Sync Categories
                     if (!empty($fields['categoryIds']) && is_array($fields['categoryIds'])) {

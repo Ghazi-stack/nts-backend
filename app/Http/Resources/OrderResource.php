@@ -22,6 +22,7 @@ class OrderResource extends JsonResource
             'comments'           => $this->comments,
             'staffNotes'         => $this->staff_notes,
             'isDraft'            => (bool) $this->is_draft,
+            'isDraftUrl'         => $this->isdrafturl,
             'deviceType'         => $this->device_type,
             'userType'           => $this->user_type,
             'emailInvoice'       => $this->email_invoice,
