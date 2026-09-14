@@ -2904,10 +2904,13 @@ class OrderController extends Controller
                 }
 
                 if ($cartUser) {
-                    $draftData = json_decode(
+                    $payload = json_decode(
                         (new OrderResource($order))->toResponse($request)->getContent(),
                         true
                     );
+
+                    $draftData = $payload['data'] ?? $payload;
+                    unset($draftData['products']);
 
                     foreach ($products as $item) {
                         $existingCart = Cart::where('store_id', $storeId)
