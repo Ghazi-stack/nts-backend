@@ -78,6 +78,7 @@ class Product extends Model
         'condition',
         'faq',
         'is_redirect',
+        'parent_id',
         'is_duplicate'
     ];
 
