@@ -3935,6 +3935,7 @@ class OrderController extends Controller
                     'order_number'                 => '',
                     'status'                       => 'Awaiting Payment',
                     'is_draft'                     => $isDraft,
+                    'isdrafturl'                   => $isDraft ? 'https://staging.sparemicro.com/cart?isDraft=true' : null,
                     'device_type'                  => $validated['deviceType'] ?? null,
                     'channel'                      => 'admin-panel',
                     'ip_address'                   => $validated['ipAddress'] ?? null,
@@ -3998,6 +3999,28 @@ class OrderController extends Controller
                     $product->increment('sold_count', $item['quantity']);
                     if ($product->track_inventory ?? $product->trackInventory ?? false) {
                         $product->decrement('current_stock', $item['quantity']);
+                    }
+                }
+
+                if ($isDraft && !empty($storeUser?->id)) {
+                    foreach ($products as $item) {
+                        $existingCart = Cart::where('store_id', $storeId)
+                            ->where('user_id', $storeUser->id)
+                            ->where('product_id', $item['product_id'])
+                            ->first();
+
+                        if ($existingCart) {
+                            $existingCart->update([
+                                'quantity' => $existingCart->quantity + $item['quantity'],
+                            ]);
+                        } else {
+                            Cart::create([
+                                'store_id'   => $storeId,
+                                'user_id'    => $storeUser->id,
+                                'product_id' => $item['product_id'],
+                                'quantity'   => $item['quantity'],
+                            ]);
+                        }
                     }
                 }
 
