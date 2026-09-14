@@ -29,6 +29,7 @@ class Order extends Model
         'address',
         'status',
         'is_draft',
+        'isdrafturl',
         'device_type',
         'user_type',
         'channel',
