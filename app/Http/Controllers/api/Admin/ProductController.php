@@ -666,8 +666,8 @@ class ProductController extends Controller
                 'hsCodes' => 'nullable|array',
                 'hsCodes.*.country' => 'nullable|string',
                 'hsCodes.*.code' => 'nullable|string',
-                'isDuplicate' => 'nullable|boolean',
                 'isRedirect' => 'nullable|boolean',
+                'parentId' => 'nullable|integer',
             ]);
 
             // ---------------- PRODUCT ----------------
@@ -720,8 +720,9 @@ class ProductController extends Controller
                 'commodity_description' => $validated['commodityDescription'] ?? null,
                 'country_of_origin' => $validated['countryOfOrigin'] ?? null,
                 'hs_codes' => $validated['hsCodes'] ?? [],
-                'is_duplicate' => $validated['isDuplicate'] ?? false,
+                'is_duplicate' => !empty($validated['parentId']),
                 'is_redirect' => $validated['isRedirect'] ?? false,
+                'parent_id' => $validated['parentId'] ?? null,
             ]);
 
             $categoryIds = collect($validated['categoryIds'] ?? [])
@@ -938,8 +939,8 @@ class ProductController extends Controller
                 'hsCodes' => 'nullable|array',
                 'hsCodes.*.country' => 'nullable|string',
                 'hsCodes.*.code' => 'nullable|string',
-                'isDuplicate' => 'nullable|boolean',
                 'isRedirect' => 'nullable|boolean',
+                'parentId' => 'nullable|integer',
             ]);
 
             $product->update([
@@ -995,8 +996,13 @@ class ProductController extends Controller
                 'country_of_origin' => $validated['countryOfOrigin'] ?? null,
 
                 'hs_codes' => $validated['hsCodes'] ?? [],
-                'is_duplicate' => $validated['isDuplicate'] ?? false,
                 'is_redirect' => $validated['isRedirect'] ?? false,
+                'parent_id' => array_key_exists('parentId', $validated)
+                    ? ($validated['parentId'] ? (int) $validated['parentId'] : null)
+                    : $product->parent_id,
+                'is_duplicate' => array_key_exists('parentId', $validated)
+                    ? !empty($validated['parentId'])
+                    : $product->is_duplicate,
             ]);
 
             // Sync many-to-many categories
@@ -1328,8 +1334,13 @@ class ProductController extends Controller
                         'tax_code' => $fields['taxCode'] ?? $product->tax_code,
                         'discount_type' => $fields['discountType'] ?? $product->discount_type,
                         'bulk_pricing_tiers' => $fields['bulkPricingTiers'] ?? $product->bulk_pricing_tiers,
-                        'is_duplicate' => $fields['isDuplicate'] ?? $product->is_duplicate,
                         'is_redirect' => $fields['isRedirect'] ?? $product->is_redirect,
+                        'parent_id' => array_key_exists('parentId', $fields)
+                            ? ($fields['parentId'] ?: null)
+                            : $product->parent_id,
+                        'is_duplicate' => array_key_exists('parentId', $fields)
+                            ? !empty($fields['parentId'])
+                            : $product->is_duplicate,
                     ])->save();
 
                     // ✅ Sync Categories
