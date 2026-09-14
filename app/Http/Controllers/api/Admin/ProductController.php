@@ -122,6 +122,9 @@ class ProductController extends Controller
                     'visible_on_storefront',
                     'min_purchase_quantity',
                     'max_purchase_quantity',
+                    'is_redirect',
+                    'is_duplicate',
+                    'parent_id',
                     'store_id'
                 ])
                 ->where('store_id', current_store_id());
