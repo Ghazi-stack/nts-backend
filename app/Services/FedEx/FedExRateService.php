@@ -347,20 +347,20 @@ class FedExRateService
                     ],
                 ],
 
-                /*
-                 * CRITICAL:
-                 * Each request specifies exactly one enabled service.
-                 */
                 'serviceType' => $serviceType,
 
                 'pickupType' => $pickupType,
 
-                /*
-                 * Only ACCOUNT or LIST.
-                 */
                 'rateRequestType' => [
                     $rateType,
                 ],
+
+                /*
+                * packagingType belongs to requestedShipment.
+                */
+                'packagingType' => strtoupper(
+                    trim((string) ($config->packaging_type ?? 'YOUR_PACKAGING'))
+                ),
 
                 'requestedPackageLineItems' => [
                     $this->buildPackageLineItem(
@@ -393,20 +393,6 @@ class FedExRateService
                 'value' => $weightValue,
             ],
         ];
-
-        /*
-         * Use the configured packaging type when one is configured.
-         *
-         * YOUR_PACKAGING is also the FedEx default and is the value
-         * returned by the successful sandbox response.
-         */
-        $packagingType = strtoupper(
-            trim((string) ($config->packaging_type ?? ''))
-        );
-
-        if ($packagingType !== '') {
-            $package['packagingType'] = $packagingType;
-        }
 
         /*
          * Dimensions are only sent when all three values are available.
