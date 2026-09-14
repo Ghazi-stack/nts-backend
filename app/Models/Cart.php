@@ -26,6 +26,7 @@ class Cart extends Model
     ];
 
     protected $casts = [
+        'draftData' => 'array',
         'email_1hr_sent_at'  => 'datetime',
         'email_24hr_sent_at' => 'datetime',
         'email_48hr_sent_at' => 'datetime',
