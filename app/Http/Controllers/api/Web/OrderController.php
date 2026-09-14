@@ -2772,7 +2772,7 @@ class OrderController extends Controller
                 'order_number'                 => '',
                 'status'                       => 'Awaiting Payment',
                 'is_draft'                     => $isDraft,
-                'isdrafturl'                   => $isDraft ? 'https://staging.sparemicro.com/cart' : null,
+                'isdrafturl'                   => $isDraft ? 'https://staging.sparemicro.com/cart?isDraft=true' : null,
                 'device_type'                  => $validated['deviceType'] ?? 'desktop',
                 'channel'                      => 'admin-panel',
                 'ip_address'                   => $validated['ipAddress'] ?? null,
