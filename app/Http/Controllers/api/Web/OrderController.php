@@ -36,6 +36,7 @@ use App\Mail\OrderStatusUpdatedMail;
 use App\Models\SavedAddress;
 use App\Http\Resources\ReturnRequestResource;
 use App\Mail\OrderPlacedMail;
+use App\Models\CheckoutFormData;
 use App\Models\CouponCode;
 use App\Models\CouponUsage;
 use App\Models\Logo;
@@ -2883,6 +2884,62 @@ class OrderController extends Controller
                 $order->update([
                     'isdrafturl' => $quoteUrl,
                 ]);
+
+                $sessionId = $request->header('X-Session-ID') ?? session()->getId();
+
+                $billingFormData = [
+                    'firstName'    => $formAddress['firstName'] ?? null,
+                    'lastName'     => $formAddress['lastName'] ?? null,
+                    'name'         => $formAddress['name'] ?? null,
+                    'email'        => $formAddress['email'] ?? null,
+                    'phone'        => $formAddress['phone'] ?? null,
+                    'companyName'  => $formAddress['companyName'] ?? null,
+                    'addressLine1' => $formAddress['addressLine1'] ?? null,
+                    'addressLine2' => $formAddress['addressLine2'] ?? null,
+                    'city'         => $formAddress['city'] ?? null,
+                    'state'        => $formAddress['state'] ?? null,
+                    'zip'          => $formAddress['zip'] ?? null,
+                    'country'      => $formAddress['country'] ?? null,
+                ];
+
+                $shippingFormData = [
+                    'firstName'    => $billingInput['firstName'] ?? null,
+                    'lastName'     => $billingInput['lastName'] ?? null,
+                    'email'        => $billingInput['email'] ?? null,
+                    'phone'        => $billingInput['phone'] ?? null,
+                    'companyName'  => $billingInput['companyName'] ?? null,
+                    'addressLine1' => $billingInput['addressLine1'] ?? null,
+                    'addressLine2' => $billingInput['addressLine2'] ?? null,
+                    'city'         => $billingInput['city'] ?? null,
+                    'state'        => $billingInput['state'] ?? null,
+                    'zip'          => $billingInput['zip'] ?? null,
+                    'country'      => $billingInput['country'] ?? null,
+                ];
+
+                $formUserId = $cartUser?->id ?? $customer->user_id ?? $user?->id;
+
+                $checkoutForm = CheckoutFormData::query()
+                    ->where('store_id', $storeId)
+                    ->when($formUserId, fn($q) => $q->where('user_id', $formUserId))
+                    ->when(!$formUserId, fn($q) => $q->where('session_id', $sessionId))
+                    ->first();
+
+                if ($checkoutForm) {
+                    $checkoutForm->update([
+                        'user_id'            => $formUserId,
+                        'session_id'         => $sessionId,
+                        'billing_form_data'  => $billingFormData,
+                        'shipping_form_data' => $shippingFormData,
+                    ]);
+                } else {
+                    CheckoutFormData::create([
+                        'store_id'           => $storeId,
+                        'user_id'            => $formUserId,
+                        'session_id'         => $sessionId,
+                        'billing_form_data'  => $billingFormData,
+                        'shipping_form_data' => $shippingFormData,
+                    ]);
+                }
             }
 
             if ($intent) {
