@@ -3226,97 +3226,88 @@ class OrderController extends Controller
 
             if (!$storeId) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'Store not selected or token invalid.'
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
                 ], 400);
             }
 
-            // ✅ isDraft must be true
             if (!$request->boolean('isDraft')) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'isDraft must be true'
+                    'status'  => false,
+                    'message' => 'isDraft must be true',
                 ], 400);
             }
 
-            $orders = Order::with([
-                'customer',
-                'billingInformation',
-                'orderItems.product'
-            ])
+            $orders = Order::query()
+                ->with([
+                    'items' => function ($q) {
+                        $q->select('id', 'order_id', 'product_id', 'quantity', 'price')
+                            ->with([
+                                'product' => function ($p) {
+                                    $p->with([
+                                        'images',
+                                        'brand',
+                                        'categories:id',
+                                    ]);
+                                },
+                            ]);
+                    },
+                    'customer',
+                    'billingInformation',
+                    'notes:id,order_id,note',
+                    'payment',
+                    'shipment:id,order_id,tracking_number,tracking_carrie,date_shipped,shipping_method,shipped_by,packing_slip_note',
+                    'manualDiscounts:id,order_id,discount_amount',
+                ])
+                ->withCount('messages')
                 ->where('store_id', $storeId)
-                ->where('is_draft', 1) // 🔥 FIX
-                ->orderBy('id', 'desc')
+                ->where('is_draft', 1)
+                ->latest('id')
                 ->get();
-            $response = [];
 
-            foreach ($orders as $order) {
+            $data = collect(OrderResource::collection($orders)->resolve())
+                ->map(function (array $item) {
+                    $billingPm = $item['billingInformation']['paymentMethod']
+                        ?? $item['billingInformation']['payment_method']
+                        ?? null;
 
-                $products = [];
+                    $hasPayment = !empty($item['payment']) || (!empty($billingPm) && strtolower((string) $billingPm) !== 'n/a');
 
-                foreach ($order->orderItems as $item) {
-                    $products[] = [
-                        'productId' => $item->product_id,
-                        'quantity'  => $item->quantity,
+                    if ($hasPayment) {
+                        $item['paymentMethod'] = [
+                            'method'          => $billingPm ?: 'Credit Card (Via Stripe)',
+                            'paymentStatus'   => $item['payment']['payment_status'] ?? null,
+                            'paymentIntentId' => $item['payment']['payment_intent_id'] ?? $item['payment']['stripe_session_id'] ?? null,
+                            'amount'          => $item['payment']['amount'] ?? null,
+                            'riskLevel'       => $item['payment']['risk_level'] ?? null,
+                        ];
+                    } else {
+                        $item['paymentMethod'] = [
+                            'method' => 'draft',
+                        ];
+                    }
+
+                    $item['isDraft'] = true;
+                    $item['shippingMethod'] = $item['shippingMethod'] ?? [
+                        'provider' => $item['carrierName'] ?? null,
+                        'method'   => $item['carrierCode'] ?? null,
+                        'cost'     => (string) ($item['shippingCost'] ?? '0.00'),
                     ];
-                }
 
-                $response[] = [
-                    'orderId'     => $order->id,
-                    'customerId'     => $order->customer_id,
-                    'email'          => $order->billingInformation?->email,
-                    'firstName'      => $order->billingInformation?->first_name,
-                    'lastName'       => $order->billingInformation?->last_name,
-                    'phone'          => $order->billingInformation?->phone,
-                    'companyName'    => $order->billingInformation?->company_name,
-                    'customerGroup'  => null,
-                    'receiveOffers'  => true,
-                    'isDraft'        => true,
-                    'isDraftUrl'     => $order->isdrafturl,
-                    'comments'       => $order->comments,
-                    'totalAmount'    => $order->total_amount,
-                    'staffNotes'     => $order->staff_notes,
-                    'created_at'     => $order->created_at,
-                    'updated_at'     => $order->updated_at,
-
-                    'billingInformation' => [
-                        'firstName'    => $order->billingInformation?->first_name,
-                        'lastName'     => $order->billingInformation?->last_name,
-                        'phone'        => $order->billingInformation?->phone,
-                        'companyName'  => $order->billingInformation?->company_name,
-                        'addressLine1' => $order->billingInformation?->address_line_1,
-                        'addressLine2' => $order->billingInformation?->address_line_2,
-                        'city'         => $order->billingInformation?->city,
-                        'state'        => $order->billingInformation?->state,
-                        'zip'          => $order->billingInformation?->zip,
-                        'country'      => $order->billingInformation?->country,
-                    ],
-
-                    'paymentMethod' => [
-                        'method' => 'draft'
-                    ],
-
-                    'shippingMethod' => [
-                        'provider' => $order->shipping_provider,
-                        'method'   => $order->shipping_method,
-                        'cost'     => (string)$order->shipping_cost,
-                    ],
-
-                    'products' => $products,
-
-                    'shippingDestinations' => []
-                ];
-            }
+                    return $item;
+                })
+                ->values();
 
             return response()->json([
-                'status' => true,
-                'data'   => $response
+                'status'  => true,
+                'message' => 'Draft orders retrieved successfully',
+                'data'    => $data,
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Something went wrong',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
