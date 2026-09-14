@@ -120,6 +120,16 @@ class Product extends Model
         return $this->belongsToMany(Category::class, 'category_product');
     }
 
+    public function parentProduct()
+    {
+        return $this->belongsTo(Product::class, 'parent_id');
+    }
+
+    public function duplicateProducts()
+    {
+        return $this->hasMany(Product::class, 'parent_id');
+    }
+
     public function images()
     {
         return $this->hasMany(ProductImage::class);
