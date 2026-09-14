@@ -33,6 +33,11 @@ class FedExRateService
         $payload = $this->buildRateRequestPayload($config, $shipmentData);
 
         try {
+
+        Log::info(
+            "FedEx Rate API request payload\n" .
+            json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+        );
             $response = Http::withToken($token)
                 ->withHeaders([
                     'Content-Type'              => 'application/json',
@@ -43,6 +48,13 @@ class FedExRateService
                 ->post($config->api_base_url . '/rate/v1/rates/quotes', $payload);
 
             $responseData = $response->json();
+
+            Log::info('FedEx Rate API response', [
+                'config_id' => $config->id,
+                'http_status' => $response->status(),
+                'successful' => $response->successful(),
+                'response' => $responseData,
+            ]);
 
             $this->logQuote($config, $shipmentData, $responseData, $response->successful());
 
@@ -93,7 +105,8 @@ class FedExRateService
                     ],
                 ],
                 'pickupType'      => $pickupType,
-                'rateRequestType' => [$config->rate_type === 'ACCOUNT' ? 'ACCOUNT' : 'LIST'],
+                'packagingType' => $config->packaging_type ?: 'YOUR_PACKAGING',
+                'rateRequestType' => [strtoupper($config->rate_type ?: 'LIST')],
                 'requestedPackageLineItems' => $this->buildPackageLineItems($config, $data),
             ],
         ];
