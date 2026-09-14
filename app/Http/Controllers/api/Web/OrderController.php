@@ -3329,6 +3329,7 @@ class OrderController extends Controller
                     'customerGroup'  => null,
                     'receiveOffers'  => true,
                     'isDraft'        => true,
+                    'isDraftUrl'     => $order->isdrafturl,
                     'comments'       => $order->comments,
                     'totalAmount'    => $order->total_amount,
                     'staffNotes'     => $order->staff_notes,
