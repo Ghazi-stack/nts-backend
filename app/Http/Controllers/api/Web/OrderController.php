@@ -2811,11 +2811,11 @@ class OrderController extends Controller
                 ];
 
                 SavedAddress::create([
-                    'store_id'          => $storeId,
-                    'user_id'           => $user?->id,
-                    'order_id'          => $order->id,
-                    'billing_address'   => $saveBilling ? $billingAddressJson : null,
-                    'shipping_address'  => $saveShipping ? $shippingAddressJson : null,
+                    'store_id'         => $storeId,
+                    'user_id'          => $user?->id,
+                    'order_id'         => $order->id,
+                    'billing_address'  => $saveBilling ? $billingAddressJson : null,
+                    'shipping_address' => $saveShipping ? $shippingAddressJson : null,
                 ]);
             }
 
@@ -2829,46 +2829,6 @@ class OrderController extends Controller
                 ]);
                 if ($product->track_inventory ?? $product->trackInventory ?? false) {
                     $product->decrement('current_stock', $item['quantity']);
-                }
-            }
-
-            if ($isDraft) {
-                $cartUser = User::where('store_id', $storeId)
-                    ->where('customer_id', $validated['customerId'])
-                    ->first();
-
-                if (!$cartUser) {
-                    $cartUser = User::where('store_id', $storeId)
-                        ->where('id', $validated['customerId'])
-                        ->first();
-                }
-
-                if (!$cartUser && !empty($customer->user_id)) {
-                    $cartUser = User::where('store_id', $storeId)
-                        ->where('id', $customer->user_id)
-                        ->first();
-                }
-
-                if ($cartUser) {
-                    foreach ($products as $item) {
-                        $existingCart = Cart::where('store_id', $storeId)
-                            ->where('user_id', $cartUser->id)
-                            ->where('product_id', $item['product_id'])
-                            ->first();
-
-                        if ($existingCart) {
-                            $existingCart->update([
-                                'quantity' => $existingCart->quantity + $item['quantity'],
-                            ]);
-                        } else {
-                            Cart::create([
-                                'store_id'   => $storeId,
-                                'user_id'    => $cartUser->id,
-                                'product_id' => $item['product_id'],
-                                'quantity'   => $item['quantity'],
-                            ]);
-                        }
-                    }
                 }
             }
 
@@ -2925,6 +2885,54 @@ class OrderController extends Controller
             }
 
             $order->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
+
+            if ($isDraft) {
+                $cartUser = User::where('store_id', $storeId)
+                    ->where('customer_id', $validated['customerId'])
+                    ->first();
+
+                if (!$cartUser) {
+                    $cartUser = User::where('store_id', $storeId)
+                        ->where('id', $validated['customerId'])
+                        ->first();
+                }
+
+                if (!$cartUser && !empty($customer->user_id)) {
+                    $cartUser = User::where('store_id', $storeId)
+                        ->where('id', $customer->user_id)
+                        ->first();
+                }
+
+                if ($cartUser) {
+                    $draftData = [
+                        'status'  => true,
+                        'message' => 'Order placed successfully.',
+                        'data'    => (new OrderResource($order))->toArray($request),
+                    ];
+
+                    foreach ($products as $item) {
+                        $existingCart = Cart::where('store_id', $storeId)
+                            ->where('user_id', $cartUser->id)
+                            ->where('product_id', $item['product_id'])
+                            ->first();
+
+                        if ($existingCart) {
+                            $existingCart->update([
+                                'quantity'  => $existingCart->quantity + $item['quantity'],
+                                'draftData' => $draftData,
+                            ]);
+                        } else {
+                            Cart::create([
+                                'store_id'   => $storeId,
+                                'user_id'    => $cartUser->id,
+                                'product_id' => $item['product_id'],
+                                'quantity'   => $item['quantity'],
+                                'draftData'  => $draftData,
+                            ]);
+                        }
+                    }
+                }
+            }
 
             $emailInvoice = (bool) ($validated['emailInvoice'] ?? true);
 
