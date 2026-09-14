@@ -19,13 +19,23 @@ class FedExRateService
     /**
      * Get real-time FedEx rates for a shipment.
      *
-     * A separate request is made for each enabled FedEx service.
+     * One FedEx request is made for each enabled service.
+     *
+     * Example:
+     * GROUND_HOME_DELIVERY
+     * FEDEX_2_DAY
+     * STANDARD_OVERNIGHT
+     * etc.
      */
     public function getRates(FedexConfiguration $config, array $shipmentData): array
     {
         $token = $this->authService->getAccessToken($config);
 
         if (!$token) {
+            Log::error('FedEx authentication failed', [
+                'config_id' => $config->id,
+            ]);
+
             return [
                 'success' => false,
                 'error'   => 'Failed to authenticate with FedEx API.',
@@ -34,169 +44,161 @@ class FedExRateService
         }
 
         /*
-         * Get enabled services from configuration.
-         *
-         * Example:
-         * [
-         *     "FEDEX_2_DAY",
-         *     "FEDEX_EXPRESS_SAVER",
-         *     "FEDEX_GROUND",
-         *     "FIRST_OVERNIGHT",
-         *     ...
-         * ]
+         * Only ACCOUNT and LIST are supported by the configuration.
+         */
+        $rateType = strtoupper((string) ($config->rate_type ?? 'ACCOUNT'));
+
+        if (!in_array($rateType, ['ACCOUNT', 'LIST'], true)) {
+            $rateType = 'ACCOUNT';
+        }
+
+        /*
+         * enabled_services can be stored as JSON and should already
+         * be cast by the model. Handle JSON/string defensively too.
          */
         $enabledServices = $config->enabled_services ?? [];
 
         if (is_string($enabledServices)) {
             $decoded = json_decode($enabledServices, true);
-
-            if (json_last_error() === JSON_ERROR_NONE) {
-                $enabledServices = $decoded;
-            } else {
-                $enabledServices = [];
-            }
+            $enabledServices = is_array($decoded) ? $decoded : [];
         }
 
-        if (!is_array($enabledServices)) {
-            $enabledServices = [];
-        }
+        $enabledServices = array_values(
+            array_filter(
+                array_map(
+                    static fn ($service) => strtoupper(trim((string) $service)),
+                    $enabledServices
+                )
+            )
+        );
 
         /*
          * If no services are configured, there is nothing to request.
          */
         if (empty($enabledServices)) {
-            Log::warning('No FedEx services configured', [
+            Log::warning('No FedEx services are enabled', [
                 'config_id' => $config->id,
             ]);
 
             return [
                 'success' => false,
                 'error'   => 'No FedEx services are enabled.',
-                'rates'    => [],
+                'rates'   => [],
             ];
         }
 
-        /*
-         * Respect the configured rate type.
-         *
-         * Configuration supports:
-         * ACCOUNT
-         * LIST
-         */
-        $rateType = strtoupper(trim((string) ($config->rate_type ?: 'LIST')));
-
-        if (!in_array($rateType, ['ACCOUNT', 'LIST'], true)) {
-            $rateType = 'LIST';
-        }
-
         $allRates = [];
-        $successfulRequests = 0;
-        $failedRequests = 0;
+        $errors   = [];
 
         foreach ($enabledServices as $serviceType) {
-
-            $serviceType = strtoupper(trim((string) $serviceType));
-
-            if ($serviceType === '') {
-                continue;
-            }
-
-            /*
-             * Build payload for this specific FedEx service.
-             */
-            $payload = $this->buildRateRequestPayload(
-                $config,
-                $shipmentData,
-                $serviceType,
-                $rateType
-            );
-
-            Log::info(
-                "FedEx Rate API request payload",
-                [
-                    'config_id'   => $config->id,
-                    'serviceType' => $serviceType,
-                    'rateType'    => $rateType,
-                    'payload'     => $payload,
-                ]
-            );
-
             try {
+                $payload = $this->buildRateRequestPayload(
+                    $config,
+                    $shipmentData,
+                    $serviceType
+                );
+
+                /*
+                 * Log the exact payload being sent.
+                 * Account credentials are intentionally not logged.
+                 */
+                $logPayload = $payload;
+
+                if (isset($logPayload['accountNumber']['value'])) {
+                    $logPayload['accountNumber']['value'] = '***';
+                }
+
+                Log::info('FedEx Rate API request', [
+                    'config_id'  => $config->id,
+                    'service'    => $serviceType,
+                    'rate_type'  => $rateType,
+                    'payload'    => $logPayload,
+                ]);
+
+                $url = rtrim(
+                    (string) $config->api_base_url,
+                    '/'
+                ) . '/rate/v1/rates/quotes';
 
                 $response = Http::withToken($token)
+                    ->acceptJson()
                     ->withHeaders([
-                        'Content-Type'              => 'application/json',
-                        'X-locale'                  => 'en_US',
-                        'x-customer-transaction-id' => 'rate_' . uniqid(),
+                        'Content-Type'             => 'application/json',
+                        'X-locale'                 => 'en_US',
+                        'x-customer-transaction-id' => 'rate_' . uniqid('', true),
                     ])
                     ->timeout(30)
-                    ->post(
-                        $config->api_base_url . '/rate/v1/rates/quotes',
-                        $payload
-                    );
+                    ->post($url, $payload);
 
                 $responseData = $response->json();
 
                 Log::info('FedEx Rate API response', [
-                    'config_id'   => $config->id,
-                    'serviceType' => $serviceType,
-                    'http_status' => $response->status(),
-                    'successful'  => $response->successful(),
-                    'response'    => $responseData,
+                    'config_id' => $config->id,
+                    'service'   => $serviceType,
+                    'status'    => $response->status(),
+                    'response'  => $responseData,
                 ]);
 
                 /*
-                 * Store every FedEx quote response in the quote log.
+                 * Keep every quote request in the existing quote log.
                  */
                 $this->logQuote(
                     $config,
                     $shipmentData,
                     $responseData,
+                    $response->successful(),
                     $response->successful()
+                        ? null
+                        : $this->extractErrorMessage($responseData)
                 );
 
                 if (
-                    $response->successful() &&
-                    isset($responseData['output']['rateReplyDetails'])
+                    !$response->successful() ||
+                    !isset($responseData['output']['rateReplyDetails'])
                 ) {
+                    $errorMessage = $this->extractErrorMessage($responseData);
 
-                    $rates = $this->parseRateResponse(
-                        $responseData,
-                        $config
-                    );
+                    $errors[] = [
+                        'service' => $serviceType,
+                        'error'   => $errorMessage,
+                    ];
 
-                    if (!empty($rates)) {
-                        $allRates = array_merge($allRates, $rates);
-                    }
-
-                    $successfulRequests++;
+                    Log::error('FedEx Rate API error', [
+                        'config_id' => $config->id,
+                        'service'   => $serviceType,
+                        'http_status' => $response->status(),
+                        'error'     => $errorMessage,
+                        'response'  => $responseData,
+                    ]);
 
                     continue;
                 }
 
                 /*
-                 * A service may not be available for the shipment.
-                 *
-                 * Don't fail the entire shipping calculation.
-                 * Simply log it and continue with the next enabled service.
+                 * Because this request contains serviceType, FedEx should
+                 * normally return one matching service. parseRateResponse()
+                 * still handles the response generically.
                  */
-                $errorMessage = $this->extractErrorMessage($responseData);
+                $rates = $this->parseRateResponse(
+                    $responseData,
+                    $config
+                );
 
-                Log::warning('FedEx service rate fetch failed', [
-                    'config_id'   => $config->id,
-                    'serviceType' => $serviceType,
-                    'http_status' => $response->status(),
-                    'error'       => $errorMessage,
-                ]);
+                foreach ($rates as $rate) {
+                    $allRates[] = $rate;
+                }
 
-                $failedRequests++;
-
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
+                $errors[] = [
+                    'service' => $serviceType,
+                    'error'   => $e->getMessage(),
+                ];
 
                 Log::error('FedEx Rate API exception', [
-                    'config_id'   => $config->id,
-                    'serviceType' => $serviceType,
-                    'error'       => $e->getMessage(),
+                    'config_id' => $config->id,
+                    'service'   => $serviceType,
+                    'error'     => $e->getMessage(),
+                    'trace'     => $e->getTraceAsString(),
                 ]);
 
                 $this->logQuote(
@@ -206,43 +208,26 @@ class FedExRateService
                     false,
                     $e->getMessage()
                 );
-
-                $failedRequests++;
             }
         }
 
         /*
-         * Remove duplicate service types.
-         *
-         * This protects us in case the configuration accidentally
-         * contains the same service more than once.
-         */
-        $uniqueRates = [];
-
-        foreach ($allRates as $rate) {
-            $serviceType = $rate['service_type'] ?? null;
-
-            if (!$serviceType) {
-                continue;
-            }
-
-            $uniqueRates[$serviceType] = $rate;
-        }
-
-        $allRates = array_values($uniqueRates);
-
-        /*
-         * Sort cheapest first, same as the previous implementation.
+         * Sort cheapest → most expensive, matching the existing behavior.
          */
         usort(
             $allRates,
-            fn ($a, $b) =>
-                ($a['total_charge'] ?? 0) <=> ($b['total_charge'] ?? 0)
+            static fn ($a, $b) =>
+                ((float) ($a['total_charge'] ?? 0))
+                <=>
+                ((float) ($b['total_charge'] ?? 0))
         );
 
         /*
-         * If at least one service produced a rate,
-         * the overall FedEx calculation is successful.
+         * If at least one enabled service succeeded, the overall FedEx
+         * operation is considered successful.
+         *
+         * This is important because one FedEx service can fail while
+         * another service still returns a valid quote.
          */
         if (!empty($allRates)) {
             return [
@@ -253,13 +238,27 @@ class FedExRateService
         }
 
         /*
-         * No service returned a rate.
+         * Nothing returned successfully.
          */
+        $errorMessage = 'FedEx did not return any shipping rates.';
+
+        if (!empty($errors)) {
+            $errorMessage = implode(
+                ' | ',
+                array_map(
+                    static function ($item) {
+                        return ($item['service'] ?? 'UNKNOWN')
+                            . ': '
+                            . ($item['error'] ?? 'Unknown error');
+                    },
+                    $errors
+                )
+            );
+        }
+
         return [
             'success' => false,
-            'error'   => $failedRequests > 0
-                ? 'FedEx did not return any available rates.'
-                : 'No FedEx rates were returned.',
+            'error'   => $errorMessage,
             'rates'   => [],
         ];
     }
@@ -267,205 +266,194 @@ class FedExRateService
     /**
      * Build the FedEx Rate API request payload.
      *
-     * A serviceType is explicitly supplied because the FedEx
-     * sandbox collection request successfully uses this format.
+     * This intentionally follows the payload structure proven to work
+     * in the FedEx sandbox/Postman request.
      */
     protected function buildRateRequestPayload(
         FedexConfiguration $config,
         array $data,
-        string $serviceType,
-        string $rateType
+        string $serviceType
     ): array {
-        $pickupType = $this->mapPickupType($config->dropoff_type);
+        $pickupType = $this->mapPickupType(
+            $config->dropoff_type
+        );
 
-        $packagingType = strtoupper(
-            trim((string) ($config->packaging_type ?: 'YOUR_PACKAGING'))
+        $rateType = strtoupper(
+            (string) ($config->rate_type ?? 'ACCOUNT')
+        );
+
+        if (!in_array($rateType, ['ACCOUNT', 'LIST'], true)) {
+            $rateType = 'ACCOUNT';
+        }
+
+        $destinationType = strtoupper(
+            (string) ($config->destination_type ?? 'RESIDENTIAL')
         );
 
         /*
-         * FedEx Rate API request.
+         * Match the working FedEx request:
          *
-         * Keep this close to the successful FedEx sandbox
-         * collection payload.
+         * residential is sent as a string "true"/"false".
          */
+        $residential = $destinationType === 'RESIDENTIAL'
+            ? 'true'
+            : 'false';
+
+        $weightUnit = strtoupper(
+            (string) ($data['weight_unit'] ?? 'LB')
+        );
+
+        $totalWeight = $data['total_weight'] ?? 0;
+
+        /*
+         * FedEx sandbox's successful request used:
+         *
+         * "value": "8"
+         *
+         * Use a string here to closely match the working request.
+         */
+        $weightValue = $this->formatFedexNumber($totalWeight);
+
         $payload = [
             'accountNumber' => [
-                'value' => $config->account_number,
+                'value' => (string) $config->account_number,
             ],
 
             'requestedShipment' => [
                 'shipper' => [
                     'address' => [
-                        'postalCode' => $data['origin_postal_code'] ?? '',
-                        'countryCode' => $data['origin_country_code'] ?? 'US',
+                        'postalCode' => (string) (
+                            $data['origin_postal_code'] ?? ''
+                        ),
+                        'countryCode' => strtoupper(
+                            (string) (
+                                $data['origin_country_code'] ?? 'US'
+                            )
+                        ),
                     ],
                 ],
 
                 'recipient' => [
                     'address' => [
-                        'postalCode' => $data['destination_postal_code'] ?? '',
-                        'countryCode' => $data['destination_country_code'] ?? 'US',
-                        'residential' => (
-                            strtoupper((string) $config->destination_type)
-                            === 'RESIDENTIAL'
+                        'postalCode' => (string) (
+                            $data['destination_postal_code'] ?? ''
                         ),
+                        'countryCode' => strtoupper(
+                            (string) (
+                                $data['destination_country_code'] ?? 'US'
+                            )
+                        ),
+                        'residential' => $residential,
                     ],
                 ],
 
                 /*
-                 * Critical:
-                 * FedEx's working sandbox request includes serviceType.
+                 * CRITICAL:
+                 * Each request specifies exactly one enabled service.
                  */
                 'serviceType' => $serviceType,
 
                 'pickupType' => $pickupType,
 
                 /*
-                 * Use exactly what is configured.
-                 */
-                'packagingType' => $packagingType,
-
-                /*
-                 * Configuration supports ACCOUNT or LIST.
+                 * Only ACCOUNT or LIST.
                  */
                 'rateRequestType' => [
                     $rateType,
                 ],
 
-                'requestedPackageLineItems' =>
-                    $this->buildPackageLineItems($config, $data),
+                'requestedPackageLineItems' => [
+                    $this->buildPackageLineItem(
+                        $config,
+                        $data,
+                        $weightUnit,
+                        $weightValue
+                    ),
+                ],
             ],
         ];
-
-        /*
-         * Add shipper state/city when available.
-         */
-        if (!empty($data['origin_state'])) {
-            $payload['requestedShipment']['shipper']['address']
-                ['stateOrProvinceCode'] = $data['origin_state'];
-        }
-
-        if (!empty($data['origin_city'])) {
-            $payload['requestedShipment']['shipper']['address']
-                ['city'] = $data['origin_city'];
-        }
-
-        /*
-         * Add recipient state/city when available.
-         */
-        if (!empty($data['destination_state'])) {
-            $payload['requestedShipment']['recipient']['address']
-                ['stateOrProvinceCode'] = $data['destination_state'];
-        }
-
-        if (!empty($data['destination_city'])) {
-            $payload['requestedShipment']['recipient']['address']
-                ['city'] = $data['destination_city'];
-        }
-
-        /*
-         * Add declared value only when enabled in configuration.
-         */
-        if (
-            $config->include_package_value &&
-            isset($data['package_value']) &&
-            (float) $data['package_value'] > 0
-        ) {
-            $payload['requestedShipment']['requestedPackageLineItems'][0]
-                ['declaredValue'] = [
-                    'amount' => (float) $data['package_value'],
-                    'currency' => 'USD',
-                ];
-        }
 
         return $payload;
     }
 
     /**
-     * Map legacy/old dropoff_type values to FedEx REST API valid pickupType.
+     * Build a single package line item.
+     *
+     * Deliberately does NOT send groupPackageCount.
      */
-    protected function mapPickupType(?string $dropoffType): string
-    {
-        $validValues = [
-            'USE_SCHEDULED_PICKUP',
-            'CONTACT_FEDEX_TO_SCHEDULE',
-            'DROPOFF_AT_FEDEX_LOCATION',
-        ];
-
-        if (
-            $dropoffType &&
-            in_array($dropoffType, $validValues, true)
-        ) {
-            return $dropoffType;
-        }
-
-        /*
-         * Legacy SOAP API values.
-         */
-        $legacyMap = [
-            'REGULAR_PICKUP'          => 'USE_SCHEDULED_PICKUP',
-            'REQUEST_COURIER'         => 'CONTACT_FEDEX_TO_SCHEDULE',
-            'DROP_BOX'                => 'DROPOFF_AT_FEDEX_LOCATION',
-            'BUSINESS_SERVICE_CENTER' => 'DROPOFF_AT_FEDEX_LOCATION',
-            'STATION'                 => 'DROPOFF_AT_FEDEX_LOCATION',
-        ];
-
-        if (
-            $dropoffType &&
-            isset($legacyMap[$dropoffType])
-        ) {
-            return $legacyMap[$dropoffType];
-        }
-
-        return 'DROPOFF_AT_FEDEX_LOCATION';
-    }
-
-    /**
-     * Build package line items.
-     */
-    protected function buildPackageLineItems(
+    protected function buildPackageLineItem(
         FedexConfiguration $config,
-        array $data
+        array $data,
+        string $weightUnit,
+        string $weightValue
     ): array {
-        $weightUnit = strtoupper(
-            $data['weight_unit'] ?? 'LB'
-        );
-
-        $dimUnit = strtoupper(
-            $data['dimension_unit'] ?? 'IN'
-        );
-
         $package = [
             'weight' => [
                 'units' => $weightUnit,
-                'value' => (float) ($data['total_weight'] ?? 1.0),
+                'value' => $weightValue,
             ],
         ];
 
         /*
-         * Add dimensions only when all three dimensions exist.
+         * Use the configured packaging type when one is configured.
          *
-         * Your current products can have zero dimensions, so don't
-         * send dimensions when they aren't available.
+         * YOUR_PACKAGING is also the FedEx default and is the value
+         * returned by the successful sandbox response.
          */
+        $packagingType = strtoupper(
+            trim((string) ($config->packaging_type ?? ''))
+        );
+
+        if ($packagingType !== '') {
+            $package['packagingType'] = $packagingType;
+        }
+
+        /*
+         * Dimensions are only sent when all three values are available.
+         *
+         * This prevents 0 x 0 x 0 dimensions from being sent for products
+         * that don't have dimensional data.
+         */
+        $length = $data['package_length'] ?? null;
+        $width  = $data['package_width'] ?? null;
+        $height = $data['package_height'] ?? null;
+
         if (
-            !empty($data['package_length']) &&
-            !empty($data['package_width']) &&
-            !empty($data['package_height'])
+            $this->hasPositiveDimension($length) &&
+            $this->hasPositiveDimension($width) &&
+            $this->hasPositiveDimension($height)
         ) {
+            $dimUnit = strtoupper(
+                (string) ($data['dimension_unit'] ?? 'IN')
+            );
+
             $package['dimensions'] = [
-                'length' => (int) $data['package_length'],
-                'width'   => (int) $data['package_width'],
-                'height'  => (int) $data['package_height'],
-                'units'   => $dimUnit,
+                'length' => (int) $length,
+                'width'  => (int) $width,
+                'height' => (int) $height,
+                'units'  => $dimUnit,
             ];
         }
 
-        return [$package];
+        /*
+         * Declared value is optional and controlled by the DB setting.
+         */
+        if (
+            !empty($config->include_package_value) &&
+            isset($data['package_value']) &&
+            (float) $data['package_value'] > 0
+        ) {
+            $package['declaredValue'] = [
+                'amount' => (float) $data['package_value'],
+                'currency' => 'USD',
+            ];
+        }
+
+        return $package;
     }
 
     /**
-     * Parse FedEx rate response.
+     * Parse FedEx rate response and filter by enabled services.
      */
     protected function parseRateResponse(
         array $responseData,
@@ -477,35 +465,29 @@ class FedExRateService
 
         if (is_string($enabledServices)) {
             $decoded = json_decode($enabledServices, true);
-
-            if (json_last_error() === JSON_ERROR_NONE) {
-                $enabledServices = $decoded;
-            } else {
-                $enabledServices = [];
-            }
+            $enabledServices = is_array($decoded) ? $decoded : [];
         }
 
-        if (!is_array($enabledServices)) {
-            $enabledServices = [];
-        }
+        $enabledServices = array_map(
+            static fn ($service) => strtoupper(trim((string) $service)),
+            $enabledServices
+        );
 
-        $rateDetails =
-            $responseData['output']['rateReplyDetails'] ?? [];
+        $rateDetails = $responseData['output']['rateReplyDetails'] ?? [];
 
-        $allServices =
-            FedexConfiguration::allServiceCodes();
+        $allServices = FedexConfiguration::allServiceCodes();
 
         foreach ($rateDetails as $detail) {
-
-            $serviceType =
-                $detail['serviceType'] ?? '';
+            $serviceType = strtoupper(
+                (string) ($detail['serviceType'] ?? '')
+            );
 
             if ($serviceType === '') {
                 continue;
             }
 
             /*
-             * If enabled_services is configured, only allow those services.
+             * Only configured services are allowed.
              */
             if (
                 !empty($enabledServices) &&
@@ -515,41 +497,66 @@ class FedExRateService
             }
 
             $serviceName =
-                $detail['serviceName'] ??
-                ($allServices[$serviceType] ?? $serviceType);
+                $detail['serviceName']
+                ?? ($allServices[$serviceType] ?? $serviceType);
 
             $ratedDetails =
                 $detail['ratedShipmentDetails'] ?? [];
 
-            $bestRate = null;
+            if (empty($ratedDetails)) {
+                continue;
+            }
 
             /*
-             * Prefer account shipment pricing when returned.
+             * Prefer the requested rate type.
              */
-            foreach ($ratedDetails as $rated) {
+            $configuredRateType = strtoupper(
+                (string) ($config->rate_type ?? 'ACCOUNT')
+            );
 
-                $rateType =
-                    $rated['rateType'] ?? '';
+            $bestRate = null;
+
+            foreach ($ratedDetails as $rated) {
+                $responseRateType = strtoupper(
+                    (string) ($rated['rateType'] ?? '')
+                );
 
                 if (
-                    $rateType === 'PAYOR_ACCOUNT_SHIPMENT' ||
-                    $rateType === 'PAYOR_LIST_SHIPMENT'
+                    $configuredRateType === 'ACCOUNT' &&
+                    in_array(
+                        $responseRateType,
+                        [
+                            'ACCOUNT',
+                            'PAYOR_ACCOUNT_SHIPMENT',
+                            'PAYOR_ACCOUNT_PACKAGE',
+                        ],
+                        true
+                    )
                 ) {
                     $bestRate = $rated;
+                    break;
+                }
 
-                    if (
-                        $rateType ===
-                        'PAYOR_ACCOUNT_SHIPMENT'
-                    ) {
-                        break;
-                    }
+                if (
+                    $configuredRateType === 'LIST' &&
+                    in_array(
+                        $responseRateType,
+                        [
+                            'LIST',
+                            'PAYOR_LIST_SHIPMENT',
+                            'PAYOR_LIST_PACKAGE',
+                        ],
+                        true
+                    )
+                ) {
+                    $bestRate = $rated;
+                    break;
                 }
             }
 
             /*
-             * FedEx sandbox's successful collection response can
-             * return rateType = ACCOUNT, so fall back to the first
-             * rated shipment when the PAYOR_* type isn't present.
+             * Fallback to the first returned rate if FedEx uses another
+             * response rateType representation.
              */
             if (!$bestRate) {
                 $bestRate = $ratedDetails[0] ?? null;
@@ -560,12 +567,15 @@ class FedExRateService
             }
 
             $totalCharge =
-                $bestRate['totalNetCharge'] ??
-                $bestRate['totalNetFedExCharge'] ??
-                0;
+                $bestRate['totalNetCharge']
+                ?? $bestRate['totalNetFedExCharge']
+                ?? $bestRate['netCharge']
+                ?? 0;
 
             $currency =
-                $bestRate['currency'] ?? 'USD';
+                $bestRate['currency']
+                ?? $bestRate['shipmentRateDetail']['currency']
+                ?? 'USD';
 
             /*
              * Collect surcharges.
@@ -573,44 +583,64 @@ class FedExRateService
             $surcharges = [];
 
             foreach (
-                $bestRate['shipmentRateDetail']['surCharges']
-                ?? []
+                $bestRate['shipmentRateDetail']['surCharges'] ?? []
                 as $surcharge
             ) {
                 $surcharges[] = [
-                    'type' =>
-                        $surcharge['type'] ?? '',
-
-                    'description' =>
-                        $surcharge['description'] ?? '',
-
-                    'amount' =>
-                        $surcharge['amount'] ?? 0,
+                    'type' => $surcharge['type'] ?? '',
+                    'description' => $surcharge['description'] ?? '',
+                    'amount' => (float) (
+                        $surcharge['amount'] ?? 0
+                    ),
                 ];
             }
 
+            /*
+             * Some FedEx responses use "surcharges" instead of
+             * "surCharges".
+             */
+            if (empty($surcharges)) {
+                foreach (
+                    $bestRate['shipmentRateDetail']['surcharges'] ?? []
+                    as $surcharge
+                ) {
+                    $surcharges[] = [
+                        'type' => $surcharge['type'] ?? '',
+                        'description' => $surcharge['description'] ?? '',
+                        'amount' => (float) (
+                            $surcharge['amount'] ?? 0
+                        ),
+                    ];
+                }
+            }
+
+            /*
+             * Transit information.
+             */
             $transitDays = null;
             $deliveryDate = null;
             $deliveryDay = null;
 
             if (isset($detail['commit'])) {
-
                 $commit = $detail['commit'];
 
-                $transitDays =
+                $transitValue =
                     $commit['transitDays']['description']
-                    ?? ($commit['transitDays'] ?? null);
+                    ?? $commit['transitDays']
+                    ?? null;
+
+                $transitDays = $this->parseTransitDays(
+                    $transitValue
+                );
 
                 $deliveryDate =
                     $commit['dateDetail']['dayFormat']
+                    ?? $commit['dateDetail']['dayFormat']
                     ?? null;
 
                 $deliveryDay =
                     $commit['dateDetail']['dayOfWeek']
                     ?? null;
-
-                $transitDays =
-                    $this->parseTransitDays($transitDays);
             }
 
             $rates[] = [
@@ -619,13 +649,17 @@ class FedExRateService
                 'service_name' => $serviceName,
 
                 'display_name' =>
-                    $config->display_name .
-                    ' (' .
-                    $serviceName .
-                    ')',
+                    trim((string) $config->display_name) !== ''
+                        ? $config->display_name
+                            . ' ('
+                            . $serviceName
+                            . ')'
+                        : $serviceName,
 
-                'total_charge' =>
-                    round((float) $totalCharge, 2),
+                'total_charge' => round(
+                    (float) $totalCharge,
+                    2
+                ),
 
                 'currency' => $currency,
 
@@ -638,14 +672,17 @@ class FedExRateService
                 'surcharges' => $surcharges,
 
                 'rate_type' =>
-                    $bestRate['rateType'] ?? '',
+                    $bestRate['rateType']
+                    ?? $configuredRateType,
             ];
         }
 
         usort(
             $rates,
-            fn ($a, $b) =>
-                $a['total_charge'] <=> $b['total_charge']
+            static fn ($a, $b) =>
+                ((float) ($a['total_charge'] ?? 0))
+                <=>
+                ((float) ($b['total_charge'] ?? 0))
         );
 
         return $rates;
@@ -661,25 +698,24 @@ class FedExRateService
         }
 
         if (is_string($value)) {
-
             $map = [
-                'ONE_DAY'       => 1,
-                'TWO_DAYS'      => 2,
-                'THREE_DAYS'    => 3,
-                'FOUR_DAYS'    => 4,
-                'FIVE_DAYS'    => 5,
-                'SIX_DAYS'     => 6,
-                'SEVEN_DAYS'   => 7,
-                'EIGHT_DAYS'   => 8,
-                'NINE_DAYS'    => 9,
-                'TEN_DAYS'     => 10,
-                'ELEVEN_DAYS'  => 11,
-                'TWELVE_DAYS'  => 12,
-                'THIRTEEN_DAYS'=> 13,
-                'FOURTEEN_DAYS'=> 14,
+                'ONE_DAY' => 1,
+                'TWO_DAYS' => 2,
+                'THREE_DAYS' => 3,
+                'FOUR_DAYS' => 4,
+                'FIVE_DAYS' => 5,
+                'SIX_DAYS' => 6,
+                'SEVEN_DAYS' => 7,
+                'EIGHT_DAYS' => 8,
+                'NINE_DAYS' => 9,
+                'TEN_DAYS' => 10,
+                'ELEVEN_DAYS' => 11,
+                'TWELVE_DAYS' => 12,
+                'THIRTEEN_DAYS' => 13,
+                'FOURTEEN_DAYS' => 14,
             ];
 
-            return $map[strtoupper($value)] ?? null;
+            return $map[strtoupper(trim($value))] ?? null;
         }
 
         return null;
@@ -688,37 +724,42 @@ class FedExRateService
     /**
      * Extract error message from FedEx response.
      */
-    protected function extractErrorMessage(
-        array $responseData
-    ): string {
-        if (isset($responseData['errors'])) {
-
+    protected function extractErrorMessage(array $responseData): string
+    {
+        if (isset($responseData['errors']) && is_array($responseData['errors'])) {
             $messages = [];
 
             foreach ($responseData['errors'] as $error) {
+                $code = $error['code'] ?? '';
+                $message = $error['message'] ?? 'Unknown error';
 
-                $messages[] =
-                    ($error['code'] ?? '') .
-                    ': ' .
-                    ($error['message'] ?? 'Unknown error');
+                $messages[] = trim(
+                    $code !== ''
+                        ? $code . ': ' . $message
+                        : $message
+                );
             }
 
-            return implode(' | ', $messages);
+            if (!empty($messages)) {
+                return implode(' | ', $messages);
+            }
         }
 
-        if (isset($responseData['output']['alerts'])) {
-
+        if (
+            isset($responseData['output']['alerts']) &&
+            is_array($responseData['output']['alerts'])
+        ) {
             $messages = [];
 
-            foreach (
-                $responseData['output']['alerts']
-                as $alert
-            ) {
-                $messages[] =
-                    $alert['message'] ?? '';
+            foreach ($responseData['output']['alerts'] as $alert) {
+                if (!empty($alert['message'])) {
+                    $messages[] = $alert['message'];
+                }
             }
 
-            return implode(' | ', $messages);
+            if (!empty($messages)) {
+                return implode(' | ', $messages);
+            }
         }
 
         return 'Unknown FedEx API error';
@@ -735,7 +776,6 @@ class FedExRateService
         ?string $errorMessage = null
     ): void {
         try {
-
             FedexQuoteLog::create([
                 'fedex_configuration_id' =>
                     $config->id,
@@ -786,8 +826,8 @@ class FedExRateService
                     $success ? 'success' : 'error',
 
                 'error_message' =>
-                    $errorMessage ??
-                    (
+                    $errorMessage
+                    ?? (
                         $success
                             ? null
                             : $this->extractErrorMessage(
@@ -795,15 +835,10 @@ class FedExRateService
                             )
                     ),
             ]);
-
-        } catch (\Exception $e) {
-
-            Log::warning(
-                'Failed to log FedEx quote',
-                [
-                    'error' => $e->getMessage(),
-                ]
-            );
+        } catch (\Throwable $e) {
+            Log::warning('Failed to log FedEx quote', [
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -813,21 +848,92 @@ class FedExRateService
     public function testConnection(
         FedexConfiguration $config
     ): array {
-        $token =
-            $this->authService->getAccessToken($config);
+        $token = $this->authService->getAccessToken($config);
 
         if ($token) {
             return [
                 'success' => true,
-                'message' =>
-                    'Successfully connected to FedEx API.',
+                'message' => 'Successfully connected to FedEx API.',
             ];
         }
 
         return [
             'success' => false,
-            'message' =>
-                'Failed to connect. Please verify your credentials.',
+            'message' => 'Failed to connect. Please verify your credentials.',
         ];
+    }
+
+    /**
+     * Convert a number into the string representation expected by
+     * the successful FedEx request.
+     *
+     * 8      -> "8"
+     * 8.5    -> "8.5"
+     * 8.00   -> "8"
+     */
+    protected function formatFedexNumber($value): string
+    {
+        $number = (float) $value;
+
+        if (floor($number) === $number) {
+            return (string) (int) $number;
+        }
+
+        return rtrim(
+            rtrim(
+                number_format($number, 4, '.', ''),
+                '0'
+            ),
+            '.'
+        );
+    }
+
+    /**
+     * Check whether a package dimension is positive.
+     */
+    protected function hasPositiveDimension($value): bool
+    {
+        return $value !== null
+            && $value !== ''
+            && is_numeric($value)
+            && (float) $value > 0;
+    }
+
+    /**
+     * Map legacy/old dropoff_type values to valid FedEx REST API
+     * pickupType values.
+     */
+    protected function mapPickupType(?string $dropoffType): string
+    {
+        $dropoffType = strtoupper(
+            trim((string) $dropoffType)
+        );
+
+        $validValues = [
+            'USE_SCHEDULED_PICKUP',
+            'CONTACT_FEDEX_TO_SCHEDULE',
+            'DROPOFF_AT_FEDEX_LOCATION',
+        ];
+
+        if (in_array($dropoffType, $validValues, true)) {
+            return $dropoffType;
+        }
+
+        /*
+         * Legacy SOAP/API values.
+         */
+        $legacyMap = [
+            'REGULAR_PICKUP'          => 'USE_SCHEDULED_PICKUP',
+            'REQUEST_COURIER'         => 'CONTACT_FEDEX_TO_SCHEDULE',
+            'DROP_BOX'                => 'DROPOFF_AT_FEDEX_LOCATION',
+            'BUSINESS_SERVICE_CENTER' => 'DROPOFF_AT_FEDEX_LOCATION',
+            'STATION'                 => 'DROPOFF_AT_FEDEX_LOCATION',
+        ];
+
+        if (isset($legacyMap[$dropoffType])) {
+            return $legacyMap[$dropoffType];
+        }
+
+        return 'DROPOFF_AT_FEDEX_LOCATION';
     }
 }
