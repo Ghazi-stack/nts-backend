@@ -2526,7 +2526,6 @@ class OrderController extends Controller
                 'ipAddress'    => 'nullable|string|max:45',
                 'emailInvoice' => 'nullable|boolean',
 
-
                 'billingAddress' => 'nullable|array',
                 'billingAddress.firstName'    => 'nullable|string',
                 'billingAddress.lastName'     => 'nullable|string',
@@ -2886,6 +2885,46 @@ class OrderController extends Controller
                 ]);
                 if ($product->track_inventory ?? $product->trackInventory ?? false) {
                     $product->decrement('current_stock', $item['quantity']);
+                }
+            }
+
+            if ($isDraft) {
+                $cartUser = User::where('store_id', $storeId)
+                    ->where('customer_id', $validated['customerId'])
+                    ->first();
+
+                if (!$cartUser) {
+                    $cartUser = User::where('store_id', $storeId)
+                        ->where('id', $validated['customerId'])
+                        ->first();
+                }
+
+                if (!$cartUser && !empty($customer->user_id)) {
+                    $cartUser = User::where('store_id', $storeId)
+                        ->where('id', $customer->user_id)
+                        ->first();
+                }
+
+                if ($cartUser) {
+                    foreach ($products as $item) {
+                        $existingCart = Cart::where('store_id', $storeId)
+                            ->where('user_id', $cartUser->id)
+                            ->where('product_id', $item['product_id'])
+                            ->first();
+
+                        if ($existingCart) {
+                            $existingCart->update([
+                                'quantity' => $existingCart->quantity + $item['quantity'],
+                            ]);
+                        } else {
+                            Cart::create([
+                                'store_id'   => $storeId,
+                                'user_id'    => $cartUser->id,
+                                'product_id' => $item['product_id'],
+                                'quantity'   => $item['quantity'],
+                            ]);
+                        }
+                    }
                 }
             }
 
