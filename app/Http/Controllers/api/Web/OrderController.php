@@ -46,9 +46,12 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Stripe\Stripe;
 use Stripe\PaymentIntent;
+use App\Services\DraftQuoteService;
 
 class OrderController extends Controller
 {
+
+    public function __construct(protected DraftQuoteService $draftQuote) {}
     public function index(Request $request)
     {
         try {
@@ -2772,7 +2775,7 @@ class OrderController extends Controller
                 'order_number'                 => '',
                 'status'                       => 'Awaiting Payment',
                 'is_draft'                     => $isDraft,
-                'isdrafturl'                   => $isDraft ? 'https://staging.sparemicro.com/cart?isDraft=true' : null,
+                'isdrafturl'                   => null,
                 'device_type'                  => $validated['deviceType'] ?? 'desktop',
                 'channel'                      => 'admin-panel',
                 'ip_address'                   => $validated['ipAddress'] ?? null,
@@ -2811,11 +2814,11 @@ class OrderController extends Controller
                 ];
 
                 SavedAddress::create([
-                    'store_id'         => $storeId,
-                    'user_id'          => $user?->id,
-                    'order_id'         => $order->id,
-                    'billing_address'  => $saveBilling ? $billingAddressJson : null,
-                    'shipping_address' => $saveShipping ? $shippingAddressJson : null,
+                    'store_id'          => $storeId,
+                    'user_id'           => $user?->id,
+                    'order_id'          => $order->id,
+                    'billing_address'   => $saveBilling ? $billingAddressJson : null,
+                    'shipping_address'  => $saveShipping ? $shippingAddressJson : null,
                 ]);
             }
 
@@ -2830,6 +2833,56 @@ class OrderController extends Controller
                 if ($product->track_inventory ?? $product->trackInventory ?? false) {
                     $product->decrement('current_stock', $item['quantity']);
                 }
+            }
+
+            if ($isDraft) {
+                $cartUser = User::where('store_id', $storeId)
+                    ->where('customer_id', $validated['customerId'])
+                    ->first();
+
+                if (!$cartUser) {
+                    $cartUser = User::where('store_id', $storeId)
+                        ->where('id', $validated['customerId'])
+                        ->first();
+                }
+
+                if (!$cartUser && !empty($customer->user_id)) {
+                    $cartUser = User::where('store_id', $storeId)
+                        ->where('id', $customer->user_id)
+                        ->first();
+                }
+
+                if ($cartUser) {
+                    foreach ($products as $item) {
+                        $existingCart = Cart::where('store_id', $storeId)
+                            ->where('user_id', $cartUser->id)
+                            ->where('product_id', $item['product_id'])
+                            ->first();
+
+                        if ($existingCart) {
+                            $existingCart->update([
+                                'quantity' => $existingCart->quantity + $item['quantity'],
+                            ]);
+                        } else {
+                            Cart::create([
+                                'store_id'   => $storeId,
+                                'user_id'    => $cartUser->id,
+                                'product_id' => $item['product_id'],
+                                'quantity'   => $item['quantity'],
+                            ]);
+                        }
+                    }
+                }
+
+                $quoteUrl = $this->draftQuote->makeDraftQuoteUrl(
+                    $order->fresh('customer'),
+                    $cartUser ?? null,
+                    $storeId
+                );
+
+                $order->update([
+                    'isdrafturl' => $quoteUrl,
+                ]);
             }
 
             if ($intent) {
@@ -2886,56 +2939,6 @@ class OrderController extends Controller
 
             $order->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
 
-            if ($isDraft) {
-                $cartUser = User::where('store_id', $storeId)
-                    ->where('customer_id', $validated['customerId'])
-                    ->first();
-
-                if (!$cartUser) {
-                    $cartUser = User::where('store_id', $storeId)
-                        ->where('id', $validated['customerId'])
-                        ->first();
-                }
-
-                if (!$cartUser && !empty($customer->user_id)) {
-                    $cartUser = User::where('store_id', $storeId)
-                        ->where('id', $customer->user_id)
-                        ->first();
-                }
-
-                if ($cartUser) {
-                    $payload = json_decode(
-                        (new OrderResource($order))->toResponse($request)->getContent(),
-                        true
-                    );
-
-                    $draftData = $payload['data'] ?? $payload;
-                    unset($draftData['products']);
-
-                    foreach ($products as $item) {
-                        $existingCart = Cart::where('store_id', $storeId)
-                            ->where('user_id', $cartUser->id)
-                            ->where('product_id', $item['product_id'])
-                            ->first();
-
-                        if ($existingCart) {
-                            $existingCart->update([
-                                'quantity'  => $existingCart->quantity + $item['quantity'],
-                                'draftData' => $draftData,
-                            ]);
-                        } else {
-                            Cart::create([
-                                'store_id'   => $storeId,
-                                'user_id'    => $cartUser->id,
-                                'product_id' => $item['product_id'],
-                                'quantity'   => $item['quantity'],
-                                'draftData'  => $draftData,
-                            ]);
-                        }
-                    }
-                }
-            }
-
             $emailInvoice = (bool) ($validated['emailInvoice'] ?? true);
 
             if ($emailInvoice) {
@@ -2954,7 +2957,7 @@ class OrderController extends Controller
             }
 
             DB::commit();
-
+            $order->refresh();
             return response()->json([
                 'status'  => true,
                 'message' => 'Order placed successfully.',
@@ -2977,6 +2980,124 @@ class OrderController extends Controller
         }
     }
 
+    public function loadSavedQuote(Request $request)
+    {
+        try {
+            $token = $request->input('quoteToken') ?? $request->query('quoteToken');
+
+            if (!$token) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'quoteToken is required',
+                ], 422);
+            }
+
+            try {
+                $payload = $this->draftQuote->decode($token);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid or expired quote token',
+                ], 401);
+            }
+
+            $storeId = (int) ($payload['store_id'] ?? 0);
+            $orderId = (int) ($payload['order_id'] ?? 0);
+            $userId  = (int) ($payload['user_id'] ?? 0);
+            $email   = $payload['email'] ?? null;
+
+            $order = Order::query()
+                ->with([
+                    'items.product.images',
+                    'items.product.brand',
+                    'customer',
+                    'billingInformation',
+                    'notes:id,order_id,note',
+                    'payment',
+                    'shipment',
+                    'manualDiscounts:id,order_id,discount_amount',
+                ])
+                ->withCount('messages')
+                ->where('id', $orderId)
+                ->where('store_id', $storeId)
+                ->where('is_draft', 1)
+                ->first();
+
+            if (!$order) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Draft order not found',
+                ], 404);
+            }
+
+            $user = null;
+
+            if ($userId) {
+                $user = User::where('store_id', $storeId)->where('id', $userId)->first();
+            }
+
+            if (!$user && $email) {
+                $user = User::where('store_id', $storeId)->where('email', $email)->first();
+            }
+
+            if (!$user && $order->customer_id) {
+                $user = User::where('store_id', $storeId)
+                    ->where('customer_id', $order->customer_id)
+                    ->first();
+            }
+
+            if (!$user) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'User not found for this quote',
+                ], 404);
+            }
+
+            $user->tokens()->delete();
+            $authToken = $user->createToken('draft-quote-login')->plainTextToken;
+
+            $data = (new OrderResource($order))->resolve();
+            unset($data['products']);
+
+            $billingPm = $data['billingInformation']['paymentMethod']
+                ?? $data['billingInformation']['payment_method']
+                ?? null;
+
+            $hasPayment = !empty($data['payment'])
+                || (!empty($billingPm) && strtolower((string) $billingPm) !== 'n/a');
+
+            $data['paymentMethod'] = $hasPayment
+                ? [
+                    'method'          => $billingPm ?: 'Credit Card (Via Stripe)',
+                    'paymentStatus'   => $data['payment']['payment_status'] ?? null,
+                    'paymentIntentId' => $data['payment']['payment_intent_id'] ?? null,
+                    'amount'          => $data['payment']['amount'] ?? null,
+                    'riskLevel'       => $data['payment']['risk_level'] ?? null,
+                ]
+                : ['method' => 'draft'];
+
+            $data['isDraft']    = true;
+            $data['isDraftUrl'] = $order->isdrafturl;
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Saved quote loaded and user logged in',
+                'token'   => $authToken,
+                'user'    => [
+                    'id'    => $user->id,
+                    'email' => $user->email,
+                    'name'  => $user->name,
+                ],
+                'data'    => $data,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load saved quote',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
     private function validateStripeCard(array $pm): array
     {
         $errors = [];

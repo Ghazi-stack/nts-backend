@@ -19,14 +19,12 @@ class Cart extends Model
         'session_id',
         'product_id',
         'quantity',
-        'draftData',
         'email_1hr_sent_at',
         'email_24hr_sent_at',
         'email_48hr_sent_at',
     ];
 
     protected $casts = [
-        'draftData' => 'array',
         'email_1hr_sent_at'  => 'datetime',
         'email_24hr_sent_at' => 'datetime',
         'email_48hr_sent_at' => 'datetime',
