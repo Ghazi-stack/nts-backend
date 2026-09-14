@@ -821,6 +821,7 @@ class OrderController extends Controller
         try {
 
             $validated = $request->validate([
+                'orderId'        => 'nullable|integer|exists:orders,id',
                 'userType'       => 'nullable|string|max:100',
                 'deviceType'     => 'nullable|string|max:1000',
                 'firstName'      => 'required_if:isMultiAddress,false|string|max:255',
@@ -850,7 +851,7 @@ class OrderController extends Controller
 
                 'ipAddress'                  => 'nullable|string|max:45',
                 'isSaveAddressForShipping'   => 'nullable|boolean',
-                'isSaveAddressForBilling'   => 'nullable|boolean',
+                'isSaveAddressForBilling'    => 'nullable|boolean',
                 'billingSame'                => 'nullable|boolean',
 
                 'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
@@ -884,6 +885,20 @@ class OrderController extends Controller
             }
 
             $orderEmail = strtolower(trim($validated['email']));
+
+            $existingDraft = null;
+            if (!empty($validated['orderId'])) {
+                $existingDraft = Order::where('id', $validated['orderId'])
+                    ->where('store_id', $storeId)
+                    ->first();
+
+                if (!$existingDraft) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Order not found.',
+                    ], 404);
+                }
+            }
 
             // ===================== IMPROVED PAYMENT CHECK =====================
             $existingPayment = Payment::where('stripe_session_id', $validated['paymentIntentId'])->first();
@@ -968,21 +983,9 @@ class OrderController extends Controller
                 $couponUsageQuery = CouponUsage::where('store_id', $storeId)
                     ->where('coupon_id', $coupon->id);
 
-                /*
-    |--------------------------------------------------------------------------
-    | Logged-in User
-    |--------------------------------------------------------------------------
-    */
                 if ($user) {
-
                     $couponUsageQuery->where('user_id', $user->id);
-                }
-                /*
-    |--------------------------------------------------------------------------
-    | Guest User
-    |--------------------------------------------------------------------------
-    */ else {
-
+                } else {
                     $sessionId = $request->header('X-Session-ID');
 
                     if (!$sessionId) {
@@ -995,11 +998,6 @@ class OrderController extends Controller
                     $couponUsageQuery->where('session_id', $sessionId);
                 }
 
-                /*
-    |--------------------------------------------------------------------------
-    | Already Used — user/session OR same email
-    |--------------------------------------------------------------------------
-    */
                 $alreadyUsedByUserOrSession = $couponUsageQuery->exists();
 
                 $alreadyUsedByEmail = CouponUsage::where('store_id', $storeId)
@@ -1008,7 +1006,6 @@ class OrderController extends Controller
                     ->exists();
 
                 if ($alreadyUsedByUserOrSession || $alreadyUsedByEmail) {
-
                     return response()->json([
                         'status' => false,
                         'message' => 'You have already used this coupon.'
@@ -1053,8 +1050,13 @@ class OrderController extends Controller
             $commonOrderFields = [
                 'ip_address'                    => $validated['ipAddress'] ?? $request->ip(),
                 'is_save_address_for_shipping'  => $validated['isSaveAddressForShipping'] ?? false,
-                'is_save_address_for_billing'  => $validated['isSaveAddressForBilling'] ?? false,
+                'is_save_address_for_billing'   => $validated['isSaveAddressForBilling'] ?? false,
                 'billing_same'                  => $validated['billingSame'] ?? true,
+            ];
+
+            $draftConvertFields = [
+                'is_draft'   => 0,
+                'isdrafturl' => null,
             ];
 
             if (!$isMulti) {
@@ -1085,11 +1087,10 @@ class OrderController extends Controller
                     'shipping_data'   => $validated['shippingData'] ?? null,
                 ]);
 
-                $order = Order::create(array_merge([
+                $orderPayload = array_merge([
                     'store_id'               => $storeId,
-                    'user_id'                => $user?->id ?? null,
+                    'user_id'                => $user?->id ?? $existingDraft?->user_id,
                     'customer_id'            => $customer->id,
-                    'order_number'           => '',
                     'billing_information_id' => $billing->id,
                     'status'                 => 'Awaiting Payment',
                     'shipping_cost'          => $validated['shippingCost'],
@@ -1101,11 +1102,18 @@ class OrderController extends Controller
                     'coupon_code'            => $validated['couponCode'] ?? null,
                     'is_multi_address'       => false,
                     'newsletter'             => $validated['newsletter'] ?? false,
-                ], $commonOrderFields));
+                ], $commonOrderFields);
 
-                $order->update([
-                    'order_number' => $order->id,
-                ]);
+                if ($existingDraft) {
+                    $existingDraft->items()->delete();
+                    $existingDraft->update(array_merge($orderPayload, $draftConvertFields));
+                    $order = $existingDraft->fresh();
+                } else {
+                    $order = Order::create(array_merge($orderPayload, [
+                        'order_number' => '',
+                    ]));
+                    $order->update(['order_number' => $order->id]);
+                }
 
                 foreach ($validated['products'] as $item) {
                     $product = Product::find($item['product_id']);
@@ -1124,6 +1132,8 @@ class OrderController extends Controller
                 $orders[] = $order;
                 $totalOrderAmount = $totalAmount;
             } else {
+                $destIndex = 0;
+
                 foreach ($validated['destinations'] as $dest) {
                     $cartTotal = 0;
                     foreach ($dest['products'] as $item) {
@@ -1152,11 +1162,10 @@ class OrderController extends Controller
                         'shipping_data'   => $dest['shippingData'] ?? null,
                     ]);
 
-                    $order = Order::create(array_merge([
+                    $orderPayload = array_merge([
                         'store_id'               => $storeId,
-                        'user_id'                => $user?->id ?? null,
+                        'user_id'                => $user?->id ?? $existingDraft?->user_id,
                         'customer_id'            => $customer->id,
-                        'order_number'           => '',
                         'billing_information_id' => $billing->id,
                         'status'                 => 'Awaiting Payment',
                         'shipping_cost'          => $dest['shippingCost'],
@@ -1168,11 +1177,18 @@ class OrderController extends Controller
                         'coupon_code'            => $validated['couponCode'] ?? null,
                         'is_multi_address'       => true,
                         'newsletter'             => $validated['newsletter'] ?? false,
-                    ], $commonOrderFields));
+                    ], $commonOrderFields);
 
-                    $order->update([
-                        'order_number' => $order->id,
-                    ]);
+                    if ($existingDraft && $destIndex === 0) {
+                        $existingDraft->items()->delete();
+                        $existingDraft->update(array_merge($orderPayload, $draftConvertFields));
+                        $order = $existingDraft->fresh();
+                    } else {
+                        $order = Order::create(array_merge($orderPayload, [
+                            'order_number' => '',
+                        ]));
+                        $order->update(['order_number' => $order->id]);
+                    }
 
                     foreach ($dest['products'] as $item) {
                         $product = Product::find($item['product_id']);
@@ -1190,6 +1206,7 @@ class OrderController extends Controller
 
                     $orders[] = $order;
                     $totalOrderAmount += $totalAmount;
+                    $destIndex++;
                 }
             }
 
@@ -1378,7 +1395,6 @@ class OrderController extends Controller
             ], 500);
         }
     }
-
 
 
     // User ke saved addresses get karo
