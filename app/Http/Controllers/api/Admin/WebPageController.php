@@ -32,6 +32,7 @@ class WebPageController extends Controller
             $keyword = trim((string) $request->query('keyword', ''));
 
             $query = WebPage::where('store_id', $storeId)
+                ->where('is_page_visible', true)
                 ->orderBy('id', 'desc');
 
             if ($keyword !== '') {
@@ -342,10 +343,14 @@ class WebPageController extends Controller
 
             $validated = $request->validate([
                 'showInNavigation' => 'required|boolean',
+                'isPageVisible'    => 'nullable|boolean',
             ]);
 
             $page->update([
                 'show_in_navigation' => $validated['showInNavigation'],
+                'is_page_visible'    => array_key_exists('isPageVisible', $validated)
+                    ? $validated['isPageVisible']
+                    : $page->is_page_visible,
             ]);
 
             return response()->json([
