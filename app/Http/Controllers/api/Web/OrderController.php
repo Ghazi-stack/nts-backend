@@ -3505,6 +3505,11 @@ class OrderController extends Controller
             '4000000000000119' => 'tok_chargeDeclinedProcessingError',
             '4000000000003220' => 'tok_threeDSecure2Required',
             '4000002500003155' => 'tok_threeDSecure2Required',
+
+            // Radar / risk
+            '4000000000009235' => 'tok_riskLevelElevated',
+            '4000000000004954' => 'tok_riskLevelHighest',
+            '4100000000000019' => 'tok_radarBlock',
         ];
 
         return $map[$num] ?? null;
