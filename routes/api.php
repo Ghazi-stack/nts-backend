@@ -54,6 +54,7 @@ use App\Http\Controllers\api\FedEx\ShippingMethodController;
 use App\Http\Controllers\api\FedEx\FedexConfigurationController;
 use App\Http\Controllers\api\FedEx\CheckoutShippingController;
 use App\Http\Controllers\api\FedEx\StoreShippingAddressController;
+use App\Http\Controllers\FedExTestController;
 
 // ===============================
 // 🔐 AUTHENTICATED USER CHECK
@@ -720,3 +721,5 @@ Route::get('/test-s3', function () {
         'url' => Storage::disk('s3')->url($path),
     ];
 });
+
+Route::post('/test/fedex/rates', [FedExTestController::class, 'rates']);
