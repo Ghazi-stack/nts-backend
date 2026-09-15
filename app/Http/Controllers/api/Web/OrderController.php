@@ -3140,8 +3140,13 @@ class OrderController extends Controller
                 ], 404);
             }
 
-            $user->tokens()->delete();
-            $authToken = $user->createToken('draft-quote-login')->plainTextToken;
+            $currentUser = auth('sanctum')->user();
+            $alreadyLoggedIn = $currentUser && (int) $currentUser->id === (int) $user->id;
+
+            $authToken = null;
+            if (!$alreadyLoggedIn) {
+                $authToken = $user->createToken('draft-quote-login')->plainTextToken;
+            }
 
             $data = (new OrderResource($order))->resolve();
             unset($data['products']);
@@ -3168,7 +3173,10 @@ class OrderController extends Controller
 
             return response()->json([
                 'status'  => true,
-                'message' => 'Saved quote loaded and user logged in',
+                'message' => $alreadyLoggedIn
+                    ? 'Saved quote loaded'
+                    : 'Saved quote loaded and user logged in',
+                'alreadyLoggedIn' => $alreadyLoggedIn,
                 'token'   => $authToken,
                 'user'    => [
                     'id'    => $user->id,
