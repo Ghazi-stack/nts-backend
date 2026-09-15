@@ -32,6 +32,7 @@ class WebPageController extends Controller
             $keyword = trim((string) $request->query('keyword', ''));
 
             $query = WebPage::where('store_id', $storeId)
+                ->where('is_page_visible', true)
                 ->orderBy('id', 'desc');
 
             if ($keyword !== '') {
@@ -133,6 +134,7 @@ class WebPageController extends Controller
                 'displayAsHomePage' => 'boolean',
                 'restrictToCustomersOnly' => 'boolean',
                 'showInNavigation' => 'boolean',
+                'isPageVisible' => 'boolean',
                 'sortOrder' => 'nullable',
                 'parentPage' => 'nullable',
                 'link' => 'nullable|string|max:255',
@@ -166,6 +168,7 @@ class WebPageController extends Controller
                 'display_as_home_page' => $validated['displayAsHomePage'] ?? false,
                 'restrict_to_customers_only' => $validated['restrictToCustomersOnly'] ?? false,
                 'show_in_navigation' => $validated['showInNavigation'] ?? false,
+                'is_page_visible' => $validated['isPageVisible'] ?? false,
                 'sort_order' => $validated['sortOrder'] ?? null,
                 'parent_page' => $validated['parentPage'] ?? null,
                 'link' => $validated['link'] ?? null,
@@ -257,6 +260,7 @@ class WebPageController extends Controller
                 'displayAsHomePage' => 'boolean',
                 'restrictToCustomersOnly' => 'boolean',
                 'showInNavigation' => 'boolean',
+                'isPageVisible' => 'boolean',
                 'sortOrder' => 'nullable',
                 'parentPage' => 'nullable',
                 'link' => 'nullable|string|max:255',
@@ -295,6 +299,7 @@ class WebPageController extends Controller
                 'display_as_home_page' => $validated['displayAsHomePage'] ?? $page->display_as_home_page,
                 'restrict_to_customers_only' => $validated['restrictToCustomersOnly'] ?? $page->restrict_to_customers_only,
                 'show_in_navigation' => $validated['showInNavigation'] ?? $page->show_in_navigation,
+                'is_page_visible' => $validated['isPageVisible'] ?? $page->is_page_visible,
                 'sort_order' => $validated['sortOrder'] ?? $page->sort_order,
                 'parent_page' => $validated['parentPage'] ?? $page->parent_page,
                 'slugWithUrl' => $slugWithUrl,
@@ -338,10 +343,14 @@ class WebPageController extends Controller
 
             $validated = $request->validate([
                 'showInNavigation' => 'required|boolean',
+                'isPageVisible'    => 'nullable|boolean',
             ]);
 
             $page->update([
                 'show_in_navigation' => $validated['showInNavigation'],
+                'is_page_visible'    => array_key_exists('isPageVisible', $validated)
+                    ? $validated['isPageVisible']
+                    : $page->is_page_visible,
             ]);
 
             return response()->json([

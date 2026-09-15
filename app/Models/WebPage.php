@@ -26,6 +26,7 @@ class WebPage extends Model
         'display_as_home_page',
         'restrict_to_customers_only',
         'show_in_navigation',
+        'is_page_visible',
         'sort_order',
         'parent_page',
         'link',
@@ -40,6 +41,7 @@ class WebPage extends Model
         'display_as_home_page' => 'boolean',
         'restrict_to_customers_only' => 'boolean',
         'show_in_navigation' => 'boolean',
+        'is_page_visible' => 'boolean',
         'showTheseFields' => 'array'
     ];
 

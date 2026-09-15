@@ -36,6 +36,7 @@ use App\Mail\OrderStatusUpdatedMail;
 use App\Models\SavedAddress;
 use App\Http\Resources\ReturnRequestResource;
 use App\Mail\OrderPlacedMail;
+use App\Models\CartShippingRate;
 use App\Models\CheckoutFormData;
 use App\Models\CouponCode;
 use App\Models\CouponUsage;
@@ -2901,7 +2902,8 @@ class OrderController extends Controller
                     'isdrafturl' => $quoteUrl,
                 ]);
 
-                $sessionId = $request->header('X-Session-ID') ?? session()->getId();
+                $sessionId  = $request->header('X-Session-ID') ?? session()->getId();
+                $formUserId = $cartUser?->id ?? $customer->user_id ?? $user?->id;
 
                 $billingFormData = [
                     'firstName'    => $formAddress['firstName'] ?? null,
@@ -2919,43 +2921,55 @@ class OrderController extends Controller
                 ];
 
                 $shippingFormData = [
-                    'firstName'    => $billingInput['firstName'] ?? null,
-                    'lastName'     => $billingInput['lastName'] ?? null,
-                    'email'        => $billingInput['email'] ?? null,
-                    'phone'        => $billingInput['phone'] ?? null,
-                    'companyName'  => $billingInput['companyName'] ?? null,
-                    'addressLine1' => $billingInput['addressLine1'] ?? null,
-                    'addressLine2' => $billingInput['addressLine2'] ?? null,
-                    'city'         => $billingInput['city'] ?? null,
-                    'state'        => $billingInput['state'] ?? null,
-                    'zip'          => $billingInput['zip'] ?? null,
-                    'country'      => $billingInput['country'] ?? null,
+                    'firstName'    => $billingInput['firstName'] ?? $shippingInfo['firstName'] ?? null,
+                    'lastName'     => $billingInput['lastName'] ?? $shippingInfo['lastName'] ?? null,
+                    'email'        => $billingInput['email'] ?? $shippingInfo['email'] ?? null,
+                    'phone'        => $billingInput['phone'] ?? $shippingInfo['phone'] ?? null,
+                    'companyName'  => $billingInput['companyName'] ?? $shippingInfo['companyName'] ?? null,
+                    'addressLine1' => $billingInput['addressLine1'] ?? $shippingInfo['addressLine1'] ?? null,
+                    'addressLine2' => $billingInput['addressLine2'] ?? $shippingInfo['addressLine2'] ?? null,
+                    'city'         => $billingInput['city'] ?? $shippingInfo['city'] ?? null,
+                    'state'        => $billingInput['state'] ?? $shippingInfo['state'] ?? null,
+                    'zip'          => $billingInput['zip'] ?? $shippingInfo['zip'] ?? null,
+                    'country'      => $billingInput['country'] ?? $shippingInfo['country'] ?? null,
                 ];
 
-                $formUserId = $cartUser?->id ?? $customer->user_id ?? $user?->id;
+                CheckoutFormData::create([
+                    'store_id'           => $storeId,
+                    'user_id'            => $formUserId,
+                    'session_id'         => $sessionId,
+                    'billing_form_data'  => $billingFormData,
+                    'shipping_form_data' => $shippingFormData,
+                ]);
 
-                $checkoutForm = CheckoutFormData::query()
-                    ->where('store_id', $storeId)
-                    ->when($formUserId, fn($q) => $q->where('user_id', $formUserId))
-                    ->when(!$formUserId, fn($q) => $q->where('session_id', $sessionId))
-                    ->first();
-
-                if ($checkoutForm) {
-                    $checkoutForm->update([
-                        'user_id'            => $formUserId,
-                        'session_id'         => $sessionId,
-                        'billing_form_data'  => $billingFormData,
-                        'shipping_form_data' => $shippingFormData,
-                    ]);
-                } else {
-                    CheckoutFormData::create([
-                        'store_id'           => $storeId,
-                        'user_id'            => $formUserId,
-                        'session_id'         => $sessionId,
-                        'billing_form_data'  => $billingFormData,
-                        'shipping_form_data' => $shippingFormData,
-                    ]);
+                $cartIds = [];
+                if ($cartUser) {
+                    $cartIds = Cart::where('store_id', $storeId)
+                        ->where('user_id', $cartUser->id)
+                        ->whereIn('product_id', collect($products)->pluck('product_id'))
+                        ->pluck('id')
+                        ->values()
+                        ->all();
                 }
+
+                CartShippingRate::create([
+                    'store_id'     => $storeId,
+                    'user_id'      => $formUserId,
+                    'session_id'   => $sessionId,
+                    'cart_ids'     => $cartIds,
+                    'country'      => $shippingFormData['country'] ?? null,
+                    'state'        => $shippingFormData['state'] ?? null,
+                    'city'         => $shippingFormData['city'] ?? null,
+                    'zip'          => $shippingFormData['zip'] ?? null,
+                    'service_type' => $shippingMethod['service_type'] ?? $shippingMethod['method'] ?? 'custom',
+                    'method_type'  => $shippingMethod['method_type'] ?? $shippingMethod['method'] ?? $shippingProvider ?? 'custom',
+                    'total_charge' => (float) (
+                        $shippingMethod['total_charge']
+                        ?? $shippingMethod['cost']
+                        ?? $shippingCost
+                        ?? 0
+                    ),
+                ]);
             }
 
             if ($intent) {
