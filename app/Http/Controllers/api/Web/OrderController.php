@@ -2812,15 +2812,94 @@ class OrderController extends Controller
                     ], 409);
                 }
 
-                $charge = $intent->latest_charge
-                    ? \Stripe\Charge::retrieve($intent->latest_charge)
-                    : null;
+                $riskData = [
+                    'risk_score' => null,
+                    'risk_level' => 'normal',
+                ];
 
-                if ($charge && $charge->outcome) {
+                try {
+                    $freshIntent = \Stripe\PaymentIntent::retrieve(
+                        $intent->id,
+                        ['expand' => ['latest_charge', 'latest_charge.review', 'review']]
+                    );
+
+                    if (empty($freshIntent->latest_charge)) {
+                        usleep(800000);
+                        $freshIntent = \Stripe\PaymentIntent::retrieve(
+                            $intent->id,
+                            ['expand' => ['latest_charge', 'latest_charge.review', 'review']]
+                        );
+                    }
+
+                    $charge = null;
+                    if (!empty($freshIntent->latest_charge)) {
+                        $charge = is_string($freshIntent->latest_charge)
+                            ? \Stripe\Charge::retrieve($freshIntent->latest_charge)
+                            : $freshIntent->latest_charge;
+                    }
+
+                    $classicScore  = null;
+                    $classicLevel  = null;
+                    $outcomeType   = null;
+                    $outcomeReason = null;
+
+                    if ($charge && !empty($charge->outcome)) {
+                        $classicScore  = isset($charge->outcome->risk_score)
+                            ? (int) $charge->outcome->risk_score
+                            : null;
+                        $classicLevel  = $charge->outcome->risk_level ?? null;
+                        $outcomeType   = $charge->outcome->type ?? null;
+                        $outcomeReason = $charge->outcome->reason ?? null;
+                    }
+
+                    $hasReview = !empty($freshIntent->review)
+                        || (!empty($charge) && !empty($charge->review))
+                        || $outcomeType === 'manual_review';
+
+                    $overallScore = $classicScore;
+                    $overallLevel = $classicLevel ?: 'normal';
+
+                    if ($outcomeReason === 'highest_risk_level' || $classicLevel === 'highest') {
+                        $overallLevel = 'highest';
+                    } elseif ($hasReview || $classicLevel === 'elevated' || $outcomeReason === 'elevated_risk_level') {
+                        $overallLevel = 'elevated';
+                    }
+
+                    if ($overallScore !== null) {
+                        if ($overallScore >= 75) {
+                            $overallLevel = 'highest';
+                        } elseif ($overallScore >= 50 && $overallLevel === 'normal') {
+                            $overallLevel = 'highest';
+                        } elseif ($overallScore >= 65 && $overallLevel === 'normal') {
+                            $overallLevel = 'elevated';
+                        }
+                    }
+
+                    try {
+                        $pmId = $freshIntent->payment_method ?? $paymentMethodId;
+                        if (!empty($pmId)) {
+                            $pm = is_string($pmId)
+                                ? \Stripe\PaymentMethod::retrieve($pmId)
+                                : $pmId;
+
+                            $checks = $pm->card->checks ?? null;
+                            $streetFail = $checks && (($checks->address_line1_check ?? null) === 'fail');
+                            $cvcFail    = $checks && (($checks->cvc_check ?? null) === 'fail');
+
+                            if (($streetFail || $cvcFail) && in_array($overallLevel, ['normal', null], true)) {
+                                $overallLevel = 'elevated';
+                            }
+                        }
+                    } catch (\Exception $pmEx) {
+                        \Log::warning('Dashboard order: could not fetch PM checks: ' . $pmEx->getMessage());
+                    }
+
                     $riskData = [
-                        'risk_score' => $charge->outcome->risk_score ?? null,
-                        'risk_level' => $charge->outcome->risk_level ?? null,
+                        'risk_score' => $overallScore,
+                        'risk_level' => $overallLevel,
                     ];
+                } catch (\Exception $e) {
+                    \Log::warning('Dashboard order: could not fetch Stripe risk data: ' . $e->getMessage());
                 }
             }
 
@@ -4246,15 +4325,94 @@ class OrderController extends Controller
                             'message' => 'Payment authorization failed. Status: ' . $intent->status,
                         ], 400);
                     } else {
-                        $charge = $intent->latest_charge
-                            ? \Stripe\Charge::retrieve($intent->latest_charge)
-                            : null;
+                        $riskData = [
+                            'risk_score' => null,
+                            'risk_level' => 'normal',
+                        ];
 
-                        if ($charge && $charge->outcome) {
+                        try {
+                            $freshIntent = \Stripe\PaymentIntent::retrieve(
+                                $intent->id,
+                                ['expand' => ['latest_charge', 'latest_charge.review', 'review']]
+                            );
+
+                            if (empty($freshIntent->latest_charge)) {
+                                usleep(800000);
+                                $freshIntent = \Stripe\PaymentIntent::retrieve(
+                                    $intent->id,
+                                    ['expand' => ['latest_charge', 'latest_charge.review', 'review']]
+                                );
+                            }
+
+                            $charge = null;
+                            if (!empty($freshIntent->latest_charge)) {
+                                $charge = is_string($freshIntent->latest_charge)
+                                    ? \Stripe\Charge::retrieve($freshIntent->latest_charge)
+                                    : $freshIntent->latest_charge;
+                            }
+
+                            $classicScore  = null;
+                            $classicLevel  = null;
+                            $outcomeType   = null;
+                            $outcomeReason = null;
+
+                            if ($charge && !empty($charge->outcome)) {
+                                $classicScore  = isset($charge->outcome->risk_score)
+                                    ? (int) $charge->outcome->risk_score
+                                    : null;
+                                $classicLevel  = $charge->outcome->risk_level ?? null;
+                                $outcomeType   = $charge->outcome->type ?? null;
+                                $outcomeReason = $charge->outcome->reason ?? null;
+                            }
+
+                            $hasReview = !empty($freshIntent->review)
+                                || (!empty($charge) && !empty($charge->review))
+                                || $outcomeType === 'manual_review';
+
+                            $overallScore = $classicScore;
+                            $overallLevel = $classicLevel ?: 'normal';
+
+                            if ($outcomeReason === 'highest_risk_level' || $classicLevel === 'highest') {
+                                $overallLevel = 'highest';
+                            } elseif ($hasReview || $classicLevel === 'elevated' || $outcomeReason === 'elevated_risk_level') {
+                                $overallLevel = 'elevated';
+                            }
+
+                            if ($overallScore !== null) {
+                                if ($overallScore >= 75) {
+                                    $overallLevel = 'highest';
+                                } elseif ($overallScore >= 50 && $overallLevel === 'normal') {
+                                    $overallLevel = 'highest';
+                                } elseif ($overallScore >= 65 && $overallLevel === 'normal') {
+                                    $overallLevel = 'elevated';
+                                }
+                            }
+
+                            try {
+                                $pmId = $freshIntent->payment_method ?? $paymentMethodId;
+                                if (!empty($pmId)) {
+                                    $pm = is_string($pmId)
+                                        ? \Stripe\PaymentMethod::retrieve($pmId)
+                                        : $pmId;
+
+                                    $checks = $pm->card->checks ?? null;
+                                    $streetFail = $checks && (($checks->address_line1_check ?? null) === 'fail');
+                                    $cvcFail    = $checks && (($checks->cvc_check ?? null) === 'fail');
+
+                                    if (($streetFail || $cvcFail) && in_array($overallLevel, ['normal', null], true)) {
+                                        $overallLevel = 'elevated';
+                                    }
+                                }
+                            } catch (\Exception $pmEx) {
+                                \Log::warning('New customer order: could not fetch PM checks: ' . $pmEx->getMessage());
+                            }
+
                             $riskData = [
-                                'risk_score' => $charge->outcome->risk_score ?? null,
-                                'risk_level' => $charge->outcome->risk_level ?? null,
+                                'risk_score' => $overallScore,
+                                'risk_level' => $overallLevel,
                             ];
+                        } catch (\Exception $e) {
+                            \Log::warning('New customer order: could not fetch Stripe risk data: ' . $e->getMessage());
                         }
                     }
                 }
