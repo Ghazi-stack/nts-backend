@@ -99,7 +99,10 @@ class OrderController extends Controller
                 ->when($status, function ($q) use ($status) {
                     if ($status === 'High Risk') {
                         $q->whereHas('payment', function ($p) {
-                            $p->where('risk_level', 'highest');
+                            $p->where(function ($r) {
+                                $r->whereIn('risk_level', ['highest', 'elevated'])
+                                    ->orWhere('risk_score', '>=', 50);
+                            });
                         });
                     } elseif ($status === 'Incomplete') {
                         $q->where('status', 'Pending');
@@ -1293,33 +1296,106 @@ class OrderController extends Controller
             }
 
             // ===================== PAYMENT =====================
-            $riskData = [];
+            $riskData = [
+                'risk_score' => null,
+                'risk_level' => 'normal',
+            ];
+
             try {
-                if (!isset($stripeIntent)) {
-                    \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-                    $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId']);
+                \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+
+                $stripeIntent = \Stripe\PaymentIntent::retrieve(
+                    $validated['paymentIntentId'],
+                    ['expand' => ['latest_charge', 'latest_charge.review', 'review']]
+                );
+
+                // authorize hote hi kabhi charge late milta hai
+                if (empty($stripeIntent->latest_charge)) {
+                    usleep(800000);
+                    $stripeIntent = \Stripe\PaymentIntent::retrieve(
+                        $validated['paymentIntentId'],
+                        ['expand' => ['latest_charge', 'latest_charge.review', 'review']]
+                    );
                 }
 
-                $charge = $stripeIntent->latest_charge
-                    ? \Stripe\Charge::retrieve($stripeIntent->latest_charge)
-                    : null;
-
-                if ($charge && $charge->outcome) {
-                    $riskData = [
-                        'risk_score' => $charge->outcome->risk_score ?? null,
-                        'risk_level' => $charge->outcome->risk_level ?? null,
-                    ];
+                $charge = null;
+                if (!empty($stripeIntent->latest_charge)) {
+                    $charge = is_string($stripeIntent->latest_charge)
+                        ? \Stripe\Charge::retrieve($stripeIntent->latest_charge)
+                        : $stripeIntent->latest_charge;
                 }
+
+                $classicScore  = null;
+                $classicLevel  = null;
+                $outcomeType   = null;
+                $outcomeReason = null;
+
+                if ($charge && !empty($charge->outcome)) {
+                    $classicScore  = isset($charge->outcome->risk_score)
+                        ? (int) $charge->outcome->risk_score
+                        : null;
+                    $classicLevel  = $charge->outcome->risk_level ?? null;
+                    $outcomeType   = $charge->outcome->type ?? null;
+                    $outcomeReason = $charge->outcome->reason ?? null;
+                }
+
+                $hasReview = !empty($stripeIntent->review)
+                    || (!empty($charge) && !empty($charge->review))
+                    || $outcomeType === 'manual_review';
+
+                $overallScore = $classicScore;
+                $overallLevel = $classicLevel ?: 'normal';
+
+                if ($outcomeReason === 'highest_risk_level' || $classicLevel === 'highest') {
+                    $overallLevel = 'highest';
+                } elseif ($hasReview || $classicLevel === 'elevated' || $outcomeReason === 'elevated_risk_level') {
+                    $overallLevel = 'elevated';
+                }
+
+                if ($overallScore !== null) {
+                    if ($overallScore >= 75) {
+                        $overallLevel = 'highest';
+                    } elseif ($overallScore >= 50 && $overallLevel === 'normal') {
+                        // Dashboard pe 59 Highest tha, classic outcome aksar normal hi deta hai
+                        $overallLevel = 'highest';
+                    } elseif ($overallScore >= 65 && $overallLevel === 'normal') {
+                        $overallLevel = 'elevated';
+                    }
+                }
+
+                // extra signal: street / cvc fail
+                try {
+                    if (!empty($stripeIntent->payment_method)) {
+                        $pm = is_string($stripeIntent->payment_method)
+                            ? \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method)
+                            : $stripeIntent->payment_method;
+
+                        $checks = $pm->card->checks ?? null;
+                        $streetFail = $checks && (($checks->address_line1_check ?? null) === 'fail');
+                        $cvcFail    = $checks && (($checks->cvc_check ?? null) === 'fail');
+
+                        if (($streetFail || $cvcFail) && in_array($overallLevel, ['normal', null], true)) {
+                            $overallLevel = 'elevated';
+                        }
+                    }
+                } catch (\Exception $pmEx) {
+                    \Log::warning('Could not fetch PM checks: ' . $pmEx->getMessage());
+                }
+
+                $riskData = [
+                    'risk_score' => $overallScore,
+                    'risk_level' => $overallLevel,
+                ];
             } catch (\Exception $e) {
                 \Log::warning('Could not fetch Stripe risk data: ' . $e->getMessage());
             }
 
             Payment::create(array_merge([
-                'order_id'           => $orders[0]->id,
-                'stripe_session_id'  => $validated['paymentIntentId'],
-                'amount'             => $totalOrderAmount,
-                'discountAmount'     => $discount,
-                'payment_status'     => 'authorized',
+                'order_id'          => $orders[0]->id,
+                'stripe_session_id' => $validated['paymentIntentId'],
+                'amount'            => $totalOrderAmount,
+                'discountAmount'    => $discount,
+                'payment_status'    => 'authorized',
             ], $riskData));
 
             // ===================== SAVE COUPON USAGE (EMAIL) =====================
