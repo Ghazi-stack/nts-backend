@@ -850,6 +850,7 @@ class OrderController extends Controller
 
                 'comments'       => 'nullable|string|max:1000',
                 'discountAmount' => 'nullable|numeric',
+                'manualDiscount' => 'nullable|numeric',
                 'paymentIntentId' => 'required|string',
                 'couponCode'     => 'nullable|string|max:255',
                 'isMultiAddress' => 'required|boolean',
@@ -1050,6 +1051,7 @@ class OrderController extends Controller
             $orders = [];
             $totalOrderAmount = 0;
             $discount = $validated['discountAmount'] ?? 0;
+            $manualDiscount = $validated['manualDiscount'] ?? 0;
             $isMulti = $validated['isMultiAddress'];
 
             $commonOrderFields = [
@@ -1071,7 +1073,7 @@ class OrderController extends Controller
                     if ($product) $cartTotal += $product->price * $item['quantity'];
                 }
 
-                $totalAmount = $cartTotal + $validated['shippingCost'] - $discount;
+                $totalAmount = $cartTotal + $validated['shippingCost'] - $discount - $manualDiscount;
 
                 $billing = BillingInformation::create([
                     'store_id'        => $storeId,
@@ -1104,6 +1106,7 @@ class OrderController extends Controller
                     'user_type'              => $isGuest ? 'guest' : ($validated['userType'] ?? null),
                     'total_amount'           => $totalAmount,
                     'discountAmount'         => $discount,
+                    'manualDiscount'         => $manualDiscount,
                     'coupon_code'            => $validated['couponCode'] ?? null,
                     'is_multi_address'       => false,
                     'newsletter'             => $validated['newsletter'] ?? false,
@@ -1146,7 +1149,7 @@ class OrderController extends Controller
                         if ($product) $cartTotal += $product->price * $item['quantity'];
                     }
 
-                    $totalAmount = $cartTotal + $dest['shippingCost'] - $discount;
+                    $totalAmount = $cartTotal + $dest['shippingCost'] - $discount - $manualDiscount;
 
                     $billing = BillingInformation::create([
                         'store_id'        => $storeId,
@@ -1179,6 +1182,7 @@ class OrderController extends Controller
                         'user_type'              => $isGuest ? 'guest' : ($validated['userType'] ?? null),
                         'total_amount'           => $totalAmount,
                         'discountAmount'         => $discount,
+                        'manualDiscount'         => $manualDiscount,
                         'coupon_code'            => $validated['couponCode'] ?? null,
                         'is_multi_address'       => true,
                         'newsletter'             => $validated['newsletter'] ?? false,
