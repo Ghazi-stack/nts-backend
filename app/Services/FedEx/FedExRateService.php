@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\FedexConfiguration;
 use App\Models\FedexQuoteLog;
+use Carbon\Carbon;
 
 class FedExRateService
 {
@@ -607,32 +608,90 @@ class FedExRateService
             }
 
             /*
-             * Transit information.
-             */
+            * Transit / delivery information.
+            *
+            * FedEx may provide transitDays directly, but production
+            * responses can also provide the committed delivery date
+            * through commit.dateDetail.dayFormat and/or
+            * operationalDetail.deliveryDate.
+            */
             $transitDays = null;
             $deliveryDate = null;
             $deliveryDay = null;
 
-            if (isset($detail['commit'])) {
-                $commit = $detail['commit'];
+            $commit = $detail['commit'] ?? [];
+            $operationalDetail = $detail['operationalDetail'] ?? [];
 
-                $transitValue =
-                    $commit['transitDays']['description']
-                    ?? $commit['transitDays']
-                    ?? null;
+            /*
+            * Delivery date.
+            *
+            * Prefer the operational deliveryDate when available,
+            * otherwise use commit.dateDetail.dayFormat.
+            */
+            $deliveryDate =
+                $operationalDetail['deliveryDate']
+                ?? $commit['dateDetail']['dayFormat']
+                ?? null;
 
-                $transitDays = $this->parseTransitDays(
-                    $transitValue
-                );
+            /*
+            * Delivery day.
+            */
+            $deliveryDay =
+                $operationalDetail['deliveryDay']
+                ?? $commit['dateDetail']['dayOfWeek']
+                ?? null;
 
-                $deliveryDate =
-                    $commit['dateDetail']['dayFormat']
-                    ?? $commit['dateDetail']['dayFormat']
-                    ?? null;
+            /*
+            * FedEx can return an explicit transitDays value.
+            */
+            $transitValue =
+                $commit['transitDays']['description']
+                ?? $commit['transitDays']
+                ?? $operationalDetail['transitDays']
+                ?? null;
 
-                $deliveryDay =
-                    $commit['dateDetail']['dayOfWeek']
-                    ?? null;
+            if ($transitValue !== null) {
+                $transitDays = $this->parseTransitDays($transitValue);
+            }
+
+            /*
+            * If FedEx does not provide an explicit transitDays value,
+            * derive it from the quote date and FedEx's committed
+            * delivery date.
+            */
+            if ($transitDays === null && $deliveryDate) {
+                try {
+                    $quoteDate = $responseData['quoteDate'] ?? null;
+
+                    if ($quoteDate) {
+                        $quote = \Carbon\Carbon::parse($quoteDate)->startOfDay();
+                        $delivery = \Carbon\Carbon::parse($deliveryDate)->startOfDay();
+
+                        $transitDays = $quote->diffInDays($delivery);
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('Unable to calculate FedEx transit days', [
+                        'service' => $serviceType,
+                        'quote_date' => $responseData['quoteDate'] ?? null,
+                        'delivery_date' => $deliveryDate,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            /*
+            * Format delivery date for US format: MM/DD/YYYY
+            */
+            if ($deliveryDate) {
+                try {
+                    $deliveryDate = \Carbon\Carbon::parse($deliveryDate)->format('m/d/Y');
+                } catch (\Throwable $e) {
+                    Log::warning('Unable to format FedEx delivery date', [
+                        'service' => $serviceType,
+                        'delivery_date' => $deliveryDate,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
 
             $rates[] = [
