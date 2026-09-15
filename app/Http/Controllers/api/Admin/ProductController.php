@@ -2520,7 +2520,7 @@ class ProductController extends Controller
     public function destroyProduct(Request $request, $id = null)
     {
         try {
-            $storeId = current_store_id(); // ✅ Real dynamic store context
+            $storeId = current_store_id();
 
             if (!$storeId) {
                 return response()->json([
@@ -2539,6 +2539,10 @@ class ProductController extends Controller
                         'message' => "Product ID $id not found in store_id $storeId."
                     ], 404);
                 }
+
+                ProductSeo::where('store_id', $storeId)
+                    ->where('product_id', $product->id)
+                    ->delete();
 
                 $product->delete();
 
@@ -2570,6 +2574,10 @@ class ProductController extends Controller
                 }
 
                 try {
+                    ProductSeo::where('store_id', $storeId)
+                        ->where('product_id', $product->id)
+                        ->delete();
+
                     $product->delete();
                     $deleted[] = $prodId;
                 } catch (Exception $e) {
