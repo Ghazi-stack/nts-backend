@@ -304,6 +304,7 @@ class OrderController extends Controller
                     'trackingNumber' => $order->tracking_number,
                     'shippedAt' => $order->shipped_at,
                     'discountAmount' => $order->discountAmount,
+                    'manualDiscount' => $order->manual_discount,
                     'couponCode'     => $order->coupon_code,
                     'totalAmount' => $order->total_amount,
                     'createdAt' => $order->created_at,
