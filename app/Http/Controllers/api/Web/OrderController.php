@@ -101,7 +101,7 @@ class OrderController extends Controller
                         $q->whereHas('payment', function ($p) {
                             $p->where(function ($r) {
                                 $r->whereIn('risk_level', ['highest', 'elevated'])
-                                    ->orWhere('risk_score', '>=', 50);
+                                    ->orWhere('risk_score', '>=', 70);
                             });
                         });
                     } elseif ($status === 'Incomplete') {
