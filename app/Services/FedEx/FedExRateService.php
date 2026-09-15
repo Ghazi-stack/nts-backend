@@ -661,13 +661,19 @@ class FedExRateService
             */
             if ($transitDays === null && $deliveryDate) {
                 try {
+                    /*
+                    * Calculate transit days from FedEx quote date
+                    * to the committed delivery date.
+                    */
                     $quoteDate = $responseData['quoteDate'] ?? null;
 
                     if ($quoteDate) {
-                        $quote = \Carbon\Carbon::parse($quoteDate)->startOfDay();
-                        $delivery = \Carbon\Carbon::parse($deliveryDate)->startOfDay();
+                        $quote = \Carbon\Carbon::parse($quoteDate);
+                        $delivery = \Carbon\Carbon::parse($deliveryDate);
 
-                        $transitDays = $quote->diffInDays($delivery);
+                        $transitDays = $quote->startOfDay()->diffInDays(
+                            $delivery->startOfDay()
+                        );
                     }
                 } catch (\Throwable $e) {
                     Log::warning('Unable to calculate FedEx transit days', [
