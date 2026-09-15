@@ -63,6 +63,55 @@ class WebPageController extends Controller
             ], 500);
         }
     }
+    public function dashboardIndex(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $perPage = (int) $request->query('perPage', 20);
+            $page = (int) $request->query('page', 1);
+
+            // Optional keyword search
+            $keyword = trim((string) $request->query('keyword', ''));
+
+            $query = WebPage::where('store_id', $storeId)
+                ->orderBy('id', 'desc');
+
+            if ($keyword !== '') {
+                $query->where('page_name', 'like', "%{$keyword}%");
+            }
+
+            $pages = $query->paginate($perPage, ['*'], 'page', $page);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Web pages retrieved successfully',
+                'data' => WebPageResource::collection($pages),
+                'pagination' => [
+                    'total' => $pages->total(),
+                    'count' => $pages->count(),
+                    'perPage' => $pages->perPage(),
+                    'currentPage' => $pages->currentPage(),
+                    'totalPages' => $pages->lastPage(),
+                ]
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error fetching web pages: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve pages',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
     public function show($id)
     {
