@@ -28,6 +28,7 @@ class WebPageResource extends JsonResource
             'displayAsHomePage' => (bool) $this->display_as_home_page,
             'restrictToCustomersOnly' => (bool) $this->restrict_to_customers_only,
             'showInNavigation' => (bool) $this->show_in_navigation,
+            'isPageVisible' => (bool) $this->is_page_visible,
             'sortOrder' => $this->sort_order,
             'parentPage' => $this->parent_page,
             'storeId' => $this->store_id,
