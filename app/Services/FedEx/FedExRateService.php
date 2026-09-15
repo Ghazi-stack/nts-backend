@@ -360,9 +360,9 @@ class FedExRateService
                 /*
                 * packagingType belongs to requestedShipment.
                 */
-                'packagingType' => strtoupper(
-                    trim((string) ($config->packaging_type ?? 'YOUR_PACKAGING'))
-                ),
+                // 'packagingType' => strtoupper(
+                //     trim((string) ($config->packaging_type ?? 'YOUR_PACKAGING'))
+                // ),
 
                 'requestedPackageLineItems' => [
                     $this->buildPackageLineItem(
