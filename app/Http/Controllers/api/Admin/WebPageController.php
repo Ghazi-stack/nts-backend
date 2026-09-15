@@ -391,7 +391,7 @@ class WebPageController extends Controller
             $page = WebPage::where('store_id', $storeId)->findOrFail($id);
 
             $validated = $request->validate([
-                'showInNavigation' => 'required|boolean',
+                'showInNavigation' => 'nullable|boolean',
                 'isPageVisible'    => 'nullable|boolean',
             ]);
 
