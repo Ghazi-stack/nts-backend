@@ -36,6 +36,7 @@ use App\Mail\OrderStatusUpdatedMail;
 use App\Models\SavedAddress;
 use App\Http\Resources\ReturnRequestResource;
 use App\Mail\OrderPlacedMail;
+use App\Models\CartShippingRate;
 use App\Models\CheckoutFormData;
 use App\Models\CouponCode;
 use App\Models\CouponUsage;
@@ -2955,6 +2956,46 @@ class OrderController extends Controller
                         'billing_form_data'  => $billingFormData,
                         'shipping_form_data' => $shippingFormData,
                     ]);
+                }
+
+                $cartIds = [];
+                if ($cartUser) {
+                    $cartIds = Cart::where('store_id', $storeId)
+                        ->where('user_id', $cartUser->id)
+                        ->whereIn('product_id', collect($products)->pluck('product_id'))
+                        ->pluck('id')
+                        ->values()
+                        ->all();
+                }
+
+                $shippingRatePayload = [
+                    'store_id'     => $storeId,
+                    'user_id'      => $formUserId,
+                    'session_id'   => $sessionId,
+                    'cart_ids'     => $cartIds,
+                    'country'      => $billingInput['country'] ?? $shippingInfo['country'] ?? null,
+                    'state'        => $billingInput['state'] ?? $shippingInfo['state'] ?? null,
+                    'city'         => $billingInput['city'] ?? $shippingInfo['city'] ?? null,
+                    'zip'          => $billingInput['zip'] ?? $shippingInfo['zip'] ?? null,
+                    'service_type' => $shippingMethod['service_type'] ?? $shippingMethod['method'] ?? null,
+                    'method_type'  => $shippingMethod['method_type'] ?? $shippingMethod['method'] ?? $shippingProvider,
+                    'total_charge' => (float) (
+                        $shippingMethod['total_charge']
+                        ?? $shippingMethod['cost']
+                        ?? $shippingCost
+                    ),
+                ];
+
+                $existingRate = CartShippingRate::query()
+                    ->where('store_id', $storeId)
+                    ->when($formUserId, fn($q) => $q->where('user_id', $formUserId))
+                    ->when(!$formUserId, fn($q) => $q->where('session_id', $sessionId))
+                    ->first();
+
+                if ($existingRate) {
+                    $existingRate->update($shippingRatePayload);
+                } else {
+                    CartShippingRate::create($shippingRatePayload);
                 }
             }
 
