@@ -319,6 +319,10 @@ class FedExRateService
                 'value' => (string) $config->account_number,
             ],
 
+            'rateRequestControlParameters' => [
+                'returnTransitTimes' => true,
+            ],
+
             'requestedShipment' => [
                 'shipper' => [
                     'address' => [
