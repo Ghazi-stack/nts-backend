@@ -2902,7 +2902,7 @@ class OrderController extends Controller
                     'isdrafturl' => $quoteUrl,
                 ]);
 
-                $sessionId  = $request->header('X-Session-ID') ?? session()->getId();
+                // $sessionId  = $request->header('X-Session-ID') ?? session()->getId();
                 $formUserId = $cartUser?->id ?? $customer->user_id ?? $user?->id;
 
                 $billingFormData = [
@@ -2937,7 +2937,7 @@ class OrderController extends Controller
                 CheckoutFormData::create([
                     'store_id'           => $storeId,
                     'user_id'            => $formUserId,
-                    'session_id'         => $sessionId,
+                    'session_id'         => null,
                     'billing_form_data'  => $billingFormData,
                     'shipping_form_data' => $shippingFormData,
                 ]);
@@ -2955,7 +2955,7 @@ class OrderController extends Controller
                 CartShippingRate::create([
                     'store_id'     => $storeId,
                     'user_id'      => $formUserId,
-                    'session_id'   => $sessionId,
+                    'session_id'   => null,
                     'cart_ids'     => $cartIds,
                     'country'      => $shippingFormData['country'] ?? null,
                     'state'        => $shippingFormData['state'] ?? null,
