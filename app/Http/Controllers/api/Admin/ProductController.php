@@ -2369,13 +2369,16 @@ class ProductController extends Controller
             $query = Product::with(['brand', 'categories', 'images'])
                 ->where('store_id', $storeId);
 
-            // 🔍 Search by name, SKU, etc.
+            // 🔍 Search by name, SKU, keywords + brand name
             if ($request->filled('searchKeywords')) {
                 $keywords = $request->searchKeywords;
                 $query->where(function ($q) use ($keywords) {
                     $q->where('name', 'like', "%{$keywords}%")
                         ->orWhere('sku', 'like', "%{$keywords}%")
-                        ->orWhere('search_keywords', 'like', "%{$keywords}%");
+                        ->orWhere('search_keywords', 'like', "%{$keywords}%")
+                        ->orWhereHas('brand', function ($brandQuery) use ($keywords) {
+                            $brandQuery->where('name', 'like', "%{$keywords}%");
+                        });
                 });
             }
 
@@ -2404,7 +2407,16 @@ class ProductController extends Controller
                 $query->where('price', '<=', $request->priceMax);
             }
 
-            // 🔍 Filter by inventory
+            // 🔍 Quantity Sold: From / To
+            if ($request->filled('soldMin')) {
+                $query->where('sold_count', '>=', $request->soldMin);
+            }
+
+            if ($request->filled('soldMax')) {
+                $query->where('sold_count', '<=', $request->soldMax);
+            }
+
+            // 🔍 Inventory Level: From / To
             if ($request->filled('inventoryMin')) {
                 $query->where('current_stock', '>=', $request->inventoryMin);
             }
@@ -2423,9 +2435,14 @@ class ProductController extends Controller
                 $query->where('is_featured', $request->boolean('isFeatured'));
             }
 
-            // 🔍 Optional: freeShipping (if such a column exists in DB)
-            if ($request->filled('freeShipping')) {
-                $query->where('free_shipping', $request->boolean('freeShipping'));
+            // 🔍 Free Shipping (No Preference = field mat bhejo / empty)
+            if ($request->filled('freeShipping') && !in_array($request->freeShipping, ['no_preference', 'No Preference', ''], true)) {
+                $isFree = $request->boolean('freeShipping');
+
+                $query->where(function ($q) use ($isFree) {
+                    $q->where('free_shipping', $isFree)
+                        ->orWhere('show_shipping', $isFree);
+                });
             }
 
             // 🔁 Sorting
