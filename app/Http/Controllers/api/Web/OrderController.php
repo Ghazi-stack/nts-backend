@@ -2934,17 +2934,13 @@ class OrderController extends Controller
                     'country'      => $billingInput['country'] ?? $shippingInfo['country'] ?? null,
                 ];
 
-                CheckoutFormData::updateOrCreate(
-                    [
-                        'store_id' => $storeId,
-                        'user_id'  => $formUserId,
-                    ],
-                    [
-                        'session_id'         => $sessionId,
-                        'billing_form_data'  => $billingFormData,
-                        'shipping_form_data' => $shippingFormData,
-                    ]
-                );
+                CheckoutFormData::create([
+                    'store_id'           => $storeId,
+                    'user_id'            => $formUserId,
+                    'session_id'         => $sessionId,
+                    'billing_form_data'  => $billingFormData,
+                    'shipping_form_data' => $shippingFormData,
+                ]);
 
                 $cartIds = [];
                 if ($cartUser) {
@@ -2956,28 +2952,24 @@ class OrderController extends Controller
                         ->all();
                 }
 
-                CartShippingRate::updateOrCreate(
-                    [
-                        'store_id' => $storeId,
-                        'user_id'  => $formUserId,
-                    ],
-                    [
-                        'session_id'   => $sessionId,
-                        'cart_ids'     => $cartIds,
-                        'country'      => $shippingFormData['country'] ?? null,
-                        'state'        => $shippingFormData['state'] ?? null,
-                        'city'         => $shippingFormData['city'] ?? null,
-                        'zip'          => $shippingFormData['zip'] ?? null,
-                        'service_type' => $shippingMethod['service_type'] ?? $shippingMethod['method'] ?? 'custom',
-                        'method_type'  => $shippingMethod['method_type'] ?? $shippingMethod['method'] ?? $shippingProvider ?? 'custom',
-                        'total_charge' => (float) (
-                            $shippingMethod['total_charge']
-                            ?? $shippingMethod['cost']
-                            ?? $shippingCost
-                            ?? 0
-                        ),
-                    ]
-                );
+                CartShippingRate::create([
+                    'store_id'     => $storeId,
+                    'user_id'      => $formUserId,
+                    'session_id'   => $sessionId,
+                    'cart_ids'     => $cartIds,
+                    'country'      => $shippingFormData['country'] ?? null,
+                    'state'        => $shippingFormData['state'] ?? null,
+                    'city'         => $shippingFormData['city'] ?? null,
+                    'zip'          => $shippingFormData['zip'] ?? null,
+                    'service_type' => $shippingMethod['service_type'] ?? $shippingMethod['method'] ?? 'custom',
+                    'method_type'  => $shippingMethod['method_type'] ?? $shippingMethod['method'] ?? $shippingProvider ?? 'custom',
+                    'total_charge' => (float) (
+                        $shippingMethod['total_charge']
+                        ?? $shippingMethod['cost']
+                        ?? $shippingCost
+                        ?? 0
+                    ),
+                ]);
             }
 
             if ($intent) {
