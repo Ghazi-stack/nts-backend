@@ -104,12 +104,12 @@ class FedExRateService
                     $logPayload['accountNumber']['value'] = '***';
                 }
 
-                Log::info('FedEx Rate API request', [
-                    'config_id' => $config->id,
-                    'service' => $serviceType,
-                    'rate_type' => $rateType,
-                    'payload' => $logPayload,
-                ]);
+                // Log::info('FedEx Rate API request', [
+                //     'config_id' => $config->id,
+                //     'service' => $serviceType,
+                //     'rate_type' => $rateType,
+                //     'payload' => $logPayload,
+                // ]);
 
                 $url = rtrim(
                     (string) $config->api_base_url,
@@ -130,12 +130,12 @@ class FedExRateService
 
                 $responseData = $response->json();
 
-                Log::info('FedEx Rate API response', [
-                    'config_id' => $config->id,
-                    'service' => $serviceType,
-                    'status' => $response->status(),
-                    'response' => $responseData,
-                ]);
+                // Log::info('FedEx Rate API response', [
+                //     'config_id' => $config->id,
+                //     'service' => $serviceType,
+                //     'status' => $response->status(),
+                //     'response' => $responseData,
+                // ]);
 
                 $successful = $response->successful()
                     && isset($responseData['output']['rateReplyDetails']);
