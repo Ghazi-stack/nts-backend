@@ -3546,137 +3546,97 @@ class OrderController extends Controller
         }
 
         $validated = $request->validate([
-            'customerId' => 'required|exists:customers,id',
-            'customerGroup' => 'nullable|string|max:255',
-            'receiveOffers' => 'nullable|boolean',
-            'comments'      => 'nullable|string|max:1000',
-            'staffNotes'    => 'nullable|string|max:1000',
-            'isDraft'       => 'nullable|boolean',
-            'billingSame'   => 'nullable|boolean',
-            'newsletter'    => 'nullable|boolean',
-            'couponCode'    => 'nullable|string|max:255',
+            'customerId'     => 'nullable|exists:customers,id',
+            'customerGroup'  => 'nullable|string|max:255',
+            'receiveOffers'  => 'nullable|boolean',
+            'comments'       => 'nullable|string|max:1000',
+            'staffNotes'     => 'nullable|string|max:1000',
+            'staff_notes'    => 'nullable|string|max:1000',
+            'isDraft'        => 'nullable|boolean',
+            'billingSame'    => 'nullable|boolean',
+            'newsletter'     => 'nullable|boolean',
+            'couponCode'     => 'nullable|string|max:255',
             'discountAmount' => 'nullable|numeric',
-            'deviceType'    => 'nullable|string|max:1000',
-            'userType'      => 'nullable|string|max:50',
-            'emailInvoice'  => 'nullable|boolean',
+            'deviceType'     => 'nullable|string|max:1000',
+            'userType'       => 'nullable|string|max:50',
+            'emailInvoice'   => 'nullable|boolean',
 
             'billingAddress' => 'nullable|array',
-            'billingAddress.firstName' => 'nullable|string|max:255',
-            'billingAddress.lastName' => 'nullable|string|max:255',
-            'billingAddress.name' => 'nullable|string|max:255',
-            'billingAddress.email' => 'nullable|email',
-            'billingAddress.phone' => 'nullable|string|max:20',
-            'billingAddress.companyName' => 'nullable|string|max:255',
-            'billingAddress.addressLine1' => 'nullable|string|max:255',
-            'billingAddress.addressLine2' => 'nullable|string|max:255',
-            'billingAddress.city' => 'nullable|string|max:100',
-            'billingAddress.state' => 'nullable|string|max:100',
-            'billingAddress.zip' => 'nullable|string|max:20',
-            'billingAddress.country' => 'nullable|string|max:100',
-
-            'billingInformation' => 'required|array',
-            'billingInformation.firstName' => 'nullable|string|max:255',
-            'billingInformation.lastName'  => 'nullable|string|max:255',
-            'billingInformation.phone'     => 'nullable|string|max:20',
-            'billingInformation.companyName' => 'nullable|string|max:255',
-            'billingInformation.addressLine1' => 'nullable|string|max:255',
-            'billingInformation.addressLine2' => 'nullable|string|max:255',
-            'billingInformation.city'         => 'nullable|string|max:100',
-            'billingInformation.state'        => 'nullable|string|max:100',
-            'billingInformation.zip'          => 'nullable|string|max:20',
-            'billingInformation.country'      => 'nullable|string|max:100',
-            'billingInformation.email'        => 'nullable|email',
-            'billingInformation.paymentMethod' => 'nullable|string',
-            'billingInformation.shippingMethod' => 'nullable|string',
-
+            'billingInformation' => 'nullable|array',
             'paymentMethod' => 'nullable|array',
-            'paymentMethod.method' => 'nullable|string',
-            'paymentMethod.cardType' => 'nullable|string',
-            'paymentMethod.cardholderName' => 'nullable|string',
-            'paymentMethod.creditCardNo' => 'nullable|string',
-            'paymentMethod.ccv2Value' => 'nullable|string',
-            'paymentMethod.expirationMonth' => 'nullable|string',
-            'paymentMethod.expirationYear' => 'nullable|string',
-            'paymentMethod.emailInvoice' => 'nullable|boolean',
 
-            'products' => 'required|array|min:1',
-            'products.*.productId' => 'required_without:products.*.product_id|exists:products,id',
+            'products' => 'nullable|array|min:1',
+            'products.*.productId'  => 'required_without:products.*.product_id|exists:products,id',
             'products.*.product_id' => 'required_without:products.*.productId|exists:products,id',
-            'products.*.quantity' => 'required|integer|min:1',
-            'products.*.price' => 'nullable|numeric|min:0',
+            'products.*.quantity'   => 'required_with:products|integer|min:1',
+            'products.*.price'      => 'nullable|numeric|min:0',
 
             'shippingDestinations' => 'nullable|array',
             'shippingMethod' => 'nullable|array',
-            'shippingMethod.provider' => 'nullable|string',
-            'shippingMethod.cost' => 'nullable',
-            'shippingMethod.method' => 'nullable',
-            'shippingMethod.data' => 'nullable',
-            'shippingMethod.service_type' => 'nullable|string',
-            'shippingMethod.method_type' => 'nullable|string',
-            'shippingMethod.total_charge' => 'nullable',
         ]);
 
         try {
             DB::beginTransaction();
 
-            $user     = auth('sanctum')->user();
-            $order    = Order::where('store_id', $storeId)->findOrFail($orderId);
-            $customer = Customer::where('store_id', $storeId)->findOrFail($validated['customerId']);
+            $user  = auth('sanctum')->user();
+            $order = Order::where('store_id', $storeId)->findOrFail($orderId);
 
             $wasDraft = (bool) $order->is_draft;
-            $isDraft  = $request->exists('isDraft')
-                ? (bool) $validated['isDraft']
-                : $wasDraft;
+            $isDraft  = $request->exists('isDraft') ? (bool) $validated['isDraft'] : $wasDraft;
 
-            $customer->update([
-                'customer_group'        => $validated['customerGroup'] ?? $customer->customer_group,
-                'receive_review_emails' => $validated['receiveOffers'] ?? $customer->receive_review_emails,
-            ]);
+            $customerId = $validated['customerId'] ?? $order->customer_id;
+            $customer   = Customer::where('store_id', $storeId)->findOrFail($customerId);
+
+            if ($request->exists('customerGroup') || $request->exists('receiveOffers')) {
+                $customer->update([
+                    'customer_group'        => $validated['customerGroup'] ?? $customer->customer_group,
+                    'receive_review_emails' => $validated['receiveOffers'] ?? $customer->receive_review_emails,
+                ]);
+            }
 
             $formAddress  = $validated['billingAddress'] ?? [];
             $billingInput = $validated['billingInformation'] ?? [];
+            $shippingMethod = $validated['shippingMethod'] ?? $request->input('shippingMethod', []);
 
-            $shippingMethod   = $validated['shippingMethod'] ?? $request->input('shippingMethod', []);
-            $shippingMethodId = is_numeric($shippingMethod['method'] ?? null)
-                ? (int) $shippingMethod['method']
-                : $order->shipping_method;
-            $shippingProvider = array_key_exists('provider', $shippingMethod)
-                ? ($shippingMethod['provider'] ?: $order->shipping_provider)
-                : ($shippingMethod['method'] ?? $order->shipping_provider);
             $shippingCost = isset($shippingMethod['cost']) || isset($shippingMethod['total_charge'])
                 ? (float) ($shippingMethod['cost'] ?? $shippingMethod['total_charge'])
                 : (float) $order->shipping_cost;
-            $shippingData = $shippingMethod['data']
-                ?? $billingInput['shippingMethod']
-                ?? $order->billingInformation?->shipping_data
-                ?? $shippingProvider;
 
-            $billing = $order->billingInformation;
-            $billing->update([
-                'first_name'      => $billingInput['firstName'] ?? $billing->first_name,
-                'last_name'       => $billingInput['lastName'] ?? $billing->last_name,
-                'company_name'    => $billingInput['companyName'] ?? $billing->company_name,
-                'email'           => $billingInput['email'] ?? $billing->email,
-                'phone'           => $billingInput['phone'] ?? $billing->phone,
-                'address_line_1'  => $billingInput['addressLine1'] ?? $billing->address_line_1,
-                'address_line_2'  => $billingInput['addressLine2'] ?? $billing->address_line_2,
-                'city'            => $billingInput['city'] ?? $billing->city,
-                'state'           => $billingInput['state'] ?? $billing->state,
-                'zip'             => $billingInput['zip'] ?? $billing->zip,
-                'country'         => $billingInput['country'] ?? $billing->country,
-                'payment_method'  => $validated['paymentMethod']['method']
-                    ?? $billingInput['paymentMethod']
-                    ?? $billing->payment_method,
-                'shipping_method' => $shippingProvider ?? $billingInput['shippingMethod'] ?? $billing->shipping_method,
-                'shipping_data'   => $shippingData,
-            ]);
+            $shippingProvider = $shippingMethod['provider']
+                ?? $shippingMethod['method']
+                ?? $order->shipping_provider;
+
+            $shippingMethodId = is_numeric($shippingMethod['method'] ?? null)
+                ? (int) $shippingMethod['method']
+                : $order->shipping_method;
+
+            if ($request->exists('billingInformation') && $order->billingInformation) {
+                $billing = $order->billingInformation;
+                $billing->update([
+                    'first_name'      => $billingInput['firstName'] ?? $billing->first_name,
+                    'last_name'       => $billingInput['lastName'] ?? $billing->last_name,
+                    'company_name'    => $billingInput['companyName'] ?? $billing->company_name,
+                    'email'           => $billingInput['email'] ?? $billing->email,
+                    'phone'           => $billingInput['phone'] ?? $billing->phone,
+                    'address_line_1'  => $billingInput['addressLine1'] ?? $billing->address_line_1,
+                    'address_line_2'  => $billingInput['addressLine2'] ?? $billing->address_line_2,
+                    'city'            => $billingInput['city'] ?? $billing->city,
+                    'state'           => $billingInput['state'] ?? $billing->state,
+                    'zip'             => $billingInput['zip'] ?? $billing->zip,
+                    'country'         => $billingInput['country'] ?? $billing->country,
+                    'payment_method'  => $validated['paymentMethod']['method']
+                        ?? $billingInput['paymentMethod']
+                        ?? $billing->payment_method,
+                    'shipping_method' => $shippingProvider ?? $billingInput['shippingMethod'] ?? $billing->shipping_method,
+                    'shipping_data'   => $shippingMethod['data'] ?? $billing->shipping_data,
+                ]);
+            }
 
             if (!empty($formAddress)) {
                 $old = $order->billing_address ?? [];
                 if (is_string($old)) {
                     $old = json_decode($old, true) ?? [];
                 }
-
                 $first = $formAddress['firstName'] ?? ($old['firstName'] ?? null);
                 $last  = $formAddress['lastName'] ?? ($old['lastName'] ?? null);
 
@@ -3698,42 +3658,55 @@ class OrderController extends Controller
                 ]);
             }
 
-            $order->items()->delete();
-
-            $total = 0;
             $products = [];
-            foreach ($validated['products'] as $item) {
-                $productId = $item['productId'] ?? $item['product_id'];
-                $product   = Product::where('store_id', $storeId)->findOrFail($productId);
-                $qty       = (int) $item['quantity'];
-                $price     = isset($item['price']) ? (float) $item['price'] : (float) $product->price;
-                $lineTotal = $price * $qty;
+            $itemsTotal = (float) $order->items()->sum(\DB::raw('price * quantity'));
 
-                OrderItem::create([
-                    'order_id'   => $order->id,
-                    'product_id' => $product->id,
-                    'quantity'   => $qty,
-                    'price'      => $price,
-                    'total'      => $lineTotal,
-                    'store_id'   => $storeId,
-                ]);
+            if (!empty($validated['products'])) {
+                $order->items()->delete();
+                $itemsTotal = 0;
 
-                $total += $lineTotal;
-                $products[] = [
-                    'product_id' => $product->id,
-                    'quantity'   => $qty,
-                    'price'      => $price,
-                ];
+                foreach ($validated['products'] as $item) {
+                    $productId = $item['productId'] ?? $item['product_id'];
+                    $product   = Product::where('store_id', $storeId)->findOrFail($productId);
+                    $qty       = (int) $item['quantity'];
+                    $price     = isset($item['price']) ? (float) $item['price'] : (float) $product->price;
+
+                    OrderItem::create([
+                        'order_id'   => $order->id,
+                        'product_id' => $product->id,
+                        'quantity'   => $qty,
+                        'price'      => $price,
+                        'total'      => $price * $qty,
+                        'store_id'   => $storeId,
+                    ]);
+
+                    $itemsTotal += $price * $qty;
+                    $products[] = [
+                        'product_id' => $product->id,
+                        'quantity'   => $qty,
+                        'price'      => $price,
+                    ];
+                }
+            } else {
+                $products = $order->items->map(fn($i) => [
+                    'product_id' => $i->product_id,
+                    'quantity'   => $i->quantity,
+                    'price'      => $i->price,
+                ])->all();
             }
 
             $discount = $request->exists('discountAmount')
                 ? (float) $validated['discountAmount']
                 : (float) ($order->discountAmount ?? 0);
 
+            $staffNotes = $validated['staffNotes'] ?? $validated['staff_notes'] ?? $order->staff_notes;
+
             $order->update([
                 'customer_id'       => $customer->id,
                 'comments'          => $request->exists('comments') ? ($validated['comments'] ?? null) : $order->comments,
-                'staff_notes'       => $request->exists('staffNotes') ? ($validated['staffNotes'] ?? null) : $order->staff_notes,
+                'staff_notes'       => ($request->exists('staffNotes') || $request->exists('staff_notes'))
+                    ? $staffNotes
+                    : $order->staff_notes,
                 'billing_same'      => $request->exists('billingSame') ? $validated['billingSame'] : $order->billing_same,
                 'newsletter'        => $request->exists('newsletter') ? $validated['newsletter'] : $order->newsletter,
                 'device_type'       => $validated['deviceType'] ?? $order->device_type,
@@ -3743,7 +3716,7 @@ class OrderController extends Controller
                 'shipping_cost'     => $shippingCost,
                 'shipping_provider' => $shippingProvider,
                 'shipping_method'   => $shippingMethodId,
-                'total_amount'      => $total + $shippingCost - $discount,
+                'total_amount'      => $itemsTotal + $shippingCost - $discount,
                 'is_draft'          => $isDraft,
                 'isdrafturl'        => $isDraft ? $order->isdrafturl : null,
             ]);
@@ -3759,7 +3732,7 @@ class OrderController extends Controller
                         ->first();
                 }
 
-                if ($cartUser) {
+                if ($cartUser && !empty($validated['products'])) {
                     foreach ($products as $item) {
                         $existingCart = Cart::where('store_id', $storeId)
                             ->where('user_id', $cartUser->id)
@@ -3788,46 +3761,47 @@ class OrderController extends Controller
                     $order->update(['isdrafturl' => $quoteUrl]);
                 }
 
-                $sessionId  = $request->header('X-Session-ID') ?? session()->getId();
-                $formUserId = $cartUser?->id ?? $customer->user_id ?? $user?->id;
+                if ($request->exists('billingAddress') || $request->exists('billingInformation') || $request->exists('shippingMethod')) {
+                    $sessionId  = $request->header('X-Session-ID') ?? session()->getId();
+                    $formUserId = $cartUser?->id ?? $customer->user_id ?? $user?->id;
 
-                CheckoutFormData::create([
-                    'store_id'           => $storeId,
-                    'user_id'            => $formUserId,
-                    'session_id'         => $sessionId,
-                    'billing_form_data'  => $formAddress,
-                    'shipping_form_data' => $billingInput,
-                ]);
+                    CheckoutFormData::create([
+                        'store_id'           => $storeId,
+                        'user_id'            => $formUserId,
+                        'session_id'         => $sessionId,
+                        'billing_form_data'  => $formAddress,
+                        'shipping_form_data' => $billingInput,
+                    ]);
 
-                $cartIds = [];
-                if ($cartUser) {
-                    $cartIds = Cart::where('store_id', $storeId)
-                        ->where('user_id', $cartUser->id)
-                        ->whereIn('product_id', collect($products)->pluck('product_id'))
-                        ->pluck('id')
-                        ->values()
-                        ->all();
+                    $cartIds = [];
+                    if ($cartUser) {
+                        $cartIds = Cart::where('store_id', $storeId)
+                            ->where('user_id', $cartUser->id)
+                            ->whereIn('product_id', collect($products)->pluck('product_id'))
+                            ->pluck('id')
+                            ->values()
+                            ->all();
+                    }
+
+                    CartShippingRate::create([
+                        'store_id'     => $storeId,
+                        'user_id'      => $formUserId,
+                        'session_id'   => $sessionId,
+                        'cart_ids'     => $cartIds,
+                        'country'      => $billingInput['country'] ?? null,
+                        'state'        => $billingInput['state'] ?? null,
+                        'city'         => $billingInput['city'] ?? null,
+                        'zip'          => $billingInput['zip'] ?? null,
+                        'service_type' => $shippingMethod['service_type'] ?? $shippingMethod['method'] ?? 'custom',
+                        'method_type'  => $shippingMethod['method_type'] ?? $shippingMethod['method'] ?? $shippingProvider ?? 'custom',
+                        'total_charge' => (float) ($shippingMethod['total_charge'] ?? $shippingMethod['cost'] ?? $shippingCost),
+                    ]);
                 }
-
-                CartShippingRate::create([
-                    'store_id'     => $storeId,
-                    'user_id'      => $formUserId,
-                    'session_id'   => $sessionId,
-                    'cart_ids'     => $cartIds,
-                    'country'      => $billingInput['country'] ?? null,
-                    'state'        => $billingInput['state'] ?? null,
-                    'city'         => $billingInput['city'] ?? null,
-                    'zip'          => $billingInput['zip'] ?? null,
-                    'service_type' => $shippingMethod['service_type'] ?? $shippingMethod['method'] ?? 'custom',
-                    'method_type'  => $shippingMethod['method_type'] ?? $shippingMethod['method'] ?? $shippingProvider ?? 'custom',
-                    'total_charge' => (float) ($shippingMethod['total_charge'] ?? $shippingMethod['cost'] ?? $shippingCost),
-                ]);
             }
 
             DB::commit();
 
             $order->refresh()->load(['items.product.images', 'items.product.brand', 'billingInformation', 'customer']);
-            $billing->refresh();
 
             return response()->json([
                 'status'  => true,
