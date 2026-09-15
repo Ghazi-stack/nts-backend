@@ -23,11 +23,11 @@ class BlogPostResource extends JsonResource
             'author' => $this->author,
             'tags' => $this->tags,
             'thumbnailImage' => $this->thumbnail_image,
-            'thumbnail' => $this->thumbnail_url, 
+            'thumbnail' => $this->thumbnail_url,
             'postUrl' => $this->post_url,
             'metaDescription' => $this->meta_description,
-            'createdAt' => $this->created_at,
-            'updatedAt' => $this->updated_at,
+            'createdAt' => $this->created_at?->toDateString(),
+            'updatedAt' => $this->updated_at?->toDateString(),
             'isDraft' => $this->is_draft,
         ];
     }

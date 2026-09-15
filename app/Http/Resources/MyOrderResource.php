@@ -14,8 +14,8 @@ class MyOrderResource extends JsonResource
             'order_number' => $this->order_number,
             'status' => $this->status,
             'total_amount' => $this->total_amount,
-            'created_at' => $this->created_at?->toDateTimeString(),
-            'updated_at' => $this->updated_at?->toDateTimeString(),
+            'createdAt' => $this->created_at?->toDateString(),
+            'updatedAt' => $this->updated_at?->toDateString(),
 
             // ✅ RETURN REQUEST OBJECT
             'returnRequest' => $this->returnRequest ? [

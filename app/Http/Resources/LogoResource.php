@@ -15,9 +15,9 @@ class LogoResource extends JsonResource
             'logoUrl' => $this->logo_url,
             'faviconUrl' => $this->favicon_url,
             'logoSize' => $this->logo_size,
-            'dimensions' => $this->dimensions ?? ['width'=>null,'height'=>null],
-            'createdAt' => $this->created_at,
-            'updatedAt' => $this->updated_at,
+            'dimensions' => $this->dimensions ?? ['width' => null, 'height' => null],
+            'createdAt' => $this->created_at?->toDateString(),
+            'updatedAt' => $this->updated_at?->toDateString(),
         ];
     }
 }

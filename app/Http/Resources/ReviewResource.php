@@ -29,7 +29,8 @@ class ReviewResource extends JsonResource
             'comment'    => $this->comment,
             'approved'   => $this->approved,
             'store_id'   => $this->store_id,
-            'created_at' => $this->created_at->toDateTimeString(),
+            'createdAt' => $this->created_at?->toDateString(),
+            'updatedAt' => $this->updated_at?->toDateString(),
         ];
     }
 }

@@ -20,8 +20,8 @@ class VisitSiteResource extends JsonResource
             'visit_date' => $this->visit_date,
             'count' => $this->count,
             'store_id' => $this->store_id,
-            'created_at' => $this->created_at ? $this->created_at->toDateTimeString() : null,
-            'updated_at' => $this->updated_at ? $this->updated_at->toDateTimeString() : null,
+            'created_at' => $this->created_at ? $this->created_at->toDateString() : null,
+            'updated_at' => $this->updated_at ? $this->updated_at->toDateString() : null,
 
             // Optional: Include store info if loaded
             'store' => new StoreResource($this->whenLoaded('store')),

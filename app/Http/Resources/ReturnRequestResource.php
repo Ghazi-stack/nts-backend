@@ -24,7 +24,8 @@ class ReturnRequestResource extends JsonResource
             'comments'      => $this->comments,
             'status'        => $this->status,
             'is_submit'     => (bool) $this->is_submit,
-            'createdAt'     => $this->created_at?->format('Y-m-d H:i:s'),
+            'createdAt' => $this->created_at?->toDateString(),
+            'updatedAt' => $this->updated_at?->toDateString(),
 
             'product' => $this->order
                 ? $this->order->items->map(function ($item) {

@@ -18,7 +18,8 @@ class ContactRequestResource extends JsonResource
             'companyName'   => $this->company_name,
             'rmaNumber'     => $this->rma_number,
             'comments'      => $this->comments,
-            'createdAt'     => $this->created_at?->format('d-m-Y H:i:s'),
+            'createdAt' => $this->created_at?->toDateString(),
+            'updatedAt' => $this->updated_at?->toDateString(),
         ];
     }
 }

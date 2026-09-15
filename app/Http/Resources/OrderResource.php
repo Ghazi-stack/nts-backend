@@ -43,10 +43,10 @@ class OrderResource extends JsonResource
             'trackingNumber' => $this->shipment?->tracking_number ?? $this->tracking_number,
             'carrierCode'    => $this->shipment?->tracking_carrie ?? $this->tracking_carrier_code,
             'carrierName'    => $this->shipment?->tracking_carrie ?? $this->tracking_carrier_name,
-            'shippedAt'      => $this->shipment?->date_shipped
-                ? (optional($this->shipment->date_shipped)->toDateTimeString()
-                    ?? $this->shipment->date_shipped)
-                : $this->shipped_at?->toDateTimeString(),
+            'shippedAt' => $this->shipment?->date_shipped
+                ? (optional($this->shipment->date_shipped)->toDateString()
+                    ?? \Carbon\Carbon::parse($this->shipment->date_shipped)->toDateString())
+                : $this->shipped_at?->toDateString(),
 
             'payment' => $this->whenLoaded('payment', function () {
                 return [
@@ -197,8 +197,9 @@ class OrderResource extends JsonResource
 
             'shippingDestinations' => ShippingDestinationResource::collection($this->whenLoaded('shippingDestinations')),
 
-            'createdAt' => $this->created_at?->toDateTimeString(),
-            'updatedAt' => $this->updated_at?->toDateTimeString(),
+
+             'createdAt' => $this->created_at?->toDateString(),
+            'updatedAt' => $this->updated_at?->toDateString(),
         ];
     }
 

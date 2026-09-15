@@ -19,8 +19,8 @@ class StoreResource extends JsonResource
             'user_id' => $this->user_id,
             'name' => $this->name,
             'baseUrl' => $this->base_url,
-            'createdAt' => $this->created_at,
-            'updatedAt' => $this->updated_at,
+            'createdAt' => $this->created_at?->toDateString(),
+            'updatedAt' => $this->updated_at?->toDateString(),
         ];
     }
 }

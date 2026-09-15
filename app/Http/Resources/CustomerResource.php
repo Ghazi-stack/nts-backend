@@ -38,8 +38,8 @@ class CustomerResource extends JsonResource
             'targeting'           => $this->targeting,
             'notes'               => $this->notes,
             'userType'            => $this->user_type,
-            'createdAt'           => $this->created_at,
-            'updatedAt'           => $this->updated_at,
+            'createdAt' => $this->created_at?->toDateString(),
+            'updatedAt' => $this->updated_at?->toDateString(),
 
             'totalOrders'         => (int) (
                 $this->total_orders

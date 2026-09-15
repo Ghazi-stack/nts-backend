@@ -4153,7 +4153,7 @@ class OrderController extends Controller
                     'order_number'                 => '',
                     'status'                       => 'Awaiting Payment',
                     'is_draft'                     => $isDraft,
-                    'isdrafturl'                   => $isDraft ? 'https://staging.sparemicro.com/cart?isDraft=true' : null,
+                    'isdrafturl'                   => null,
                     'device_type'                  => $validated['deviceType'] ?? null,
                     'channel'                      => 'admin-panel',
                     'ip_address'                   => $validated['ipAddress'] ?? null,
@@ -4220,26 +4220,103 @@ class OrderController extends Controller
                     }
                 }
 
-                if ($isDraft && !empty($storeUser?->id)) {
-                    foreach ($products as $item) {
-                        $existingCart = Cart::where('store_id', $storeId)
-                            ->where('user_id', $storeUser->id)
-                            ->where('product_id', $item['product_id'])
-                            ->first();
+                if ($isDraft) {
+                    if (!empty($storeUser?->id)) {
+                        foreach ($products as $item) {
+                            $existingCart = Cart::where('store_id', $storeId)
+                                ->where('user_id', $storeUser->id)
+                                ->where('product_id', $item['product_id'])
+                                ->first();
 
-                        if ($existingCart) {
-                            $existingCart->update([
-                                'quantity' => $existingCart->quantity + $item['quantity'],
-                            ]);
-                        } else {
-                            Cart::create([
-                                'store_id'   => $storeId,
-                                'user_id'    => $storeUser->id,
-                                'product_id' => $item['product_id'],
-                                'quantity'   => $item['quantity'],
-                            ]);
+                            if ($existingCart) {
+                                $existingCart->update([
+                                    'quantity' => $existingCart->quantity + $item['quantity'],
+                                ]);
+                            } else {
+                                Cart::create([
+                                    'store_id'   => $storeId,
+                                    'user_id'    => $storeUser->id,
+                                    'product_id' => $item['product_id'],
+                                    'quantity'   => $item['quantity'],
+                                ]);
+                            }
                         }
                     }
+
+                    $quoteUrl = $this->draftQuote->makeDraftQuoteUrl(
+                        $order->fresh('customer'),
+                        $storeUser ?? null,
+                        $storeId
+                    );
+
+                    $order->update([
+                        'isdrafturl' => $quoteUrl,
+                    ]);
+
+                    $sessionId  = $request->header('X-Session-ID') ?? session()->getId();
+                    $formUserId = $storeUser?->id ?? $customer->user_id ?? $user?->id;
+
+                    CheckoutFormData::create([
+                        'store_id'           => $storeId,
+                        'user_id'            => $formUserId,
+                        'session_id'         => $sessionId,
+                        'billing_form_data'  => [
+                            'firstName'    => $formAddress['firstName'] ?? $validated['firstName'] ?? null,
+                            'lastName'     => $formAddress['lastName'] ?? $validated['lastName'] ?? null,
+                            'name'         => $formAddress['name'] ?? null,
+                            'email'        => $formAddress['email'] ?? $validated['email'] ?? null,
+                            'phone'        => $formAddress['phone'] ?? $validated['phone'] ?? null,
+                            'companyName'  => $formAddress['companyName'] ?? $validated['companyName'] ?? null,
+                            'addressLine1' => $formAddress['addressLine1'] ?? null,
+                            'addressLine2' => $formAddress['addressLine2'] ?? null,
+                            'city'         => $formAddress['city'] ?? null,
+                            'state'        => $formAddress['state'] ?? null,
+                            'zip'          => $formAddress['zip'] ?? null,
+                            'country'      => $formAddress['country'] ?? null,
+                        ],
+                        'shipping_form_data' => [
+                            'firstName'    => $shippingAddress['firstName'] ?? $billingInput['firstName'] ?? $validated['firstName'] ?? null,
+                            'lastName'     => $shippingAddress['lastName'] ?? $billingInput['lastName'] ?? $validated['lastName'] ?? null,
+                            'email'        => $shippingAddress['email'] ?? $billingInput['email'] ?? $validated['email'] ?? null,
+                            'phone'        => $shippingAddress['phone'] ?? $billingInput['phone'] ?? $validated['phone'] ?? null,
+                            'companyName'  => $shippingAddress['companyName'] ?? $billingInput['companyName'] ?? $validated['companyName'] ?? null,
+                            'addressLine1' => $shippingAddress['addressLine1'] ?? $billingInput['addressLine1'] ?? null,
+                            'addressLine2' => $shippingAddress['addressLine2'] ?? $billingInput['addressLine2'] ?? null,
+                            'city'         => $shippingAddress['city'] ?? $billingInput['city'] ?? null,
+                            'state'        => $shippingAddress['state'] ?? $billingInput['state'] ?? null,
+                            'zip'          => $shippingAddress['zip'] ?? $billingInput['zip'] ?? null,
+                            'country'      => $shippingAddress['country'] ?? $billingInput['country'] ?? null,
+                        ],
+                    ]);
+
+                    $cartIds = [];
+                    if (!empty($storeUser?->id)) {
+                        $cartIds = Cart::where('store_id', $storeId)
+                            ->where('user_id', $storeUser->id)
+                            ->whereIn('product_id', collect($products)->pluck('product_id'))
+                            ->pluck('id')
+                            ->values()
+                            ->all();
+                    }
+
+                    CartShippingRate::create([
+                        'store_id'     => $storeId,
+                        'user_id'      => $formUserId,
+                        'session_id'   => $sessionId,
+                        'cart_ids'     => $cartIds,
+                        'country'      => $shippingAddress['country'] ?? $billingInput['country'] ?? null,
+                        'state'        => $shippingAddress['state'] ?? $billingInput['state'] ?? null,
+                        'city'         => $shippingAddress['city'] ?? $billingInput['city'] ?? null,
+                        'zip'          => $shippingAddress['zip'] ?? $billingInput['zip'] ?? null,
+                        'service_type' => $shippingMethod['service_type'] ?? $shippingMethod['method'] ?? 'custom',
+                        'method_type'  => $shippingMethod['method_type'] ?? $shippingMethod['method'] ?? $shippingProvider ?? 'custom',
+                        'total_charge' => (float) (
+                            $shippingMethod['total_charge']
+                            ?? $shippingMethod['cost']
+                            ?? $shippingCost
+                            ?? 0
+                        ),
+                    ]);
                 }
 
                 if ($intent && ($intent->status ?? null) === 'requires_capture') {
@@ -4310,6 +4387,9 @@ class OrderController extends Controller
                 $orders[] = $order;
             }
 
+            foreach ($orders as $ord) {
+                $ord->refresh();
+            }
             DB::commit();
 
             if ($requiresAction) {

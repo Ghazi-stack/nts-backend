@@ -37,8 +37,8 @@ class BillingInformationResource extends JsonResource
             'paymentMethod'   => $this->payment_method,
             'shippingMethod'  => $this->shipping_method,
             'shippingData'    => $shippingData,
-            'createdAt'       => $this->created_at,
-            'updatedAt'       => $this->updated_at,
+            'createdAt' => $this->created_at?->toDateString(),
+            'updatedAt' => $this->updated_at?->toDateString(),
         ];
     }
 }

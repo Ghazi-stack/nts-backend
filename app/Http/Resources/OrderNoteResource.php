@@ -26,7 +26,8 @@ class OrderNoteResource extends JsonResource
                     'name' => trim(optional($this->order)->first_name . ' ' . optional($this->order)->last_name),
                     'email' => optional($this->order)->email,
                 ],
-            'created_at' => $this->created_at->toDateTimeString(),
+             'createdAt' => $this->created_at?->toDateString(),
+            'updatedAt' => $this->updated_at?->toDateString(),
         ];
     }
 }

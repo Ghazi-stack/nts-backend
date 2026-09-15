@@ -90,8 +90,8 @@ class ProductResource extends JsonResource
                 return [trim($key, "\"") => is_string($value) ? trim($value, "\"") : $value];
             }),
             'storeId' => $this->store_id,
-            'createdAt' => $this->created_at,
-            'updatedAt' => $this->updated_at,
+             'createdAt' => $this->created_at?->toDateString(),
+            'updatedAt' => $this->updated_at?->toDateString(),
             'image' => ProductImageResource::collection($this->whenLoaded('images')),
             'description' => optional($this->content)->description,
             'warranty' => optional($this->content)->warranty,
