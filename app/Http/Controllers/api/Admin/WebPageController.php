@@ -396,8 +396,10 @@ class WebPageController extends Controller
             ]);
 
             $page->update([
-                'show_in_navigation' => $validated['showInNavigation'],
-                'is_page_visible'    => array_key_exists('isPageVisible', $validated)
+                'show_in_navigation' => array_key_exists('showInNavigation', $validated)
+                    ? $validated['showInNavigation']
+                    : $page->show_in_navigation,
+                'is_page_visible' => array_key_exists('isPageVisible', $validated)
                     ? $validated['isPageVisible']
                     : $page->is_page_visible,
             ]);
