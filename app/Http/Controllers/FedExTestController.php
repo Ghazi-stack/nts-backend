@@ -18,10 +18,9 @@ class FedExTestController extends Controller
         $validated = $request->validate([
             'client_id' => 'sometimes|nullable|string',
             'client_secret' => 'sometimes|nullable|string',
-
-            'service_type' => 'required|string',
             'weight' => 'required|numeric|min:0.01',
             'weight_unit' => 'sometimes|string|in:LB,KG',
+            'service_type' => 'sometimes|nullable|string',
 
             'origin.postal_code' => 'required|string',
             'origin.country_code' => 'required|string|size:2',
@@ -253,9 +252,9 @@ class FedExTestController extends Controller
             isset($validated['package_length']) &&
             isset($validated['package_width']) &&
             isset($validated['package_height']) &&
-            $validated['package_length'] !== null &&
-            $validated['package_width'] !== null &&
-            $validated['package_height'] !== null
+            (float) $validated['package_length'] > 0 &&
+            (float) $validated['package_width'] > 0 &&
+            (float) $validated['package_height'] > 0
         ) {
             $package['dimensions'] = [
                 'length' => (string) $validated['package_length'],
@@ -272,21 +271,12 @@ class FedExTestController extends Controller
 
             'requestedShipment' => [
                 'shipper' => [
-                    'address' => [
-                        'postalCode' => '91723',
-                        'countryCode' => 'US',
-                    ],
+                    'address' => $shipperAddress,
                 ],
 
                 'recipient' => [
-                    'address' => [
-                        'postalCode' => '90001',
-                        'countryCode' => 'US',
-                        'residential' => 'true',
-                    ],
+                    'address' => $recipientAddress,
                 ],
-
-                'serviceType' => 'GROUND_HOME_DELIVERY',
 
                 'pickupType' => 'DROPOFF_AT_FEDEX_LOCATION',
 
@@ -295,15 +285,24 @@ class FedExTestController extends Controller
                 ],
 
                 'requestedPackageLineItems' => [
-                    [
-                        'weight' => [
-                            'units' => 'LB',
-                            'value' => '8',
-                        ],
-                    ],
+                    $package,
                 ],
             ],
         ];
+
+        /*
+         * serviceType is intentionally optional.
+         *
+         * Leave service_type out of the Postman request to test FedEx
+         * rate-shopping / multiple-service responses.
+         *
+         * If service_type is supplied, it is added for a single-service
+         * diagnostic test such as GROUND_HOME_DELIVERY.
+         */
+        if (!empty($validated['service_type'])) {
+            $payload['requestedShipment']['serviceType'] =
+                strtoupper(trim($validated['service_type']));
+        }
 
         Log::info('FedEx rate request payload prepared', [
             'test_id' => $testId,
@@ -321,9 +320,9 @@ class FedExTestController extends Controller
         Log::info('FedEx rate request starting', [
             'test_id' => $testId,
             'url' => $rateUrl,
-            'service_type' => $validated['service_type'],
             'weight' => $validated['weight'],
             'weight_unit' => $weightUnit,
+            'service_type' => $validated['service_type'] ?? null,
         ]);
 
         $rateStarted = microtime(true);
