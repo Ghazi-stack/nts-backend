@@ -377,7 +377,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
     // ===================== STOREFRONT — WEB PAGES =====================
     Route::prefix('webpages')->middleware('permission:web_pages')->controller(WebPageController::class)->group(function () {
-        Route::get('/web-pages', 'index');
+        Route::get('/dashboard-web-pages', 'dashboardIndex');
         Route::get('/single-page/{id}', 'show');
         Route::post('/create-page', 'store');
         Route::put('update/{id}', 'update');
