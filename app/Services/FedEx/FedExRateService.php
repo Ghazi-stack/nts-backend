@@ -53,8 +53,10 @@ class FedExRateService
         }
 
         /*
-         * enabled_services can be stored as JSON and should already
-         * be cast by the model. Handle JSON/string defensively too.
+         * enabled_services is used for filtering the services returned by
+         * FedEx. We do NOT make one API request per enabled service.
+         *
+         * One Rate API request can return multiple applicable services.
          */
         $enabledServices = $config->enabled_services ?? [];
 
@@ -72,9 +74,6 @@ class FedExRateService
             )
         );
 
-        /*
-         * If no services are configured, there is nothing to request.
-         */
         if (empty($enabledServices)) {
             Log::warning('No FedEx services are enabled', [
                 'config_id' => $config->id,
@@ -87,180 +86,140 @@ class FedExRateService
             ];
         }
 
-        $allRates = [];
-        $errors   = [];
+        try {
+            /*
+             * IMPORTANT:
+             * Do not send serviceType here.
+             *
+             * FedEx will return the applicable services in
+             * output.rateReplyDetails. parseRateResponse() then filters
+             * those results against enabled_services.
+             */
+            $payload = $this->buildRateRequestPayload(
+                $config,
+                $shipmentData
+            );
 
-        foreach ($enabledServices as $serviceType) {
-            try {
-                $payload = $this->buildRateRequestPayload(
-                    $config,
-                    $shipmentData,
-                    $serviceType
-                );
+            $logPayload = $payload;
 
-                /*
-                 * Log the exact payload being sent.
-                 * Account credentials are intentionally not logged.
-                 */
-                $logPayload = $payload;
-
-                if (isset($logPayload['accountNumber']['value'])) {
-                    $logPayload['accountNumber']['value'] = '***';
-                }
-
-                Log::info('FedEx Rate API request', [
-                    'config_id'  => $config->id,
-                    'service'    => $serviceType,
-                    'rate_type'  => $rateType,
-                    'payload'    => $logPayload,
-                ]);
-
-                $url = rtrim(
-                    (string) $config->api_base_url,
-                    '/'
-                ) . '/rate/v1/rates/quotes';
-
-                $response = Http::withToken($token)
-                    ->acceptJson()
-                    ->withHeaders([
-                        'Content-Type'             => 'application/json',
-                        'X-locale'                 => 'en_US',
-                        'x-customer-transaction-id' => 'rate_' . uniqid('', true),
-                    ])
-                    ->timeout(30)
-                    ->post($url, $payload);
-
-                $responseData = $response->json();
-
-                Log::info('FedEx Rate API response', [
-                    'config_id' => $config->id,
-                    'service'   => $serviceType,
-                    'status'    => $response->status(),
-                    'response'  => $responseData,
-                ]);
-
-                /*
-                 * Keep every quote request in the existing quote log.
-                 */
-                $this->logQuote(
-                    $config,
-                    $shipmentData,
-                    $responseData,
-                    $response->successful(),
-                    $response->successful()
-                        ? null
-                        : $this->extractErrorMessage($responseData)
-                );
-
-                if (
-                    !$response->successful() ||
-                    !isset($responseData['output']['rateReplyDetails'])
-                ) {
-                    $errorMessage = $this->extractErrorMessage($responseData);
-
-                    $errors[] = [
-                        'service' => $serviceType,
-                        'error'   => $errorMessage,
-                    ];
-
-                    Log::error('FedEx Rate API error', [
-                        'config_id' => $config->id,
-                        'service'   => $serviceType,
-                        'http_status' => $response->status(),
-                        'error'     => $errorMessage,
-                        'response'  => $responseData,
-                    ]);
-
-                    continue;
-                }
-
-                /*
-                 * Because this request contains serviceType, FedEx should
-                 * normally return one matching service. parseRateResponse()
-                 * still handles the response generically.
-                 */
-                $rates = $this->parseRateResponse(
-                    $responseData,
-                    $config
-                );
-
-                foreach ($rates as $rate) {
-                    $allRates[] = $rate;
-                }
-
-            } catch (\Throwable $e) {
-                $errors[] = [
-                    'service' => $serviceType,
-                    'error'   => $e->getMessage(),
-                ];
-
-                Log::error('FedEx Rate API exception', [
-                    'config_id' => $config->id,
-                    'service'   => $serviceType,
-                    'error'     => $e->getMessage(),
-                    'trace'     => $e->getTraceAsString(),
-                ]);
-
-                $this->logQuote(
-                    $config,
-                    $shipmentData,
-                    null,
-                    false,
-                    $e->getMessage()
-                );
+            if (isset($logPayload['accountNumber']['value'])) {
+                $logPayload['accountNumber']['value'] = '***';
             }
-        }
 
-        /*
-         * Sort cheapest → most expensive, matching the existing behavior.
-         */
-        usort(
-            $allRates,
-            static fn ($a, $b) =>
-                ((float) ($a['total_charge'] ?? 0))
-                <=>
-                ((float) ($b['total_charge'] ?? 0))
-        );
+            Log::info('FedEx Rate API request', [
+                'config_id' => $config->id,
+                'rate_type' => $rateType,
+                'enabled_services' => $enabledServices,
+                'payload' => $logPayload,
+            ]);
 
-        /*
-         * If at least one enabled service succeeded, the overall FedEx
-         * operation is considered successful.
-         *
-         * This is important because one FedEx service can fail while
-         * another service still returns a valid quote.
-         */
-        if (!empty($allRates)) {
+            $url = rtrim(
+                (string) $config->api_base_url,
+                '/'
+            ) . '/rate/v1/rates/quotes';
+
+            $response = Http::withToken($token)
+                ->acceptJson()
+                ->withHeaders([
+                    'Content-Type'              => 'application/json',
+                    'X-locale'                  => 'en_US',
+                    'x-customer-transaction-id' => 'rate_' . uniqid('', true),
+                ])
+                ->timeout(30)
+                ->connectTimeout(15)
+                ->post($url, $payload);
+
+            $responseData = $response->json();
+
+            Log::info('FedEx Rate API response', [
+                'config_id' => $config->id,
+                'status' => $response->status(),
+                'response' => $responseData,
+            ]);
+
+            $successful = $response->successful()
+                && isset($responseData['output']['rateReplyDetails']);
+
+            $this->logQuote(
+                $config,
+                $shipmentData,
+                $responseData,
+                $successful,
+                $successful
+                    ? null
+                    : $this->extractErrorMessage($responseData)
+            );
+
+            if (!$successful) {
+                $errorMessage = $this->extractErrorMessage($responseData);
+
+                Log::error('FedEx Rate API error', [
+                    'config_id' => $config->id,
+                    'http_status' => $response->status(),
+                    'error' => $errorMessage,
+                    'response' => $responseData,
+                ]);
+
+                return [
+                    'success' => false,
+                    'error'   => $errorMessage,
+                    'rates'   => [],
+                ];
+            }
+
+            $rates = $this->parseRateResponse(
+                $responseData,
+                $config
+            );
+
+            if (empty($rates)) {
+                Log::warning('FedEx returned no enabled shipping rates', [
+                    'config_id' => $config->id,
+                    'enabled_services' => $enabledServices,
+                ]);
+
+                return [
+                    'success' => false,
+                    'error'   => 'FedEx did not return any enabled shipping rates.',
+                    'rates'   => [],
+                ];
+            }
+
+            usort(
+                $rates,
+                static fn ($a, $b) =>
+                    ((float) ($a['total_charge'] ?? 0))
+                    <=>
+                    ((float) ($b['total_charge'] ?? 0))
+            );
+
             return [
                 'success' => true,
                 'error'   => null,
-                'rates'   => $allRates,
+                'rates'   => $rates,
+            ];
+
+        } catch (\Throwable $e) {
+            Log::error('FedEx Rate API exception', [
+                'config_id' => $config->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            $this->logQuote(
+                $config,
+                $shipmentData,
+                null,
+                false,
+                $e->getMessage()
+            );
+
+            return [
+                'success' => false,
+                'error'   => $e->getMessage(),
+                'rates'   => [],
             ];
         }
-
-        /*
-         * Nothing returned successfully.
-         */
-        $errorMessage = 'FedEx did not return any shipping rates.';
-
-        if (!empty($errors)) {
-            $errorMessage = implode(
-                ' | ',
-                array_map(
-                    static function ($item) {
-                        return ($item['service'] ?? 'UNKNOWN')
-                            . ': '
-                            . ($item['error'] ?? 'Unknown error');
-                    },
-                    $errors
-                )
-            );
-        }
-
-        return [
-            'success' => false,
-            'error'   => $errorMessage,
-            'rates'   => [],
-        ];
     }
 
     /**
@@ -272,7 +231,7 @@ class FedExRateService
     protected function buildRateRequestPayload(
         FedexConfiguration $config,
         array $data,
-        string $serviceType
+        ?string $serviceType = null
     ): array {
         $pickupType = $this->mapPickupType(
             $config->dropoff_type
@@ -347,8 +306,6 @@ class FedExRateService
                     ],
                 ],
 
-                'serviceType' => $serviceType,
-
                 'pickupType' => $pickupType,
 
                 'rateRequestType' => [
@@ -372,6 +329,17 @@ class FedExRateService
                 ],
             ],
         ];
+
+        /*
+         * serviceType is optional. Normal checkout requests omit it so
+         * FedEx can return all applicable services in one response.
+         * It is only added when a caller explicitly requests one service.
+         */
+        if ($serviceType !== null && trim($serviceType) !== '') {
+            $payload['requestedShipment']['serviceType'] = strtoupper(
+                trim($serviceType)
+            );
+        }
 
         return $payload;
     }
