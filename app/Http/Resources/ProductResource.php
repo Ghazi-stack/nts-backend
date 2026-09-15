@@ -100,10 +100,10 @@ class ProductResource extends JsonResource
             'pageTitle' => optional($this->seo)->page_title,
             'productUrl' => optional($this->seo)->product_url,
             'metaDescription' => optional($this->seo)->meta_description,
-            'mpn' => optional($this->identifiers)->mpn,
-            'upc' => optional($this->identifiers)->upc,
-            'gtin' => optional($this->identifiers)->gtin,
-            'bpn' => optional($this->identifiers)->bpn,
+            // 'mpn' => optional($this->identifiers)->mpn,
+            // 'upc' => optional($this->identifiers)->upc,
+            // 'gtin' => optional($this->identifiers)->gtin,
+            // 'bpn' => optional($this->identifiers)->bpn,
             'categoryHierarchy' => $this->whenLoaded('categories', function () {
                 $primaryCategory = $this->categories->first();
                 return $primaryCategory ? $this->buildCategoryHierarchy($primaryCategory) : null;
