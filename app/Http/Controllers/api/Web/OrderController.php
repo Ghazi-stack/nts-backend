@@ -36,6 +36,7 @@ use App\Mail\OrderStatusUpdatedMail;
 use App\Models\SavedAddress;
 use App\Http\Resources\ReturnRequestResource;
 use App\Mail\OrderPlacedMail;
+use App\Models\CheckoutFormData;
 use App\Models\CouponCode;
 use App\Models\CouponUsage;
 use App\Models\Logo;
@@ -46,9 +47,12 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Stripe\Stripe;
 use Stripe\PaymentIntent;
+use App\Services\DraftQuoteService;
 
 class OrderController extends Controller
 {
+
+    public function __construct(protected DraftQuoteService $draftQuote) {}
     public function index(Request $request)
     {
         try {
@@ -817,6 +821,7 @@ class OrderController extends Controller
         try {
 
             $validated = $request->validate([
+                'orderId'        => 'nullable|integer|exists:orders,id',
                 'userType'       => 'nullable|string|max:100',
                 'deviceType'     => 'nullable|string|max:1000',
                 'firstName'      => 'required_if:isMultiAddress,false|string|max:255',
@@ -846,7 +851,7 @@ class OrderController extends Controller
 
                 'ipAddress'                  => 'nullable|string|max:45',
                 'isSaveAddressForShipping'   => 'nullable|boolean',
-                'isSaveAddressForBilling'   => 'nullable|boolean',
+                'isSaveAddressForBilling'    => 'nullable|boolean',
                 'billingSame'                => 'nullable|boolean',
 
                 'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
@@ -880,6 +885,20 @@ class OrderController extends Controller
             }
 
             $orderEmail = strtolower(trim($validated['email']));
+
+            $existingDraft = null;
+            if (!empty($validated['orderId'])) {
+                $existingDraft = Order::where('id', $validated['orderId'])
+                    ->where('store_id', $storeId)
+                    ->first();
+
+                if (!$existingDraft) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Order not found.',
+                    ], 404);
+                }
+            }
 
             // ===================== IMPROVED PAYMENT CHECK =====================
             $existingPayment = Payment::where('stripe_session_id', $validated['paymentIntentId'])->first();
@@ -964,21 +983,9 @@ class OrderController extends Controller
                 $couponUsageQuery = CouponUsage::where('store_id', $storeId)
                     ->where('coupon_id', $coupon->id);
 
-                /*
-    |--------------------------------------------------------------------------
-    | Logged-in User
-    |--------------------------------------------------------------------------
-    */
                 if ($user) {
-
                     $couponUsageQuery->where('user_id', $user->id);
-                }
-                /*
-    |--------------------------------------------------------------------------
-    | Guest User
-    |--------------------------------------------------------------------------
-    */ else {
-
+                } else {
                     $sessionId = $request->header('X-Session-ID');
 
                     if (!$sessionId) {
@@ -991,11 +998,6 @@ class OrderController extends Controller
                     $couponUsageQuery->where('session_id', $sessionId);
                 }
 
-                /*
-    |--------------------------------------------------------------------------
-    | Already Used — user/session OR same email
-    |--------------------------------------------------------------------------
-    */
                 $alreadyUsedByUserOrSession = $couponUsageQuery->exists();
 
                 $alreadyUsedByEmail = CouponUsage::where('store_id', $storeId)
@@ -1004,7 +1006,6 @@ class OrderController extends Controller
                     ->exists();
 
                 if ($alreadyUsedByUserOrSession || $alreadyUsedByEmail) {
-
                     return response()->json([
                         'status' => false,
                         'message' => 'You have already used this coupon.'
@@ -1049,8 +1050,13 @@ class OrderController extends Controller
             $commonOrderFields = [
                 'ip_address'                    => $validated['ipAddress'] ?? $request->ip(),
                 'is_save_address_for_shipping'  => $validated['isSaveAddressForShipping'] ?? false,
-                'is_save_address_for_billing'  => $validated['isSaveAddressForBilling'] ?? false,
+                'is_save_address_for_billing'   => $validated['isSaveAddressForBilling'] ?? false,
                 'billing_same'                  => $validated['billingSame'] ?? true,
+            ];
+
+            $draftConvertFields = [
+                'is_draft'   => 0,
+                'isdrafturl' => null,
             ];
 
             if (!$isMulti) {
@@ -1081,11 +1087,10 @@ class OrderController extends Controller
                     'shipping_data'   => $validated['shippingData'] ?? null,
                 ]);
 
-                $order = Order::create(array_merge([
+                $orderPayload = array_merge([
                     'store_id'               => $storeId,
-                    'user_id'                => $user?->id ?? null,
+                    'user_id'                => $user?->id ?? $existingDraft?->user_id,
                     'customer_id'            => $customer->id,
-                    'order_number'           => '',
                     'billing_information_id' => $billing->id,
                     'status'                 => 'Awaiting Payment',
                     'shipping_cost'          => $validated['shippingCost'],
@@ -1097,11 +1102,18 @@ class OrderController extends Controller
                     'coupon_code'            => $validated['couponCode'] ?? null,
                     'is_multi_address'       => false,
                     'newsletter'             => $validated['newsletter'] ?? false,
-                ], $commonOrderFields));
+                ], $commonOrderFields);
 
-                $order->update([
-                    'order_number' => $order->id,
-                ]);
+                if ($existingDraft) {
+                    $existingDraft->items()->delete();
+                    $existingDraft->update(array_merge($orderPayload, $draftConvertFields));
+                    $order = $existingDraft->fresh();
+                } else {
+                    $order = Order::create(array_merge($orderPayload, [
+                        'order_number' => '',
+                    ]));
+                    $order->update(['order_number' => $order->id]);
+                }
 
                 foreach ($validated['products'] as $item) {
                     $product = Product::find($item['product_id']);
@@ -1120,6 +1132,8 @@ class OrderController extends Controller
                 $orders[] = $order;
                 $totalOrderAmount = $totalAmount;
             } else {
+                $destIndex = 0;
+
                 foreach ($validated['destinations'] as $dest) {
                     $cartTotal = 0;
                     foreach ($dest['products'] as $item) {
@@ -1148,11 +1162,10 @@ class OrderController extends Controller
                         'shipping_data'   => $dest['shippingData'] ?? null,
                     ]);
 
-                    $order = Order::create(array_merge([
+                    $orderPayload = array_merge([
                         'store_id'               => $storeId,
-                        'user_id'                => $user?->id ?? null,
+                        'user_id'                => $user?->id ?? $existingDraft?->user_id,
                         'customer_id'            => $customer->id,
-                        'order_number'           => '',
                         'billing_information_id' => $billing->id,
                         'status'                 => 'Awaiting Payment',
                         'shipping_cost'          => $dest['shippingCost'],
@@ -1164,11 +1177,18 @@ class OrderController extends Controller
                         'coupon_code'            => $validated['couponCode'] ?? null,
                         'is_multi_address'       => true,
                         'newsletter'             => $validated['newsletter'] ?? false,
-                    ], $commonOrderFields));
+                    ], $commonOrderFields);
 
-                    $order->update([
-                        'order_number' => $order->id,
-                    ]);
+                    if ($existingDraft && $destIndex === 0) {
+                        $existingDraft->items()->delete();
+                        $existingDraft->update(array_merge($orderPayload, $draftConvertFields));
+                        $order = $existingDraft->fresh();
+                    } else {
+                        $order = Order::create(array_merge($orderPayload, [
+                            'order_number' => '',
+                        ]));
+                        $order->update(['order_number' => $order->id]);
+                    }
 
                     foreach ($dest['products'] as $item) {
                         $product = Product::find($item['product_id']);
@@ -1186,6 +1206,7 @@ class OrderController extends Controller
 
                     $orders[] = $order;
                     $totalOrderAmount += $totalAmount;
+                    $destIndex++;
                 }
             }
 
@@ -1374,7 +1395,6 @@ class OrderController extends Controller
             ], 500);
         }
     }
-
 
 
     // User ke saved addresses get karo
@@ -2772,7 +2792,7 @@ class OrderController extends Controller
                 'order_number'                 => '',
                 'status'                       => 'Awaiting Payment',
                 'is_draft'                     => $isDraft,
-                'isdrafturl'                   => $isDraft ? 'https://staging.sparemicro.com/cart' : null,
+                'isdrafturl'                   => null,
                 'device_type'                  => $validated['deviceType'] ?? 'desktop',
                 'channel'                      => 'admin-panel',
                 'ip_address'                   => $validated['ipAddress'] ?? null,
@@ -2870,6 +2890,72 @@ class OrderController extends Controller
                         }
                     }
                 }
+
+                $quoteUrl = $this->draftQuote->makeDraftQuoteUrl(
+                    $order->fresh('customer'),
+                    $cartUser ?? null,
+                    $storeId
+                );
+
+                $order->update([
+                    'isdrafturl' => $quoteUrl,
+                ]);
+
+                $sessionId = $request->header('X-Session-ID') ?? session()->getId();
+
+                $billingFormData = [
+                    'firstName'    => $formAddress['firstName'] ?? null,
+                    'lastName'     => $formAddress['lastName'] ?? null,
+                    'name'         => $formAddress['name'] ?? null,
+                    'email'        => $formAddress['email'] ?? null,
+                    'phone'        => $formAddress['phone'] ?? null,
+                    'companyName'  => $formAddress['companyName'] ?? null,
+                    'addressLine1' => $formAddress['addressLine1'] ?? null,
+                    'addressLine2' => $formAddress['addressLine2'] ?? null,
+                    'city'         => $formAddress['city'] ?? null,
+                    'state'        => $formAddress['state'] ?? null,
+                    'zip'          => $formAddress['zip'] ?? null,
+                    'country'      => $formAddress['country'] ?? null,
+                ];
+
+                $shippingFormData = [
+                    'firstName'    => $billingInput['firstName'] ?? null,
+                    'lastName'     => $billingInput['lastName'] ?? null,
+                    'email'        => $billingInput['email'] ?? null,
+                    'phone'        => $billingInput['phone'] ?? null,
+                    'companyName'  => $billingInput['companyName'] ?? null,
+                    'addressLine1' => $billingInput['addressLine1'] ?? null,
+                    'addressLine2' => $billingInput['addressLine2'] ?? null,
+                    'city'         => $billingInput['city'] ?? null,
+                    'state'        => $billingInput['state'] ?? null,
+                    'zip'          => $billingInput['zip'] ?? null,
+                    'country'      => $billingInput['country'] ?? null,
+                ];
+
+                $formUserId = $cartUser?->id ?? $customer->user_id ?? $user?->id;
+
+                $checkoutForm = CheckoutFormData::query()
+                    ->where('store_id', $storeId)
+                    ->when($formUserId, fn($q) => $q->where('user_id', $formUserId))
+                    ->when(!$formUserId, fn($q) => $q->where('session_id', $sessionId))
+                    ->first();
+
+                if ($checkoutForm) {
+                    $checkoutForm->update([
+                        'user_id'            => $formUserId,
+                        'session_id'         => $sessionId,
+                        'billing_form_data'  => $billingFormData,
+                        'shipping_form_data' => $shippingFormData,
+                    ]);
+                } else {
+                    CheckoutFormData::create([
+                        'store_id'           => $storeId,
+                        'user_id'            => $formUserId,
+                        'session_id'         => $sessionId,
+                        'billing_form_data'  => $billingFormData,
+                        'shipping_form_data' => $shippingFormData,
+                    ]);
+                }
             }
 
             if ($intent) {
@@ -2944,7 +3030,7 @@ class OrderController extends Controller
             }
 
             DB::commit();
-
+            $order->refresh();
             return response()->json([
                 'status'  => true,
                 'message' => 'Order placed successfully.',
@@ -2967,6 +3053,124 @@ class OrderController extends Controller
         }
     }
 
+    public function loadSavedQuote(Request $request)
+    {
+        try {
+            $token = $request->input('quoteToken') ?? $request->query('quoteToken');
+
+            if (!$token) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'quoteToken is required',
+                ], 422);
+            }
+
+            try {
+                $payload = $this->draftQuote->decode($token);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid or expired quote token',
+                ], 401);
+            }
+
+            $storeId = (int) ($payload['store_id'] ?? 0);
+            $orderId = (int) ($payload['order_id'] ?? 0);
+            $userId  = (int) ($payload['user_id'] ?? 0);
+            $email   = $payload['email'] ?? null;
+
+            $order = Order::query()
+                ->with([
+                    'items.product.images',
+                    'items.product.brand',
+                    'customer',
+                    'billingInformation',
+                    'notes:id,order_id,note',
+                    'payment',
+                    'shipment',
+                    'manualDiscounts:id,order_id,discount_amount',
+                ])
+                ->withCount('messages')
+                ->where('id', $orderId)
+                ->where('store_id', $storeId)
+                ->where('is_draft', 1)
+                ->first();
+
+            if (!$order) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Draft order not found',
+                ], 404);
+            }
+
+            $user = null;
+
+            if ($userId) {
+                $user = User::where('store_id', $storeId)->where('id', $userId)->first();
+            }
+
+            if (!$user && $email) {
+                $user = User::where('store_id', $storeId)->where('email', $email)->first();
+            }
+
+            if (!$user && $order->customer_id) {
+                $user = User::where('store_id', $storeId)
+                    ->where('customer_id', $order->customer_id)
+                    ->first();
+            }
+
+            if (!$user) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'User not found for this quote',
+                ], 404);
+            }
+
+            $user->tokens()->delete();
+            $authToken = $user->createToken('draft-quote-login')->plainTextToken;
+
+            $data = (new OrderResource($order))->resolve();
+            unset($data['products']);
+
+            $billingPm = $data['billingInformation']['paymentMethod']
+                ?? $data['billingInformation']['payment_method']
+                ?? null;
+
+            $hasPayment = !empty($data['payment'])
+                || (!empty($billingPm) && strtolower((string) $billingPm) !== 'n/a');
+
+            $data['paymentMethod'] = $hasPayment
+                ? [
+                    'method'          => $billingPm ?: 'Credit Card (Via Stripe)',
+                    'paymentStatus'   => $data['payment']['payment_status'] ?? null,
+                    'paymentIntentId' => $data['payment']['payment_intent_id'] ?? null,
+                    'amount'          => $data['payment']['amount'] ?? null,
+                    'riskLevel'       => $data['payment']['risk_level'] ?? null,
+                ]
+                : ['method' => 'draft'];
+
+            $data['isDraft']    = true;
+            $data['isDraftUrl'] = $order->isdrafturl;
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Saved quote loaded and user logged in',
+                'token'   => $authToken,
+                'user'    => [
+                    'id'    => $user->id,
+                    'email' => $user->email,
+                    'name'  => $user->name,
+                ],
+                'data'    => $data,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load saved quote',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
     private function validateStripeCard(array $pm): array
     {
         $errors = [];
@@ -3935,6 +4139,7 @@ class OrderController extends Controller
                     'order_number'                 => '',
                     'status'                       => 'Awaiting Payment',
                     'is_draft'                     => $isDraft,
+                    'isdrafturl'                   => $isDraft ? 'https://staging.sparemicro.com/cart?isDraft=true' : null,
                     'device_type'                  => $validated['deviceType'] ?? null,
                     'channel'                      => 'admin-panel',
                     'ip_address'                   => $validated['ipAddress'] ?? null,
@@ -3998,6 +4203,28 @@ class OrderController extends Controller
                     $product->increment('sold_count', $item['quantity']);
                     if ($product->track_inventory ?? $product->trackInventory ?? false) {
                         $product->decrement('current_stock', $item['quantity']);
+                    }
+                }
+
+                if ($isDraft && !empty($storeUser?->id)) {
+                    foreach ($products as $item) {
+                        $existingCart = Cart::where('store_id', $storeId)
+                            ->where('user_id', $storeUser->id)
+                            ->where('product_id', $item['product_id'])
+                            ->first();
+
+                        if ($existingCart) {
+                            $existingCart->update([
+                                'quantity' => $existingCart->quantity + $item['quantity'],
+                            ]);
+                        } else {
+                            Cart::create([
+                                'store_id'   => $storeId,
+                                'user_id'    => $storeUser->id,
+                                'product_id' => $item['product_id'],
+                                'quantity'   => $item['quantity'],
+                            ]);
+                        }
                     }
                 }
 

@@ -578,6 +578,9 @@ Route::prefix('web')->group(function () {
         Route::post('/add', 'store');
         Route::delete('/remove/{id}', 'destroy');
     });
+
+    Route::post('/cart/load-saved-quote', [OrderController::class, 'loadSavedQuote']);
+
     Route::prefix('orders')->controller(OrderController::class)->group(function () {
         Route::post('/place-order', 'store');
         Route::get('/order-detail', 'detail');
