@@ -625,7 +625,7 @@ class FedExRateService
             /*
             * Delivery date.
             *
-            * Prefer the operational deliveryDate when available,
+            * Prefer operationalDetail.deliveryDate when available,
             * otherwise use commit.dateDetail.dayFormat.
             */
             $deliveryDate =
@@ -642,12 +642,29 @@ class FedExRateService
                 ?? null;
 
             /*
-            * FedEx can return an explicit transitDays value.
+            * ---------------------------------------------------------
+            * Transit days
+            * ---------------------------------------------------------
+            *
+            * 1. First try FedEx's explicit transit information.
+            * 2. If unavailable, calculate it from quoteDate -> deliveryDate.
+            */
+
+            /*
+            * FedEx explicit transit time.
+            *
+            * Example:
+            * "ONE_DAY"
+            * "TWO_DAYS"
+            * "THREE_DAYS"
+            *
+            * or:
+            * "1 Business Day"
             */
             $transitValue =
-                $commit['transitDays']['description']
-                ?? $commit['transitDays']
-                ?? $operationalDetail['transitDays']
+                $commit['transitDays']['minimumTransitTime']
+                ?? $commit['transitDays']['description']
+                ?? $operationalDetail['transitTime']
                 ?? null;
 
             if ($transitValue !== null) {
@@ -655,38 +672,38 @@ class FedExRateService
             }
 
             /*
-            * If FedEx does not provide an explicit transitDays value,
-            * derive it from the quote date and FedEx's committed
-            * delivery date.
+            * Fallback:
+            * Calculate transit days from FedEx quote date
+            * to the committed delivery date.
             */
             if ($transitDays === null && $deliveryDate) {
                 try {
-                    /*
-                    * Calculate transit days from FedEx quote date
-                    * to the committed delivery date.
-                    */
                     $quoteDate = $responseData['quoteDate'] ?? null;
 
                     if ($quoteDate) {
-                        $quote = \Carbon\Carbon::parse($quoteDate);
-                        $delivery = \Carbon\Carbon::parse($deliveryDate);
+                        $quote = \Carbon\Carbon::parse($quoteDate)->startOfDay();
+                        $delivery = \Carbon\Carbon::parse($deliveryDate)->startOfDay();
 
-                        $transitDays = $quote->startOfDay()->diffInDays(
-                            $delivery->startOfDay()
-                        );
+                        $transitDays = $quote->diffInDays($delivery);
                     }
                 } catch (\Throwable $e) {
                     Log::warning('Unable to calculate FedEx transit days', [
                         'service' => $serviceType,
                         'quote_date' => $responseData['quoteDate'] ?? null,
                         'delivery_date' => $deliveryDate,
+                        'transit_value' => $transitValue,
                         'error' => $e->getMessage(),
                     ]);
                 }
             }
 
             /*
-            * Format delivery date for US format: MM/DD/YYYY
+            * Format delivery date for US format.
+            *
+            * Example:
+            * 2026-09-16T23:59:00
+            * becomes:
+            * 09/16/2026
             */
             if ($deliveryDate) {
                 try {
@@ -750,32 +767,75 @@ class FedExRateService
      */
     protected function parseTransitDays($value): ?int
     {
+        if ($value === null) {
+            return null;
+        }
+
+        /*
+        * Numeric value.
+        */
         if (is_numeric($value)) {
             return (int) $value;
         }
 
-        if (is_string($value)) {
-            $map = [
-                'ONE_DAY' => 1,
-                'TWO_DAYS' => 2,
-                'THREE_DAYS' => 3,
-                'FOUR_DAYS' => 4,
-                'FIVE_DAYS' => 5,
-                'SIX_DAYS' => 6,
-                'SEVEN_DAYS' => 7,
-                'EIGHT_DAYS' => 8,
-                'NINE_DAYS' => 9,
-                'TEN_DAYS' => 10,
-                'ELEVEN_DAYS' => 11,
-                'TWELVE_DAYS' => 12,
-                'THIRTEEN_DAYS' => 13,
-                'FOURTEEN_DAYS' => 14,
-            ];
+        $value = strtoupper(trim((string) $value));
 
-            return $map[strtoupper(trim($value))] ?? null;
+        /*
+        * FedEx enum values.
+        */
+        $map = [
+            'ONE_DAY' => 1,
+            'TWO_DAYS' => 2,
+            'THREE_DAYS' => 3,
+            'FOUR_DAYS' => 4,
+            'FIVE_DAYS' => 5,
+            'SIX_DAYS' => 6,
+            'SEVEN_DAYS' => 7,
+            'EIGHT_DAYS' => 8,
+            'NINE_DAYS' => 9,
+            'TEN_DAYS' => 10,
+            'ELEVEN_DAYS' => 11,
+            'TWELVE_DAYS' => 12,
+            'THIRTEEN_DAYS' => 13,
+            'FOURTEEN_DAYS' => 14,
+        ];
+
+        if (isset($map[$value])) {
+            return $map[$value];
         }
 
-        return null;
+        /*
+        * Handle strings such as:
+        *
+        * "1 Business Day"
+        * "2 Business Days"
+        * "3 Business Days"
+        */
+        if (preg_match('/\b(\d+)\s*(?:BUSINESS\s+)?DAYS?\b/i', $value, $matches)) {
+            return (int) $matches[1];
+        }
+
+        /*
+        * Handle "ONE DAY", "TWO DAYS", etc.
+        */
+        $wordMap = [
+            'ONE DAY' => 1,
+            'TWO DAYS' => 2,
+            'THREE DAYS' => 3,
+            'FOUR DAYS' => 4,
+            'FIVE DAYS' => 5,
+            'SIX DAYS' => 6,
+            'SEVEN DAYS' => 7,
+            'EIGHT DAYS' => 8,
+            'NINE DAYS' => 9,
+            'TEN DAYS' => 10,
+            'ELEVEN DAYS' => 11,
+            'TWELVE DAYS' => 12,
+            'THIRTEEN DAYS' => 13,
+            'FOURTEEN DAYS' => 14,
+        ];
+
+        return $wordMap[$value] ?? null;
     }
 
     /**
