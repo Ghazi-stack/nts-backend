@@ -401,6 +401,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/get-couponcode/{id}', 'show');
         Route::post('/add-couponcode', 'store');
         Route::put('/update-couponcode/{id}', 'update');
+        Route::put('/update-enabled/{id}', 'updateEnabled');
         Route::delete('/delete-couponcode/{id}', 'destroy');
     });
 

@@ -245,24 +245,21 @@ class CouponCodeController extends Controller
 
             if (!$coupon) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'Record not found'
+                    'status'  => false,
+                    'message' => 'Record not found',
                 ], 404);
             }
 
-            if (!empty($coupon->categoryIds)) {
-                $coupon->categoryIds = json_decode($coupon->categoryIds);
-            }
-
             return response()->json([
-                'status' => true,
-                'data' => $coupon
+                'status'  => true,
+                'message' => 'Coupon fetched successfully',
+                'data'    => $this->formatCoupon($coupon),
             ]);
         } catch (Exception $e) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Something went wrong',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
@@ -398,42 +395,240 @@ class CouponCodeController extends Controller
         try {
             $storeId = $this->getStoreId();
 
+            if ($request->input('expiration') === '') {
+                $request->merge(['expiration' => null]);
+            }
+
             $coupon = CouponCode::where('id', $id)
                 ->where('store_id', $storeId)
                 ->first();
 
             if (!$coupon) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'Record not found'
+                    'status'  => false,
+                    'message' => 'Record not found',
                 ], 404);
             }
 
-            $data = $request->all();
+            $validated = $request->validate([
+                'couponCode' => [
+                    'sometimes',
+                    'required',
+                    'string',
+                    'max:255',
+                    Rule::unique('coupon_code', 'couponCode')
+                        ->where(fn($q) => $q->where('store_id', $storeId))
+                        ->ignore($coupon->id),
+                ],
+                'couponName' => [
+                    'sometimes',
+                    'required',
+                    'string',
+                    'max:255',
+                    Rule::unique('coupon_code', 'couponName')
+                        ->where(fn($q) => $q->where('store_id', $storeId))
+                        ->ignore($coupon->id),
+                ],
+                'discountType' => [
+                    'sometimes',
+                    'required',
+                    'string',
+                    Rule::in([
+                        'per_total_discount',
+                        'per_item_discount',
+                        'percentage_discount',
+                        'shipping_discount',
+                        'free_shipping',
+                    ]),
+                ],
+                'discountAmount' => [
+                    'sometimes',
+                    'nullable',
+                    'numeric',
+                    'min:0',
+                    function ($attribute, $value, $fail) use ($request, $coupon) {
+                        $type = $request->input('discountType', $coupon->discountType);
+                        if ($type === 'percentage_discount' && $value !== null && (float) $value > 100) {
+                            $fail('Percentage discount cannot be greater than 100.');
+                        }
+                    },
+                ],
+                'minimumPurchase'       => 'sometimes|nullable|numeric|min:0',
+                'expiration'            => 'sometimes|nullable|date',
+                'enabled'               => 'sometimes|boolean',
+                'excludeCartDiscounts'  => 'sometimes|boolean',
+                'limitTotalUses'        => 'sometimes|boolean',
+                'limitUsesPerCustomer'  => 'sometimes|boolean',
+                'appliesToCategories'   => 'sometimes|boolean',
+                'appliesToProducts'     => 'sometimes|boolean',
+                'limitByLocation'       => 'sometimes|boolean',
+                'limitByShipping'       => 'sometimes|boolean',
+                'categoryIds'           => 'sometimes|nullable',
+                'productIds'            => 'sometimes|nullable',
+            ], [
+                'couponCode.unique' => 'This coupon code already exists.',
+                'couponName.unique' => 'This coupon name already exists.',
+            ]);
 
-            // ❌ store_id overwrite prevent
-            unset($data['store_id']);
+            $data = [];
 
-            if (isset($data['categoryIds']) && is_array($data['categoryIds'])) {
-                $data['categoryIds'] = json_encode($data['categoryIds']);
+            foreach (
+                [
+                    'couponCode',
+                    'couponName',
+                    'discountType',
+                    'minimumPurchase',
+                    'expiration',
+                ] as $field
+            ) {
+                if ($request->exists($field)) {
+                    $data[$field] = $validated[$field] ?? null;
+                }
             }
 
-            $coupon->update($data);
+            if ($request->exists('discountAmount')) {
+                $data['discountAmount'] = (string) ($validated['discountAmount'] ?? 0);
+            }
+
+            foreach (
+                [
+                    'enabled',
+                    'excludeCartDiscounts',
+                    'limitTotalUses',
+                    'limitUsesPerCustomer',
+                    'appliesToCategories',
+                    'appliesToProducts',
+                    'limitByLocation',
+                    'limitByShipping',
+                ] as $field
+            ) {
+                if ($request->exists($field)) {
+                    $data[$field] = $request->boolean($field);
+                }
+            }
+
+            $appliesToCategories = $data['appliesToCategories'] ?? (bool) $coupon->appliesToCategories;
+            $appliesToProducts   = $data['appliesToProducts'] ?? (bool) $coupon->appliesToProducts;
+
+            if ($appliesToCategories && $appliesToProducts) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Coupon can apply to categories or products, not both.',
+                ], 422);
+            }
+
+            if ($request->exists('categoryIds')) {
+                $categoryIds = $this->normalizeIds($request->input('categoryIds'));
+                $data['categoryIds'] = $appliesToCategories ? json_encode($categoryIds) : null;
+            }
+
+            if ($request->exists('productIds')) {
+                $productIds = $this->normalizeIds($request->input('productIds'));
+                $data['productIds'] = $appliesToProducts ? json_encode($productIds) : null;
+            }
+
+            if ($request->exists('appliesToCategories') && !$appliesToCategories) {
+                $data['categoryIds'] = null;
+            }
+
+            if ($request->exists('appliesToProducts') && !$appliesToProducts) {
+                $data['productIds'] = null;
+            }
+
+            $discountType = $data['discountType'] ?? $coupon->discountType;
+            if ($discountType === 'free_shipping') {
+                $data['discountAmount'] = '0';
+            }
+
+            if ($appliesToCategories) {
+                $finalCategoryIds = $this->normalizeIds($data['categoryIds'] ?? $coupon->categoryIds);
+                if (empty($finalCategoryIds)) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Please select at least one category.',
+                    ], 422);
+                }
+            }
+
+            if ($appliesToProducts) {
+                $finalProductIds = $this->normalizeIds($data['productIds'] ?? $coupon->productIds);
+                if (empty($finalProductIds)) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Please select at least one product.',
+                    ], 422);
+                }
+            }
+
+            unset($data['store_id']);
+
+            if (!empty($data)) {
+                $coupon->update($data);
+            }
 
             return response()->json([
-                'status' => true,
+                'status'  => true,
                 'message' => 'Coupon updated successfully',
-                'data' => $coupon
+                'data'    => $this->formatCoupon($coupon->fresh()),
             ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Validation failed',
+                'errors'  => $e->errors(),
+            ], 422);
         } catch (Exception $e) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Something went wrong',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
 
+    public function updateEnabled(Request $request, $id)
+    {
+        try {
+            $storeId = $this->getStoreId();
+
+            $request->validate([
+                'enabled' => 'required|boolean',
+            ]);
+
+            $coupon = CouponCode::where('id', $id)
+                ->where('store_id', $storeId)
+                ->first();
+
+            if (!$coupon) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Record not found',
+                ], 404);
+            }
+
+            $coupon->update([
+                'enabled' => $request->boolean('enabled'),
+            ]);
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Coupon status updated successfully',
+                'data'    => $this->formatCoupon($coupon->fresh()),
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Validation failed',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
     public function destroy($id)
     {
         try {
@@ -445,22 +640,22 @@ class CouponCodeController extends Controller
 
             if (!$coupon) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'Record not found'
+                    'status'  => false,
+                    'message' => 'Record not found',
                 ], 404);
             }
 
             $coupon->delete();
 
             return response()->json([
-                'status' => true,
-                'message' => 'Coupon deleted successfully'
+                'status'  => true,
+                'message' => 'Coupon deleted successfully',
             ]);
         } catch (Exception $e) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Something went wrong',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
