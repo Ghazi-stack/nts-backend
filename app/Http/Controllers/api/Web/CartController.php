@@ -87,6 +87,28 @@ class CartController extends Controller
                 ->with($this->productRelations())
                 ->paginate($perPage);
 
+            $cartItems->getCollection()->transform(function ($item) {
+                if ((int) ($item->isdraftcart ?? 0) !== 1) {
+                    return $item;
+                }
+
+                $override = \App\Models\OrderCartItemProduct::query()
+                    ->where('cart_id', $item->id)
+                    ->where('product_id', $item->product_id)
+                    ->latest('id')
+                    ->first();
+
+                if ($override) {
+                    $item->quantity = $override->qty;
+
+                    if ($item->relationLoaded('product') && $item->product) {
+                        $item->product->setAttribute('price', $override->price);
+                    }
+                }
+
+                return $item;
+            });
+
             return response()->json([
                 'status'     => true,
                 'message'    => 'Cart items retrieved successfully',
@@ -252,7 +274,6 @@ class CartController extends Controller
     // ─────────────────────────────────────────────────────────────
     // POST /web/cart/add-cart
     // ─────────────────────────────────────────────────────────────
-
     public function storeCart(Request $request)
     {
         try {
@@ -281,12 +302,11 @@ class CartController extends Controller
 
             $product = Product::find($validated['productId']);
 
-            $quantity = (int) $validated['quantity'];
-            $minQty = (int) $product->min_purchase_quantity;
-            $maxQty = (int) $product->max_purchase_quantity;
+            $quantity     = (int) $validated['quantity'];
+            $minQty       = (int) $product->min_purchase_quantity;
+            $maxQty       = (int) $product->max_purchase_quantity;
             $currentStock = (int) $product->current_stock;
 
-            // Minimum quantity validation
             if ($minQty > 0 && $quantity < $minQty) {
                 return response()->json([
                     'status'  => false,
@@ -294,7 +314,6 @@ class CartController extends Controller
                 ], 422);
             }
 
-            // Maximum quantity validation
             if ($maxQty > 0 && $quantity > $maxQty) {
                 return response()->json([
                     'status'  => false,
@@ -302,22 +321,22 @@ class CartController extends Controller
                 ], 422);
             }
 
-            // Check if product already exists in cart
-            $existingCartItem = $this->cartQuery($user, $sessionId, $storeId)
+            $existingNormal = $this->cartQuery($user, $sessionId, $storeId)
                 ->where('product_id', $validated['productId'])
+                ->where(function ($q) {
+                    $q->where('isdraftcart', 0)->orWhereNull('isdraftcart');
+                })
                 ->first();
 
-            /*
-        |--------------------------------------------------------------------------
-        | Stock Validation
-        |--------------------------------------------------------------------------
-        | If min_purchase_quantity = 0 and max_purchase_quantity = 0,
-        | then validate against current stock.
-        | Existing cart quantity is also considered.
-        |--------------------------------------------------------------------------
-        */
+            $existingDraft = $this->cartQuery($user, $sessionId, $storeId)
+                ->where('product_id', $validated['productId'])
+                ->where('isdraftcart', 1)
+                ->first();
+
+            $existingForStock = $existingNormal ?: null;
+
             if ($minQty == 0 && $maxQty == 0) {
-                $totalQty = $quantity + ($existingCartItem?->quantity ?? 0);
+                $totalQty = $quantity + ($existingForStock?->quantity ?? 0);
 
                 if ($totalQty > $currentStock) {
                     return response()->json([
@@ -327,16 +346,17 @@ class CartController extends Controller
                 }
             }
 
-            if ($existingCartItem) {
-                $existingCartItem->increment('quantity', $quantity);
-                $cartItem = $existingCartItem->fresh();
+            if ($existingNormal) {
+                $existingNormal->increment('quantity', $quantity);
+                $cartItem = $existingNormal->fresh();
             } else {
                 $cartItem = Cart::create([
-                    'store_id'   => $storeId,
-                    'user_id'    => $user?->id,
-                    'session_id' => $sessionId,
-                    'product_id' => $validated['productId'],
-                    'quantity'   => $quantity,
+                    'store_id'    => $storeId,
+                    'user_id'     => $user?->id,
+                    'session_id'  => $sessionId,
+                    'product_id'  => $validated['productId'],
+                    'quantity'    => $quantity,
+                    'isdraftcart' => 0,
                 ]);
             }
 
