@@ -98,12 +98,16 @@ class CartController extends Controller
                     ->latest('id')
                     ->first();
 
-                if ($override) {
-                    $item->quantity = $override->qty;
+                if (!$override) {
+                    return $item;
+                }
 
-                    if ($item->relationLoaded('product') && $item->product) {
-                        $item->product->setAttribute('price', $override->price);
-                    }
+                $item->quantity = $override->qty;
+
+                if ($item->relationLoaded('product') && $item->product) {
+                    $cloned = clone $item->product;
+                    $cloned->setAttribute('price', $override->price);
+                    $item->setRelation('product', $cloned);
                 }
 
                 return $item;
