@@ -13,6 +13,7 @@ class CouponCode extends Model
         'appliesToCategories',
         'appliesToProducts',
         'categoryIds',
+        'productIds',
         'couponCode',
         'couponName',
         'discountAmount',
