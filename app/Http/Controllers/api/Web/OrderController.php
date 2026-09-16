@@ -3319,7 +3319,7 @@ class OrderController extends Controller
                 return response()->json([
                     'status'  => false,
                     'message' => 'User not found',
-                ], 404);
+                ], 403);
             }
 
             $alreadyLoggedIn = true;
