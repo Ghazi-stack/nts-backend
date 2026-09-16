@@ -147,7 +147,7 @@ class CustomerAddressController extends Controller
         ]);
 
         if ($user && (int) $user->userRole === 2) {
-            $customerId = $user->id;
+            $customerId = $user->customer_id ?: $user->id;
         } else {
             $customerId = $validated['customer_id'] ?? null;
         }
