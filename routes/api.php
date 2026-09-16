@@ -571,6 +571,10 @@ Route::prefix('web')->group(function () {
     Route::prefix('cart')->middleware('auth:sanctum')->controller(CartController::class)->group(function () {
         Route::post('/transfer', 'transferGuestCartToUser');
     });
+    
+    Route::prefix('cart')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {
+        Route::post('/load-saved-quote', 'loadSavedQuote');
+    });
 
     // ❤️ Wishlist (auth required)
     Route::prefix('wishlist')->middleware('auth:sanctum')->controller(WishlistController::class)->group(function () {
@@ -579,7 +583,7 @@ Route::prefix('web')->group(function () {
         Route::delete('/remove/{id}', 'destroy');
     });
 
-    Route::post('/cart/load-saved-quote', [OrderController::class, 'loadSavedQuote']);
+    
 
     Route::prefix('orders')->controller(OrderController::class)->group(function () {
         Route::post('/place-order', 'store');

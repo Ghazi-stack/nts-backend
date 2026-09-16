@@ -3313,20 +3313,17 @@ class OrderController extends Controller
                     ->first();
             }
 
-            if (!$user) {
+            $headerUser = auth('sanctum')->user();
+
+            if (!$headerUser || !$user || (int) $headerUser->id !== (int) $user->id) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'User not found for this quote',
+                    'message' => 'User not found',
                 ], 404);
             }
 
-            $currentUser = auth('sanctum')->user();
-            $alreadyLoggedIn = $currentUser && (int) $currentUser->id === (int) $user->id;
-
+            $alreadyLoggedIn = true;
             $authToken = null;
-            if (!$alreadyLoggedIn) {
-                $authToken = $user->createToken('draft-quote-login')->plainTextToken;
-            }
 
             $data = (new OrderResource($order))->resolve();
             unset($data['products']);
@@ -3353,9 +3350,7 @@ class OrderController extends Controller
 
             return response()->json([
                 'status'  => true,
-                'message' => $alreadyLoggedIn
-                    ? 'Saved quote loaded'
-                    : 'Saved quote loaded and user logged in',
+                'message' => 'Saved quote loaded',
                 'alreadyLoggedIn' => $alreadyLoggedIn,
                 'token'   => $authToken,
                 'user'    => [
