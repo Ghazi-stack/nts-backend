@@ -273,7 +273,7 @@ class CustomerAddressController extends Controller
         // Customer → sirf apna address delete
         // Admin/Sub-user → koi bhi address (us store ka)
         if ($user && (int) $user->userRole === 2) {
-            $query->where('customer_id', $user->id);
+            $query->where('customer_id', $user->customer_id ?: $user->id);
         }
 
         $address = $query->first();
