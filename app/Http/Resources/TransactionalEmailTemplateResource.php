@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Resources;
 
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -26,13 +25,13 @@ class TransactionalEmailTemplateResource extends JsonResource
             'bodyText'   => $this->body_text,
             'variables'  => $this->variables,
             'locale'     => $this->locale,
-            'updatedBy'  => $this->whenLoaded('updater', fn() => [
+            'updatedBy'  => $this->whenLoaded('updater', fn()=>[
                 'id' => $this->updater?->id,
                 'name' => $this->updater?->name,
-                'email' => $this->updater?->email,
+                'email'=> $this->updater?->email,
             ]),
-            'createdAt' => $this->created_at?->toDateString(),
-            'updatedAt' => $this->updated_at?->toDateString(),
+            'createdAt'  => $this->created_at,
+            'updatedAt'  => $this->updated_at,
         ];
     }
 }

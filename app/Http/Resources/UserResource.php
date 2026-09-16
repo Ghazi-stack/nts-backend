@@ -24,8 +24,7 @@ class UserResource extends JsonResource
             'storeName'     => $this->store_name,      // ✅ map to DB field
             'region'        => $this->region,
             'region' => $this->region,
-            'createdAt' => $this->created_at?->toDateString(),
-            'updatedAt' => $this->updated_at?->toDateString(),
+            'created_at' => $this->created_at,
         ];
     }
 }

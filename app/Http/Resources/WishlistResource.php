@@ -13,7 +13,7 @@ class WishlistResource extends JsonResource
             'id'         => $this->id,
             'productId' => $this->product_id,
             'product'    => $this->whenLoaded('product'), // only includes product if loaded
-            'created_at' => $this->created_at?->toDateString(),
+            'created_at' => $this->created_at->toDateTimeString(),
         ];
     }
 }

@@ -34,12 +34,12 @@ class PromotionResource extends JsonResource
                 'conditions' => $p->conditions,
                 'actions'    => $p->actions,
 
-                'startsAt'   => optional($p->starts_at)->toDateString(),
-                'endsAt'     => optional($p->ends_at)->toDateString(),
+                'startsAt'   => optional($p->starts_at)->toDateTimeString(),
+                'endsAt'     => optional($p->ends_at)->toDateTimeString(),
 
                 'extra'      => $p->extra,
-                'createdAt'  => optional($p->created_at)->toDateString(),
-                'updatedAt'  => optional($p->updated_at)->toDateString(),
+                'createdAt'  => optional($p->created_at)->toDateTimeString(),
+                'updatedAt'  => optional($p->updated_at)->toDateTimeString(),
             ];
         };
 
