@@ -7,6 +7,7 @@ use App\Models\CouponCode;
 use App\Models\CouponUsage;
 use Illuminate\Http\Request;
 use Exception;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -268,64 +269,51 @@ class CouponCodeController extends Controller
     public function showWebCouponCode(Request $request, $id = null)
     {
         try {
-
             $storeId = $this->getStoreId();
 
             $query = CouponCode::where('store_id', $storeId);
 
-            // Coupon code se fetch
             if ($request->filled('couponCode')) {
-
                 $query->where('couponCode', $request->couponCode);
-            }
-            // ID se fetch
-            elseif ($id) {
-
+            } elseif ($id) {
                 $query->where('id', $id);
             } else {
-
                 return response()->json([
-                    'status' => false,
-                    'message' => 'CouponCode or ID is required'
+                    'status'  => false,
+                    'message' => 'CouponCode or ID is required',
                 ], 400);
             }
 
             $coupon = $query->first();
 
             if (!$coupon) {
-
                 return response()->json([
-                    'status' => false,
-                    'message' => 'Invalid coupon code'
+                    'status'  => false,
+                    'message' => 'Invalid coupon code',
                 ], 404);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | Identify Customer
-        |--------------------------------------------------------------------------
-        */
-
-            $user = auth('sanctum')->user();
-            $userId = $user?->id;
-            $sessionId = null;
-
-            if (!$userId) {
-                $sessionId = $request->header('X-Session-ID');
+            if (!$coupon->enabled) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'This coupon is not enabled.',
+                ], 400);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | Check Coupon Already Used
-        |--------------------------------------------------------------------------
-        */
+            if (!empty($coupon->expiration) && strtotime($coupon->expiration) < strtotime(date('Y-m-d'))) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'This coupon has expired.',
+                ], 400);
+            }
+
+            $user   = auth('sanctum')->user();
+            $userId = $user?->id;
 
             $usageQuery = CouponUsage::where('store_id', $storeId)
                 ->where('coupon_id', $coupon->id);
 
             if ($userId) {
-
-                // Logged-in user — user_id ya usi user ka email
                 $userEmail = strtolower(trim($user->email ?? ''));
 
                 $usageQuery->where(function ($q) use ($userId, $userEmail) {
@@ -336,56 +324,109 @@ class CouponCodeController extends Controller
                     }
                 });
             } else {
+                $sessionId = $request->header('X-Session-ID');
 
-                // Guest — yahan email nahi aati, session se check
                 if (!$sessionId) {
-
                     return response()->json([
-                        'status' => false,
-                        'message' => 'Session ID is required for guest users'
+                        'status'  => false,
+                        'message' => 'Session ID is required for guest users',
                     ], 400);
                 }
 
                 $usageQuery->where('session_id', $sessionId);
             }
 
-            $alreadyUsed = $usageQuery->exists();
-
-            if ($alreadyUsed) {
-
+            if ($usageQuery->exists()) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'You have already used this coupon.'
+                    'status'  => false,
+                    'message' => 'You have already used this coupon.',
                 ], 400);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | Decode categoryIds
-        |--------------------------------------------------------------------------
-        */
+            $coupon = $this->formatCoupon($coupon);
 
-            if (!empty($coupon->categoryIds)) {
-                $coupon->categoryIds = json_decode($coupon->categoryIds);
+            $productIds = $this->normalizeIds($request->input('productIds', $request->input('product_id')));
+
+            if (empty($productIds) && $request->filled('cart')) {
+                foreach ((array) $request->input('cart') as $item) {
+                    if (isset($item['productId']) || isset($item['product_id'])) {
+                        $productIds[] = (int) ($item['productId'] ?? $item['product_id']);
+                    }
+                }
+                $productIds = array_values(array_unique(array_filter($productIds)));
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | Return Coupon
-        |--------------------------------------------------------------------------
-        */
+            if ($coupon->appliesToCategories) {
+                if (empty($productIds)) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Product IDs are required to apply this coupon.',
+                    ], 400);
+                }
+
+                $pivotCategoryIds = DB::table('category_product')
+                    ->whereIn('product_id', $productIds)
+                    ->pluck('category_id')
+                    ->toArray();
+
+                $productTableCategoryIds = DB::table('product')
+                    ->whereIn('id', $productIds)
+                    ->whereNotNull('category_id')
+                    ->pluck('category_id')
+                    ->toArray();
+
+                $productCategoryIds = collect($pivotCategoryIds)
+                    ->merge($productTableCategoryIds)
+                    ->map(fn($id) => (int) $id)
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->toArray();
+
+                $allowedCategoryIds = $coupon->categoryIds ?? [];
+                $matchedCategoryIds = array_values(array_intersect($productCategoryIds, $allowedCategoryIds));
+
+                if (empty($matchedCategoryIds)) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'This coupon is not applicable to the products in your cart.',
+                    ], 400);
+                }
+
+                $coupon->applicableCategoryIds = $matchedCategoryIds;
+            }
+
+            if ($coupon->appliesToProducts) {
+                if (empty($productIds)) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Product IDs are required to apply this coupon.',
+                    ], 400);
+                }
+
+                $allowedProductIds = $coupon->productIds ?? [];
+                $matchedProductIds = array_values(array_intersect($productIds, $allowedProductIds));
+
+                if (empty($matchedProductIds)) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'This coupon is not applicable to the products in your cart.',
+                    ], 400);
+                }
+
+                $coupon->applicableProductIds = $matchedProductIds;
+            }
 
             return response()->json([
-                'status' => true,
+                'status'  => true,
                 'message' => 'Coupon is valid.',
-                'data' => $coupon
+                'data'    => $coupon,
             ]);
         } catch (\Exception $e) {
-
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Something went wrong',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
