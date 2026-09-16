@@ -32,9 +32,8 @@ class CustomerAddressController extends Controller
         // Customer (userRole = 2) → sirf apne addresses
         // Admin / Sub-user (userRole = 1) → customer_id optional (query param se)
         if ($user && (int) $user->userRole === 2) {
-            $query->where('customer_id', $user->id);
+            $query->where('customer_id', $user->customer_id ?: $user->id);
         } else {
-            // Admin side: specific customer ke addresses chahiye to ?customer_id=123
             if ($request->filled('customer_id')) {
                 $query->where('customer_id', $request->customer_id);
             }
