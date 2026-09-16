@@ -205,10 +205,8 @@ class CustomerAddressController extends Controller
         $query = CustomerAddress::where('id', $id)
             ->where('store_id', $storeId);
 
-        // Customer → sirf apna address
-        // Admin/Sub-user → koi bhi address (us store ka)
         if ($user && (int) $user->userRole === 2) {
-            $query->where('customer_id', $user->id);
+            $query->where('customer_id', $user->customer_id ?: $user->id);
         }
 
         $address = $query->first();
@@ -221,22 +219,21 @@ class CustomerAddressController extends Controller
         }
 
         $validated = $request->validate([
-            'first_name'     => 'required|string|max:100',
-            'last_name'      => 'required|string|max:100',
-            'company_name'   => 'nullable|string|max:255',
-            'phone_number'   => 'required|string|max:30',
-            'address_line_1' => 'required|string|max:255',
-            'address_line_2' => 'nullable|string|max:255',
-            'city'           => 'required|string|max:100',
-            'state'          => 'required|string|max:100',
-            'zip'            => 'required|string|max:30',
-            'country'        => 'required|string|max:100',
-            'is_default'     => 'nullable|boolean',
-            'type'           => 'nullable|in:Residential,Commercial',  // naya
+            'first_name'     => 'sometimes|string|max:100',
+            'last_name'      => 'sometimes|string|max:100',
+            'company_name'   => 'sometimes|nullable|string|max:255',
+            'phone_number'   => 'sometimes|nullable|string|max:30',
+            'address_line_1' => 'sometimes|string|max:255',
+            'address_line_2' => 'sometimes|nullable|string|max:255',
+            'city'           => 'sometimes|string|max:100',
+            'state'          => 'sometimes|string|max:100',
+            'zip'            => 'sometimes|nullable|string|max:30',
+            'country'        => 'sometimes|string|max:100',
+            'is_default'     => 'sometimes|nullable|boolean',
+            'type'           => 'sometimes|nullable|in:Residential,Commercial',
         ]);
 
-        // Default address handle
-        if (!empty($validated['is_default'])) {
+        if (array_key_exists('is_default', $validated) && !empty($validated['is_default'])) {
             CustomerAddress::where('customer_id', $address->customer_id)
                 ->where('store_id', $storeId)
                 ->where('id', '!=', $address->id)
