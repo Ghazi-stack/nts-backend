@@ -42,6 +42,7 @@ use App\Models\CouponCode;
 use App\Models\CouponUsage;
 use App\Models\Logo;
 use App\Models\ManualDiscount;
+use App\Models\OrderCartItemProduct;
 use App\Models\OrderTimeline;
 use App\Models\Store;
 use Illuminate\Validation\ValidationException;
@@ -2615,7 +2616,7 @@ class OrderController extends Controller
                 'products.*.productId'  => 'required_without:products.*.product_id|integer|exists:products,id',
                 'products.*.product_id' => 'required_without:products.*.productId|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
-                'products.*.price'      => 'required|numeric|min:0',
+                'products.*.price'      => 'nullable|numeric|min:0',
 
                 'shippingDestinations'  => 'nullable|array',
                 'shippingMethod'        => 'nullable|array',
@@ -3031,23 +3032,43 @@ class OrderController extends Controller
                         ->first();
                 }
 
+                $formUserId = $cartUser?->id ?? $customer->user_id ?? $user?->id;
+
                 if ($cartUser) {
-                    foreach ($products as $item) {
+                    foreach ($validated['products'] as $raw) {
+                        $productId = $raw['product_id'] ?? $raw['productId'];
+                        $qty       = (int) $raw['quantity'];
+                        $hasPrice  = array_key_exists('price', $raw) && $raw['price'] !== null && $raw['price'] !== '';
+
                         $existingCart = Cart::where('store_id', $storeId)
                             ->where('user_id', $cartUser->id)
-                            ->where('product_id', $item['product_id'])
+                            ->where('product_id', $productId)
                             ->first();
 
                         if ($existingCart) {
                             $existingCart->update([
-                                'quantity' => $existingCart->quantity + $item['quantity'],
+                                'quantity'    => $existingCart->quantity + $qty,
+                                'isdraftcart' => $hasPrice ? 1 : ($existingCart->isdraftcart ?? 0),
                             ]);
+                            $cartRow = $existingCart->fresh();
                         } else {
-                            Cart::create([
-                                'store_id'   => $storeId,
-                                'user_id'    => $cartUser->id,
-                                'product_id' => $item['product_id'],
-                                'quantity'   => $item['quantity'],
+                            $cartRow = Cart::create([
+                                'store_id'    => $storeId,
+                                'user_id'     => $cartUser->id,
+                                'product_id'  => $productId,
+                                'quantity'    => $qty,
+                                'isdraftcart' => $hasPrice ? 1 : 0,
+                            ]);
+                        }
+
+                        if ($hasPrice) {
+                            OrderCartItemProduct::create([
+                                'order_id'   => $order->id,
+                                'user_id'    => $formUserId,
+                                'product_id' => $productId,
+                                'cart_id'    => $cartRow->id,
+                                'price'      => (float) $raw['price'],
+                                'qty'        => $qty,
                             ]);
                         }
                     }
@@ -3062,9 +3083,6 @@ class OrderController extends Controller
                 $order->update([
                     'isdrafturl' => $quoteUrl,
                 ]);
-
-                // $sessionId  = $request->header('X-Session-ID') ?? session()->getId();
-                $formUserId = $cartUser?->id ?? $customer->user_id ?? $user?->id;
 
                 $billingFormData = [
                     'firstName'    => $formAddress['firstName'] ?? null,
@@ -3107,7 +3125,7 @@ class OrderController extends Controller
                 if ($cartUser) {
                     $cartIds = Cart::where('store_id', $storeId)
                         ->where('user_id', $cartUser->id)
-                        ->whereIn('product_id', collect($products)->pluck('product_id'))
+                        ->whereIn('product_id', collect($validated['products'])->map(fn($p) => $p['product_id'] ?? $p['productId']))
                         ->pluck('id')
                         ->values()
                         ->all();
@@ -3132,6 +3150,7 @@ class OrderController extends Controller
                     ),
                 ]);
             }
+
 
             if ($intent) {
                 Payment::create(array_merge([
