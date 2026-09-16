@@ -69,24 +69,26 @@ class CouponCodeController extends Controller
                     },
                 ],
                 'minimumPurchase'       => 'nullable|numeric|min:0',
-                'limitTotalUses'        => 'nullable|integer|min:1',
-                'limitUsesPerCustomer'  => 'nullable|integer|min:1',
-                'excludeCartDiscounts'  => 'nullable',
-                'enabled'               => 'nullable',
                 'expiration'            => 'nullable|date',
-                'appliesToCategories'   => 'nullable',
-                'appliesToProducts'     => 'nullable',
+
+                'enabled'               => 'nullable|boolean',
+                'excludeCartDiscounts'  => 'nullable|boolean',
+                'limitTotalUses'        => 'nullable|boolean',
+                'limitUsesPerCustomer'  => 'nullable|boolean',
+                'appliesToCategories'   => 'nullable|boolean',
+                'appliesToProducts'     => 'nullable|boolean',
+                'limitByLocation'       => 'nullable|boolean',
+                'limitByShipping'       => 'nullable|boolean',
+
                 'categoryIds'           => 'nullable',
                 'productIds'            => 'nullable',
-                'limitByLocation'       => 'nullable',
-                'limitByShipping'       => 'nullable',
             ], [
                 'couponCode.unique' => 'This coupon code already exists.',
                 'couponName.unique' => 'This coupon name already exists.',
             ]);
 
-            $appliesToCategories = $this->toBool($request->input('appliesToCategories', false));
-            $appliesToProducts   = $this->toBool($request->input('appliesToProducts', false));
+            $appliesToCategories = $request->boolean('appliesToCategories');
+            $appliesToProducts   = $request->boolean('appliesToProducts');
 
             if ($appliesToCategories && $appliesToProducts) {
                 return response()->json([
@@ -121,26 +123,25 @@ class CouponCodeController extends Controller
                     ? '0'
                     : (string) ($validated['discountAmount'] ?? 0),
                 'minimumPurchase'      => (string) ($validated['minimumPurchase'] ?? 0),
-                'limitTotalUses'       => $request->filled('limitTotalUses') ? (string) $validated['limitTotalUses'] : null,
-                'limitUsesPerCustomer' => $request->filled('limitUsesPerCustomer') ? (string) $validated['limitUsesPerCustomer'] : null,
-                'excludeCartDiscounts' => $this->toBool($request->input('excludeCartDiscounts', false)) ? '1' : '0',
-                'enabled'              => $request->has('enabled') ? ($this->toBool($request->input('enabled')) ? 1 : 0) : 1,
                 'expiration'           => $validated['expiration'] ?? null,
-                'appliesToCategories'  => $appliesToCategories ? '1' : '0',
-                'appliesToProducts'    => $appliesToProducts ? '1' : '0',
+
+                'enabled'              => $request->has('enabled') ? $request->boolean('enabled') : true,
+                'excludeCartDiscounts' => $request->boolean('excludeCartDiscounts'),
+                'limitTotalUses'       => $request->boolean('limitTotalUses'),
+                'limitUsesPerCustomer' => $request->boolean('limitUsesPerCustomer'),
+                'appliesToCategories'  => $appliesToCategories,
+                'appliesToProducts'    => $appliesToProducts,
+                'limitByLocation'      => $request->boolean('limitByLocation'),
+                'limitByShipping'      => $request->boolean('limitByShipping'),
+
                 'categoryIds'          => $appliesToCategories ? json_encode($categoryIds) : null,
                 'productIds'           => $appliesToProducts ? json_encode($productIds) : null,
-                'limitByLocation'      => $this->toBool($request->input('limitByLocation', false)) ? '1' : '0',
-                'limitByShipping'      => $this->toBool($request->input('limitByShipping', false)) ? '1' : '0',
             ]);
-
-            $coupon->categoryIds = $coupon->categoryIds ? json_decode($coupon->categoryIds, true) : [];
-            $coupon->productIds  = $coupon->productIds ? json_decode($coupon->productIds, true) : [];
 
             return response()->json([
                 'status'  => true,
                 'message' => 'Coupon added successfully',
-                'data'    => $coupon,
+                'data'    => $this->formatCoupon($coupon),
             ], 201);
         } catch (ValidationException $e) {
             return response()->json([
@@ -157,9 +158,15 @@ class CouponCodeController extends Controller
         }
     }
 
-    private function toBool($value): bool
+    private function formatCoupon($coupon)
     {
-        return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+        $coupon->categoryIds = $coupon->categoryIds ? json_decode($coupon->categoryIds, true) : [];
+        $coupon->productIds  = $coupon->productIds ? json_decode($coupon->productIds, true) : [];
+
+        $coupon->discountAmount  = $coupon->discountAmount !== null ? (float) $coupon->discountAmount : 0;
+        $coupon->minimumPurchase = $coupon->minimumPurchase !== null ? (float) $coupon->minimumPurchase : 0;
+
+        return $coupon;
     }
 
     private function normalizeIds($ids): array
@@ -199,8 +206,7 @@ class CouponCodeController extends Controller
             }
 
             if ($request->filled('enabled')) {
-                $enabled = filter_var($request->enabled, FILTER_VALIDATE_BOOLEAN);
-                $query->where('enabled', $enabled ? 1 : 0);
+                $query->where('enabled', $request->boolean('enabled') ? 1 : 0);
             }
 
             if ($request->filled('discountType')) {
@@ -211,30 +217,7 @@ class CouponCodeController extends Controller
                 ->paginate($request->get('per_page', 10));
 
             $coupons->getCollection()->transform(function ($coupon) {
-                $coupon->categoryIds = $coupon->categoryIds
-                    ? json_decode($coupon->categoryIds, true)
-                    : [];
-
-                $coupon->productIds = $coupon->productIds
-                    ? json_decode($coupon->productIds, true)
-                    : [];
-
-                $coupon->appliesToCategories = filter_var($coupon->appliesToCategories, FILTER_VALIDATE_BOOLEAN);
-                $coupon->appliesToProducts   = filter_var($coupon->appliesToProducts, FILTER_VALIDATE_BOOLEAN);
-                $coupon->excludeCartDiscounts = filter_var($coupon->excludeCartDiscounts, FILTER_VALIDATE_BOOLEAN);
-                $coupon->limitByLocation     = filter_var($coupon->limitByLocation, FILTER_VALIDATE_BOOLEAN);
-                $coupon->limitByShipping     = filter_var($coupon->limitByShipping, FILTER_VALIDATE_BOOLEAN);
-                $coupon->enabled             = (bool) $coupon->enabled;
-                $coupon->discountAmount      = $coupon->discountAmount !== null ? (float) $coupon->discountAmount : 0;
-                $coupon->minimumPurchase     = $coupon->minimumPurchase !== null ? (float) $coupon->minimumPurchase : 0;
-                $coupon->limitTotalUses      = $coupon->limitTotalUses !== null && $coupon->limitTotalUses !== ''
-                    ? (int) $coupon->limitTotalUses
-                    : null;
-                $coupon->limitUsesPerCustomer = $coupon->limitUsesPerCustomer !== null && $coupon->limitUsesPerCustomer !== ''
-                    ? (int) $coupon->limitUsesPerCustomer
-                    : null;
-
-                return $coupon;
+                return $this->formatCoupon($coupon);
             });
 
             return response()->json([

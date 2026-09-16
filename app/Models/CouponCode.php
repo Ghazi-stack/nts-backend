@@ -27,4 +27,15 @@ class CouponCode extends Model
         'limitUsesPerCustomer',
         'minimumPurchase',
     ];
+
+    protected $casts = [
+        'appliesToCategories'  => 'boolean',
+        'appliesToProducts'    => 'boolean',
+        'enabled'              => 'boolean',
+        'excludeCartDiscounts' => 'boolean',
+        'limitByLocation'      => 'boolean',
+        'limitByShipping'      => 'boolean',
+        'limitTotalUses'       => 'boolean',
+        'limitUsesPerCustomer' => 'boolean',
+    ];
 }
