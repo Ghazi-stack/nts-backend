@@ -2858,12 +2858,9 @@ class ProductController extends Controller
                 return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
             }
 
-            // DELETE body kabhi request bag mein nahi aati
-            if (!$request->filled('productIds') || !$request->filled('categoryIds')) {
-                $json = json_decode($request->getContent(), true);
-                if (is_array($json)) {
-                    $request->merge($json);
-                }
+            $json = json_decode($request->getContent(), true);
+            if (is_array($json)) {
+                $request->merge($json);
             }
 
             $request->validate([
@@ -2877,34 +2874,37 @@ class ProductController extends Controller
             if ($id !== null && $id !== '' && is_numeric($id)) {
                 $productIds[] = (int) $id;
             }
-            $productIds  = array_values(array_unique(array_filter($productIds)));
-            $categoryIds = $request->categoryIds;
+            $productIds  = array_values(array_unique(array_map('intval', array_filter($productIds))));
+            $categoryIds = array_map('intval', $request->categoryIds);
 
             if (empty($productIds)) {
                 return response()->json(['status' => false, 'message' => 'Product ID is required.'], 422);
             }
 
-            $productQuery = Product::withoutGlobalScopes()
+            // scopes / newQuery bypass — raw table
+            $foundIds = \DB::table('products')
+                ->whereIn('id', $productIds)
                 ->where('store_id', $storeId)
-                ->whereIn('id', $productIds);
+                ->pluck('id')
+                ->map(fn($v) => (int) $v)
+                ->all();
 
-            if (method_exists(Product::class, 'bootSoftDeletes') || in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive(Product::class))) {
-                $productQuery->withTrashed();
-            }
-
-            $products = $productQuery->get();
-
-            if ($products->isEmpty()) {
+            if (empty($foundIds)) {
                 return response()->json([
                     'status'  => false,
                     'message' => "Product ID categories not found in store_id {$storeId}.",
                 ], 404);
             }
 
+            $products = Product::withoutGlobalScopes()
+                ->newQueryWithoutScopes()
+                ->whereIn('id', $foundIds)
+                ->get();
+
             $toDetachAll = [];
 
             foreach ($products as $product) {
-                $attachedIds = $product->categories()->pluck('categories.id')->toArray();
+                $attachedIds = $product->categories()->pluck('categories.id')->map(fn($v) => (int) $v)->all();
                 $toDetach    = array_values(array_intersect($attachedIds, $categoryIds));
 
                 if (empty($toDetach)) {
@@ -2912,7 +2912,6 @@ class ProductController extends Controller
                 }
 
                 $product->categories()->detach($toDetach);
-
                 $toDetachAll = array_merge($toDetachAll, $toDetach);
 
                 if (!empty($product->category_id) && in_array((int) $product->category_id, $toDetach, true)) {
