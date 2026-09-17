@@ -2874,63 +2874,87 @@ class ProductController extends Controller
                 $productIds[] = (int) $id;
             }
             $productIds  = array_values(array_unique(array_filter($productIds)));
-            $categoryIds = $request->categoryIds;
+            $categoryIds = array_values(array_unique(array_map('intval', $request->categoryIds)));
 
             if (empty($productIds)) {
-                return response()->json(['status' => false, 'message' => 'Product ID is required.'], 422);
-            }
-
-            $products = Product::where('store_id', $storeId)
-                ->whereIn('id', $productIds)
-                ->get();
-
-            if ($products->isEmpty()) {
                 return response()->json([
                     'status'  => false,
-                    'message' => "Product ID categories not found in store_id {$storeId}.",
+                    'message' => 'Product ID is required.',
+                ], 422);
+            }
+
+            $foundIds = \DB::table('products')
+                ->where('store_id', $storeId)
+                ->whereIn('id', $productIds)
+                ->pluck('id')
+                ->map(fn($v) => (int) $v)
+                ->all();
+
+            if (empty($foundIds)) {
+                $foundIds = \DB::table('products')
+                    ->whereIn('id', $productIds)
+                    ->pluck('id')
+                    ->map(fn($v) => (int) $v)
+                    ->all();
+            }
+
+            if (empty($foundIds)) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Product not found.',
+                    'debug'   => [
+                        'store_id'   => $storeId,
+                        'productIds' => $productIds,
+                    ],
                 ], 404);
             }
 
-            $toDetachAll = [];
+            $deleted = \DB::table('category_product')
+                ->whereIn('product_id', $foundIds)
+                ->whereIn('category_id', $categoryIds)
+                ->delete();
+
+            if ($deleted === 0) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'No matching categories attached to these products.',
+                    'debug'   => [
+                        'store_id'    => $storeId,
+                        'productIds'  => $foundIds,
+                        'categoryIds' => $categoryIds,
+                    ],
+                ], 422);
+            }
+
+            $products = Product::withoutGlobalScopes()
+                ->whereIn('id', $foundIds)
+                ->get();
 
             foreach ($products as $product) {
-                $attachedIds = $product->categories()->pluck('categories.id')->toArray();
-                $toDetach    = array_values(array_intersect($attachedIds, $categoryIds));
-
-                if (empty($toDetach)) {
-                    continue;
-                }
-
-                $product->categories()->detach($toDetach); // category_product se delete
-                $toDetachAll = array_merge($toDetachAll, $toDetach);
-
-                if (!empty($product->category_id) && in_array((int) $product->category_id, $toDetach, true)) {
+                if (!empty($product->category_id) && in_array((int) $product->category_id, $categoryIds, true)) {
                     $newPrimary = $product->categories()->pluck('categories.id')->first();
                     $product->update(['category_id' => $newPrimary]);
                 }
             }
 
-            $toDetachAll = array_values(array_unique($toDetachAll));
-
-            if (empty($toDetachAll)) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'No matching categories to detach.',
-                ], 422);
+            $first = $products->first();
+            if ($first) {
+                $first = $first->fresh(['categories', 'brand', 'images', 'content', 'seo']);
             }
 
             return response()->json([
                 'status'     => true,
                 'message'    => 'Categories detached from product.',
-                'deletedIds' => $toDetachAll,
-                'data'       => new ProductResource(
-                    $products->first()->fresh(['categories', 'brand', 'images', 'content', 'seo'])
-                ),
+                'deletedIds' => $categoryIds,
+                'data'       => $first ? new ProductResource($first) : null,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+            return response()->json([
+                'status'  => false,
+                'message' => $e->getMessage(),
+            ], 500);
         }
     }
 
