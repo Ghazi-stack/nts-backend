@@ -406,6 +406,7 @@
     $totalAmount = $orderData->total_amount ?? $orderData->totalAmount ?? 0;
     $shippingCost = $orderData->shipping_cost ?? $orderData->shippingCost ?? 0;
     $discountAmt = $orderData->discountAmount ?? 0;
+    $manualDiscount = $orderData->manual_discount ?? $orderData->manualDiscount ?? 0;
     $orderStatus = $orderData->status ?? 'Pending';
     $orderComments = $orderData->comments ?? null;
     $items = $orderData->items ?? collect([]);
@@ -604,6 +605,17 @@
                                                                         </th>
                                                                         <th class="total__value">
                                                                             <p><strong>-${{ number_format($discountAmt, 2) }}</strong></p>
+                                                                        </th>
+                                                                    </tr>
+                                                                    @endif
+
+                                                                    @if($manualDiscount > 0)
+                                                                    <tr class="total__item">
+                                                                        <th class="total__name">
+                                                                            <p>Manual Discount:</p>
+                                                                        </th>
+                                                                        <th class="total__value">
+                                                                            <p><strong>-${{ number_format((float) $manualDiscount, 2) }}</strong></p>
                                                                         </th>
                                                                     </tr>
                                                                     @endif
