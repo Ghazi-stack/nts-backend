@@ -1479,6 +1479,83 @@ class OrderController extends Controller
         }
     }
 
+    public function getCustomerOrderDiscounts(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected',
+                ], 400);
+            }
+
+            $customerId = null;
+            $orderId    = null;
+
+            $quoteToken = $request->input('quoteToken') ?? $request->query('quoteToken');
+
+            if ($quoteToken) {
+                try {
+                    $payload    = $this->draftQuote->decode($quoteToken);
+                    $customerId = $payload['customer_id'] ?? null;
+                    $orderId    = $payload['order_id'] ?? null;
+                } catch (\Exception $e) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Invalid or expired token',
+                    ], 401);
+                }
+            }
+
+            if (!$customerId) {
+                $user = auth('sanctum')->user();
+                $customerId = $user?->customer_id;
+            }
+
+            if (!$customerId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'customer_id not found in token',
+                ], 404);
+            }
+
+            $query = Order::query()
+                ->where('store_id', $storeId)
+                ->where('customer_id', $customerId);
+
+            if ($orderId) {
+                $query->where('id', $orderId);
+            }
+
+            $order = $query->latest('id')->first();
+
+            if (!$order) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Order not found',
+                ], 404);
+            }
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Discounts retrieved successfully',
+                'data'    => [
+                    'orderId'        => $order->id,
+                    'customerId'     => $order->customer_id,
+                    'couponCode'     => $order->coupon_code,
+                    'discountAmount' => (float) ($order->discountAmount ?? 0),
+                    'manualDiscount' => (float) ($order->manual_discount ?? 0),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to retrieve discounts',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
 
     // User ke saved addresses get karo
     public function getSavedAddress(Request $request)

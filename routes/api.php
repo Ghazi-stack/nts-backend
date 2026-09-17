@@ -169,6 +169,8 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/customer/{customerId}/orders', 'getCustomerWithOrders');
     });
 
+    Route::get('/customer-discounts', [OrderController::class, 'getCustomerOrderDiscounts'])
+    ->middleware('auth:sanctum');
     // Orders — Add
     Route::prefix('orders')->middleware('permission:add_order')->controller(OrderController::class)->group(function () {
         Route::post('/existing-customer', 'storeFromDashboard');
