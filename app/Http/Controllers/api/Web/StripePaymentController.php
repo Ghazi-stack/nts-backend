@@ -881,5 +881,225 @@ class StripePaymentController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Update Express Checkout PaymentIntent after
+     * customer selects a shipping rate.
+     */
+    public function updateExpressCheckoutIntent(Request $request)
+    {
+        $validated = $request->validate([
+            'payment_intent_id' => 'required|string',
+
+            'products' => 'required|array|min:1',
+
+            'products.*.product_id' => [
+                'required',
+                'integer',
+                'exists:products,id',
+            ],
+
+            'products.*.quantity' => [
+                'required',
+                'integer',
+                'min:1',
+            ],
+
+            'shippingCost' => 'required|numeric|min:0',
+
+            'discountAmount' => 'nullable|numeric|min:0',
+
+            'manualDiscount' => 'nullable|numeric|min:0',
+
+            'currency' => 'nullable|string|size:3',
+        ]);
+
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected.',
+                ], 400);
+            }
+
+            Stripe::setApiKey(
+                config('services.stripe.secret')
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Retrieve PaymentIntent
+            |--------------------------------------------------------------------------
+            */
+
+            $intent = PaymentIntent::retrieve(
+                $validated['payment_intent_id']
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Make sure this is our Express Checkout intent
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                ($intent->metadata->store_id ?? null)
+                && (string) $intent->metadata->store_id !== (string) $storeId
+            ) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid payment intent.',
+                ], 403);
+            }
+
+            if (
+                !in_array(
+                    $intent->status,
+                    [
+                        'requires_payment_method',
+                        'requires_confirmation',
+                    ],
+                    true
+                )
+            ) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'PaymentIntent can no longer be updated.',
+                    'payment_status' => $intent->status,
+                ], 422);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Recalculate product total from database
+            |--------------------------------------------------------------------------
+            */
+
+            $productTotal = 0;
+
+            foreach ($validated['products'] as $item) {
+
+                $product = Product::where('store_id', $storeId)
+                    ->find($item['product_id']);
+
+                if (!$product) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Product not found.',
+                        'product_id' => $item['product_id'],
+                    ], 404);
+                }
+
+                if (
+                    $product->current_stock
+                    < $item['quantity']
+                ) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => "Insufficient stock for {$product->name}.",
+                    ], 422);
+                }
+
+                $productTotal +=
+                    (float) $product->price
+                    * (int) $item['quantity'];
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Calculate final total
+            |--------------------------------------------------------------------------
+            */
+
+            $shippingCost = (float) $validated['shippingCost'];
+
+            $discountAmount = (float) (
+                $validated['discountAmount'] ?? 0
+            );
+
+            $manualDiscount = (float) (
+                $validated['manualDiscount'] ?? 0
+            );
+
+            $totalAmount =
+                $productTotal
+                + $shippingCost
+                - $discountAmount
+                - $manualDiscount;
+
+            $totalAmount = max(
+                $totalAmount,
+                0
+            );
+
+            $stripeAmount = (int) round(
+                $totalAmount * 100
+            );
+
+            if ($stripeAmount <= 0) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Payment amount must be greater than zero.',
+                ], 422);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Update PaymentIntent
+            |--------------------------------------------------------------------------
+            */
+
+            $updatedIntent = $intent->update([
+                'amount' => $stripeAmount,
+                'metadata' => [
+                    'store_id' => (string) $storeId,
+                    'checkout_type' => 'express_checkout',
+                    'shipping_cost' => (string) $shippingCost,
+                ],
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Express Checkout PaymentIntent updated.',
+                'data' => [
+                    'payment_intent_id' => $updatedIntent->id,
+                    'amount' => $totalAmount,
+                    'amount_cents' => $stripeAmount,
+                    'currency' => $updatedIntent->currency,
+                    'status' => $updatedIntent->status,
+                ],
+            ]);
+
+        } catch (\Stripe\Exception\ApiErrorException $e) {
+
+            \Log::error(
+                'Express Checkout PaymentIntent update failed',
+                [
+                    'error' => $e->getMessage(),
+                ]
+            );
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Unable to update payment amount.',
+            ], 422);
+
+        } catch (\Throwable $e) {
+
+            \Log::error(
+                'Express Checkout update error',
+                [
+                    'error' => $e->getMessage(),
+                ]
+            );
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Unable to update Express Checkout.',
+            ], 500);
+        }
+    }
     
 }
