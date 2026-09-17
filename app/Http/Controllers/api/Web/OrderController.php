@@ -1520,36 +1520,34 @@ class OrderController extends Controller
                 ], 404);
             }
 
-            $query = Order::query()
+            $order = Order::query()
                 ->where('store_id', $storeId)
                 ->where('customer_id', $customerId)
-                ->orderByDesc('id');
+                ->latest('id')
+                ->first();
 
-            if ($orderId) {
-                $query->where('id', $orderId);
-            }
-
-            $orders = $query->get();
-
-            if ($orders->isEmpty()) {
+            if (!$order) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'Order not found',
                 ], 404);
             }
 
+            $data = [
+                'customerId'     => $order->customer_id,
+                'couponCode'     => $order->coupon_code,
+                'discountAmount' => round((float) ($order->discountAmount ?? 0), 2),
+                'manualDiscount' => round((float) ($order->manual_discount ?? 0), 2),
+            ];
+
+            if ((int) $order->is_draft === 1) {
+                $data['orderId'] = $order->id;
+            }
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Discounts retrieved successfully',
-                'data'    => $orders->map(function ($order) {
-                    return [
-                        'orderId'        => $order->id,
-                        'customerId'     => $order->customer_id,
-                        'couponCode'     => $order->coupon_code,
-                        'discountAmount' => round((float) ($order->discountAmount ?? 0), 2),
-                        'manualDiscount' => round((float) ($order->manual_discount ?? 0), 2),
-                    ];
-                })->values(),
+                'data'    => $data,
             ]);
         } catch (\Exception $e) {
             return response()->json([
