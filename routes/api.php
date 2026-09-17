@@ -237,8 +237,10 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/show-product/{slug}', 'showProduct');
         Route::put('/update-product', 'updateProduct');
         Route::post('/update-single-product/{id}', 'updateSingleProduct');
+
+        Route::delete('/delete-product/categories', 'destroyProductCategories');
         Route::delete('/delete-product/{id?}', 'destroyProduct');
-        Route::delete('/delete-product/categories/{id?}', 'destroyProductCategories');
+
         Route::get('/featured-products', 'featuredProducts');
     });
 

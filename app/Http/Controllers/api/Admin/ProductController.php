@@ -2850,7 +2850,7 @@ class ProductController extends Controller
             ], 500);
         }
     }
-    public function destroyProductCategories(Request $request, $id = null)
+    public function destroyProductCategories(Request $request)
     {
         try {
             $storeId = current_store_id();
@@ -2863,22 +2863,14 @@ class ProductController extends Controller
             }
 
             $request->validate([
-                'productIds'    => 'nullable|array',
+                'productIds'    => 'required|array|min:1',
                 'productIds.*'  => 'integer',
                 'categoryIds'   => 'required|array|min:1',
                 'categoryIds.*' => 'integer',
             ]);
 
-            $productIds = $request->productIds ?? [];
-            if ($id) {
-                $productIds[] = (int) $id;
-            }
-            $productIds  = array_values(array_unique(array_filter($productIds)));
+            $productIds  = array_values(array_unique(array_filter($request->productIds)));
             $categoryIds = $request->categoryIds;
-
-            if (empty($productIds)) {
-                return response()->json(['status' => false, 'message' => 'Product ID is required.'], 422);
-            }
 
             $products = Product::where('store_id', $storeId)
                 ->whereIn('id', $productIds)
@@ -2901,7 +2893,7 @@ class ProductController extends Controller
                     continue;
                 }
 
-                $product->categories()->detach($toDetach); // category_product se delete
+                $product->categories()->detach($toDetach);
                 $toDetachAll = array_merge($toDetachAll, $toDetach);
 
                 if (!empty($product->category_id) && in_array((int) $product->category_id, $toDetach, true)) {
@@ -2930,7 +2922,10 @@ class ProductController extends Controller
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+            return response()->json([
+                'status'  => false,
+                'message' => $e->getMessage(),
+            ], 500);
         }
     }
 
