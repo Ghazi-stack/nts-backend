@@ -2854,8 +2854,12 @@ class ProductController extends Controller
     {
         try {
             $storeId = current_store_id();
+
             if (!$storeId) {
-                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not found or unauthorized.',
+                ], 403);
             }
 
             $request->validate([
