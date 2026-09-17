@@ -2871,11 +2871,20 @@ class OrderController extends Controller
             $discount         = (float) ($validated['discountAmount'] ?? 0);
             $manualDiscount   = (float) ($validated['manualDiscount'] ?? $request->input('manualDiscount', 0));
 
-            $products = collect($validated['products'])->map(function ($item) {
+            $products = collect($validated['products'])->map(function ($item) use ($storeId) {
+                $productId = $item['product_id'] ?? $item['productId'];
+                $hasPrice  = array_key_exists('price', $item) && $item['price'] !== null && $item['price'] !== '';
+
+                if ($hasPrice) {
+                    $price = (float) $item['price'];
+                } else {
+                    $price = (float) Product::where('store_id', $storeId)->findOrFail($productId)->price;
+                }
+
                 return [
-                    'product_id' => $item['product_id'] ?? $item['productId'],
+                    'product_id' => $productId,
                     'quantity'   => (int) $item['quantity'],
-                    'price'      => (float) $item['price'],
+                    'price'      => $price,
                 ];
             })->all();
 
