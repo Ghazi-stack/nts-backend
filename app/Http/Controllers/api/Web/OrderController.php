@@ -81,8 +81,7 @@ class OrderController extends Controller
                                     $p->with([
                                         'images',
                                         'brand',
-                                        'categories:id',          // categoryIds ke liye
-
+                                        'categories:id',
                                     ]);
                                 }
                             ]);
@@ -150,6 +149,35 @@ class OrderController extends Controller
                 })
                 ->latest('id')
                 ->paginate($perPage);
+
+            $orderIds = $orders->getCollection()->pluck('id');
+
+            $overrides = \App\Models\OrderCartItemProduct::query()
+                ->whereIn('order_id', $orderIds)
+                ->get()
+                ->groupBy(fn($row) => $row->order_id . '-' . $row->product_id);
+
+            $orders->getCollection()->transform(function ($order) use ($overrides) {
+                foreach ($order->items as $item) {
+                    $key = $order->id . '-' . $item->product_id;
+                    $row = $overrides->get($key)?->last();
+
+                    if (!$row) {
+                        continue;
+                    }
+
+                    $item->quantity = $row->qty;
+                    $item->price    = $row->price;
+
+                    if ($item->relationLoaded('product') && $item->product) {
+                        $cloned = clone $item->product;
+                        $cloned->setAttribute('price', $row->price);
+                        $item->setRelation('product', $cloned);
+                    }
+                }
+
+                return $order;
+            });
 
             return response()->json([
                 'status'  => true,
@@ -337,13 +365,21 @@ class OrderController extends Controller
 
                     'products' => $order->items
                         ->filter(fn($item) => $item->product)
-                        ->map(function ($item) {
+                        ->map(function ($item) use ($order) {
+
+                            $override = \App\Models\OrderCartItemProduct::query()
+                                ->where('order_id', $order->id)
+                                ->where('product_id', $item->product_id)
+                                ->latest('id')
+                                ->first();
+
+                            $qty   = $override ? $override->qty : $item->quantity;
+                            $price = $override ? $override->price : $item->price;
 
                             $product = (new ProductResource($item->product))->toArray(request());
 
-                            // Order item values overwrite
-                            $product['quantity'] = $item->quantity;
-                            $product['price'] = $item->price;
+                            $product['quantity'] = $qty;
+                            $product['price']    = $price;
 
                             return $product;
                         })->values(),
@@ -907,7 +943,22 @@ class OrderController extends Controller
                 }
             }
 
-            // ===================== IMPROVED PAYMENT CHECK =====================
+            $resolvePrice = function (int $productId, $fallbackPrice) use ($existingDraft) {
+                if ($existingDraft) {
+                    $row = \App\Models\OrderCartItemProduct::query()
+                        ->where('order_id', $existingDraft->id)
+                        ->where('product_id', $productId)
+                        ->latest('id')
+                        ->first();
+
+                    if ($row) {
+                        return (float) $row->price;
+                    }
+                }
+
+                return (float) $fallbackPrice;
+            };
+
             $existingPayment = Payment::where('stripe_session_id', $validated['paymentIntentId'])->first();
 
             if ($existingPayment) {
@@ -928,7 +979,6 @@ class OrderController extends Controller
                 }
             }
 
-            // ===================== VERIFY STRIPE PAYMENT INTENT =====================
             Stripe::setApiKey(config('services.stripe.secret'));
 
             try {
@@ -942,7 +992,6 @@ class OrderController extends Controller
                 ], 422);
             }
 
-            // Payment must be authorized and waiting for capture.
             if ($stripeIntent->status !== 'requires_capture') {
                 return response()->json([
                     'status'  => false,
@@ -951,7 +1000,6 @@ class OrderController extends Controller
                 ], 422);
             }
 
-            // ===================== USER & CUSTOMER =====================
             $user = auth('sanctum')->user();
             $customer = null;
             $isGuest = false;
@@ -994,7 +1042,6 @@ class OrderController extends Controller
                 }
             }
 
-            // ===================== COUPON USAGE CHECK =====================
             $coupon = null;
 
             if (!empty($validated['couponCode'])) {
@@ -1043,7 +1090,6 @@ class OrderController extends Controller
                 }
             }
 
-            // ===================== GUEST — NO USER CREATE, SEND ACCOUNT CREATE EMAIL =====================
             if ($isGuest) {
                 try {
                     $store = Store::find($storeId);
@@ -1066,12 +1112,10 @@ class OrderController extends Controller
                 }
             }
 
-            // ===================== LOGGED IN USER (existing) =====================
             if (!$user && !$isGuest) {
                 $user = User::where('email', $validated['email'])->first();
             }
 
-            // ===================== ORDERS =====================
             $orders = [];
             $totalOrderAmount = 0;
             $discount = $validated['discountAmount'] ?? 0;
@@ -1094,7 +1138,9 @@ class OrderController extends Controller
                 $cartTotal = 0;
                 foreach ($validated['products'] as $item) {
                     $product = Product::find($item['product_id']);
-                    if ($product) $cartTotal += $product->price * $item['quantity'];
+                    if ($product) {
+                        $cartTotal += $resolvePrice($product->id, $product->price) * $item['quantity'];
+                    }
                 }
 
                 $totalAmount = $cartTotal + $validated['shippingCost'] - $discount - $manualDiscount;
@@ -1154,7 +1200,7 @@ class OrderController extends Controller
                             'store_id'   => $storeId,
                             'product_id' => $product->id,
                             'quantity'   => $item['quantity'],
-                            'price'      => $product->price,
+                            'price'      => $resolvePrice($product->id, $product->price),
                         ]);
 
                         $product->decrement('current_stock', $item['quantity']);
@@ -1170,7 +1216,9 @@ class OrderController extends Controller
                     $cartTotal = 0;
                     foreach ($dest['products'] as $item) {
                         $product = Product::find($item['product_id']);
-                        if ($product) $cartTotal += $product->price * $item['quantity'];
+                        if ($product) {
+                            $cartTotal += $resolvePrice($product->id, $product->price) * $item['quantity'];
+                        }
                     }
 
                     $totalAmount = $cartTotal + $dest['shippingCost'] - $discount - $manualDiscount;
@@ -1230,7 +1278,7 @@ class OrderController extends Controller
                                 'store_id'   => $storeId,
                                 'product_id' => $product->id,
                                 'quantity'   => $item['quantity'],
-                                'price'      => $product->price,
+                                'price'      => $resolvePrice($product->id, $product->price),
                             ]);
 
                             $product->decrement('current_stock', $item['quantity']);
@@ -1243,7 +1291,6 @@ class OrderController extends Controller
                 }
             }
 
-            // ===================== FETCH BILLING FROM STRIPE =====================
             $stripeBillingDetails = null;
             try {
                 \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
@@ -1277,7 +1324,6 @@ class OrderController extends Controller
                 }
             }
 
-            // ===================== PREPARE SHIPPING ADDRESS =====================
             $shippingData = null;
 
             if ($validated['isSaveAddressForShipping'] ?? false) {
@@ -1297,7 +1343,6 @@ class OrderController extends Controller
                     ];
             }
 
-            // ===================== PREPARE BILLING ADDRESS =====================
             $billingData = null;
 
             if ($validated['isSaveAddressForBilling'] ?? false) {
@@ -1324,7 +1369,6 @@ class OrderController extends Controller
                 ]);
             }
 
-            // ===================== PAYMENT =====================
             $riskData = [
                 'risk_score' => null,
                 'risk_level' => 'normal',
@@ -1338,7 +1382,6 @@ class OrderController extends Controller
                     ['expand' => ['latest_charge', 'latest_charge.review', 'review']]
                 );
 
-                // authorize hote hi kabhi charge late milta hai
                 if (empty($stripeIntent->latest_charge)) {
                     usleep(800000);
                     $stripeIntent = \Stripe\PaymentIntent::retrieve(
@@ -1385,14 +1428,12 @@ class OrderController extends Controller
                     if ($overallScore >= 75) {
                         $overallLevel = 'highest';
                     } elseif ($overallScore >= 50 && $overallLevel === 'normal') {
-                        // Dashboard pe 59 Highest tha, classic outcome aksar normal hi deta hai
                         $overallLevel = 'highest';
                     } elseif ($overallScore >= 65 && $overallLevel === 'normal') {
                         $overallLevel = 'elevated';
                     }
                 }
 
-                // extra signal: street / cvc fail
                 try {
                     if (!empty($stripeIntent->payment_method)) {
                         $pm = is_string($stripeIntent->payment_method)
@@ -1427,7 +1468,6 @@ class OrderController extends Controller
                 'payment_status'    => 'authorized',
             ], $riskData));
 
-            // ===================== SAVE COUPON USAGE (EMAIL) =====================
             if ($coupon) {
                 CouponUsage::create([
                     'store_id'    => $storeId,
@@ -1439,7 +1479,6 @@ class OrderController extends Controller
                 ]);
             }
 
-            // ===================== TIMELINE EVENTS =====================
             foreach ($orders as $ord) {
                 $ord->load('billingInformation');
 
@@ -1470,7 +1509,6 @@ class OrderController extends Controller
                 $order->load('items.product.images', 'billingInformation', 'customer');
             }
 
-            // ===================== SEND ORDER EMAIL =====================
             try {
                 foreach ($orders as $ord) {
                     $ord->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
