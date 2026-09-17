@@ -170,7 +170,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     Route::get('/customer-discounts', [OrderController::class, 'getCustomerOrderDiscounts'])
-    ->middleware('auth:sanctum');
+        ->middleware('auth:sanctum');
     // Orders — Add
     Route::prefix('orders')->middleware('permission:add_order')->controller(OrderController::class)->group(function () {
         Route::post('/existing-customer', 'storeFromDashboard');
@@ -238,7 +238,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::put('/update-product', 'updateProduct');
         Route::post('/update-single-product/{id}', 'updateSingleProduct');
         Route::delete('/delete-product/{id?}', 'destroyProduct');
-        Route::delete('/delete-product/categories/{id}', 'destroyProductCategories');
+        Route::delete('/delete-product/categories/{id?}', 'destroyProductCategories');
         Route::get('/featured-products', 'featuredProducts');
     });
 
@@ -574,7 +574,7 @@ Route::prefix('web')->group(function () {
     Route::prefix('cart')->middleware('auth:sanctum')->controller(CartController::class)->group(function () {
         Route::post('/transfer', 'transferGuestCartToUser');
     });
-    
+
     Route::prefix('cart')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {
         Route::post('/load-saved-quote', 'loadSavedQuote');
     });
@@ -586,7 +586,7 @@ Route::prefix('web')->group(function () {
         Route::delete('/remove/{id}', 'destroy');
     });
 
-    
+
 
     Route::prefix('orders')->controller(OrderController::class)->group(function () {
         Route::post('/place-order', 'store');

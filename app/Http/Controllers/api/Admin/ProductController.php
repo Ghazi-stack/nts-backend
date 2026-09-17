@@ -2858,6 +2858,14 @@ class ProductController extends Controller
                 return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
             }
 
+            // DELETE body kabhi request bag mein nahi aati
+            if (!$request->filled('productIds') || !$request->filled('categoryIds')) {
+                $json = json_decode($request->getContent(), true);
+                if (is_array($json)) {
+                    $request->merge($json);
+                }
+            }
+
             $request->validate([
                 'productIds'    => 'nullable|array',
                 'productIds.*'  => 'integer',
@@ -2865,8 +2873,8 @@ class ProductController extends Controller
                 'categoryIds.*' => 'integer',
             ]);
 
-            $productIds = $request->productIds ?? [];
-            if ($id) {
+            $productIds = $request->input('productIds', []);
+            if ($id !== null && $id !== '' && is_numeric($id)) {
                 $productIds[] = (int) $id;
             }
             $productIds  = array_values(array_unique(array_filter($productIds)));
@@ -2876,9 +2884,15 @@ class ProductController extends Controller
                 return response()->json(['status' => false, 'message' => 'Product ID is required.'], 422);
             }
 
-            $products = Product::where('store_id', $storeId)
-                ->whereIn('id', $productIds)
-                ->get();
+            $productQuery = Product::withoutGlobalScopes()
+                ->where('store_id', $storeId)
+                ->whereIn('id', $productIds);
+
+            if (method_exists(Product::class, 'bootSoftDeletes') || in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive(Product::class))) {
+                $productQuery->withTrashed();
+            }
+
+            $products = $productQuery->get();
 
             if ($products->isEmpty()) {
                 return response()->json([
@@ -2897,7 +2911,8 @@ class ProductController extends Controller
                     continue;
                 }
 
-                $product->categories()->detach($toDetach); // category_product se delete
+                $product->categories()->detach($toDetach);
+
                 $toDetachAll = array_merge($toDetachAll, $toDetach);
 
                 if (!empty($product->category_id) && in_array((int) $product->category_id, $toDetach, true)) {
