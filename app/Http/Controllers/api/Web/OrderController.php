@@ -4219,7 +4219,7 @@ class OrderController extends Controller
                 'products.*.productId'  => 'required_without:products.*.product_id|integer|exists:products,id',
                 'products.*.product_id' => 'required_without:products.*.productId|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
-                'products.*.price'      => 'required|numeric|min:0',
+                'products.*.price'      => 'nullable|numeric|min:0',
 
                 'shippingDestinations'            => 'nullable|array',
                 'shippingDestinations.*.address'  => 'required|array',
@@ -4364,12 +4364,19 @@ class OrderController extends Controller
             $discount       = (float) ($validated['discountAmount'] ?? 0);
             $manualDiscount = (float) ($validated['manualDiscount'] ?? $request->input('manualDiscount', 0));
 
-            $mapProducts = function ($items) {
-                return collect($items)->map(function ($item) {
+            $mapProducts = function ($items) use ($storeId) {
+                return collect($items)->map(function ($item) use ($storeId) {
+                    $productId = $item['product_id'] ?? $item['productId'];
+                    $hasPrice  = array_key_exists('price', $item) && $item['price'] !== null && $item['price'] !== '';
+
+                    $price = $hasPrice
+                        ? (float) $item['price']
+                        : (float) Product::where('store_id', $storeId)->findOrFail($productId)->price;
+
                     return [
-                        'product_id' => $item['product_id'] ?? $item['productId'],
+                        'product_id' => $productId,
                         'quantity'   => (int) $item['quantity'],
-                        'price'      => (float) $item['price'],
+                        'price'      => $price,
                     ];
                 })->all();
             };
@@ -4654,27 +4661,7 @@ class OrderController extends Controller
                 }
 
                 if ($isDraft) {
-                    if (!empty($storeUser?->id)) {
-                        foreach ($products as $item) {
-                            $existingCart = Cart::where('store_id', $storeId)
-                                ->where('user_id', $storeUser->id)
-                                ->where('product_id', $item['product_id'])
-                                ->first();
-
-                            if ($existingCart) {
-                                $existingCart->update([
-                                    'quantity' => $existingCart->quantity + $item['quantity'],
-                                ]);
-                            } else {
-                                Cart::create([
-                                    'store_id'   => $storeId,
-                                    'user_id'    => $storeUser->id,
-                                    'product_id' => $item['product_id'],
-                                    'quantity'   => $item['quantity'],
-                                ]);
-                            }
-                        }
-                    }
+                    $formUserId = $storeUser?->id ?? $customer->user_id ?? $user?->id;
 
                     $quoteUrl = $this->draftQuote->makeDraftQuoteUrl(
                         $order->fresh('customer'),
@@ -4686,8 +4673,40 @@ class OrderController extends Controller
                         'isdrafturl' => $quoteUrl,
                     ]);
 
-                    $sessionId  = $request->header('X-Session-ID') ?? session()->getId();
-                    $formUserId = $storeUser?->id ?? $customer->user_id ?? $user?->id;
+                    $quoteToken = null;
+                    if ($quoteUrl && str_contains($quoteUrl, 'quoteToken=')) {
+                        $quoteToken = substr($quoteUrl, strpos($quoteUrl, 'quoteToken=') + 11);
+                    }
+
+                    if (!empty($storeUser?->id)) {
+                        foreach ($validated['products'] as $raw) {
+                            $productId = $raw['product_id'] ?? $raw['productId'];
+                            $qty       = (int) $raw['quantity'];
+                            $hasPrice  = array_key_exists('price', $raw) && $raw['price'] !== null && $raw['price'] !== '';
+
+                            $cartRow = Cart::create([
+                                'store_id'    => $storeId,
+                                'user_id'     => $storeUser->id,
+                                'product_id'  => $productId,
+                                'quantity'    => $qty,
+                                'isdraftcart' => $hasPrice ? 1 : 0,
+                                'quote_token' => $quoteToken,
+                            ]);
+
+                            if ($hasPrice) {
+                                OrderCartItemProduct::create([
+                                    'order_id'   => $order->id,
+                                    'user_id'    => $formUserId,
+                                    'product_id' => $productId,
+                                    'cart_id'    => $cartRow->id,
+                                    'price'      => (float) $raw['price'],
+                                    'qty'        => $qty,
+                                ]);
+                            }
+                        }
+                    }
+
+                    $sessionId = $request->header('X-Session-ID') ?? session()->getId();
 
                     CheckoutFormData::create([
                         'store_id'           => $storeId,
@@ -4726,7 +4745,7 @@ class OrderController extends Controller
                     if (!empty($storeUser?->id)) {
                         $cartIds = Cart::where('store_id', $storeId)
                             ->where('user_id', $storeUser->id)
-                            ->whereIn('product_id', collect($products)->pluck('product_id'))
+                            ->where('quote_token', $quoteToken)
                             ->pluck('id')
                             ->values()
                             ->all();
