@@ -3112,32 +3112,35 @@ class OrderController extends Controller
 
                 $formUserId = $cartUser?->id ?? $customer->user_id ?? $user?->id;
 
+                $quoteUrl = $this->draftQuote->makeDraftQuoteUrl(
+                    $order->fresh('customer'),
+                    $cartUser ?? null,
+                    $storeId
+                );
+
+                $order->update([
+                    'isdrafturl' => $quoteUrl,
+                ]);
+
+                $quoteToken = null;
+                if ($quoteUrl && str_contains($quoteUrl, 'quoteToken=')) {
+                    $quoteToken = substr($quoteUrl, strpos($quoteUrl, 'quoteToken=') + 11);
+                }
+
                 if ($cartUser) {
                     foreach ($validated['products'] as $raw) {
                         $productId = $raw['product_id'] ?? $raw['productId'];
                         $qty       = (int) $raw['quantity'];
                         $hasPrice  = array_key_exists('price', $raw) && $raw['price'] !== null && $raw['price'] !== '';
 
-                        $existingCart = Cart::where('store_id', $storeId)
-                            ->where('user_id', $cartUser->id)
-                            ->where('product_id', $productId)
-                            ->first();
-
-                        if ($existingCart) {
-                            $existingCart->update([
-                                'quantity'    => $existingCart->quantity + $qty,
-                                'isdraftcart' => $hasPrice ? 1 : ($existingCart->isdraftcart ?? 0),
-                            ]);
-                            $cartRow = $existingCart->fresh();
-                        } else {
-                            $cartRow = Cart::create([
-                                'store_id'    => $storeId,
-                                'user_id'     => $cartUser->id,
-                                'product_id'  => $productId,
-                                'quantity'    => $qty,
-                                'isdraftcart' => $hasPrice ? 1 : 0,
-                            ]);
-                        }
+                        $cartRow = Cart::create([
+                            'store_id'    => $storeId,
+                            'user_id'     => $cartUser->id,
+                            'product_id'  => $productId,
+                            'quantity'    => $qty,
+                            'isdraftcart' => $hasPrice ? 1 : 0,
+                            'quote_token' => $quoteToken,
+                        ]);
 
                         if ($hasPrice) {
                             OrderCartItemProduct::create([
@@ -3151,16 +3154,6 @@ class OrderController extends Controller
                         }
                     }
                 }
-
-                $quoteUrl = $this->draftQuote->makeDraftQuoteUrl(
-                    $order->fresh('customer'),
-                    $cartUser ?? null,
-                    $storeId
-                );
-
-                $order->update([
-                    'isdrafturl' => $quoteUrl,
-                ]);
 
                 $billingFormData = [
                     'firstName'    => $formAddress['firstName'] ?? null,
@@ -3203,7 +3196,7 @@ class OrderController extends Controller
                 if ($cartUser) {
                     $cartIds = Cart::where('store_id', $storeId)
                         ->where('user_id', $cartUser->id)
-                        ->whereIn('product_id', collect($validated['products'])->map(fn($p) => $p['product_id'] ?? $p['productId']))
+                        ->where('quote_token', $quoteToken)
                         ->pluck('id')
                         ->values()
                         ->all();

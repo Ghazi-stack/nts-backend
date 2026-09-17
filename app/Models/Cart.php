@@ -19,6 +19,7 @@ class Cart extends Model
         'session_id',
         'product_id',
         'quantity',
+        'quote_token',
         'isdraftcart',
         'email_1hr_sent_at',
         'email_24hr_sent_at',
