@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Http\Controllers\Controller;
 use App\Models\OrderTimeline;
+use Illuminate\Support\Facades\Log;
 
 class StripePaymentController extends Controller
 {
@@ -308,51 +309,577 @@ class StripePaymentController extends Controller
     /**
      * 📩 Stripe Webhook to update order/payment status
      */
+    // public function handleWebhook(Request $request)
+    // {
+    //     $payload = @file_get_contents('php://input');
+    //     $sig_header = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? null;
+    //     $endpoint_secret = env('STRIPE_WEBHOOK_SECRET');
+
+    //     try {
+    //         $event = Webhook::constructEvent(
+    //             $payload,
+    //             $sig_header,
+    //             $endpoint_secret
+    //         );
+    //     } catch (\Exception $e) {
+    //         \Log::error('Stripe webhook verification failed:', ['error' => $e->getMessage()]);
+    //         return response()->json(['error' => $e->getMessage()], 400);
+    //     }
+
+    //     if ($event->type === 'payment_intent.succeeded') {
+    //         $intent = $event->data->object;
+
+    //         $payment = Payment::where('stripe_session_id', $intent->id)->first();
+    //         if ($payment) {
+    //             $payment->update(['payment_status' => 'completed']);
+
+    //             $order = $payment->order;
+    //             if ($order) {
+    //                 $order->update(['status' => 'Awaiting Fulfillment']);
+    //             }
+    //         }
+    //     }
+
+    //     if ($event->type === 'payment_intent.canceled') {
+    //         $intent = $event->data->object;
+
+    //         $payment = Payment::where('stripe_session_id', $intent->id)->first();
+    //         if ($payment && $payment->payment_status === 'authorized') {
+    //             $payment->update(['payment_status' => 'expired']);
+
+    //             $order = $payment->order;
+    //             if ($order) {
+    //                 $order->update(['status' => 'Payment Expired']);
+    //             }
+    //         }
+    //     }
+
+    //     return response()->json(['status' => 'success']);
+    // }
+
     public function handleWebhook(Request $request)
     {
-        $payload = @file_get_contents('php://input');
-        $sig_header = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? null;
-        $endpoint_secret = env('STRIPE_WEBHOOK_SECRET');
+        $payload = $request->getContent();
+
+        $sigHeader = $request->header('Stripe-Signature');
+
+        $endpointSecret = config('services.stripe.webhook_secret')
+            ?? env('STRIPE_WEBHOOK_SECRET');
 
         try {
+
             $event = Webhook::constructEvent(
                 $payload,
-                $sig_header,
-                $endpoint_secret
+                $sigHeader,
+                $endpointSecret
             );
-        } catch (\Exception $e) {
-            \Log::error('Stripe webhook verification failed:', ['error' => $e->getMessage()]);
-            return response()->json(['error' => $e->getMessage()], 400);
+
+        } catch (\UnexpectedValueException $e) {
+
+            \Log::error('Stripe webhook invalid payload', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Invalid payload',
+            ], 400);
+
+        } catch (\Stripe\Exception\SignatureVerificationException $e) {
+
+            \Log::error('Stripe webhook signature verification failed', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Invalid signature',
+            ], 400);
         }
 
-        if ($event->type === 'payment_intent.succeeded') {
-            $intent = $event->data->object;
+        try {
 
-            $payment = Payment::where('stripe_session_id', $intent->id)->first();
-            if ($payment) {
-                $payment->update(['payment_status' => 'completed']);
+            /*
+            |--------------------------------------------------------------------------
+            | PAYMENT AUTHORIZED
+            |--------------------------------------------------------------------------
+            |
+            | Manual capture PaymentIntent becomes capturable.
+            |
+            */
 
-                $order = $payment->order;
-                if ($order) {
-                    $order->update(['status' => 'Awaiting Fulfillment']);
+            if ($event->type === 'payment_intent.amount_capturable_updated') {
+
+                $intent = $event->data->object;
+
+                $payment = Payment::where(
+                    'stripe_session_id',
+                    $intent->id
+                )->first();
+
+                if ($payment) {
+
+                    $payment->update([
+                        'payment_status' => 'authorized',
+                    ]);
+
+                    \Log::info(
+                        'Stripe Payment authorized',
+                        [
+                            'payment_intent_id' => $intent->id,
+                            'order_id' => $payment->order_id,
+                        ]
+                    );
                 }
             }
-        }
 
-        if ($event->type === 'payment_intent.canceled') {
-            $intent = $event->data->object;
 
-            $payment = Payment::where('stripe_session_id', $intent->id)->first();
-            if ($payment && $payment->payment_status === 'authorized') {
-                $payment->update(['payment_status' => 'expired']);
+            /*
+            |--------------------------------------------------------------------------
+            | PAYMENT CAPTURED
+            |--------------------------------------------------------------------------
+            */
 
-                $order = $payment->order;
-                if ($order) {
-                    $order->update(['status' => 'Payment Expired']);
+            elseif ($event->type === 'payment_intent.succeeded') {
+
+                $intent = $event->data->object;
+
+                $payment = Payment::where(
+                    'stripe_session_id',
+                    $intent->id
+                )->first();
+
+                if ($payment) {
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Idempotency protection
+                    |--------------------------------------------------------------------------
+                    */
+
+                    if ($payment->payment_status !== 'completed') {
+
+                        $payment->update([
+                            'payment_status' => 'completed',
+                        ]);
+
+                        $order = $payment->order;
+
+                        if ($order) {
+
+                            $previousStatus = $order->status;
+
+                            $order->update([
+                                'status' => 'Awaiting Fulfillment',
+                            ]);
+
+                            /*
+                            |--------------------------------------------------------------------------
+                            | Timeline
+                            |--------------------------------------------------------------------------
+                            */
+
+                            try {
+
+                                $storeId = current_store_id();
+
+                                OrderTimeline::addEvent(
+                                    $order->id,
+                                    $storeId,
+                                    'payment_captured',
+                                    'Payment captured successfully.',
+                                    [
+                                        'source' => 'Express Checkout via Stripe',
+                                        'payment_intent' => $intent->id,
+                                        'amount' => '$' . number_format(
+                                            ($intent->amount_received ?? $intent->amount) / 100,
+                                            2
+                                        ),
+                                    ],
+                                    'payment'
+                                );
+
+                                OrderTimeline::addEvent(
+                                    $order->id,
+                                    $storeId,
+                                    'status_changed',
+                                    'Order status changed',
+                                    [
+                                        'previous_status' => $previousStatus,
+                                        'new_status' => 'Awaiting Fulfillment',
+                                    ],
+                                    'dot'
+                                );
+
+                            } catch (\Throwable $timelineException) {
+
+                                \Log::warning(
+                                    'Unable to create Express Checkout order timeline',
+                                    [
+                                        'error' => $timelineException->getMessage(),
+                                    ]
+                                );
+                            }
+                        }
+                    }
                 }
             }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | PAYMENT CANCELED
+            |--------------------------------------------------------------------------
+            */
+
+            elseif ($event->type === 'payment_intent.canceled') {
+
+                $intent = $event->data->object;
+
+                $payment = Payment::where(
+                    'stripe_session_id',
+                    $intent->id
+                )->first();
+
+                if ($payment) {
+
+                    if (
+                        in_array(
+                            $payment->payment_status,
+                            ['pending', 'authorized']
+                        )
+                    ) {
+
+                        $payment->update([
+                            'payment_status' => 'expired',
+                        ]);
+
+                        $order = $payment->order;
+
+                        if ($order) {
+
+                            $order->update([
+                                'status' => 'Payment Expired',
+                            ]);
+                        }
+                    }
+                }
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | PAYMENT FAILED
+            |--------------------------------------------------------------------------
+            */
+
+            elseif ($event->type === 'payment_intent.payment_failed') {
+
+                $intent = $event->data->object;
+
+                $payment = Payment::where(
+                    'stripe_session_id',
+                    $intent->id
+                )->first();
+
+                if ($payment) {
+
+                    $payment->update([
+                        'payment_status' => 'failed',
+                    ]);
+
+                    $order = $payment->order;
+
+                    if ($order) {
+
+                        $order->update([
+                            'status' => 'Payment Failed',
+                        ]);
+                    }
+                }
+            }
+
+        } catch (\Throwable $e) {
+
+            \Log::error(
+                'Stripe webhook processing error',
+                [
+                    'event_type' => $event->type ?? null,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Return 200 only if you intentionally don't want Stripe retrying.
+            |
+            | For critical processing errors, returning 500 lets Stripe retry.
+            |--------------------------------------------------------------------------
+            */
+
+            return response()->json([
+                'error' => 'Webhook processing failed',
+            ], 500);
         }
 
-        return response()->json(['status' => 'success']);
+        return response()->json([
+            'status' => 'success',
+        ]);
     }
+
+    // Wallet Payment Functions
+
+    /**
+     * Create PaymentIntent for Express Checkout wallets.
+     *
+     * Supports:
+     * - Apple Pay
+     * - Google Pay
+     * - Link
+     * - PayPal
+     * - Klarna
+     * - Amazon Pay
+     * - Other Stripe-supported Express Checkout methods
+     */
+    public function createExpressCheckoutIntent(Request $request)
+    {
+        $validated = $request->validate([
+            'products' => 'required|array|min:1',
+
+            'products.*.product_id' => [
+                'required',
+                'integer',
+                'exists:products,id',
+            ],
+
+            'products.*.quantity' => [
+                'required',
+                'integer',
+                'min:1',
+            ],
+
+            'shippingCost' => 'nullable|numeric|min:0',
+
+            'discountAmount' => 'nullable|numeric|min:0',
+
+            'manualDiscount' => 'nullable|numeric|min:0',
+
+            'currency' => 'nullable|string|size:3',
+
+            'isMultiAddress' => 'nullable|boolean',
+
+            'destinations' => 'nullable|array',
+        ]);
+
+        try {
+
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected.',
+                ], 400);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Calculate product total from DATABASE
+            |--------------------------------------------------------------------------
+            |
+            | Never trust the price sent from Next.js.
+            |
+            */
+
+            $productTotal = 0;
+
+            foreach ($validated['products'] as $item) {
+
+                $product = Product::where('store_id', $storeId)
+                    ->find($item['product_id']);
+
+                if (!$product) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Product not found.',
+                        'product_id' => $item['product_id'],
+                    ], 404);
+                }
+
+                if ($product->current_stock < $item['quantity']) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => "Insufficient stock for {$product->name}.",
+                    ], 422);
+                }
+
+                $productTotal +=
+                    ((float) $product->price * (int) $item['quantity']);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Shipping
+            |--------------------------------------------------------------------------
+            */
+
+            $shippingCost = (float) (
+                $validated['shippingCost'] ?? 0
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Discounts
+            |--------------------------------------------------------------------------
+            */
+
+            $discountAmount = (float) (
+                $validated['discountAmount'] ?? 0
+            );
+
+            $manualDiscount = (float) (
+                $validated['manualDiscount'] ?? 0
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Final amount
+            |--------------------------------------------------------------------------
+            */
+
+            $totalAmount =
+                $productTotal
+                + $shippingCost
+                - $discountAmount
+                - $manualDiscount;
+
+            $totalAmount = max($totalAmount, 0);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Stripe amount
+            |--------------------------------------------------------------------------
+            */
+
+            $stripeAmount = (int) round($totalAmount * 100);
+
+            if ($stripeAmount <= 0) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Payment amount must be greater than zero.',
+                ], 422);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Stripe
+            |--------------------------------------------------------------------------
+            */
+
+            Stripe::setApiKey(
+                config('services.stripe.secret')
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | PaymentIntent
+            |--------------------------------------------------------------------------
+            |
+            | automatic_payment_methods allows Stripe to determine which
+            | payment methods can be used.
+            |
+            | Express Checkout will then display the eligible wallet(s).
+            |
+            */
+
+            $intent = PaymentIntent::create([
+                'amount' => $stripeAmount,
+
+                'currency' => strtolower(
+                    $validated['currency'] ?? 'usd'
+                ),
+
+                'automatic_payment_methods' => [
+                    'enabled' => true,
+                ],
+
+                /*
+                 * IMPORTANT:
+                 *
+                 * Your existing system authorizes first and captures later.
+                 */
+                'capture_method' => 'manual',
+
+                'metadata' => [
+                    'store_id' => (string) $storeId,
+                    'checkout_type' => 'express_checkout',
+                ],
+            ], [
+                /*
+                 * Prevent accidental duplicate PaymentIntents.
+                 *
+                 * Ideally replace this with a stable cart/session key.
+                 */
+                'idempotency_key' =>
+                    'express_checkout_' .
+                    $storeId . '_' .
+                    sha1(json_encode([
+                        'products' => $validated['products'],
+                        'shipping' => $shippingCost,
+                        'discount' => $discountAmount,
+                        'manual_discount' => $manualDiscount,
+                    ])),
+            ]);
+
+            return response()->json([
+                'status' => true,
+
+                'message' =>
+                    'Express Checkout PaymentIntent created.',
+
+                'data' => [
+                    'payment_intent_id' => $intent->id,
+
+                    'client_secret' => $intent->client_secret,
+
+                    'amount' => $totalAmount,
+
+                    'amount_cents' => $stripeAmount,
+
+                    'currency' => $intent->currency,
+
+                    'status' => $intent->status,
+                ],
+            ]);
+
+        } catch (\Stripe\Exception\ApiErrorException $e) {
+
+            Log::error(
+                'Stripe Express Checkout PaymentIntent Error',
+                [
+                    'error' => $e->getMessage(),
+                ]
+            );
+
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+
+        } catch (\Throwable $e) {
+
+            Log::error(
+                'Express Checkout Intent Error',
+                [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]
+            );
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Unable to create payment.',
+            ], 500);
+        }
+    }
+    
 }

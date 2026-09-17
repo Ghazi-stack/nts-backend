@@ -928,6 +928,29 @@ class OrderController extends Controller
                 }
             }
 
+            // ===================== VERIFY STRIPE PAYMENT INTENT =====================
+            Stripe::setApiKey(config('services.stripe.secret'));
+
+            try {
+                $stripeIntent = PaymentIntent::retrieve(
+                    $validated['paymentIntentId']
+                );
+            } catch (\Exception $stripeException) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Unable to verify payment with Stripe.',
+                ], 422);
+            }
+
+            // Payment must be authorized and waiting for capture.
+            if ($stripeIntent->status !== 'requires_capture') {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Payment has not been authorized.',
+                    'payment_status' => $stripeIntent->status,
+                ], 422);
+            }
+
             // ===================== USER & CUSTOMER =====================
             $user = auth('sanctum')->user();
             $customer = null;
