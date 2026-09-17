@@ -675,32 +675,48 @@ class CustomerController extends Controller
     public function myOrders(Request $request)
     {
         try {
-            // Logged-in user
             $user = auth()->user();
             if (!$user) {
                 return response()->json([
-                    'status' => false,
+                    'status'  => false,
                     'message' => 'User not authenticated.'
                 ], 401);
             }
 
-            // Fetch orders based on user_id
             $orders = Order::with([
                 'items.product.images',
-                'returnRequest' // ✅ ADD THIS
+                'returnRequest',
             ])
                 ->where('user_id', $user->id)
                 ->orderBy('created_at', 'desc')
                 ->get();
-            // Return orders using a resource
+
+            // product-less items hatao taake resource null->id na read kare
+            $orders->each(function ($order) {
+                $order->setRelation(
+                    'items',
+                    $order->items->filter(fn($item) => $item->product !== null)->values()
+                );
+            });
+
+            $result = [];
+            foreach ($orders as $order) {
+                try {
+                    $result[] = (new MyOrderResource($order))->resolve();
+                } catch (\Throwable $e) {
+                    // yeh order skip — baqi orders chalte rahein
+                    continue;
+                }
+            }
+
             return response()->json([
                 'status' => true,
-                'orders' => MyOrderResource::collection($orders)
+                'orders' => $result,
             ], 200);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return response()->json([
-                'status' => false,
-                'error' => $e->getMessage()
+                'status'  => false,
+                'message' => 'Unable to load orders right now. Please try again.'
             ], 500);
         }
     }
