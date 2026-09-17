@@ -14,7 +14,7 @@ class ShipmentResource extends JsonResource
             'shippedTo' => $this->shipped_to,
             'dateShipped' => $this->date_shipped,
             'shippingMethod' => $this->shipping_method,
-            'trackingCarrier' => $this->tracking_carrie,
+            'trackingCarrier' => $this->tracking_carrier ?? null,
             'shippedBy' => $this->shipped_by,
             'packingSlipNotes' => $this->packing_slip_note,
             'trackingNumber' => $this->tracking_number,
@@ -27,7 +27,7 @@ class ShipmentResource extends JsonResource
                     'quantity' => $item->quantity,
                     'price' => $item->price,
                     'total' => $item->quantity * $item->price,
-                    'productUrl'  => optional($item->product->seo)->product_url,
+                    'productUrl'  => optional($item->product->seo)->product_url ?? null,
                 ];
             }) ?? [],
         ];
