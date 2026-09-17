@@ -694,6 +694,11 @@ Route::prefix('web')->group(function () {
     // 📩 Webhook (no auth)
     Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
 
+    Route::post(
+        '/stripe/express-checkout/create-intent',
+        [StripePaymentController::class, 'createExpressCheckoutIntent']
+    );
+
     // ── Checkout Shipping Rates (public) ──
     Route::prefix('checkout')->controller(CheckoutShippingController::class)->group(function () {
         Route::get('/get-shipping-rates', 'getRates');
