@@ -1528,7 +1528,7 @@ class OrderController extends Controller
                 $query->where('id', $orderId);
             }
 
-            $order = $query->latest('id')->first();
+            $order = $query->latest('id')->get();
 
             if (!$order) {
                 return response()->json([
