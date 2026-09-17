@@ -90,7 +90,11 @@ class CartController extends Controller
                 ->with($this->productRelations());
 
             if ($quoteToken) {
-                $query->where('quote_token', $quoteToken);
+                $query->where(function ($q) use ($quoteToken) {
+                    $q->where('quote_token', $quoteToken)
+                        ->orWhereNull('quote_token')
+                        ->orWhere('quote_token', '');
+                });
             } else {
                 $query->where(function ($q) {
                     $q->whereNull('quote_token')->orWhere('quote_token', '');
