@@ -730,43 +730,16 @@ class CartController extends Controller
                 ], 400);
             }
 
-            $request->validate([
-                'cart_id'  => 'nullable',
-                'cartId'   => 'nullable',
-                'cart_ids' => 'nullable',
-                'cartIds'  => 'nullable',
-            ]);
-
-            $raw = $request->input(
-                'cart_ids',
-                $request->input('cartIds', $request->input('cart_id', $request->input('cartId')))
-            );
-
-            $cartIds = [];
-            if (is_array($raw)) {
-                $cartIds = $raw;
-            } elseif (is_string($raw) && str_contains($raw, ',')) {
-                $cartIds = explode(',', $raw);
-            } elseif ($raw !== null && $raw !== '') {
-                $cartIds = [$raw];
-            }
-
-            $cartIds = array_values(array_unique(array_filter(array_map('intval', $cartIds))));
-
-            if (empty($cartIds)) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'cart_id is required.',
-                ], 422);
-            }
-
             [$user, $sessionId] = $this->resolveIdentity($request);
 
+            // Token priority: token hai → user_id se, nahi → session_id se
             $query = CartShippingRate::where('store_id', $storeId);
 
             if ($user) {
+                // Token hai → user_id se match karo (session ignore)
                 $query->where('user_id', $user->id);
             } elseif ($sessionId) {
+                // Guest → session_id se match karo
                 $query->where('session_id', $sessionId);
             } else {
                 return response()->json([
@@ -774,13 +747,6 @@ class CartController extends Controller
                     'message' => 'Authentication or Session ID required.',
                 ], 422);
             }
-
-            $query->where(function ($q) use ($cartIds) {
-                foreach ($cartIds as $id) {
-                    $q->orWhereJsonContains('cart_ids', $id)
-                        ->orWhereJsonContains('cart_ids', (string) $id);
-                }
-            });
 
             $shippingRate = $query->latest()->first();
 
@@ -791,19 +757,13 @@ class CartController extends Controller
                 ], 404);
             }
 
-            $savedCartIds = $shippingRate->cart_ids;
-            if (is_string($savedCartIds)) {
-                $decoded = json_decode($savedCartIds, true);
-                $savedCartIds = json_last_error() === JSON_ERROR_NONE ? $decoded : $savedCartIds;
-            }
-
             return response()->json([
                 'status'  => true,
                 'message' => 'Shipping rate fetched successfully.',
                 'data'    => [
                     'id'      => $shippingRate->id,
                     'storeId' => $shippingRate->store_id,
-                    'cartIds' => $savedCartIds,
+                    'cartIds' => $shippingRate->cart_ids,
                     'country' => $shippingRate->country,
                     'state'   => $shippingRate->state,
                     'city'    => $shippingRate->city,
@@ -815,8 +775,6 @@ class CartController extends Controller
                     ],
                 ],
             ], 200);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
