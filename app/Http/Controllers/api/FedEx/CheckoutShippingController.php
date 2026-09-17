@@ -774,7 +774,7 @@ class CheckoutShippingController extends Controller
                 'destination.country_code' => 'required|string|size:2',
                 'destination.state'        => 'nullable|string|max:255',
                 'destination.city'         => 'nullable|string|max:255',
-                'destination.postal_code'  => 'required|string|max:50',
+                'destination.postal_code'  => 'nullable|string|max:50',
 
                 /*
                 * Dashboard can provide the already-prepared package.

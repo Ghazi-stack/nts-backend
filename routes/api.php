@@ -699,6 +699,11 @@ Route::prefix('web')->group(function () {
         [StripePaymentController::class, 'createExpressCheckoutIntent']
     );
 
+    Route::post(
+        'stripe/express-checkout/update-intent',
+        [StripePaymentController::class, 'updateExpressCheckoutIntent']
+    );
+
     // ── Checkout Shipping Rates (public) ──
     Route::prefix('checkout')->controller(CheckoutShippingController::class)->group(function () {
         Route::get('/get-shipping-rates', 'getRates');
