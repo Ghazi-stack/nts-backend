@@ -81,8 +81,7 @@ class OrderController extends Controller
                                     $p->with([
                                         'images',
                                         'brand',
-                                        'categories:id',          // categoryIds ke liye
-
+                                        'categories:id',
                                     ]);
                                 }
                             ]);
@@ -150,6 +149,35 @@ class OrderController extends Controller
                 })
                 ->latest('id')
                 ->paginate($perPage);
+
+            $orderIds = $orders->getCollection()->pluck('id');
+
+            $overrides = \App\Models\OrderCartItemProduct::query()
+                ->whereIn('order_id', $orderIds)
+                ->get()
+                ->groupBy(fn($row) => $row->order_id . '-' . $row->product_id);
+
+            $orders->getCollection()->transform(function ($order) use ($overrides) {
+                foreach ($order->items as $item) {
+                    $key = $order->id . '-' . $item->product_id;
+                    $row = $overrides->get($key)?->last();
+
+                    if (!$row) {
+                        continue;
+                    }
+
+                    $item->quantity = $row->qty;
+                    $item->price    = $row->price;
+
+                    if ($item->relationLoaded('product') && $item->product) {
+                        $cloned = clone $item->product;
+                        $cloned->setAttribute('price', $row->price);
+                        $item->setRelation('product', $cloned);
+                    }
+                }
+
+                return $order;
+            });
 
             return response()->json([
                 'status'  => true,
