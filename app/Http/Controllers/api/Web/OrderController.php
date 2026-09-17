@@ -3489,6 +3489,43 @@ class OrderController extends Controller
             $data['isDraft']    = true;
             $data['isDraftUrl'] = $order->isdrafturl;
 
+            $savedShipping = $order->billingInformation->shipping_data ?? [];
+            if (is_string($savedShipping)) {
+                $savedShipping = json_decode($savedShipping, true) ?: [];
+            }
+
+            $rate = \App\Models\CartShippingRate::query()
+                ->where('store_id', $storeId)
+                ->where('user_id', $user->id)
+                ->latest('id')
+                ->first();
+
+            $displayName = $savedShipping['display_name']
+                ?? $savedShipping['label']
+                ?? $order->billingInformation->shipping_method
+                ?? null;
+
+            $data['shippingMethod'] = [
+                'method_id'     => $savedShipping['method_id'] ?? $order->shipping_method ?? null,
+                'method_type'   => $savedShipping['method_type'] ?? $rate?->method_type ?? null,
+                'display_name'  => $displayName,
+                'total_charge'  => $savedShipping['total_charge'] ?? $rate?->total_charge ?? $order->shipping_cost,
+                'currency'      => $savedShipping['currency'] ?? 'USD',
+                'transit_days'  => $savedShipping['transit_days'] ?? null,
+                'delivery_date' => $savedShipping['delivery_date'] ?? null,
+                'service_type'  => $savedShipping['service_type'] ?? $rate?->service_type ?? null,
+                'is_fedex'      => $savedShipping['is_fedex']
+                    ?? str_contains(strtolower((string) $displayName), 'fedex'),
+                'provider'      => $savedShipping['provider']
+                    ?? $order->shipping_provider
+                    ?? $displayName,
+                'method'        => $savedShipping['method']
+                    ?? $savedShipping['data']
+                    ?? $displayName,
+                'cost'          => $savedShipping['cost'] ?? $order->shipping_cost,
+                'data'          => $savedShipping['data'] ?? $savedShipping['label'] ?? $displayName,
+            ];
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Saved quote loaded',
