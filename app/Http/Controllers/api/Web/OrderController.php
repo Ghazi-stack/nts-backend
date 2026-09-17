@@ -1522,15 +1522,16 @@ class OrderController extends Controller
 
             $query = Order::query()
                 ->where('store_id', $storeId)
-                ->where('customer_id', $customerId);
+                ->where('customer_id', $customerId)
+                ->orderByDesc('id');
 
             if ($orderId) {
                 $query->where('id', $orderId);
             }
 
-            $order = $query->latest('id')->get();
+            $orders = $query->get();
 
-            if (!$order) {
+            if ($orders->isEmpty()) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'Order not found',
@@ -1540,13 +1541,15 @@ class OrderController extends Controller
             return response()->json([
                 'status'  => true,
                 'message' => 'Discounts retrieved successfully',
-                'data'    => [
-                    'orderId'        => $order->id,
-                    'customerId'     => $order->customer_id,
-                    'couponCode'     => $order->coupon_code,
-                    'discountAmount' => (float) ($order->discountAmount ?? 0),
-                    'manualDiscount' => (float) ($order->manual_discount ?? 0),
-                ],
+                'data'    => $orders->map(function ($order) {
+                    return [
+                        'orderId'        => $order->id,
+                        'customerId'     => $order->customer_id,
+                        'couponCode'     => $order->coupon_code,
+                        'discountAmount' => round((float) ($order->discountAmount ?? 0), 2),
+                        'manualDiscount' => round((float) ($order->manual_discount ?? 0), 2),
+                    ];
+                })->values(),
             ]);
         } catch (\Exception $e) {
             return response()->json([
