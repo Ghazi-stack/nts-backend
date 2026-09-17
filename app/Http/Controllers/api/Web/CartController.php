@@ -730,16 +730,40 @@ class CartController extends Controller
                 ], 400);
             }
 
+            $request->validate([
+                'cart_id'  => 'nullable',
+                'cartId'   => 'nullable',
+                'cart_ids' => 'nullable',
+                'cartIds'  => 'nullable',
+            ]);
+
+            $rawCartIds = $request->input('cart_ids', $request->input('cartIds', $request->input('cart_id', $request->input('cartId'))));
+
+            $cartIds = [];
+            if (is_array($rawCartIds)) {
+                $cartIds = $rawCartIds;
+            } elseif (is_string($rawCartIds) && str_contains($rawCartIds, ',')) {
+                $cartIds = explode(',', $rawCartIds);
+            } elseif ($rawCartIds !== null && $rawCartIds !== '') {
+                $cartIds = [$rawCartIds];
+            }
+
+            $cartIds = array_values(array_unique(array_filter(array_map('intval', $cartIds))));
+
+            if (empty($cartIds)) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'cart_id is required.',
+                ], 422);
+            }
+
             [$user, $sessionId] = $this->resolveIdentity($request);
 
-            // Token priority: token hai → user_id se, nahi → session_id se
             $query = CartShippingRate::where('store_id', $storeId);
 
             if ($user) {
-                // Token hai → user_id se match karo (session ignore)
                 $query->where('user_id', $user->id);
             } elseif ($sessionId) {
-                // Guest → session_id se match karo
                 $query->where('session_id', $sessionId);
             } else {
                 return response()->json([
@@ -747,6 +771,17 @@ class CartController extends Controller
                     'message' => 'Authentication or Session ID required.',
                 ], 422);
             }
+
+            $query->where(function ($q) use ($cartIds) {
+                foreach ($cartIds as $cartId) {
+                    $q->orWhereJsonContains('cart_ids', $cartId)
+                        ->orWhereJsonContains('cart_ids', (string) $cartId)
+                        ->orWhere('cart_ids', $cartId)
+                        ->orWhere('cart_ids', (string) $cartId)
+                        ->orWhere('cart_ids', 'like', '%"' . $cartId . '"%')
+                        ->orWhere('cart_ids', 'like', '%' . $cartId . '%');
+                }
+            });
 
             $shippingRate = $query->latest()->first();
 
@@ -757,13 +792,19 @@ class CartController extends Controller
                 ], 404);
             }
 
+            $savedCartIds = $shippingRate->cart_ids;
+            if (is_string($savedCartIds)) {
+                $decoded = json_decode($savedCartIds, true);
+                $savedCartIds = json_last_error() === JSON_ERROR_NONE ? $decoded : $savedCartIds;
+            }
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Shipping rate fetched successfully.',
                 'data'    => [
                     'id'      => $shippingRate->id,
                     'storeId' => $shippingRate->store_id,
-                    'cartIds' => $shippingRate->cart_ids,
+                    'cartIds' => $savedCartIds,
                     'country' => $shippingRate->country,
                     'state'   => $shippingRate->state,
                     'city'    => $shippingRate->city,
@@ -775,6 +816,8 @@ class CartController extends Controller
                     ],
                 ],
             ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
