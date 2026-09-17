@@ -82,10 +82,40 @@ class CartController extends Controller
                 ], 422);
             }
 
+            $quoteOrderId = null;
+            $quoteToken   = $request->input('quoteToken')
+                ?? $request->query('quoteToken')
+                ?? $request->header('X-Quote-Token');
+
+            if ($quoteToken) {
+                try {
+                    $payload      = app(\App\Services\DraftQuoteService::class)->decode($quoteToken);
+                    $quoteOrderId = (int) ($payload['order_id'] ?? 0) ?: null;
+                } catch (\Exception $e) {
+                    $quoteOrderId = null;
+                }
+            }
+
+            if (!$quoteOrderId) {
+                $quoteOrderId = (int) ($request->query('orderId') ?? $request->header('X-Quote-Order-Id') ?? 0) ?: null;
+            }
+
+            $query = $this->cartQuery($user, $sessionId, $storeId)
+                ->with($this->productRelations());
+
+            if ($quoteOrderId) {
+                $cartIds = \App\Models\OrderCartItemProduct::query()
+                    ->where('order_id', $quoteOrderId)
+                    ->pluck('cart_id')
+                    ->filter()
+                    ->unique()
+                    ->values();
+
+                $query->whereIn('id', $cartIds->isEmpty() ? [0] : $cartIds);
+            }
+
             $perPage   = $request->query('perPage', 20);
-            $cartItems = $this->cartQuery($user, $sessionId, $storeId)
-                ->with($this->productRelations())
-                ->paginate($perPage);
+            $cartItems = $query->paginate($perPage);
 
             $cartItems->getCollection()->transform(function ($item) {
                 if ((int) ($item->isdraftcart ?? 0) !== 1) {
