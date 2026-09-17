@@ -365,13 +365,21 @@ class OrderController extends Controller
 
                     'products' => $order->items
                         ->filter(fn($item) => $item->product)
-                        ->map(function ($item) {
+                        ->map(function ($item) use ($order) {
+
+                            $override = \App\Models\OrderCartItemProduct::query()
+                                ->where('order_id', $order->id)
+                                ->where('product_id', $item->product_id)
+                                ->latest('id')
+                                ->first();
+
+                            $qty   = $override ? $override->qty : $item->quantity;
+                            $price = $override ? $override->price : $item->price;
 
                             $product = (new ProductResource($item->product))->toArray(request());
 
-                            // Order item values overwrite
-                            $product['quantity'] = $item->quantity;
-                            $product['price'] = $item->price;
+                            $product['quantity'] = $qty;
+                            $product['price']    = $price;
 
                             return $product;
                         })->values(),
