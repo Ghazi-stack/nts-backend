@@ -737,15 +737,18 @@ class CartController extends Controller
                 'cartIds'  => 'nullable',
             ]);
 
-            $rawCartIds = $request->input('cart_ids', $request->input('cartIds', $request->input('cart_id', $request->input('cartId'))));
+            $raw = $request->input(
+                'cart_ids',
+                $request->input('cartIds', $request->input('cart_id', $request->input('cartId')))
+            );
 
             $cartIds = [];
-            if (is_array($rawCartIds)) {
-                $cartIds = $rawCartIds;
-            } elseif (is_string($rawCartIds) && str_contains($rawCartIds, ',')) {
-                $cartIds = explode(',', $rawCartIds);
-            } elseif ($rawCartIds !== null && $rawCartIds !== '') {
-                $cartIds = [$rawCartIds];
+            if (is_array($raw)) {
+                $cartIds = $raw;
+            } elseif (is_string($raw) && str_contains($raw, ',')) {
+                $cartIds = explode(',', $raw);
+            } elseif ($raw !== null && $raw !== '') {
+                $cartIds = [$raw];
             }
 
             $cartIds = array_values(array_unique(array_filter(array_map('intval', $cartIds))));
@@ -773,13 +776,9 @@ class CartController extends Controller
             }
 
             $query->where(function ($q) use ($cartIds) {
-                foreach ($cartIds as $cartId) {
-                    $q->orWhereJsonContains('cart_ids', $cartId)
-                        ->orWhereJsonContains('cart_ids', (string) $cartId)
-                        ->orWhere('cart_ids', $cartId)
-                        ->orWhere('cart_ids', (string) $cartId)
-                        ->orWhere('cart_ids', 'like', '%"' . $cartId . '"%')
-                        ->orWhere('cart_ids', 'like', '%' . $cartId . '%');
+                foreach ($cartIds as $id) {
+                    $q->orWhereJsonContains('cart_ids', $id)
+                        ->orWhereJsonContains('cart_ids', (string) $id);
                 }
             });
 
