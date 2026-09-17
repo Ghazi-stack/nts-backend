@@ -369,7 +369,7 @@ class CouponCodeController extends Controller
                     ->pluck('category_id')
                     ->toArray();
 
-                $productTableCategoryIds = DB::table('product')
+                $productTableCategoryIds = DB::table('products')
                     ->whereIn('id', $productIds)
                     ->whereNotNull('category_id')
                     ->pluck('category_id')
