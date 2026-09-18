@@ -1052,43 +1052,58 @@ class OrderController extends Controller
 
                 if (!$coupon) {
                     return response()->json([
-                        'status' => false,
-                        'message' => 'Invalid coupon code.'
-                    ], 400);
-                }
-
-                $couponUsageQuery = CouponUsage::where('store_id', $storeId)
-                    ->where('coupon_id', $coupon->id);
-
-                if ($user) {
-                    $couponUsageQuery->where('user_id', $user->id);
-                } else {
-                    $sessionId = $request->header('X-Session-ID');
-
-                    if (!$sessionId) {
-                        return response()->json([
-                            'status' => false,
-                            'message' => 'Session ID is required for guest coupon usage.'
-                        ], 400);
-                    }
-
-                    $couponUsageQuery->where('session_id', $sessionId);
-                }
-
-                $alreadyUsedByUserOrSession = $couponUsageQuery->exists();
-
-                $alreadyUsedByEmail = CouponUsage::where('store_id', $storeId)
-                    ->where('coupon_id', $coupon->id)
-                    ->whereRaw('LOWER(email) = ?', [$orderEmail])
-                    ->exists();
-
-                if ($alreadyUsedByUserOrSession || $alreadyUsedByEmail) {
-                    return response()->json([
-                        'status' => false,
-                        'message' => 'You have already used this coupon.'
+                        'status'  => false,
+                        'message' => 'Invalid coupon code.',
                     ], 400);
                 }
             }
+            // $coupon = null;
+
+            // if (!empty($validated['couponCode'])) {
+
+            //     $coupon = CouponCode::where('store_id', $storeId)
+            //         ->where('couponCode', $validated['couponCode'])
+            //         ->first();
+
+            //     if (!$coupon) {
+            //         return response()->json([
+            //             'status' => false,
+            //             'message' => 'Invalid coupon code.'
+            //         ], 400);
+            //     }
+
+            //     $couponUsageQuery = CouponUsage::where('store_id', $storeId)
+            //         ->where('coupon_id', $coupon->id);
+
+            //     if ($user) {
+            //         $couponUsageQuery->where('user_id', $user->id);
+            //     } else {
+            //         $sessionId = $request->header('X-Session-ID');
+
+            //         if (!$sessionId) {
+            //             return response()->json([
+            //                 'status' => false,
+            //                 'message' => 'Session ID is required for guest coupon usage.'
+            //             ], 400);
+            //         }
+
+            //         $couponUsageQuery->where('session_id', $sessionId);
+            //     }
+
+            //     $alreadyUsedByUserOrSession = $couponUsageQuery->exists();
+
+            //     $alreadyUsedByEmail = CouponUsage::where('store_id', $storeId)
+            //         ->where('coupon_id', $coupon->id)
+            //         ->whereRaw('LOWER(email) = ?', [$orderEmail])
+            //         ->exists();
+
+            //     if ($alreadyUsedByUserOrSession || $alreadyUsedByEmail) {
+            //         return response()->json([
+            //             'status' => false,
+            //             'message' => 'You have already used this coupon.'
+            //         ], 400);
+            //     }
+            // }
 
             if ($isGuest) {
                 try {
