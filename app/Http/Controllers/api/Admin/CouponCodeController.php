@@ -684,10 +684,19 @@ class CouponCodeController extends Controller
     {
         try {
             $storeId = $this->getStoreId();
-            $user    = auth('sanctum')->user();
-            $userId  = $user?->id;
 
-            $query = CouponUsage::where('store_id', $storeId);
+            $user = $request->user('sanctum') ?? auth('sanctum')->user();
+
+            if (!$user && $request->bearerToken()) {
+                $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+                $user  = $token?->tokenable;
+            }
+
+            $userId    = $user?->id;
+            $sessionId = $request->header('X-Session-ID');
+
+            $query = CouponUsage::where('store_id', $storeId)
+                ->where('user_used', 0);
 
             if ($userId) {
                 $userEmail = strtolower(trim($user->email ?? ''));
@@ -699,17 +708,13 @@ class CouponCodeController extends Controller
                         $q->orWhereRaw('LOWER(email) = ?', [$userEmail]);
                     }
                 });
-            } else {
-                $sessionId = $request->header('X-Session-ID');
-
-                if (!$sessionId) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'Token or X-Session-ID is required',
-                    ], 400);
-                }
-
+            } elseif ($sessionId) {
                 $query->where('session_id', $sessionId);
+            } else {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Token or X-Session-ID is required',
+                ], 400);
             }
 
             if ($id) {
@@ -729,13 +734,16 @@ class CouponCodeController extends Controller
                 ], 404);
             }
 
-            $deletedIds = $usages->pluck('id')->values();
-            $query->delete();
+            $updatedIds = $usages->pluck('id')->values();
+
+            $query->update([
+                'user_used' => 1,
+            ]);
 
             return response()->json([
                 'status'     => true,
                 'message'    => 'Coupon usage deleted successfully',
-                'deletedIds' => $deletedIds,
+                'deletedIds' => $updatedIds,
             ]);
         } catch (\Exception $e) {
             return response()->json([
