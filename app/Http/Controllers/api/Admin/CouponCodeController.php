@@ -431,6 +431,126 @@ class CouponCodeController extends Controller
         }
     }
 
+    public function getMyCouponUsage(Request $request)
+    {
+        try {
+            $storeId = $this->getStoreId();
+            $user    = auth('sanctum')->user();
+            $userId  = $user?->id;
+
+            $query = CouponUsage::where('store_id', $storeId);
+
+            if ($userId) {
+                $userEmail = strtolower(trim($user->email ?? ''));
+
+                $query->where(function ($q) use ($userId, $userEmail) {
+                    $q->where('user_id', $userId);
+
+                    if ($userEmail) {
+                        $q->orWhereRaw('LOWER(email) = ?', [$userEmail]);
+                    }
+                });
+            } else {
+                $sessionId = $request->header('X-Session-ID');
+
+                if (!$sessionId) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Token or X-Session-ID is required',
+                    ], 400);
+                }
+
+                $query->where('session_id', $sessionId);
+            }
+
+            if ($request->filled('coupon_id')) {
+                $query->where('coupon_id', $request->coupon_id);
+            }
+
+            if ($request->filled('coupon_code')) {
+                $query->where('coupon_code', $request->coupon_code);
+            }
+
+            $usages = $query->orderBy('id', 'desc')
+                ->paginate($request->get('per_page', 10));
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Coupon usages fetched successfully',
+                'data'    => $usages,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong',
+            ], 500);
+        }
+    }
+
+    public function deleteMyCouponUsage(Request $request, $id = null)
+    {
+        try {
+            $storeId = $this->getStoreId();
+            $user    = auth('sanctum')->user();
+            $userId  = $user?->id;
+
+            $query = CouponUsage::where('store_id', $storeId);
+
+            if ($userId) {
+                $userEmail = strtolower(trim($user->email ?? ''));
+
+                $query->where(function ($q) use ($userId, $userEmail) {
+                    $q->where('user_id', $userId);
+
+                    if ($userEmail) {
+                        $q->orWhereRaw('LOWER(email) = ?', [$userEmail]);
+                    }
+                });
+            } else {
+                $sessionId = $request->header('X-Session-ID');
+
+                if (!$sessionId) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Token or X-Session-ID is required',
+                    ], 400);
+                }
+
+                $query->where('session_id', $sessionId);
+            }
+
+            if ($id) {
+                $query->where('id', $id);
+            }
+
+            if ($request->filled('coupon_id')) {
+                $query->where('coupon_id', $request->coupon_id);
+            }
+
+            $usages = $query->get();
+
+            if ($usages->isEmpty()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Record not found',
+                ], 404);
+            }
+
+            $deletedIds = $usages->pluck('id')->values();
+            $query->delete();
+
+            return response()->json([
+                'status'     => true,
+                'message'    => 'Coupon usage deleted successfully',
+                'deletedIds' => $deletedIds,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong',
+            ], 500);
+        }
+    }
     public function update(Request $request, $id)
     {
         try {
