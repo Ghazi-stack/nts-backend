@@ -407,8 +407,6 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::put('/update-couponcode/{id}', 'update');
         Route::put('/update-enabled/{id}', 'updateEnabled');
         Route::delete('/delete-couponcode/{id}', 'destroy');
-        Route::get('/my-coupon-usage', 'getMyCouponUsage');
-        Route::delete('/my-coupon-usage/{id?}', 'deleteMyCouponUsage');
     });
 
     // ===================== SETTINGS =====================
@@ -676,6 +674,9 @@ Route::prefix('web')->group(function () {
 
     Route::prefix('coupons')->controller(CouponCodeController::class)->group(function () {
         Route::get('/get-couponcode', 'showWebCouponCode');
+        Route::get('/my-coupon-usage', 'getMyCouponUsage');
+        Route::delete('/my-coupon-usage/{id?}', 'deleteMyCouponUsage');
+
     });
 
     Route::prefix('scripts')->controller(ScriptController::class)->group(function () {
