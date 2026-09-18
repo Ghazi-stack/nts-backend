@@ -400,15 +400,19 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/draft-blogs', 'drafts');
     });
 
+
     // ===================== MARKETING — COUPONS =====================
     Route::prefix('coupons')->middleware('permission:coupon_codes')->controller(CouponCodeController::class)->group(function () {
         Route::get('/get-couponcode', 'index');
         Route::get('/get-couponcode/{id}', 'show');
-        Route::get('/get-couponcode-dashboard', 'showDashboardCouponCode');
         Route::post('/add-couponcode', 'store');
         Route::put('/update-couponcode/{id}', 'update');
         Route::put('/update-enabled/{id}', 'updateEnabled');
         Route::delete('/delete-couponcode/{id}', 'destroy');
+    });
+
+    Route::prefix('coupons')->controller(CouponCodeController::class)->group(function () {
+        Route::get('/get-couponcode-dashboard', 'showDashboardCouponCode');
     });
 
     // ===================== SETTINGS =====================
@@ -678,7 +682,6 @@ Route::prefix('web')->group(function () {
         Route::get('/get-couponcode', 'showWebCouponCode');
         Route::get('/my-coupon-usage', 'getMyCouponUsage');
         Route::delete('/my-coupon-usage/{id?}', 'deleteMyCouponUsage');
-
     });
 
     Route::prefix('scripts')->controller(ScriptController::class)->group(function () {
