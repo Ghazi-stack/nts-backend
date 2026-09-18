@@ -318,7 +318,10 @@ class CouponCodeController extends Controller
             $sessionId = $request->header('X-Session-ID');
 
             $usageQuery = CouponUsage::where('store_id', $storeId)
-                ->where('coupon_id', $coupon->id);
+                ->where(function ($q) use ($coupon) {
+                    $q->where('coupon_id', $coupon->id)
+                        ->orWhere('coupon_code', $coupon->couponCode);
+                });
 
             if ($userId) {
                 $userEmail = strtolower(trim($user->email ?? ''));
@@ -339,7 +342,9 @@ class CouponCodeController extends Controller
                 ], 400);
             }
 
-            if ($usageQuery->exists()) {
+            $existingUsage = $usageQuery->orderBy('id', 'desc')->first();
+
+            if ($existingUsage && (int) $existingUsage->user_used === 1) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'You have already used this coupon.',
@@ -420,16 +425,18 @@ class CouponCodeController extends Controller
                 $coupon->applicableProductIds = $matchedProductIds;
             }
 
-            CouponUsage::create([
-                'store_id'    => $storeId,
-                'user_id'     => $userId,
-                'session_id'  => $userId ? null : $sessionId,
-                'coupon_id'   => $coupon->id,
-                'coupon_code' => $coupon->couponCode,
-                'discount_amount' => $coupon->discountAmount,
-                'user_used'       => 0,
-                'email'       => $user->email ?? null,
-            ]);
+            if (!$existingUsage) {
+                CouponUsage::create([
+                    'store_id'        => $storeId,
+                    'user_id'         => $userId,
+                    'session_id'      => $userId ? null : $sessionId,
+                    'coupon_id'       => $coupon->id,
+                    'coupon_code'     => $coupon->couponCode,
+                    'discount_amount' => $coupon->discountAmount,
+                    'user_used'       => 0,
+                    'email'           => $user->email ?? null,
+                ]);
+            }
 
             return response()->json([
                 'status'  => true,
