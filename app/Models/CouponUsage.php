@@ -16,5 +16,10 @@ class CouponUsage extends Model
         'coupon_code',
         'discount_amount',
         'email',
+        'user_used',
+    ];
+
+    protected $casts = [
+        'user_used' => 'boolean',
     ];
 }
