@@ -127,8 +127,7 @@ class ProductController extends Controller
                     'parent_id',
                     'store_id'
                 ])
-                ->where('store_id', current_store_id())
-                ->where('allow_purchase', 1);
+                ->where('store_id', current_store_id());
 
             if ($request->has('isFeatured')) {
                 $query->where('is_featured', $request->boolean('isFeatured'));
@@ -181,6 +180,80 @@ class ProductController extends Controller
         }
     }
 
+    public function purchasableProducts(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
+            $query = Product::with([
+                'brand:id,name',
+                'categories:id,name',
+                'images:id,product_id,path,is_primary',
+                'seo',
+            ])
+                ->select([
+                    'id',
+                    'name',
+                    'slug',
+                    'sku',
+                    'price',
+                    'msrp',
+                    'brand_id',
+                    'current_stock',
+                    'is_featured',
+                    'sale_price',
+                    'cost_price',
+                    'free_shipping',
+                    'track_inventory',
+                    'low_stock',
+                    'allow_purchase',
+                    'visible_on_storefront',
+                    'min_purchase_quantity',
+                    'max_purchase_quantity',
+                    'is_redirect',
+                    'is_duplicate',
+                    'parent_id',
+                    'store_id',
+                ])
+                ->where('store_id', $storeId)
+                ->where('allow_purchase', 1);
+
+            if ($request->filled('sortBy')) {
+                $query->orderBy($request->sortBy, $request->get('sortOrder', 'asc'));
+            } else {
+                $query->orderBy('id', 'desc');
+            }
+
+            $page     = (int) $request->input('page', 1);
+            $pageSize = (int) $request->input('pageSize', 20);
+
+            $products = $query->paginate($pageSize, ['*'], 'page', $page);
+
+            return response()->json([
+                'status'     => true,
+                'message'    => 'Product list fetched.',
+                'data'       => ProductListResource::collection($products),
+                'pagination' => [
+                    'total'    => $products->total(),
+                    'page'     => $products->currentPage(),
+                    'pageSize' => $products->perPage(),
+                    'lastPage' => $products->lastPage(),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error'  => $e->getMessage(),
+            ], 500);
+        }
+    }
     public function filterProducts(Request $request)
     {
         try {
