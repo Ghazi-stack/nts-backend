@@ -307,8 +307,15 @@ class CouponCodeController extends Controller
                 ], 400);
             }
 
-            $user   = auth('sanctum')->user();
-            $userId = $user?->id;
+            $user = $request->user('sanctum') ?? auth('sanctum')->user();
+
+            if (!$user && $request->bearerToken()) {
+                $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+                $user  = $token?->tokenable;
+            }
+
+            $userId    = $user?->id;
+            $sessionId = $request->header('X-Session-ID');
 
             $usageQuery = CouponUsage::where('store_id', $storeId)
                 ->where('coupon_id', $coupon->id);
@@ -323,17 +330,13 @@ class CouponCodeController extends Controller
                         $q->orWhereRaw('LOWER(email) = ?', [$userEmail]);
                     }
                 });
-            } else {
-                $sessionId = $request->header('X-Session-ID');
-
-                if (!$sessionId) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'Session ID is required for guest users',
-                    ], 400);
-                }
-
+            } elseif ($sessionId) {
                 $usageQuery->where('session_id', $sessionId);
+            } else {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Token or X-Session-ID is required',
+                ], 400);
             }
 
             if ($usageQuery->exists()) {
@@ -416,6 +419,15 @@ class CouponCodeController extends Controller
 
                 $coupon->applicableProductIds = $matchedProductIds;
             }
+
+            CouponUsage::create([
+                'store_id'    => $storeId,
+                'user_id'     => $userId,
+                'session_id'  => $userId ? null : $sessionId,
+                'coupon_id'   => $coupon->id,
+                'coupon_code' => $coupon->couponCode,
+                'email'       => $user->email ?? null,
+            ]);
 
             return response()->json([
                 'status'  => true,
