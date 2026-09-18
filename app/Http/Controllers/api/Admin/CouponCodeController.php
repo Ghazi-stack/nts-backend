@@ -460,7 +460,8 @@ class CouponCodeController extends Controller
             $userId    = $user?->id;
             $sessionId = $request->header('X-Session-ID');
 
-            $query = CouponUsage::where('store_id', $storeId);
+            $query = CouponUsage::where('store_id', $storeId)
+                ->where('user_used', 0);
 
             if ($userId) {
                 $userEmail = strtolower(trim($user->email ?? ''));
