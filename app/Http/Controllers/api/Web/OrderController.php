@@ -1057,31 +1057,17 @@ class OrderController extends Controller
                     ], 400);
                 }
 
-                $sessionId  = $request->header('X-Session-ID');
                 $orderEmail = strtolower(trim($validated['email'] ?? ''));
 
-                $usage = CouponUsage::where('store_id', $storeId)
-                    ->where('coupon_id', $coupon->id)
-                    ->where(function ($q) use ($user, $sessionId, $orderEmail) {
-                        if (!empty($user?->id)) {
-                            $q->orWhere('user_id', $user->id);
-                        }
-
-                        if (!empty($sessionId)) {
-                            $q->orWhere('session_id', $sessionId);
-                        }
-
-                        if (!empty($orderEmail)) {
-                            $q->orWhereRaw('LOWER(email) = ?', [$orderEmail]);
-                        }
-                    })
-                    ->orderBy('id', 'desc')
-                    ->first();
-
-                if ($usage) {
-                    $usage->update([
-                        'user_used' => 1,
-                    ]);
+                if ($orderEmail) {
+                    CouponUsage::where('store_id', $storeId)
+                        ->where('coupon_code', $coupon->couponCode)
+                        ->whereRaw('LOWER(email) = ?', [$orderEmail])
+                        ->orderBy('id', 'desc')
+                        ->limit(1)
+                        ->update([
+                            'user_used' => 1,
+                        ]);
                 }
             }
             // $coupon = null;
