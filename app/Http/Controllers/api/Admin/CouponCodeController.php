@@ -435,8 +435,16 @@ class CouponCodeController extends Controller
     {
         try {
             $storeId = $this->getStoreId();
-            $user    = auth('sanctum')->user();
-            $userId  = $user?->id;
+
+            $user = $request->user('sanctum') ?? auth('sanctum')->user();
+
+            if (!$user && $request->bearerToken()) {
+                $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+                $user  = $token?->tokenable;
+            }
+
+            $userId    = $user?->id;
+            $sessionId = $request->header('X-Session-ID');
 
             $query = CouponUsage::where('store_id', $storeId);
 
@@ -450,17 +458,13 @@ class CouponCodeController extends Controller
                         $q->orWhereRaw('LOWER(email) = ?', [$userEmail]);
                     }
                 });
-            } else {
-                $sessionId = $request->header('X-Session-ID');
-
-                if (!$sessionId) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'Token or X-Session-ID is required',
-                    ], 400);
-                }
-
+            } elseif ($sessionId) {
                 $query->where('session_id', $sessionId);
+            } else {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Token or X-Session-ID is required',
+                ], 400);
             }
 
             $usages = $query->orderBy('id', 'desc')->get();
@@ -477,7 +481,6 @@ class CouponCodeController extends Controller
             ], 500);
         }
     }
-
     public function deleteMyCouponUsage(Request $request, $id = null)
     {
         try {
