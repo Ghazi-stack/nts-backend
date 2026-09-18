@@ -344,6 +344,10 @@ class CouponCodeController extends Controller
 
             $existingUsage = $usageQuery->orderBy('id', 'desc')->first();
 
+            if ($existingUsage && (int) $existingUsage->is_delete === 1) {
+                $existingUsage = null;
+            }
+
             if ($existingUsage && (int) $existingUsage->user_used === 1) {
                 return response()->json([
                     'status'  => false,
@@ -434,6 +438,7 @@ class CouponCodeController extends Controller
                     'coupon_code'     => $coupon->couponCode,
                     'discount_amount' => $coupon->discountAmount,
                     'user_used'       => 0,
+                    'is_delete'       => 0,
                     'email'           => $user->email ?? null,
                 ]);
             }
@@ -645,6 +650,7 @@ class CouponCodeController extends Controller
             $sessionId = $request->header('X-Session-ID');
 
             $query = CouponUsage::where('store_id', $storeId)
+                ->where('is_delete', 0)
                 ->where('user_used', 0);
 
             if ($userId) {
@@ -696,6 +702,7 @@ class CouponCodeController extends Controller
             $sessionId = $request->header('X-Session-ID');
 
             $query = CouponUsage::where('store_id', $storeId)
+                ->where('is_delete', 0)
                 ->where('user_used', 0);
 
             if ($userId) {
@@ -737,7 +744,7 @@ class CouponCodeController extends Controller
             $updatedIds = $usages->pluck('id')->values();
 
             $query->update([
-                'user_used' => 1,
+                'is_delete' => 1,
             ]);
 
             return response()->json([

@@ -17,9 +17,11 @@ class CouponUsage extends Model
         'discount_amount',
         'email',
         'user_used',
+        'is_delete',
     ];
 
     protected $casts = [
         'user_used' => 'boolean',
+        'is_delete' => 'boolean',
     ];
 }
