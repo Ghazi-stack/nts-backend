@@ -1056,6 +1056,22 @@ class OrderController extends Controller
                         'message' => 'Invalid coupon code.',
                     ], 400);
                 }
+
+                $usageQuery = CouponUsage::where('store_id', $storeId)
+                    ->where('coupon_id', $coupon->id);
+
+                if (!empty($user?->id)) {
+                    $usageQuery->where('user_id', $user->id);
+                } else {
+                    $sessionId = $request->header('X-Session-ID');
+                    if ($sessionId) {
+                        $usageQuery->where('session_id', $sessionId);
+                    }
+                }
+
+                $usageQuery->orderBy('id', 'desc')->limit(1)->update([
+                    'user_used' => false,
+                ]);
             }
             // $coupon = null;
 
