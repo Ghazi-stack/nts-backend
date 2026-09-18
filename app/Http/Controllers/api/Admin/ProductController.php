@@ -225,6 +225,14 @@ class ProductController extends Controller
                 ->where('store_id', $storeId)
                 ->where('allow_purchase', 1);
 
+            if ($request->filled('search')) {
+                $q = $request->search;
+                $query->where(function ($sub) use ($q) {
+                    $sub->where('name', 'like', "%{$q}%")
+                        ->orWhere('sku', 'like', "%{$q}%");
+                });
+            }
+
             if ($request->filled('sortBy')) {
                 $query->orderBy($request->sortBy, $request->get('sortOrder', 'asc'));
             } else {
