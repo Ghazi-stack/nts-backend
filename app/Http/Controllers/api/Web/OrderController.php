@@ -1070,7 +1070,7 @@ class OrderController extends Controller
                 }
 
                 $usageQuery->orderBy('id', 'desc')->limit(1)->update([
-                    'user_used' => true,
+                    'user_used' => 1,
                 ]);
             }
             // $coupon = null;
