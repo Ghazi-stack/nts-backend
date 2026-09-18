@@ -463,16 +463,7 @@ class CouponCodeController extends Controller
                 $query->where('session_id', $sessionId);
             }
 
-            if ($request->filled('coupon_id')) {
-                $query->where('coupon_id', $request->coupon_id);
-            }
-
-            if ($request->filled('coupon_code')) {
-                $query->where('coupon_code', $request->coupon_code);
-            }
-
-            $usages = $query->orderBy('id', 'desc')
-                ->paginate($request->get('per_page', 10));
+            $usages = $query->orderBy('id', 'desc')->get();
 
             return response()->json([
                 'status'  => true,
