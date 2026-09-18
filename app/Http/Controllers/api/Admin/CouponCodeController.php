@@ -427,7 +427,7 @@ class CouponCodeController extends Controller
                 'coupon_id'   => $coupon->id,
                 'coupon_code' => $coupon->couponCode,
                 'discount_amount' => $coupon->discountAmount,
-                'user_used'       => false,
+                'user_used'       => 0,
                 'email'       => $user->email ?? null,
             ]);
 
