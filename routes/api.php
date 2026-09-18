@@ -404,7 +404,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::prefix('coupons')->middleware('permission:coupon_codes')->controller(CouponCodeController::class)->group(function () {
         Route::get('/get-couponcode', 'index');
         Route::get('/get-couponcode/{id}', 'show');
-        Route::get('/dashboard/get-couponcode', 'showDashboardCouponCode');
+        Route::get('/get-couponcode-dashboard', 'showDashboardCouponCode');
         Route::post('/add-couponcode', 'store');
         Route::put('/update-couponcode/{id}', 'update');
         Route::put('/update-enabled/{id}', 'updateEnabled');
