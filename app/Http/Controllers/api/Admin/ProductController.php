@@ -127,7 +127,8 @@ class ProductController extends Controller
                     'parent_id',
                     'store_id'
                 ])
-                ->where('store_id', current_store_id());
+                ->where('store_id', current_store_id())
+                ->where('allow_purchase', 1);
 
             if ($request->has('isFeatured')) {
                 $query->where('is_featured', $request->boolean('isFeatured'));
