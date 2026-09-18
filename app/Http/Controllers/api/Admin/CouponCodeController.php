@@ -480,12 +480,12 @@ class CouponCodeController extends Controller
                 ], 400);
             }
 
-            $usages = $query->orderBy('id', 'desc')->get();
+            $usage = $query->orderBy('id', 'desc')->first();
 
             return response()->json([
                 'status'  => true,
                 'message' => 'Coupon usages fetched successfully',
-                'data'    => $usages,
+                'data'    => $usage,
             ]);
         } catch (\Exception $e) {
             return response()->json([
