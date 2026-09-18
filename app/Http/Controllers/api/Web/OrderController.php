@@ -1042,24 +1042,28 @@ class OrderController extends Controller
                 }
             }
 
-            $coupon = null;
+            $user = $request->user('sanctum') ?? auth('sanctum')->user();
 
-            if (!empty($validated['couponCode'])) {
+            if (!$user && $request->bearerToken()) {
+                $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+                $user  = $token?->tokenable;
+            }
 
-                $coupon = CouponCode::where('store_id', $storeId)
-                    ->where('couponCode', $validated['couponCode'])
-                    ->first();
+            $orderEmail = strtolower(trim($validated['email'] ?? ''));
+            $sessionId  = $request->header('X-Session-ID');
+            $userId     = $user?->id;
 
-                if (!$coupon) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'Invalid coupon code.',
-                    ], 400);
-                }
-
+            if ($orderEmail) {
                 CouponUsage::where('store_id', $storeId)
-                    ->where('coupon_code', $validated['couponCode'])
-                    ->whereRaw('LOWER(email) = ?', [strtolower(trim($validated['email']))])
+                    ->whereRaw('LOWER(email) = ?', [$orderEmail])
+                    ->where(function ($q) use ($userId, $sessionId) {
+                        if ($userId) {
+                            $q->orWhere('user_id', $userId);
+                        }
+                        if ($sessionId) {
+                            $q->orWhere('session_id', $sessionId);
+                        }
+                    })
                     ->update([
                         'user_used' => 1,
                     ]);
