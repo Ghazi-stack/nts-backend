@@ -1494,16 +1494,16 @@ class OrderController extends Controller
                 'payment_status'    => 'authorized',
             ], $riskData));
 
-            if ($coupon) {
-                CouponUsage::create([
-                    'store_id'    => $storeId,
-                    'user_id'     => $user?->id ?? null,
-                    'session_id'  => $user ? null : $request->header('X-Session-ID'),
-                    'coupon_id'   => $coupon->id,
-                    'coupon_code' => $coupon->couponCode,
-                    'email'       => $orderEmail,
-                ]);
-            }
+            // if ($coupon) {
+            //     CouponUsage::create([
+            //         'store_id'    => $storeId,
+            //         'user_id'     => $user?->id ?? null,
+            //         'session_id'  => $user ? null : $request->header('X-Session-ID'),
+            //         'coupon_id'   => $coupon->id,
+            //         'coupon_code' => $coupon->couponCode,
+            //         'email'       => $orderEmail,
+            //     ]);
+            // }
 
             foreach ($orders as $ord) {
                 $ord->load('billingInformation');
