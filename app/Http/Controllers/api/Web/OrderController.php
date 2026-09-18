@@ -1057,18 +1057,12 @@ class OrderController extends Controller
                     ], 400);
                 }
 
-                $orderEmail = strtolower(trim($validated['email'] ?? ''));
-
-                if ($orderEmail) {
-                    CouponUsage::where('store_id', $storeId)
-                        ->where('coupon_code', $coupon->couponCode)
-                        ->whereRaw('LOWER(email) = ?', [$orderEmail])
-                        ->orderBy('id', 'desc')
-                        ->limit(1)
-                        ->update([
-                            'user_used' => 1,
-                        ]);
-                }
+                CouponUsage::where('store_id', $storeId)
+                    ->where('coupon_code', $validated['couponCode'])
+                    ->whereRaw('LOWER(email) = ?', [strtolower(trim($validated['email']))])
+                    ->update([
+                        'user_used' => 1,
+                    ]);
             }
             // $coupon = null;
 
