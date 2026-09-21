@@ -253,7 +253,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     // Products — Search
     Route::prefix('products')->middleware('permission:search_products')->controller(ProductController::class)->group(function () {
         Route::get('/search-product', 'searchProduct');
-        Route::post('/advanced-search', 'searchAdvanced');
+       // Route::post('/advanced-search', 'searchAdvanced');
     });
 
     // Products — Import

@@ -2504,118 +2504,118 @@ class ProductController extends Controller
     }
 
 
-    public function searchAdvanced(Request $request)
-    {
-        try {
-            $storeId = current_store_id();
-            if (!$storeId) {
-                return response()->json(['error' => 'Store not selected.'], 400);
-            }
+    // public function searchAdvanced(Request $request)
+    // {
+    //     try {
+    //         $storeId = current_store_id();
+    //         if (!$storeId) {
+    //             return response()->json(['error' => 'Store not selected.'], 400);
+    //         }
 
-            $query = Product::with(['brand', 'categories', 'images'])
-                ->where('store_id', $storeId);
+    //         $query = Product::with(['brand', 'categories', 'images'])
+    //             ->where('store_id', $storeId);
 
-            // 🔍 Search by name, SKU, keywords + brand name
-            if ($request->filled('searchKeywords')) {
-                $keywords = $request->searchKeywords;
-                $query->where(function ($q) use ($keywords) {
-                    $q->where('name', 'like', "%{$keywords}%")
-                        ->orWhere('sku', 'like', "%{$keywords}%")
-                        ->orWhere('search_keywords', 'like', "%{$keywords}%")
-                        ->orWhereHas('brand', function ($brandQuery) use ($keywords) {
-                            $brandQuery->where('name', 'like', "%{$keywords}%");
-                        });
-                });
-            }
+    //         // 🔍 Search by name, SKU, keywords + brand name
+    //         if ($request->filled('searchKeywords')) {
+    //             $keywords = $request->searchKeywords;
+    //             $query->where(function ($q) use ($keywords) {
+    //                 $q->where('name', 'like', "%{$keywords}%")
+    //                     ->orWhere('sku', 'like', "%{$keywords}%")
+    //                     ->orWhere('search_keywords', 'like', "%{$keywords}%")
+    //                     ->orWhereHas('brand', function ($brandQuery) use ($keywords) {
+    //                         $brandQuery->where('name', 'like', "%{$keywords}%");
+    //                     });
+    //             });
+    //         }
 
-            // 🔍 Filter by brand
-            if ($request->filled('brandId')) {
-                $query->where('brand_id', $request->brandId);
-            }
+    //         // 🔍 Filter by brand
+    //         if ($request->filled('brandId')) {
+    //             $query->where('brand_id', $request->brandId);
+    //         }
 
-            // 🔍 Filter by categories (multiple IDs allowed)
-            if ($request->filled('categoryIds')) {
-                $categoryIds = is_array($request->categoryIds)
-                    ? $request->categoryIds
-                    : [$request->categoryIds];
+    //         // 🔍 Filter by categories (multiple IDs allowed)
+    //         if ($request->filled('categoryIds')) {
+    //             $categoryIds = is_array($request->categoryIds)
+    //                 ? $request->categoryIds
+    //                 : [$request->categoryIds];
 
-                $query->whereHas('categories', function ($q) use ($categoryIds) {
-                    $q->whereIn('categories.id', $categoryIds);
-                });
-            }
+    //             $query->whereHas('categories', function ($q) use ($categoryIds) {
+    //                 $q->whereIn('categories.id', $categoryIds);
+    //             });
+    //         }
 
-            // 🔍 Filter by price range
-            if ($request->filled('priceMin')) {
-                $query->where('price', '>=', $request->priceMin);
-            }
+    //         // 🔍 Filter by price range
+    //         if ($request->filled('priceMin')) {
+    //             $query->where('price', '>=', $request->priceMin);
+    //         }
 
-            if ($request->filled('priceMax')) {
-                $query->where('price', '<=', $request->priceMax);
-            }
+    //         if ($request->filled('priceMax')) {
+    //             $query->where('price', '<=', $request->priceMax);
+    //         }
 
-            // 🔍 Quantity Sold: From / To
-            if ($request->filled('soldMin')) {
-                $query->where('sold_count', '>=', $request->soldMin);
-            }
+    //         // 🔍 Quantity Sold: From / To
+    //         if ($request->filled('soldMin')) {
+    //             $query->where('sold_count', '>=', $request->soldMin);
+    //         }
 
-            if ($request->filled('soldMax')) {
-                $query->where('sold_count', '<=', $request->soldMax);
-            }
+    //         if ($request->filled('soldMax')) {
+    //             $query->where('sold_count', '<=', $request->soldMax);
+    //         }
 
-            // 🔍 Inventory Level: From / To
-            if ($request->filled('inventoryMin')) {
-                $query->where('current_stock', '>=', $request->inventoryMin);
-            }
+    //         // 🔍 Inventory Level: From / To
+    //         if ($request->filled('inventoryMin')) {
+    //             $query->where('current_stock', '>=', $request->inventoryMin);
+    //         }
 
-            if ($request->filled('inventoryMax')) {
-                $query->where('current_stock', '<=', $request->inventoryMax);
-            }
+    //         if ($request->filled('inventoryMax')) {
+    //             $query->where('current_stock', '<=', $request->inventoryMax);
+    //         }
 
-            // 🔍 Filter by visibility
-            if ($request->filled('isVisible')) {
-                $query->where('visible_on_storefront', $request->boolean('isVisible'));
-            }
+    //         // 🔍 Filter by visibility
+    //         if ($request->filled('isVisible')) {
+    //             $query->where('visible_on_storefront', $request->boolean('isVisible'));
+    //         }
 
-            // 🔍 Filter by featured
-            if ($request->filled('isFeatured')) {
-                $query->where('is_featured', $request->boolean('isFeatured'));
-            }
+    //         // 🔍 Filter by featured
+    //         if ($request->filled('isFeatured')) {
+    //             $query->where('is_featured', $request->boolean('isFeatured'));
+    //         }
 
-            // 🔍 Free Shipping (No Preference = field mat bhejo / empty)
-            if ($request->filled('freeShipping') && !in_array($request->freeShipping, ['no_preference', 'No Preference', ''], true)) {
-                $isFree = $request->boolean('freeShipping');
+    //         // 🔍 Free Shipping (No Preference = field mat bhejo / empty)
+    //         if ($request->filled('freeShipping') && !in_array($request->freeShipping, ['no_preference', 'No Preference', ''], true)) {
+    //             $isFree = $request->boolean('freeShipping');
 
-                $query->where(function ($q) use ($isFree) {
-                    $q->where('free_shipping', $isFree)
-                        ->orWhere('show_shipping', $isFree);
-                });
-            }
+    //             $query->where(function ($q) use ($isFree) {
+    //                 $q->where('free_shipping', $isFree)
+    //                     ->orWhere('show_shipping', $isFree);
+    //             });
+    //         }
 
-            // 🔁 Sorting
-            $sortBy = $request->get('sortBy', 'id');
-            $sortOrder = $request->get('sortOrder', 'asc');
-            $query->orderBy($sortBy, $sortOrder);
+    //         // 🔁 Sorting
+    //         $sortBy = $request->get('sortBy', 'id');
+    //         $sortOrder = $request->get('sortOrder', 'asc');
+    //         $query->orderBy($sortBy, $sortOrder);
 
-            // ✅ Pagination
-            $page = (int) $request->input('page', 1);
-            $pageSize = (int) $request->input('pageSize', 50);
-            $products = $query->paginate($pageSize, ['*'], 'page', $page);
+    //         // ✅ Pagination
+    //         $page = (int) $request->input('page', 1);
+    //         $pageSize = (int) $request->input('pageSize', 50);
+    //         $products = $query->paginate($pageSize, ['*'], 'page', $page);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Advanced product search result.',
-                'data' => ProductResource::collection($products),
-                'pagination' => [
-                    'total' => $products->total(),
-                    'page' => $products->currentPage(),
-                    'pageSize' => $products->perPage(),
-                    'lastPage' => $products->lastPage()
-                ]
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    }
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Advanced product search result.',
+    //             'data' => ProductResource::collection($products),
+    //             'pagination' => [
+    //                 'total' => $products->total(),
+    //                 'page' => $products->currentPage(),
+    //                 'pageSize' => $products->perPage(),
+    //                 'lastPage' => $products->lastPage()
+    //             ]
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json(['error' => $e->getMessage()], 500);
+    //     }
+    // }
 
 
 
