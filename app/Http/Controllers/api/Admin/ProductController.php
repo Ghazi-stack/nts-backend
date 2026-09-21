@@ -96,11 +96,17 @@ class ProductController extends Controller
     public function index(Request $request)
     {
         try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json(['error' => 'Store not selected.'], 400);
+            }
+
             $query = Product::with([
                 'brand:id,name',
                 'categories:id,name',
                 'images:id,product_id,path,is_primary',
-                'seo'
+                'seo',
             ])
                 ->select([
                     'id',
@@ -117,7 +123,6 @@ class ProductController extends Controller
                     'free_shipping',
                     'track_inventory',
                     'low_stock',
-                    'price',
                     'allow_purchase',
                     'visible_on_storefront',
                     'min_purchase_quantity',
@@ -125,15 +130,20 @@ class ProductController extends Controller
                     'is_redirect',
                     'is_duplicate',
                     'parent_id',
-                    'store_id'
+                    'store_id',
                 ])
-                ->where('store_id', current_store_id());
+                ->where('store_id', $storeId);
 
             if ($request->has('isFeatured')) {
                 $query->where('is_featured', $request->boolean('isFeatured'));
             }
-            if ($request->has('freeShipping')) {
-                $query->where('free_shipping', $request->boolean('freeShipping'));
+
+            if ($request->has('freeShipping') && !in_array($request->freeShipping, ['no_preference', 'No Preference', ''], true)) {
+                $isFree = $request->boolean('freeShipping');
+                $query->where(function ($q) use ($isFree) {
+                    $q->where('free_shipping', $isFree)
+                        ->orWhere('show_shipping', $isFree);
+                });
             }
 
             if ($request->has('outOfStock') && $request->boolean('outOfStock')) {
@@ -145,35 +155,88 @@ class ProductController extends Controller
                     ->where('current_stock', '>', 0);
             }
 
-            if ($request->has('search')) {
+            if ($request->filled('search')) {
                 $q = $request->search;
                 $query->where(function ($sub) use ($q) {
-                    $sub->where('name', 'like', "%$q%")
-                        ->orWhere('sku', 'like', "%$q%");
+                    $sub->where('name', 'like', "%{$q}%")
+                        ->orWhere('sku', 'like', "%{$q}%");
                 });
             }
 
-            if ($request->has('sortBy')) {
+            if ($request->filled('searchKeywords')) {
+                $keywords = $request->searchKeywords;
+                $query->where(function ($q) use ($keywords) {
+                    $q->where('name', 'like', "%{$keywords}%")
+                        ->orWhere('sku', 'like', "%{$keywords}%")
+                        ->orWhere('search_keywords', 'like', "%{$keywords}%")
+                        ->orWhereHas('brand', function ($brandQuery) use ($keywords) {
+                            $brandQuery->where('name', 'like', "%{$keywords}%");
+                        });
+                });
+            }
+
+            if ($request->filled('brandId')) {
+                $query->where('brand_id', $request->brandId);
+            }
+
+            if ($request->filled('categoryIds')) {
+                $categoryIds = is_array($request->categoryIds)
+                    ? $request->categoryIds
+                    : [$request->categoryIds];
+
+                $query->whereHas('categories', function ($q) use ($categoryIds) {
+                    $q->whereIn('categories.id', $categoryIds);
+                });
+            }
+
+            if ($request->filled('priceMin')) {
+                $query->where('price', '>=', $request->priceMin);
+            }
+
+            if ($request->filled('priceMax')) {
+                $query->where('price', '<=', $request->priceMax);
+            }
+
+            if ($request->filled('soldMin')) {
+                $query->where('sold_count', '>=', $request->soldMin);
+            }
+
+            if ($request->filled('soldMax')) {
+                $query->where('sold_count', '<=', $request->soldMax);
+            }
+
+            if ($request->filled('inventoryMin')) {
+                $query->where('current_stock', '>=', $request->inventoryMin);
+            }
+
+            if ($request->filled('inventoryMax')) {
+                $query->where('current_stock', '<=', $request->inventoryMax);
+            }
+
+            if ($request->filled('isVisible')) {
+                $query->where('visible_on_storefront', $request->boolean('isVisible'));
+            }
+
+            if ($request->filled('sortBy')) {
                 $query->orderBy($request->sortBy, $request->get('sortOrder', 'asc'));
             } else {
                 $query->orderBy('id', 'desc');
             }
 
-            $page = (int) $request->input('page', 1);
+            $page     = (int) $request->input('page', 1);
             $pageSize = (int) $request->input('pageSize', 20);
-
             $products = $query->paginate($pageSize, ['*'], 'page', $page);
 
             return response()->json([
-                'status' => true,
-                'message' => 'Product list fetched.',
-                'data' => ProductListResource::collection($products),
+                'status'     => true,
+                'message'    => 'Product list fetched.',
+                'data'       => ProductListResource::collection($products),
                 'pagination' => [
-                    'total' => $products->total(),
-                    'page' => $products->currentPage(),
+                    'total'    => $products->total(),
+                    'page'     => $products->currentPage(),
                     'pageSize' => $products->perPage(),
-                    'lastPage' => $products->lastPage()
-                ]
+                    'lastPage' => $products->lastPage(),
+                ],
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -1909,7 +1972,7 @@ class ProductController extends Controller
         }
     }
 
-       public function productsByBrand(Request $request)
+    public function productsByBrand(Request $request)
     {
         try {
             $storeId = current_store_id();
