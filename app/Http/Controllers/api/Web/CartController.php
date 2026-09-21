@@ -732,14 +732,11 @@ class CartController extends Controller
 
             [$user, $sessionId] = $this->resolveIdentity($request);
 
-            // Token priority: token hai → user_id se, nahi → session_id se
             $query = CartShippingRate::where('store_id', $storeId);
 
             if ($user) {
-                // Token hai → user_id se match karo (session ignore)
                 $query->where('user_id', $user->id);
             } elseif ($sessionId) {
-                // Guest → session_id se match karo
                 $query->where('session_id', $sessionId);
             } else {
                 return response()->json([
@@ -748,7 +745,26 @@ class CartController extends Controller
                 ], 422);
             }
 
-            $shippingRate = $query->latest()->first();
+            $cartIds = $request->input('cartIds', $request->query('cartIds', $request->input('cartId')));
+
+            if (!is_array($cartIds)) {
+                $cartIds = $cartIds !== null && $cartIds !== ''
+                    ? array_filter(array_map('trim', explode(',', (string) $cartIds)))
+                    : [];
+            }
+
+            $cartIds = array_values(array_unique(array_map('intval', $cartIds)));
+
+            if (!empty($cartIds)) {
+                $query->where(function ($q) use ($cartIds) {
+                    foreach ($cartIds as $id) {
+                        $q->orWhereJsonContains('cart_ids', $id)
+                            ->orWhereJsonContains('cart_ids', (string) $id);
+                    }
+                });
+            }
+
+            $shippingRate = $query->latest('id')->first();
 
             if (!$shippingRate) {
                 return response()->json([
