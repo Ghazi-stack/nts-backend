@@ -3184,9 +3184,7 @@ class OrderController extends Controller
                     'quantity'   => $item['quantity'],
                     'price'      => $item['price'],
                 ]);
-                if ($product->track_inventory ?? $product->trackInventory ?? false) {
-                    $product->decrement('current_stock', $item['quantity']);
-                }
+                $product->decrement('current_stock', $item['quantity']);
             }
 
             if ($isDraft) {
@@ -4718,9 +4716,7 @@ class OrderController extends Controller
                         'store_id'   => $storeId,
                     ]);
                     $product->increment('sold_count', $item['quantity']);
-                    if ($product->track_inventory ?? $product->trackInventory ?? false) {
-                        $product->decrement('current_stock', $item['quantity']);
-                    }
+                    $product->decrement('current_stock', $item['quantity']);
                 }
 
                 if ($isDraft) {

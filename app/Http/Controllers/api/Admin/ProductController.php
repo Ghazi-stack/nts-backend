@@ -1909,7 +1909,7 @@ class ProductController extends Controller
         }
     }
 
-    public function productsByBrand(Request $request)
+       public function productsByBrand(Request $request)
     {
         try {
             $storeId = current_store_id();
