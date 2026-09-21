@@ -1587,6 +1587,7 @@ class OrderController extends Controller
                     $payload    = $this->draftQuote->decode($quoteToken);
                     $customerId = $payload['customer_id'] ?? null;
                     $orderId    = $payload['order_id'] ?? null;
+                    $userId     = $payload['user_id'] ?? null;
                 } catch (\Exception $e) {
                     return response()->json([
                         'status'  => false,
@@ -1600,18 +1601,25 @@ class OrderController extends Controller
                 $customerId = $user?->customer_id;
             }
 
-            if (!$customerId) {
+            if (!$customerId && !empty($userId)) {
+                $tokenUser = User::where('store_id', $storeId)->where('id', $userId)->first();
+                $customerId = $tokenUser?->customer_id;
+            }
+
+            $query = Order::query()->where('store_id', $storeId);
+
+            if ($orderId) {
+                $query->where('id', $orderId)->where('is_draft', 1);
+            } elseif ($customerId) {
+                $query->where('customer_id', $customerId)->latest('id');
+            } else {
                 return response()->json([
                     'status'  => false,
                     'message' => 'customer_id not found in token',
                 ], 404);
             }
 
-            $order = Order::query()
-                ->where('store_id', $storeId)
-                ->where('customer_id', $customerId)
-                ->latest('id')
-                ->first();
+            $order = $query->first();
 
             if (!$order) {
                 return response()->json([
