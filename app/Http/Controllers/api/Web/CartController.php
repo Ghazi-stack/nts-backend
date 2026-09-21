@@ -732,23 +732,64 @@ class CartController extends Controller
 
             [$user, $sessionId] = $this->resolveIdentity($request);
 
-            // Token priority: token hai → user_id se, nahi → session_id se
-            $query = CartShippingRate::where('store_id', $storeId);
-
-            if ($user) {
-                // Token hai → user_id se match karo (session ignore)
-                $query->where('user_id', $user->id);
-            } elseif ($sessionId) {
-                // Guest → session_id se match karo
-                $query->where('session_id', $sessionId);
-            } else {
+            if (!$user && !$sessionId) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'Authentication or Session ID required.',
                 ], 422);
             }
 
-            $shippingRate = $query->latest()->first();
+            $quoteToken = $request->input('quoteToken')
+                ?? $request->query('quoteToken')
+                ?? $request->header('X-Quote-Token');
+
+            $cartQuery = Cart::query()->where('store_id', $storeId);
+
+            if ($user) {
+                $cartQuery->where('user_id', $user->id);
+            } else {
+                $cartQuery->where('session_id', $sessionId);
+            }
+
+            if ($quoteToken) {
+                $cartQuery->where(function ($q) use ($quoteToken) {
+                    $q->where('quote_token', $quoteToken)
+                        ->orWhereNull('quote_token')
+                        ->orWhere('quote_token', '');
+                });
+            } else {
+                $cartQuery->where(function ($q) {
+                    $q->whereNull('quote_token')->orWhere('quote_token', '');
+                });
+            }
+
+            $cartIds = $cartQuery->pluck('id')->filter()->values();
+
+            $rateQuery = CartShippingRate::where('store_id', $storeId);
+
+            if ($user) {
+                $rateQuery->where('user_id', $user->id);
+            } else {
+                $rateQuery->where('session_id', $sessionId);
+            }
+
+            $shippingRate = null;
+
+            if ($cartIds->isNotEmpty()) {
+                $shippingRate = (clone $rateQuery)
+                    ->where(function ($q) use ($cartIds) {
+                        foreach ($cartIds as $id) {
+                            $q->orWhereJsonContains('cart_ids', (int) $id)
+                                ->orWhereJsonContains('cart_ids', (string) $id);
+                        }
+                    })
+                    ->latest('id')
+                    ->first();
+            }
+
+            if (!$shippingRate) {
+                $shippingRate = $rateQuery->latest('id')->first();
+            }
 
             if (!$shippingRate) {
                 return response()->json([
