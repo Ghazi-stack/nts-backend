@@ -158,7 +158,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::patch('/update-status/{id}', 'updateOrderStatus');
         Route::get('/export-orders', 'exportToExcel');
         Route::get('/get-notes/{orderId}', 'getOrderNotes');
-      //  Route::get('/search-advanced', 'advancedOrderSearch');
+        //  Route::get('/search-advanced', 'advancedOrderSearch');
         Route::put('/update-order/{id}', 'updateFromDashboard');
         Route::get('/invoice/{ids}', 'downloadInvoice');
         Route::post('/resend-invoice/{id}', 'resendInvoice');
@@ -253,7 +253,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     // Products — Search
     Route::prefix('products')->middleware('permission:search_products')->controller(ProductController::class)->group(function () {
         Route::get('/search-product', 'searchProduct');
-       // Route::post('/advanced-search', 'searchAdvanced');
+        // Route::post('/advanced-search', 'searchAdvanced');
     });
 
     // Products — Import
@@ -408,12 +408,13 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/add-couponcode', 'store');
         Route::put('/update-couponcode/{id}', 'update');
         Route::put('/update-enabled/{id}', 'updateEnabled');
-        Route::post('/coupon-usage/draft', 'updateMyCouponDraft');
+
         Route::delete('/delete-couponcode/{id}', 'destroy');
     });
 
     Route::prefix('coupons')->controller(CouponCodeController::class)->group(function () {
         Route::get('/get-couponcode-dashboard', 'showDashboardCouponCode');
+        Route::post('/coupon-usage/draft', 'updateMyCouponDraft');
     });
 
     // ===================== SETTINGS =====================
