@@ -59,7 +59,7 @@ class OrderController extends Controller
     {
         try {
             $perPage   = min((int) $request->query('perPage', 20), 50);
-            $keyword   = $request->query('keyword');
+            $keyword   = trim((string) $request->query('keyword', ''));
             $status    = $request->query('status');
             $productId = $request->query('productId');
             $storeId   = current_store_id();
@@ -114,81 +114,42 @@ class OrderController extends Controller
                         $item->where('product_id', (int) $productId);
                     });
                 })
-                ->when($keyword, function ($q) use ($keyword) {
-                    $keyword = trim($keyword);
+                ->when($keyword !== '', function ($q) use ($keyword) {
                     $q->where(function ($query) use ($keyword) {
                         $query->where('id', 'like', "%{$keyword}%")
                             ->orWhere('order_number', 'like', "%{$keyword}%")
                             ->orWhere('status', 'like', "%{$keyword}%")
-                            ->orWhere('total_amount', 'like', "%{$keyword}%")
-                            ->orWhereExists(function ($sub) use ($keyword) {
-                                $sub->select(\DB::raw(1))
-                                    ->from('customers')
-                                    ->whereColumn('customers.id', 'orders.customer_id')
-                                    ->where(function ($c) use ($keyword) {
-                                        $c->where('first_name', 'like', "%{$keyword}%")
-                                            ->orWhere('last_name', 'like', "%{$keyword}%")
-                                            ->orWhere('email', 'like', "%{$keyword}%")
-                                            ->orWhere('phone', 'like', "%{$keyword}%");
-                                    });
-                            })
-                            ->orWhereExists(function ($sub) use ($keyword) {
-                                $sub->select(\DB::raw(1))
-                                    ->from('billing_information')
-                                    ->whereColumn('billing_information.order_id', 'orders.id')
-                                    ->where(function ($b) use ($keyword) {
-                                        $b->where('first_name', 'like', "%{$keyword}%")
-                                            ->orWhere('last_name', 'like', "%{$keyword}%")
-                                            ->orWhere('phone', 'like', "%{$keyword}%")
-                                            ->orWhere('payment_method', 'like', "%{$keyword}%")
-                                            ->orWhere('shipping_method', 'like', "%{$keyword}%");
-                                    });
-                            });
+                            ->orWhere('total_amount', 'like', "%{$keyword}%");
+
+                        if (is_numeric($keyword)) {
+                            $query->orWhere('id', (int) $keyword)
+                                ->orWhere('total_amount', $keyword);
+                        }
+
+                        $query->orWhereHas('customer', function ($c) use ($keyword) {
+                            $c->where('first_name', 'like', "%{$keyword}%")
+                                ->orWhere('last_name', 'like', "%{$keyword}%")
+                                ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keyword}%"])
+                                ->orWhere('email', 'like', "%{$keyword}%")
+                                ->orWhere('phone', 'like', "%{$keyword}%");
+                        });
+
+                        $query->orWhereHas('billingInformation', function ($b) use ($keyword) {
+                            $b->where('first_name', 'like', "%{$keyword}%")
+                                ->orWhere('last_name', 'like', "%{$keyword}%")
+                                ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keyword}%"])
+                                ->orWhere('phone', 'like', "%{$keyword}%")
+                                ->orWhere('email', 'like', "%{$keyword}%")
+                                ->orWhere('payment_method', 'like', "%{$keyword}%")
+                                ->orWhere('shipping_method', 'like', "%{$keyword}%");
+                        });
+
+                        $query->orWhereHas('items.product', function ($p) use ($keyword) {
+                            $p->where('name', 'like', "%{$keyword}%")
+                                ->orWhere('sku', 'like', "%{$keyword}%");
+                        });
                     });
                 });
-
-            if ($request->filled('keywords')) {
-                $keywords = trim($request->input('keywords'));
-
-                $customerIds = \App\Models\Customer::where('store_id', $storeId)
-                    ->where(function ($c) use ($keywords) {
-                        $c->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keywords}%"])
-                            ->orWhere('first_name', 'like', "%{$keywords}%")
-                            ->orWhere('last_name', 'like', "%{$keywords}%");
-                    })->pluck('id');
-
-                $billingIds = \App\Models\BillingInformation::where('store_id', $storeId)
-                    ->where(function ($b) use ($keywords) {
-                        $b->where('first_name', 'like', "%{$keywords}%")
-                            ->orWhere('last_name', 'like', "%{$keywords}%")
-                            ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keywords}%"])
-                            ->orWhere('payment_method', 'like', "%{$keywords}%")
-                            ->orWhere('shipping_method', 'like', "%{$keywords}%");
-                    })->pluck('id');
-
-                $query->where(function ($q) use ($keywords, $customerIds, $billingIds) {
-                    $q->where('order_number', 'like', "%{$keywords}%")
-                        ->orWhere('status', 'like', "%{$keywords}%");
-
-                    if (is_numeric($keywords)) {
-                        $q->orWhere('id', $keywords)
-                            ->orWhere('total_amount', $keywords);
-                    }
-
-                    if ($customerIds->isNotEmpty()) {
-                        $q->orWhereIn('customer_id', $customerIds);
-                    }
-
-                    if ($billingIds->isNotEmpty()) {
-                        $q->orWhereIn('billing_information_id', $billingIds);
-                    }
-
-                    $q->orWhereHas('items.product', function ($p) use ($keywords) {
-                        $p->where('name', 'like', "%{$keywords}%")
-                            ->orWhere('sku', 'like', "%{$keywords}%");
-                    });
-                });
-            }
 
             if ($request->filled('paymentMethod')) {
                 $query->whereHas('billingInformation', function ($b) use ($request) {
