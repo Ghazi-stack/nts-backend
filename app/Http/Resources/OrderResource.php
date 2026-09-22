@@ -138,7 +138,7 @@ class OrderResource extends JsonResource
                             'isFeatured' => $product->is_featured,
                             'isVisible' => $product->visible_on_storefront,
                             'showCondition' => $product->show_condition,
-                            'freeShipping' => $product->show_shipping,
+                            'freeShipping' => $product->free_shipping,
                             'sortOrder' => $product->sort_order,
                             'searchKeywords' => $product->search_keywords,
 
