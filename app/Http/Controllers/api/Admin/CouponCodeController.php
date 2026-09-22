@@ -649,15 +649,16 @@ class CouponCodeController extends Controller
 
             $userId    = $user?->id;
             $sessionId = $request->header('X-Session-ID');
+            $isDraft   = (int) $request->query('isDraft', $request->input('isDraft', 0)) === 1;
 
-            $query = CouponUsage::where('store_id', $storeId)
+            $baseQuery = CouponUsage::where('store_id', $storeId)
                 ->where('is_delete', 0)
                 ->where('user_used', 0);
 
             if ($userId) {
                 $userEmail = strtolower(trim($user->email ?? ''));
 
-                $query->where(function ($q) use ($userId, $userEmail) {
+                $baseQuery->where(function ($q) use ($userId, $userEmail) {
                     $q->where('user_id', $userId);
 
                     if ($userEmail) {
@@ -665,7 +666,7 @@ class CouponCodeController extends Controller
                     }
                 });
             } elseif ($sessionId) {
-                $query->where('session_id', $sessionId);
+                $baseQuery->where('session_id', $sessionId);
             } else {
                 return response()->json([
                     'status'  => false,
@@ -673,7 +674,31 @@ class CouponCodeController extends Controller
                 ], 400);
             }
 
-            $usage = $query->orderBy('id', 'desc')->first();
+            // ?isDraft=1 → pehle draft record dhoondo
+            if ($isDraft) {
+                $draftUsage = (clone $baseQuery)
+                    ->where('isdraft', 1)
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if ($draftUsage) {
+                    // jo last normal record get pe aata, usko hide karo
+                    (clone $baseQuery)
+                        ->where('id', '!=', $draftUsage->id)
+                        ->update(['is_delete' => 1]);
+
+                    return response()->json([
+                        'status'  => true,
+                        'message' => 'Coupon usages fetched successfully',
+                        'data'    => $draftUsage,
+                    ]);
+                }
+                // draft match nahi → neeche normal flow
+            }
+
+            $usage = (clone $baseQuery)
+                ->orderBy('id', 'desc')
+                ->first();
 
             return response()->json([
                 'status'  => true,
