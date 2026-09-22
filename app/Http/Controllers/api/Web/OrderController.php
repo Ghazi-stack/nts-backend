@@ -3366,7 +3366,10 @@ class OrderController extends Controller
                     'quantity'   => $item['quantity'],
                     'price'      => $item['price'],
                 ]);
-                $product->decrement('current_stock', $item['quantity']);
+
+                if (!$isDraft) {
+                    $product->decrement('current_stock', $item['quantity']);
+                }
             }
 
             if ($isDraft) {
@@ -4735,6 +4738,26 @@ class OrderController extends Controller
                             'message' => 'Payment authorization failed. Status: ' . $intent->status,
                         ], 400);
                     } else {
+                        $existingPayment = Payment::where('stripe_session_id', $intent->id)->first();
+                        if ($existingPayment) {
+                            DB::rollBack();
+                            if ($existingPayment->payment_status === 'completed') {
+                                $existingOrder = Order::with('items.product.images', 'billingInformation', 'customer')
+                                    ->find($existingPayment->order_id);
+
+                                return response()->json([
+                                    'status'  => true,
+                                    'message' => 'Order already placed successfully.',
+                                    'data'    => new OrderResource($existingOrder),
+                                ]);
+                            }
+
+                            return response()->json([
+                                'status'  => false,
+                                'message' => 'This payment is already being processed.',
+                            ], 409);
+                        }
+
                         $riskData = [
                             'risk_score' => null,
                             'risk_level' => 'normal',
@@ -4897,8 +4920,11 @@ class OrderController extends Controller
                         'total'      => $item['price'] * $item['quantity'],
                         'store_id'   => $storeId,
                     ]);
-                    $product->increment('sold_count', $item['quantity']);
-                    $product->decrement('current_stock', $item['quantity']);
+
+                    if (!$isDraft) {
+                        $product->increment('sold_count', $item['quantity']);
+                        $product->decrement('current_stock', $item['quantity']);
+                    }
                 }
 
                 if ($isDraft) {
