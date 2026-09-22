@@ -26,13 +26,12 @@ class CustomerController extends Controller
     public function index(Request $request)
     {
         try {
-
             $storeId = current_store_id();
 
             if (!$storeId) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'Store not selected or token invalid.'
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
                 ], 400);
             }
 
@@ -43,17 +42,14 @@ class CustomerController extends Controller
                 'orders.customer',
                 'orders.billingInformation',
                 'orders.notes',
-                'orders.payment'
+                'orders.payment',
             ])->where('store_id', $storeId);
 
-            // Search
-            if ($request->filled('search')) {
+            $search = $request->input('searchKeywords', $request->input('search'));
 
-                $search = $request->input('search');
-
+            if (!empty($search)) {
                 $query->where(function ($q) use ($search) {
-
-                    $q->orWhere(DB::raw("CONCAT(first_name,' ',last_name)"), 'like', "%{$search}%")
+                    $q->where(DB::raw("CONCAT(first_name,' ',last_name)"), 'like', "%{$search}%")
                         ->orWhere('first_name', 'like', "%{$search}%")
                         ->orWhere('last_name', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%")
@@ -63,12 +59,76 @@ class CustomerController extends Controller
                 });
             }
 
-            $customers = $query
-                ->orderBy('id', 'desc')
-                ->paginate($request->input('pageSize', 50));
+            if ($request->filled('startsWith')) {
+                $query->where('first_name', 'like', $request->input('startsWith') . '%');
+            }
+
+            if ($request->filled('phone')) {
+                $query->where('phone', 'like', '%' . $request->input('phone') . '%');
+            }
+
+            if ($request->filled('country')) {
+                $query->where('country', $request->input('country'));
+            }
+
+            if ($request->filled('stateProvince')) {
+                $query->where('state', $request->input('stateProvince'));
+            }
+
+            if ($request->filled('customerIdFrom')) {
+                $query->where('id', '>=', $request->input('customerIdFrom'));
+            }
+
+            if ($request->filled('customerIdTo')) {
+                $query->where('id', '<=', $request->input('customerIdTo'));
+            }
+
+            if ($request->filled('creditFrom')) {
+                $query->where('store_credit', '>=', $request->input('creditFrom'));
+            }
+
+            if ($request->filled('creditTo')) {
+                $query->where('store_credit', '<=', $request->input('creditTo'));
+            }
+
+            if ($request->filled('customerGroup')) {
+                $query->where('customer_group', $request->input('customerGroup'));
+            }
+
+            if ($request->filled('dateJoined')) {
+                switch ($request->input('dateJoined')) {
+                    case 'last_24_hours':
+                        $query->where('created_at', '>=', now()->subHours(24));
+                        break;
+                    case 'last_7_days':
+                        $query->whereDate('created_at', '>=', now()->subDays(7)->toDateString());
+                        break;
+                    case 'last_30_days':
+                        $query->whereDate('created_at', '>=', now()->subDays(30)->toDateString());
+                        break;
+                    case 'today':
+                        $query->whereDate('created_at', today());
+                        break;
+                    case 'yesterday':
+                        $query->whereDate('created_at', today()->subDay());
+                        break;
+                    default:
+                        return response()->json([
+                            'status'  => false,
+                            'message' => 'Invalid date filter.',
+                        ], 422);
+                }
+            }
+
+            if ($request->filled('sortBy')) {
+                $query->orderBy($request->input('sortBy', 'id'), $request->input('sortOrder', 'asc'));
+            } else {
+                $query->orderBy('id', 'desc');
+            }
+
+            $customers = $query->paginate($request->input('pageSize', 50));
 
             $customers->getCollection()->transform(function ($customer) {
-
                 $orders = $customer->orders
                     ->where('is_draft', 0)
                     ->sortByDesc('id')
@@ -79,7 +139,7 @@ class CustomerController extends Controller
                         'Completed',
                         'Cancelled',
                         'Refunded',
-                        'Declined'
+                        'Declined',
                     ]);
                 })->values();
 
@@ -88,56 +148,51 @@ class CustomerController extends Controller
                         'Completed',
                         'Cancelled',
                         'Refunded',
-                        'Declined'
+                        'Declined',
                     ]);
                 })->values();
 
                 return [
-                    'id' => $customer->id,
-                    'firstName' => $customer->first_name,
-                    'lastName' => $customer->last_name,
-                    'email' => $customer->email,
-                    'phone' => $customer->phone,
-                    'companyName' => $customer->company_name,
-                    'address' => $customer->address,
-                    'addressLine2' => $customer->address_line_2,
-                    'city' => $customer->city,
-                    'state' => $customer->state,
-                    'zip' => $customer->zip,
-                    'country' => $customer->country,
-                    'customerGroup' => $customer->customer_group,
-                    'storeCredit' => $customer->store_credit,
+                    'id'                  => $customer->id,
+                    'firstName'           => $customer->first_name,
+                    'lastName'            => $customer->last_name,
+                    'email'               => $customer->email,
+                    'phone'               => $customer->phone,
+                    'companyName'         => $customer->company_name,
+                    'address'             => $customer->address,
+                    'addressLine2'        => $customer->address_line_2,
+                    'city'                => $customer->city,
+                    'state'               => $customer->state,
+                    'zip'                 => $customer->zip,
+                    'country'             => $customer->country,
+                    'customerGroup'       => $customer->customer_group,
+                    'storeCredit'         => $customer->store_credit,
                     'receiveReviewEmails' => $customer->receive_review_emails,
-                    'joinDate' => optional($customer->created_at)->format('M d, Y'),
-
-                    'addresses' => $customer->addresses,
+                    'joinDate'            => optional($customer->created_at)->format('M d, Y'),
+                    'addresses'           => $customer->addresses,
                     'billingInformations' => $customer->billingInformations,
-
-                    'totalOrders' => $orders->count(),
-
-                    'currentOrders' => OrderResource::collection($currentOrders),
-
-                    'pastOrders' => OrderResource::collection($pastOrders),
+                    'totalOrders'         => $orders->count(),
+                    'currentOrders'       => OrderResource::collection($currentOrders),
+                    'pastOrders'          => OrderResource::collection($pastOrders),
                 ];
             });
 
             return response()->json([
-                'status' => true,
-                'message' => 'Customer list fetched.',
-                'data' => $customers->items(),
+                'status'     => true,
+                'message'    => 'Customer list fetched.',
+                'data'       => $customers->items(),
                 'pagination' => [
-                    'total' => $customers->total(),
-                    'page' => $customers->currentPage(),
+                    'total'    => $customers->total(),
+                    'page'     => $customers->currentPage(),
                     'pageSize' => $customers->perPage(),
                     'lastPage' => $customers->lastPage(),
-                ]
+                ],
             ]);
         } catch (\Exception $e) {
-
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Something went wrong.',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }

@@ -158,7 +158,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::patch('/update-status/{id}', 'updateOrderStatus');
         Route::get('/export-orders', 'exportToExcel');
         Route::get('/get-notes/{orderId}', 'getOrderNotes');
-        Route::get('/search-advanced', 'advancedOrderSearch');
+      //  Route::get('/search-advanced', 'advancedOrderSearch');
         Route::put('/update-order/{id}', 'updateFromDashboard');
         Route::get('/invoice/{ids}', 'downloadInvoice');
         Route::post('/resend-invoice/{id}', 'resendInvoice');
@@ -178,9 +178,9 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Orders — Search
-    Route::prefix('orders')->middleware('permission:search_orders')->controller(OrderController::class)->group(function () {
-        Route::get('/search-advanced', 'advancedOrderSearch');
-    });
+    // Route::prefix('orders')->middleware('permission:search_orders')->controller(OrderController::class)->group(function () {
+    //     Route::get('/search-advanced', 'advancedOrderSearch');
+    // });
 
     // Orders — Export
     Route::prefix('orders')->middleware('permission:export_orders')->controller(OrderController::class)->group(function () {
