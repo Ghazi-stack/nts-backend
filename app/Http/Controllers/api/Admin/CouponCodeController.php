@@ -837,8 +837,8 @@ class CouponCodeController extends Controller
             $storeId = $this->getStoreId();
 
             $request->validate([
-                'email'    => 'nullable|email',
-                'is_draft' => 'nullable|in:0,1',
+                'email'       => 'nullable|email',
+                'draft_token' => 'nullable|string',
             ]);
 
             $email = strtolower(trim($request->email));
@@ -855,12 +855,12 @@ class CouponCodeController extends Controller
                 ], 404);
             }
 
-            $usage->is_draft = (int) $request->is_draft;
+            $usage->draft_token = $request->draft_token;
             $usage->save();
 
             return response()->json([
                 'status'  => true,
-                'message' => 'Draft status updated successfully',
+                'message' => 'Draft token updated successfully',
                 'data'    => $usage,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
