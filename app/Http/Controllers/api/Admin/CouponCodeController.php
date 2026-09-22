@@ -649,9 +649,7 @@ class CouponCodeController extends Controller
             $userId    = $user?->id;
             $sessionId = $request->header('X-Session-ID');
 
-            $query = CouponUsage::where('store_id', $storeId)
-                ->where('is_delete', 0)
-                ->where('user_used', 0);
+            $query = CouponUsage::where('store_id', $storeId);
 
             if ($userId) {
                 $userEmail = strtolower(trim($user->email ?? ''));
@@ -672,12 +670,22 @@ class CouponCodeController extends Controller
                 ], 400);
             }
 
-            $usage = $query->orderBy('id', 'desc')->first();
+            // Latest row only — is_delete filter yahan nahi
+            $latest = $query->orderBy('id', 'desc')->first();
+
+            // Agar latest delete hai ya already used hai to kuch return mat karo
+            if (!$latest || (int) $latest->is_delete === 1 || (int) $latest->user_used === 1) {
+                return response()->json([
+                    'status'  => true,
+                    'message' => 'Coupon usages fetched successfully',
+                    'data'    => null,
+                ]);
+            }
 
             return response()->json([
                 'status'  => true,
                 'message' => 'Coupon usages fetched successfully',
-                'data'    => $usage,
+                'data'    => $latest,
             ]);
         } catch (\Exception $e) {
             return response()->json([
