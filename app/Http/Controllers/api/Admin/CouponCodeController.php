@@ -613,7 +613,6 @@ class CouponCodeController extends Controller
                 'discount_amount' => $coupon->discountAmount,
                 'user_used'       => 0,
                 'email'           => $email,
-                'is_draft'        => 1,
             ]);
 
             return response()->json([
@@ -649,16 +648,16 @@ class CouponCodeController extends Controller
 
             $userId    = $user?->id;
             $sessionId = $request->header('X-Session-ID');
-            $isDraft   = (int) $request->query('isDraft', $request->input('isDraft', 0)) === 1;
+            $isDraft   = (int) $request->query('isDraft', 0) === 1;
 
-            $baseQuery = CouponUsage::where('store_id', $storeId)
+            $query = CouponUsage::where('store_id', $storeId)
                 ->where('is_delete', 0)
                 ->where('user_used', 0);
 
             if ($userId) {
                 $userEmail = strtolower(trim($user->email ?? ''));
 
-                $baseQuery->where(function ($q) use ($userId, $userEmail) {
+                $query->where(function ($q) use ($userId, $userEmail) {
                     $q->where('user_id', $userId);
 
                     if ($userEmail) {
@@ -666,7 +665,7 @@ class CouponCodeController extends Controller
                     }
                 });
             } elseif ($sessionId) {
-                $baseQuery->where('session_id', $sessionId);
+                $query->where('session_id', $sessionId);
             } else {
                 return response()->json([
                     'status'  => false,
@@ -674,16 +673,14 @@ class CouponCodeController extends Controller
                 ], 400);
             }
 
-            // ?isDraft=1 → pehle draft record dhoondo
             if ($isDraft) {
-                $draftUsage = (clone $baseQuery)
-                    ->where('isdraft', 1)
+                $draftUsage = (clone $query)
+                    ->where('is_draft', 1)
                     ->orderBy('id', 'desc')
                     ->first();
 
                 if ($draftUsage) {
-                    // jo last normal record get pe aata, usko hide karo
-                    (clone $baseQuery)
+                    (clone $query)
                         ->where('id', '!=', $draftUsage->id)
                         ->update(['is_delete' => 1]);
 
@@ -693,12 +690,9 @@ class CouponCodeController extends Controller
                         'data'    => $draftUsage,
                     ]);
                 }
-                // draft match nahi → neeche normal flow
             }
 
-            $usage = (clone $baseQuery)
-                ->orderBy('id', 'desc')
-                ->first();
+            $usage = $query->orderBy('id', 'desc')->first();
 
             return response()->json([
                 'status'  => true,
@@ -771,6 +765,7 @@ class CouponCodeController extends Controller
 
             $query->update([
                 'is_delete' => 1,
+                'is_draft'  => 0,
             ]);
 
             return response()->json([
@@ -778,6 +773,52 @@ class CouponCodeController extends Controller
                 'message'    => 'Coupon usage deleted successfully',
                 'deletedIds' => $updatedIds,
             ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong',
+            ], 500);
+        }
+    }
+
+    public function updateMyCouponDraft(Request $request)
+    {
+        try {
+            $storeId = $this->getStoreId();
+
+            $request->validate([
+                'email'    => 'required|email',
+                'is_draft' => 'required|in:0,1',
+            ]);
+
+            $email = strtolower(trim($request->email));
+
+            $usage = CouponUsage::where('store_id', $storeId)
+                ->whereRaw('LOWER(email) = ?', [$email])
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if (!$usage) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Record not found',
+                ], 404);
+            }
+
+            $usage->is_draft = (int) $request->is_draft;
+            $usage->save();
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Draft status updated successfully',
+                'data'    => $usage,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Validation failed',
+                'errors'  => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,

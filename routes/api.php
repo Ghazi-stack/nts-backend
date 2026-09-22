@@ -408,6 +408,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/add-couponcode', 'store');
         Route::put('/update-couponcode/{id}', 'update');
         Route::put('/update-enabled/{id}', 'updateEnabled');
+        Route::post('/coupon-usage/draft', 'updateMyCouponDraft');
         Route::delete('/delete-couponcode/{id}', 'destroy');
     });
 

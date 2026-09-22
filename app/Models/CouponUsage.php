@@ -24,6 +24,5 @@ class CouponUsage extends Model
     protected $casts = [
         'user_used' => 'boolean',
         'is_delete' => 'boolean',
-        'is_draft' => 'boolean',
     ];
 }
