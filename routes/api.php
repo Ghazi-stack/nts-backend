@@ -322,9 +322,9 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Customers — Search
-    Route::prefix('customers')->middleware('permission:search_customers')->group(function () {
-        Route::post('/customer-search', [CustomerController::class, 'advancedSearch']);
-    });
+    // Route::prefix('customers')->middleware('permission:search_customers')->group(function () {
+    //     Route::post('/customer-search', [CustomerController::class, 'advancedSearch']);
+    // });
 
     // Customers — Import
     Route::prefix('customers')->middleware('permission:import_customers')->group(function () {
