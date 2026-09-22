@@ -683,13 +683,13 @@ class CouponCodeController extends Controller
                     (clone $query)
                         ->where('id', '!=', $draftUsage->id)
                         ->update(['is_delete' => 1]);
-                }
 
-                return response()->json([
-                    'status'  => true,
-                    'message' => 'Coupon usages fetched successfully',
-                    'data'    => $draftUsage,
-                ]);
+                    return response()->json([
+                        'status'  => true,
+                        'message' => 'Coupon usages fetched successfully',
+                        'data'    => $draftUsage,
+                    ]);
+                }
             }
 
             $usage = $query
