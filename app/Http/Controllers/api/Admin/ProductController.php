@@ -141,8 +141,7 @@ class ProductController extends Controller
             if ($request->has('freeShipping') && !in_array($request->freeShipping, ['no_preference', 'No Preference', ''], true)) {
                 $isFree = $request->boolean('freeShipping');
                 $query->where(function ($q) use ($isFree) {
-                    $q->where('free_shipping', $isFree)
-                        ->orWhere('show_shipping', $isFree);
+                    $q->where('free_shipping', $isFree);
                 });
             }
 
@@ -846,7 +845,7 @@ class ProductController extends Controller
                 'low_stock' => $validated['lowStock'] ?? 0,
                 'is_featured' => $validated['isFeatured'] ?? false,
                 'show_condition' => $validated['showCondition'] ?? false,
-                'show_shipping' => $validated['freeShipping'] ?? false,
+                'free_shipping' => $validated['freeShipping'] ?? false,
                 'sort_order' => $validated['sortOrder'] ?? 0,
                 'search_keywords' => $validated['searchKeywords'] ?? null,
                 'visible_on_storefront' => $validated['isVisible'] ?? true,
@@ -1123,7 +1122,7 @@ class ProductController extends Controller
                 'low_stock' => $validated['lowStock'] ?? 0,
                 'is_featured' => $validated['isFeatured'] ?? false,
                 'show_condition' => $validated['showCondition'] ?? false,
-                'show_shipping' => $validated['freeShipping'] ?? false,
+                'free_shipping' => $validated['freeShipping'] ?? false,
                 'sort_order' => $validated['sortOrder'] ?? 0,
                 'search_keywords' => $validated['searchKeywords'] ?? null,
                 'visible_on_storefront' => $validated['isVisible'] ?? true,
@@ -1378,7 +1377,7 @@ class ProductController extends Controller
                 'brand_id'                => 'Brand',
                 'track_inventory'         => 'Track Inventory',
                 'show_condition'          => 'Show Condition',
-                'show_shipping'           => 'Free Shipping',
+                'free_shipping'           => 'Free Shipping',
                 'sort_order'              => 'Sort Order',
                 'search_keywords'         => 'Search Keywords',
                 'purchasability_status'   => 'Purchasability',
@@ -1494,7 +1493,7 @@ class ProductController extends Controller
                         'low_stock' => $fields['lowStock'] ?? $product->low_stock,
                         'is_featured' => $fields['isFeatured'] ?? $product->is_featured,
                         'show_condition' => $fields['showCondition'] ?? $product->show_condition,
-                        'show_shipping' => $fields['freeShipping'] ?? $product->show_shipping,
+                        'free_shipping' => $fields['freeShipping'] ?? $product->free_shipping,
                         'sort_order' => $fields['sortOrder'] ?? $product->sort_order,
                         'search_keywords' => $fields['searchKeywords'] ?? $product->search_keywords,
                         'visible_on_storefront' => $fields['isVisible'] ?? $product->visible_on_storefront,
@@ -1741,7 +1740,7 @@ class ProductController extends Controller
                         'brand_id'                => 'Brand',
                         'track_inventory'         => 'Track Inventory',
                         'show_condition'          => 'Show Condition',
-                        'show_shipping'           => 'Free Shipping',
+                        'free_shipping'           => 'Free Shipping',
                         'sort_order'              => 'Sort Order',
                         'search_keywords'         => 'Search Keywords',
                         'purchasability_status'   => 'Purchasability',
