@@ -784,6 +784,53 @@ class CouponCodeController extends Controller
         }
     }
 
+    public function deleteCouponUsageByEmail(Request $request, $id = null)
+    {
+        try {
+            $storeId = $this->getStoreId();
+
+            $request->validate([
+                'email' => 'required|email',
+                'id'    => $id ? 'nullable' : 'required|integer',
+            ]);
+
+            $email    = strtolower(trim($request->email));
+            $recordId = $id ?: $request->id;
+
+            $usage = CouponUsage::where('store_id', $storeId)
+                ->where('id', $recordId)
+                ->whereRaw('LOWER(email) = ?', [$email])
+                ->first();
+
+            if (!$usage) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Record not found',
+                ], 404);
+            }
+
+            $deletedId = $usage->id;
+            $usage->delete();
+
+            return response()->json([
+                'status'     => true,
+                'message'    => 'Coupon usage deleted successfully',
+                'deletedIds' => [$deletedId],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Validation failed',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong',
+            ], 500);
+        }
+    }
+
     public function updateMyCouponDraft(Request $request)
     {
         try {

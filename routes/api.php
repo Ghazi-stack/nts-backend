@@ -415,6 +415,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::prefix('coupons')->controller(CouponCodeController::class)->group(function () {
         Route::get('/get-couponcode-dashboard', 'showDashboardCouponCode');
         Route::post('/coupon-usage/draft', 'updateMyCouponDraft');
+        Route::delete('/coupon-usage/remove', 'deleteCouponUsageByEmail');
     });
 
     // ===================== SETTINGS =====================
