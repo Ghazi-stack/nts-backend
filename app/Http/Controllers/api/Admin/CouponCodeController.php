@@ -790,17 +790,17 @@ class CouponCodeController extends Controller
             $storeId = $this->getStoreId();
 
             $request->validate([
-                'email' => 'required|email',
+               // 'email' => 'required|email',
                 'id'    => $id ? 'nullable' : 'required|integer',
             ]);
 
-            $email    = strtolower(trim($request->email));
+           // $email    = strtolower(trim($request->email));
             $recordId = $id ?: $request->id;
 
             $usage = CouponUsage::where('store_id', $storeId)
                 ->where('id', $recordId)
-                ->whereRaw('LOWER(email) = ?', [$email])
                 ->first();
+                //->whereRaw('LOWER(email) = ?', [$email])
 
             if (!$usage) {
                 return response()->json([
