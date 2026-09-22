@@ -787,8 +787,8 @@ class CouponCodeController extends Controller
             $storeId = $this->getStoreId();
 
             $request->validate([
-                'email'    => 'required|email',
-                'is_draft' => 'required|in:0,1',
+                'email'    => 'nullable|email',
+                'is_draft' => 'nullable|in:0,1',
             ]);
 
             $email = strtolower(trim($request->email));
