@@ -646,13 +646,36 @@ class CouponCodeController extends Controller
                 $user  = $token?->tokenable;
             }
 
-            $userId    = $user?->id;
-            $sessionId = $request->header('X-Session-ID');
-            $isDraft   = (int) $request->query('isDraft', 0) === 1;
+            $userId     = $user?->id;
+            $sessionId  = $request->header('X-Session-ID');
+            $draftToken = $request->query('draft_token')
+                ?: $request->input('draft_token')
+                ?: $request->header('X-Draft-Token');
 
             $query = CouponUsage::where('store_id', $storeId)
                 ->where('is_delete', 0)
                 ->where('user_used', 0);
+
+            if (!empty($draftToken)) {
+                $draftUsage = (clone $query)
+                    ->where('draft_token', $draftToken)
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if ($draftUsage) {
+                    return response()->json([
+                        'status'  => true,
+                        'message' => 'Coupon usages fetched successfully',
+                        'data'    => $draftUsage,
+                    ]);
+                }
+
+                return response()->json([
+                    'status'  => true,
+                    'message' => 'Coupon usages fetched successfully',
+                    'data'    => null,
+                ]);
+            }
 
             if ($userId) {
                 $userEmail = strtolower(trim($user->email ?? ''));
@@ -673,29 +696,7 @@ class CouponCodeController extends Controller
                 ], 400);
             }
 
-            if ($isDraft) {
-                $draftUsage = (clone $query)
-                    ->where('is_draft', 1)
-                    ->orderBy('id', 'desc')
-                    ->first();
-
-                if ($draftUsage) {
-                    (clone $query)
-                        ->where('id', '!=', $draftUsage->id)
-                        ->update(['is_delete' => 1]);
-
-                    return response()->json([
-                        'status'  => true,
-                        'message' => 'Coupon usages fetched successfully',
-                        'data'    => $draftUsage,
-                    ]);
-                }
-            }
-
-            $usage = $query
-                ->where('is_draft', 0)
-                ->orderBy('id', 'desc')
-                ->first();
+            $usage = $query->orderBy('id', 'desc')->first();
 
             return response()->json([
                 'status'  => true,
