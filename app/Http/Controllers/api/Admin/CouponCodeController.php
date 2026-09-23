@@ -657,10 +657,10 @@ class CouponCodeController extends Controller
                 ->where('is_delete', 0)
                 ->where('user_used', 0);
 
-            // Token aaya → is_draft 0 + token match tabhi get
+            // Token + is_draft 1
             if (!empty($draftToken)) {
                 $usage = (clone $query)
-                    ->where('is_draft', 0)
+                    ->where('is_draft', 1)
                     ->where('draft_token', $draftToken)
                     ->orderBy('id', 'desc')
                     ->first();
@@ -672,7 +672,7 @@ class CouponCodeController extends Controller
                 ]);
             }
 
-            // Bina token → website: is_draft 1 wala user data
+            // Website: teeno 0
             if ($userId) {
                 $userEmail = strtolower(trim($user->email ?? ''));
 
@@ -693,7 +693,7 @@ class CouponCodeController extends Controller
             }
 
             $usage = $query
-                ->where('is_draft', 1)
+                ->where('is_draft', 0)
                 ->orderBy('id', 'desc')
                 ->first();
 
@@ -845,9 +845,6 @@ class CouponCodeController extends Controller
 
             $usage = CouponUsage::where('store_id', $storeId)
                 ->whereRaw('LOWER(email) = ?', [$email])
-                ->where('is_delete', 0)
-                ->where('user_used', 0)
-                ->where('is_draft', 1)
                 ->orderBy('id', 'desc')
                 ->first();
 
@@ -859,7 +856,6 @@ class CouponCodeController extends Controller
             }
 
             $usage->draft_token = $request->draft_token;
-            $usage->is_draft    = 0;
             $usage->save();
 
             return response()->json([
