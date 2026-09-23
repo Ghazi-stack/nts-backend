@@ -616,8 +616,8 @@ class CouponCodeController extends Controller
                 'is_draft'        => 1,
             ]);
 
-            $coupon->CouponUsageId    = $usage->id;
-            $coupon->CouponUsageEmail = $usage->email;
+            $coupon->couponUsageId    = $usage->id;
+            $coupon->couponUsageEmail = $usage->email;
 
             return response()->json([
                 'status'  => true,
