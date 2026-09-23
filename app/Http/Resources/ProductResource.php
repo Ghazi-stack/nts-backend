@@ -68,6 +68,8 @@ class ProductResource extends JsonResource
             'trackInventory' => $this->track_inventory,
             'currentStock' => $this->current_stock,
             'callPricing' => $this->call_pricing,
+            'callForPricingLabel' => $this->call_pricing_label,
+            'callForPricingPhone' => $this->call_pricing_phone,
             'lowStock' => $this->low_stock,
             'isFeatured' => $this->is_featured,
             'isVisible' => $this->visible_on_storefront,
