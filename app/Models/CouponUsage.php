@@ -18,11 +18,13 @@ class CouponUsage extends Model
         'email',
         'user_used',
         'is_delete',
+        'is_draft',
         'draft_token',
     ];
 
     protected $casts = [
         'user_used' => 'boolean',
         'is_delete' => 'boolean',
+        'is_draft' => 'boolean',
     ];
 }

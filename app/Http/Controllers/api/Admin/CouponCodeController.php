@@ -613,6 +613,7 @@ class CouponCodeController extends Controller
                 'discount_amount' => $coupon->discountAmount,
                 'user_used'       => 0,
                 'email'           => $email,
+                'is_draft'        => 1,
             ]);
 
             return response()->json([
