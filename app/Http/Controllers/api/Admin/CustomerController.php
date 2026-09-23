@@ -120,6 +120,20 @@ class CustomerController extends Controller
                 }
             }
 
+            if ($request->filled('orderIdFrom') || $request->filled('orderIdTo')) {
+                $query->whereHas('orders', function ($q) use ($request) {
+                    $q->where('is_draft', 0);
+
+                    if ($request->filled('orderIdFrom')) {
+                        $q->where('id', '>=', $request->input('orderIdFrom'));
+                    }
+
+                    if ($request->filled('orderIdTo')) {
+                        $q->where('id', '<=', $request->input('orderIdTo'));
+                    }
+                });
+            }
+
             if ($request->filled('sortBy')) {
                 $query->orderBy($request->input('sortBy', 'id'), $request->input('sortOrder', 'asc'));
             } else {
