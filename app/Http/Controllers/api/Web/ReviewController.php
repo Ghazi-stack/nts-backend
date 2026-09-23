@@ -73,6 +73,11 @@ class ReviewController extends Controller
             $user  = $token?->tokenable;
         }
 
+        // Guest: email se users table
+        if (!$user) {
+            $user = \App\Models\User::where('email', $request->email)->first();
+        }
+
         if (!$user) {
             return response()->json([
                 'status'  => false,
@@ -89,11 +94,22 @@ class ReviewController extends Controller
             ], 403);
         }
 
-        $hasOrder = \App\Models\Order::where('customer_id', $customerId)
+        $orderIds = \App\Models\Order::where('customer_id', $customerId)
             ->where('store_id', current_store_id())
+            ->pluck('id');
+
+        if ($orderIds->isEmpty()) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Please place an order first, then you can submit a review.',
+            ], 403);
+        }
+
+        $hasProduct = \App\Models\OrderItem::whereIn('orderId', $orderIds)
+            ->where('product_id', $request->productId)
             ->exists();
 
-        if (!$hasOrder) {
+        if (!$hasProduct) {
             return response()->json([
                 'status'  => false,
                 'message' => 'Please place an order first, then you can submit a review.',
