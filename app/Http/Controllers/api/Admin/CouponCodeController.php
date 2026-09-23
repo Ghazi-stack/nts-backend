@@ -657,22 +657,23 @@ class CouponCodeController extends Controller
                 ->where('is_delete', 0)
                 ->where('user_used', 0);
 
-            // Token + is_draft 1
             if (!empty($draftToken)) {
-                $usage = (clone $query)
+                $byToken = (clone $query)
                     ->where('is_draft', 1)
                     ->where('draft_token', $draftToken)
                     ->orderBy('id', 'desc')
                     ->first();
 
-                return response()->json([
-                    'status'  => true,
-                    'message' => 'Coupon usages fetched successfully',
-                    'data'    => $usage,
-                ]);
+                if ($byToken) {
+                    return response()->json([
+                        'status'  => true,
+                        'message' => 'Coupon usages fetched successfully',
+                        'data'    => $byToken,
+                    ]);
+                }
+                // token match nahi → ignore, neeche website flow
             }
 
-            // Website: teeno 0
             if ($userId) {
                 $userEmail = strtolower(trim($user->email ?? ''));
 
