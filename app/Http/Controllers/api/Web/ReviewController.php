@@ -63,27 +63,48 @@ class ReviewController extends Controller
             'name'      => 'nullable|string|max:255',
             'email'     => 'required|email|max:255',
             'subject'   => 'required|string|max:255',
-            'comment'   => 'nullable|string'
+            'comment'   => 'nullable|string',
         ]);
 
-        $userId = null;
+        $user = Auth::guard('sanctum')->user();
 
-        // Agar logged in hai to uska id use karo
-        if (Auth::guard('sanctum')->check()) {
-            $userId = Auth::guard('sanctum')->user()->id;
-        } else {
-            // Guest — email se existing user dhundo
-            $existingUser = \App\Models\User::where('email', $request->email)->first();
-            if ($existingUser) {
-                $userId = $existingUser->id;
-            }
+        if (!$user && $request->bearerToken()) {
+            $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+            $user  = $token?->tokenable;
+        }
+
+        if (!$user) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Please register or log in to submit a review.',
+            ], 401);
+        }
+
+        $customerId = $user->customer_id ?? null;
+
+        if (empty($customerId)) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Please place an order first, then you can submit a review.',
+            ], 403);
+        }
+
+        $hasOrder = \App\Models\Order::where('customer_id', $customerId)
+            ->where('store_id', current_store_id())
+            ->exists();
+
+        if (!$hasOrder) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Please place an order first, then you can submit a review.',
+            ], 403);
         }
 
         $review = Review::create([
-            'user_id'    => $userId,
+            'user_id'    => $user->id,
             'product_id' => $request->productId,
             'rating'     => $request->rating,
-            'name'       => $request->name,
+            'name'       => $request->name ?? $user->name,
             'email'      => $request->email,
             'subject'    => $request->subject,
             'comment'    => $request->comment,
@@ -91,9 +112,9 @@ class ReviewController extends Controller
         ]);
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Review created successfully',
-            'data' => new ReviewResource($review->load('user'))
+            'data'    => new ReviewResource($review->load('user')),
         ], 201);
     }
 
