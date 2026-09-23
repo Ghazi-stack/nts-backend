@@ -26,6 +26,7 @@ class CategoryResource extends JsonResource
             'description' => $this->description,
             'is_visible' => $this->is_visible,
             'parent_id' => $this->parent_id,
+            'channel' => $this->channel,
 
               // NEW fields (no imageUrl accessor, as requested)
             'image' => $this->image ? Storage::disk('s3')->url($this->image) : null,

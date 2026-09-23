@@ -137,6 +137,7 @@ class CategoryController extends Controller
             'description' => $category->description,
             'is_visible' => $category->is_visible,
             'parent_id' => $category->parent_id,
+            'channel' => $category->channel,
 
             'seo' => [
                 'page_title'       => $category->seo_home_title,
@@ -164,6 +165,7 @@ class CategoryController extends Controller
             'slug' => $category->slug,
             'description' => $category->description,
             'is_visible' => $category->is_visible,
+            'channel' => $category->channel,
             'parent_id' => $category->parent_id,
             'total_products' => $directProducts + $subProducts,
             'direct_products' => $directProducts,
@@ -242,6 +244,7 @@ class CategoryController extends Controller
             'description' => 'nullable|string',
             'parentId'    => 'nullable|exists:categories,id',
             'isVisible'   => 'nullable|boolean',
+            'channel'     => 'required|string|max:255',
         ]);
 
         $slug = Str::slug($request->name);
@@ -257,6 +260,7 @@ class CategoryController extends Controller
             'parent_id' => $request->parentId,
             'is_visible' => $request->boolean('isVisible', true),
             'store_id' => $storeId,
+            'channel' => $request->channel,
         ]);
 
         return response()->json([
@@ -290,6 +294,7 @@ class CategoryController extends Controller
                 'description' => 'nullable|string',
                 'parentId' => 'nullable|exists:categories,id',
                 'isVisible' => 'nullable|boolean',
+                'channel' => 'nullable|string|max:255',
             ]);
 
             // $slug = Str::slug($request->name);
@@ -307,6 +312,7 @@ class CategoryController extends Controller
                 // 'slug' => $slug,
                 'description' => $request->description,
                 'parent_id' => $request->parentId,
+                'channel' => $request->channel,
                 'is_visible' => $request->boolean('isVisible', $category->is_visible),
             ]);
 
@@ -434,6 +440,7 @@ class CategoryController extends Controller
             'categories.*.description' => 'nullable|string',
             'categories.*.parentId' => 'nullable|exists:categories,id',
             'categories.*.isVisible' => 'nullable|boolean',
+            'categories.*.channel' => 'nullable|string|max:255',
         ]);
 
         $updated = [];
@@ -460,6 +467,7 @@ class CategoryController extends Controller
                     'description' => $data['description'] ?? null,
                     'parent_id' => $data['parentId'] ?? null,
                     'is_visible' => isset($data['isVisible']) ? (bool)$data['isVisible'] : $category->is_visible,
+                    'channel' => $data['channel'] ?? $category->channel,
                 ]);
 
                 $updated[] = new CategoryResource($category->load(['childrenRecursive', 'products']));
