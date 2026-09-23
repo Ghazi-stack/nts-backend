@@ -191,7 +191,6 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::prefix('orders')->middleware('permission:draft_orders')->controller(OrderController::class)->group(function () {
         Route::get('/list-drafts', 'listDraftOrders');
         Route::post('/create-draft', 'createDraftOrder');
-        Route::delete('/delete-draft/{id}', 'deleteDraftOrder');
         Route::get('/get-draft-order', 'getDraftOrders');
     });
 
@@ -612,7 +611,10 @@ Route::prefix('web')->group(function () {
         Route::get('/show/{id}', 'show');
         Route::post('/return-order', 'submitReturnRequest');
         Route::post('/order-details', 'showByOrderId');
+        Route::delete('/draft-orders/{id}', 'deleteDraftOrder');
+        
     });
+
 
     Route::prefix('customer-messages')->middleware('auth:sanctum')->controller(CustomerMessageController::class)->group(function () {
         // Customer APIs
