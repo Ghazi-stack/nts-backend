@@ -657,27 +657,22 @@ class CouponCodeController extends Controller
                 ->where('is_delete', 0)
                 ->where('user_used', 0);
 
+            // Token aaya → is_draft 0 + token match tabhi get
             if (!empty($draftToken)) {
-                $draftUsage = (clone $query)
+                $usage = (clone $query)
+                    ->where('is_draft', 0)
                     ->where('draft_token', $draftToken)
                     ->orderBy('id', 'desc')
                     ->first();
 
-                if ($draftUsage) {
-                    return response()->json([
-                        'status'  => true,
-                        'message' => 'Coupon usages fetched successfully',
-                        'data'    => $draftUsage,
-                    ]);
-                }
-
                 return response()->json([
                     'status'  => true,
                     'message' => 'Coupon usages fetched successfully',
-                    'data'    => null,
+                    'data'    => $usage,
                 ]);
             }
 
+            // Bina token → website: is_draft 1 wala user data
             if ($userId) {
                 $userEmail = strtolower(trim($user->email ?? ''));
 
@@ -697,7 +692,10 @@ class CouponCodeController extends Controller
                 ], 400);
             }
 
-            $usage = $query->orderBy('id', 'desc')->first();
+            $usage = $query
+                ->where('is_draft', 1)
+                ->orderBy('id', 'desc')
+                ->first();
 
             return response()->json([
                 'status'  => true,
@@ -847,6 +845,9 @@ class CouponCodeController extends Controller
 
             $usage = CouponUsage::where('store_id', $storeId)
                 ->whereRaw('LOWER(email) = ?', [$email])
+                ->where('is_delete', 0)
+                ->where('user_used', 0)
+                ->where('is_draft', 1)
                 ->orderBy('id', 'desc')
                 ->first();
 
@@ -858,6 +859,7 @@ class CouponCodeController extends Controller
             }
 
             $usage->draft_token = $request->draft_token;
+            $usage->is_draft    = 0;
             $usage->save();
 
             return response()->json([
