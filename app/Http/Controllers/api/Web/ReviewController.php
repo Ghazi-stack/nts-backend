@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Review;
 use App\Http\Resources\ReviewResource;
+use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 
 class ReviewController extends Controller
@@ -73,9 +76,8 @@ class ReviewController extends Controller
             $user  = $token?->tokenable;
         }
 
-        // Guest: email se users table
         if (!$user) {
-            $user = \App\Models\User::where('email', $request->email)->first();
+            $user = User::where('email', $request->email)->first();
         }
 
         if (!$user) {
@@ -90,29 +92,32 @@ class ReviewController extends Controller
         if (empty($customerId)) {
             return response()->json([
                 'status'  => false,
-                'message' => 'Please place an order first, then you can submit a review.',
+                'message' => 'Please order this product first, then you can submit a review.',
             ], 403);
         }
 
-        $orderIds = \App\Models\Order::where('customer_id', $customerId)
-            ->where('store_id', current_store_id())
-            ->pluck('id');
+        $storeId = current_store_id();
+
+        $orderIds = OrderItem::where('product_id', $request->productId)
+            ->where('store_id', $storeId)
+            ->pluck('order_id');
 
         if ($orderIds->isEmpty()) {
             return response()->json([
                 'status'  => false,
-                'message' => 'Please place an order first, then you can submit a review.',
+                'message' => 'Please order this product first, then you can submit a review.',
             ], 403);
         }
 
-        $hasProduct = \App\Models\OrderItem::whereIn('orderId', $orderIds)
-            ->where('product_id', $request->productId)
+        $hasOrder = Order::whereIn('id', $orderIds)
+            ->where('customer_id', $customerId)
+            ->where('store_id', $storeId)
             ->exists();
 
-        if (!$hasProduct) {
+        if (!$hasOrder) {
             return response()->json([
                 'status'  => false,
-                'message' => 'Please place an order first, then you can submit a review.',
+                'message' => 'Please order this product first, then you can submit a review.',
             ], 403);
         }
 
@@ -124,7 +129,7 @@ class ReviewController extends Controller
             'email'      => $request->email,
             'subject'    => $request->subject,
             'comment'    => $request->comment,
-            'store_id'   => current_store_id(),
+            'store_id'   => $storeId,
         ]);
 
         return response()->json([
