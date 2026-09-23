@@ -13,10 +13,11 @@ use App\Models\BillingInformation;
 use App\Models\ShippingDestination;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Order extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
     protected $fillable = [
         'store_id',
         'user_id',
@@ -64,7 +65,6 @@ class Order extends Model
         'is_save_address_for_billing' => 'boolean',
         'billing_same' => 'boolean',
         'billing_address' => 'array',
-
     ];
     public function items()
     {

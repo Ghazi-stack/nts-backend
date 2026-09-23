@@ -4066,6 +4066,46 @@ class OrderController extends Controller
         }
     }
 
+    // public function deleteDraftOrder(Request $request, $id)
+    // {
+    //     try {
+    //         $storeId = current_store_id();
+
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Store not selected or token invalid.',
+    //             ], 400);
+    //         }
+
+    //         $order = Order::query()
+    //             ->where('store_id', $storeId)
+    //             ->where('is_draft', 1)
+    //             ->find($id);
+
+    //         if (!$order) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Draft order not found.',
+    //             ], 404);
+    //         }
+
+    //         $order->delete(); // SoftDeletes — row delete nahi hoti, deleted_at set hota hai
+
+    //         return response()->json([
+    //             'status'  => true,
+    //             'message' => 'Draft order deleted successfully',
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Something went wrong',
+    //             'error'   => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
+   
     public function updateFromDashboard(Request $request, $orderId)
     {
         $storeId = current_store_id();
