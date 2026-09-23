@@ -813,7 +813,9 @@ class ProductController extends Controller
                 'dontUse' => 'nullable|boolean',
                 'manageCustoms' => 'nullable|boolean',
 
-                'callForPricing' => 'nullable|boolean',
+                'callForPricing'       => 'nullable|boolean',
+                'callForPricingLabel' => 'nullable|string|max:255',
+                'callForPricingPhone' => 'nullable|string|max:255',
 
                 'commodityDescription' => 'nullable|string',
                 'countryOfOrigin' => 'nullable|string',
@@ -872,6 +874,8 @@ class ProductController extends Controller
                 'dont_use' => $validated['dontUse'] ?? false,
                 'manage_customs' => $validated['manageCustoms'] ?? false,
                 'call_pricing' => $validated['callForPricing'] ?? false,
+                'call_Pricing_Label' => $validated['callForPricingLabel'] ?? null,
+                'call_Pricing_Phone' => $validated['callForPricingPhone'] ?? null,
                 'commodity_description' => $validated['commodityDescription'] ?? null,
                 'country_of_origin' => $validated['countryOfOrigin'] ?? null,
                 'hs_codes' => $validated['hsCodes'] ?? [],
@@ -1092,6 +1096,8 @@ class ProductController extends Controller
                 'manageCustoms' => 'nullable|boolean',
 
                 'callForPricing' => 'nullable|boolean',
+                'callForPricingLabel' => 'nullable|string|max:255',
+                'callForPricingPhone' => 'nullable|string|max:255',
 
                 'commodityDescription' => 'nullable|string',
                 'countryOfOrigin' => 'nullable|string',
@@ -1151,6 +1157,8 @@ class ProductController extends Controller
                 'manage_customs' => $validated['manageCustoms'] ?? false,
 
                 'call_pricing' => $validated['callForPricing'] ?? false,
+                'call_Pricing_Label' => $validated['callForPricingLabel'] ?? null,
+                'call_Pricing_Phone' => $validated['callForPricingPhone'] ?? null,
 
                 'commodity_description' => $validated['commodityDescription'] ?? null,
                 'country_of_origin' => $validated['countryOfOrigin'] ?? null,
@@ -1389,6 +1397,8 @@ class ProductController extends Controller
                 'tax_code'                => 'Tax Code',
                 'discount_type'           => 'Discount Type',
                 'call_pricing'            => 'Call For Pricing',
+                'call_Pricing_Label'      => 'Call For Pricing Label',
+                'call_Pricing_Phone'      => 'Call For Pricing Phone',
             ];
 
             foreach ($trackedFields as $column => $label) {
@@ -1511,6 +1521,8 @@ class ProductController extends Controller
                         'tax_class' => $fields['taxClass'] ?? $product->tax_class,
                         'tax_provider_code' => $fields['taxProviderCode'] ?? $product->tax_provider_code,
                         'tax_code' => $fields['taxCode'] ?? $product->tax_code,
+                        'call_Pricing_Label' => $fields['callForPricingLabel'] ?? $product->call_Pricing_Label,
+                        'call_Pricing_Phone' => $fields['callForPricingPhone'] ?? $product->call_Pricing_Phone,
                         'discount_type' => $fields['discountType'] ?? $product->discount_type,
                         'bulk_pricing_tiers' => $fields['bulkPricingTiers'] ?? $product->bulk_pricing_tiers,
                         'is_redirect' => $fields['isRedirect'] ?? $product->is_redirect,

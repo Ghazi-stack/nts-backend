@@ -58,6 +58,8 @@ class Product extends Model
         'store_id',
         'msrp',
         'call_pricing',
+        'call_Pricing_Label',
+        'call_Pricing_Phone',
         'purchasability_status',
         'min_purchase_quantity',
         'max_purchase_quantity',
