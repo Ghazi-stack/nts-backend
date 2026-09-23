@@ -134,10 +134,21 @@ class CustomerController extends Controller
                 });
             }
 
-            if ($request->filled('sortBy')) {
-                $query->orderBy($request->input('sortBy', 'id'), $request->input('sortOrder', 'asc'));
+            $sortBy    = strtolower((string) $request->input('sortBy', 'id'));
+            $sortOrder = strtolower((string) $request->input('sortOrder', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+            if ($sortBy === 'orders') {
+                $query->withCount([
+                    'orders as orders_count' => function ($q) {
+                        $q->where('is_draft', 0);
+                    },
+                ])->orderBy('orders_count', $sortOrder);
+            } elseif ($sortBy === 'name') {
+                $query->orderBy('first_name', $sortOrder)->orderBy('last_name', $sortOrder);
+            } elseif ($sortBy === 'email') {
+                $query->orderBy('email', $sortOrder);
             } else {
-                $query->orderBy('id', 'desc');
+                $query->orderBy('id', $sortOrder);
             }
 
             $customers = $query->paginate($request->input('pageSize', 50));
