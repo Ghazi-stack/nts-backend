@@ -604,7 +604,7 @@ class CouponCodeController extends Controller
                 $coupon->applicableProductIds = $matchedProductIds;
             }
 
-            CouponUsage::create([
+            $usage = CouponUsage::create([
                 'store_id'        => $storeId,
                 'user_id'         => null,
                 'session_id'      => null,
@@ -615,6 +615,9 @@ class CouponCodeController extends Controller
                 'email'           => $email,
                 'is_draft'        => 1,
             ]);
+
+            $coupon->CouponUsageId    = $usage->id;
+            $coupon->CouponUsageEmail = $usage->email;
 
             return response()->json([
                 'status'  => true,
