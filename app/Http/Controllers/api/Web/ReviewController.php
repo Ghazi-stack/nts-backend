@@ -87,12 +87,22 @@ class ReviewController extends Controller
             ], 401);
         }
 
+        $loginEmail = strtolower(trim((string) $user->email));
+        $formEmail  = strtolower(trim((string) $request->email));
+
+        if ($loginEmail !== '' && $formEmail !== $loginEmail) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'This email does not match your logged-in account. Please use your account email to submit a review.',
+            ], 403);
+        }
+
         $customerId = $user->customer_id ?? null;
 
         if (empty($customerId)) {
             return response()->json([
                 'status'  => false,
-                'message' => 'Please order this product first, then you can submit a review.',
+                'message' => 'Only customers who have purchased this item can review it.',
             ], 403);
         }
 
@@ -105,7 +115,7 @@ class ReviewController extends Controller
         if ($orderIds->isEmpty()) {
             return response()->json([
                 'status'  => false,
-                'message' => 'Please order this product first, then you can submit a review.',
+                'message' => 'Only customers who have purchased this item can review it.',
             ], 403);
         }
 
@@ -117,7 +127,7 @@ class ReviewController extends Controller
         if (!$hasOrder) {
             return response()->json([
                 'status'  => false,
-                'message' => 'Please order this product first, then you can submit a review.',
+                'message' => 'Only customers who have purchased this item can review it.',
             ], 403);
         }
 
