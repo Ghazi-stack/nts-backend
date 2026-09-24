@@ -94,15 +94,12 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
         ];
     }
 
-    /**
-     * @param  \App\Models\Order  $order
-     */
     public function map($order): array
     {
-        $customer = $order->customer;
-        $billing  = $order->billingInformation;
-        $payment  = $order->payment;
-        $shipment = $order->shipment;
+        $customer    = $order->customer;
+        $billing     = $order->billingInformation;
+        $payment     = $order->payment;
+        $shipment    = $order->shipment;
         $billingAddr = $this->json($order->billing_address ?? $order->billingAddress ?? null);
 
         $firstName = $this->attr($customer, 'first_name') ?: $this->attr($billing, 'first_name');
@@ -133,7 +130,7 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
             ?? $order->shipped_at
             ?? null;
 
-        $couponDetails = $this->couponDetails($order, $discountAmt);
+        $couponDetails  = $this->couponDetails($order, $discountAmt);
         $productDetails = $this->productDetails($order);
 
         $orderNotes = $order->notes?->pluck('note')->filter()->implode(' | ')
@@ -145,7 +142,7 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
             ?: $this->str($order->channel_name ?? '')
             ?: $this->str($order->channel ?? '')
             ?: 'Server Blink';
-        $channelId   = $this->num($order->channel_id ?? 1, 1);
+        $channelId = $this->num($order->channel_id ?? 1, 1);
 
         $shipMethod = $this->attr($billing, 'shipping_method')
             ?: $this->str($order->shipping_method ?? '')
@@ -200,11 +197,11 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
             $this->attr($billing, 'first_name'),
             $this->attr($billing, 'last_name'),
             $this->attr($billing, 'company_name') ?: $this->attr($billing, 'company'),
-            $this->attr($billing, 'address_line1') ?: $this->attr($billing, 'street_1'),
-            $this->attr($billing, 'address_line2') ?: $this->attr($billing, 'street_2'),
+            $this->shipField($billing, ['address_line1', 'addressLine1', 'address1', 'street_1', 'street1', 'address']),
+            $this->shipField($billing, ['address_line2', 'addressLine2', 'address2', 'street_2', 'street2']),
             $this->attr($billing, 'city') ?: $this->attr($billing, 'suburb'),
             $this->attr($billing, 'state'),
-            $this->attr($billing, 'zip'),
+            $this->attr($billing, 'zip') ?: $this->attr($billing, 'postal_code'),
             $this->attr($billing, 'country'),
             $this->attr($billing, 'phone'),
             $this->attr($billing, 'email'),
@@ -227,19 +224,55 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
             $qty     = (int) ($item->quantity ?? 0);
             $unit    = $this->num($item->price ?? optional($product)->price ?? 0);
             $total   = $this->num($qty * (float) $unit);
-            $weight  = number_format((float) ($item->weight ?? optional($product)->weight ?? 0), 4, '.', '');
+            $weight  = number_format($this->productWeight($product), 4, '.', '');
 
             return implode(', ', [
-                'Product ID: ' . ($product->id ?? $item->product_id ?? 0),
+                'Product ID: ' . (optional($product)->id ?? $item->product_id ?? 0),
                 'Product Qty: ' . $qty,
-                'Product SKU: ' . $this->str($product->sku ?? $item->sku ?? ''),
-                'Product Name: ' . $this->str($product->name ?? $item->name ?? ''),
+                'Product SKU: ' . $this->str(optional($product)->sku ?? $item->sku ?? ''),
+                'Product Name: ' . $this->str(optional($product)->name ?? $item->name ?? ''),
                 'Product Weight: ' . $weight,
                 'Product Variation Details: ' . $this->str($item->variation_details ?? ''),
                 'Product Unit Price: ' . number_format((float) $unit, 2, '.', ''),
                 'Product Total Price: ' . number_format((float) $total, 2, '.', ''),
             ]);
         })->implode('|');
+    }
+
+    private function productWeight($product): float
+    {
+        if (!$product) {
+            return 0;
+        }
+
+        $dimensions = $product->dimensions ?? null;
+
+        if (is_string($dimensions) && $dimensions !== '') {
+            $decoded    = json_decode($dimensions, true);
+            $dimensions = is_array($decoded) ? $decoded : [];
+        }
+
+        if (is_object($dimensions)) {
+            $dimensions = (array) $dimensions;
+        }
+
+        if (is_array($dimensions)) {
+            return (float) ($dimensions['weight'] ?? 0);
+        }
+
+        return (float) ($product->weight ?? 0);
+    }
+
+    private function shipField($model, array $keys): string
+    {
+        foreach ($keys as $key) {
+            $value = $this->attr($model, $key);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
     }
 
     private function couponDetails($order, $discountAmt): string
@@ -302,7 +335,7 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
             if ($full === '') {
                 return '';
             }
-            $bits = preg_split('/\s+/', $full, 2);
+            $bits  = preg_split('/\s+/', $full, 2);
             $first = $bits[0] ?? '';
             $last  = $bits[1] ?? '';
         }
