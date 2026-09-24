@@ -217,15 +217,15 @@ class ProductController extends Controller
             }
 
             $sortMap = [
-                'id'                    => 'id',
-                'name'                  => 'name',
-                'sku'                   => 'sku',
-                // 'stock'                 => 'current_stock',
-                // 'current_stock'         => 'current_stock',
-                'currentStock'          => 'current_stock',
-                'price'                 => 'price',
-                'visibility'            => 'visible_on_storefront',
-                'visible'               => 'visible_on_storefront',
+                'id'            => 'id',
+                'name'          => 'name',
+                'sku'           => 'sku',
+                'stock'         => 'current_stock',
+                'currentstock'  => 'current_stock',
+                'current_stock' => 'current_stock',
+                'price'         => 'price',
+                'visibility'    => 'visible_on_storefront',
+                'visible'       => 'visible_on_storefront',
             ];
 
             $sortByInput = strtolower((string) $request->input('sortBy', 'id'));
