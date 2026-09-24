@@ -129,15 +129,11 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
         $subtotalInc = $this->num($itemsSubtotal);
 
         $totalQty     = (int) ($order->items?->sum('quantity') ?? 0);
-        $hasShipment = !empty($order->shipment_id ?? optional($shipment)->id);
+        $shipment = $order->shipment;
 
-        $totalShipped = $hasShipment
-            ? (int) ($order->total_shipped ?? 1)
-            : 0;
+        $totalShipped = $shipment?->id ? (int) $shipment->id : 0;
 
-        $shippedAt = $hasShipment
-            ? (optional($shipment)->date_shipped ?? $order->shipped_at)
-            : null;
+        $shippedAt = $shipment?->date_shipped;
 
         $couponDetails  = $this->couponDetails($order, $discountAmt);
         $productDetails = $this->productDetails($order);
@@ -187,7 +183,7 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
             $paymentMethod,
             $totalQty,
             $totalShipped,
-            $this->formatDate($shippedAt),
+            $shippedAt ? $this->formatDate($shippedAt) : '0',
             $this->str($order->currency_code ?? $order->order_currency_code ?? 'USD') ?: 'USD',
             $this->num($order->exchange_rate ?? 1, 1),
             $orderNotes,
@@ -206,8 +202,8 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
             $this->attr($billing, 'first_name'),
             $this->attr($billing, 'last_name'),
             $this->attr($billing, 'company_name') ?: $this->attr($billing, 'company'),
-            $this->attr($billing, 'address_line1'),
-            $this->attr($billing, 'address_line2'),
+            $this->attr($billing, 'address_line_1'),
+            $this->attr($billing, 'address_line_2'),
             $this->attr($billing, 'city') ?: $this->attr($billing, 'suburb'),
             $this->attr($billing, 'state'),
             $this->attr($billing, 'zip') ?: $this->attr($billing, 'postal_code'),
