@@ -120,8 +120,16 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
                 ?? 0
         );
 
-        $subtotalEx  = $orderTotal;
-        $subtotalInc = $orderTotal;
+        $itemsSubtotal = $order->items
+            ? $order->items->sum(function ($item) {
+                $qty   = (float) ($item->quantity ?? 0);
+                $price = (float) ($item->price ?? optional($item->product)->price ?? 0);
+                return $qty * $price;
+            })
+            : 0;
+
+        $subtotalEx  = $this->num($itemsSubtotal);
+        $subtotalInc = $this->num($itemsSubtotal);
 
         $totalQty     = (int) ($order->items?->sum('quantity') ?? 0);
         $totalShipped = (int) ($order->total_shipped ?? ($shipment ? $totalQty : 0));
