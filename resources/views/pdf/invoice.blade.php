@@ -179,178 +179,185 @@
 
 <body>
 
-@php
+    @php
     $invoiceList = (isset($orders) && count($orders)) ? $orders : collect([$order]);
-@endphp
+    @endphp
 
-@foreach ($invoiceList as $order)
+    @foreach ($invoiceList as $order)
 
     <div class="invoice-wrap">
 
-    {{-- Logo --}}
-    <div class="logo-section">
-        @if($logoBase64)
-        <img src="{{ $logoBase64 }}" alt="{{ $store?->name ?? 'Store' }} Logo">
-        @else
-        <span class="store-name">{{ $store?->name ?? 'Store' }}</span>
+        {{-- Logo --}}
+        <div class="logo-section">
+            @if($logoBase64)
+            <img src="{{ $logoBase64 }}" alt="{{ $store?->name ?? 'Store' }} Logo">
+            @else
+            <span class="store-name">{{ $store?->name ?? 'Store' }}</span>
+            @endif
+        </div>
+
+        {{-- Invoice Title Bar --}}
+        <div class="invoice-bar">
+            {{ $store?->name ?? 'Store' }} invoice for order #{{ $order->order_number }}
+        </div>
+
+        {{-- Store Address --}}
+        @php
+        $storeAddress = $store->store_address ?? [];
+        @endphp
+
+        @if(!empty($storeAddress))
+        <div class="store-address">
+            <strong>Address:</strong><br>
+            @if(!empty($storeAddress['line1'])){{ $storeAddress['line1'] }}<br>@endif
+            @if(!empty($storeAddress['line2'])){{ $storeAddress['line2'] }}<br>@endif
+            {{ $storeAddress['city'] ?? '' }}{{ !empty($storeAddress['state']) ? ', ' . $storeAddress['state'] : '' }} {{ $storeAddress['zip'] ?? '' }}
+        </div>
         @endif
-    </div>
 
-    {{-- Invoice Title Bar --}}
-    <div class="invoice-bar">
-        {{ $store?->name ?? 'Store' }} invoice for order #{{ $order->order_number }}
-    </div>
+        {{-- Billing & Shipping Side by Side --}}
+        @php
+        $billing = $order->billing_address ?? [];
+        $shipping = $order->billingInformation;
 
-    {{-- Store Address --}}
-    @php
-    $storeAddress = $store->store_address ?? [];
-    @endphp
+        $rawPayment = $shipping->payment_method ?? 'N/A';
+        $paymentLabels = [
+        'credit_card' => 'Credit Card',
+        'stripe_card' => 'Credit Card (Stripe)',
+        'paypal_express' => 'PayPal Express',
+        'cash_on_delivery' => 'Cash on Delivery',
+        'bank_transfer' => 'Bank Transfer',
+        'cod' => 'Cash on Delivery',
+        'stripe' => 'Stripe',
+        ];
+        $paymentMethod = $paymentLabels[$rawPayment] ?? ucwords(str_replace('_', ' ', $rawPayment));
+        @endphp
 
-    @if(!empty($storeAddress))
-    <div class="store-address">
-        <strong>Address:</strong><br>
-        @if(!empty($storeAddress['line1'])){{ $storeAddress['line1'] }}<br>@endif
-        @if(!empty($storeAddress['line2'])){{ $storeAddress['line2'] }}<br>@endif
-        {{ $storeAddress['city'] ?? '' }}{{ !empty($storeAddress['state']) ? ', ' . $storeAddress['state'] : '' }} {{ $storeAddress['zip'] ?? '' }}
-    </div>
-    @endif
-
-    {{-- Billing & Shipping Side by Side --}}
-    @php
-    $billing = $order->billing_address ?? [];
-    $shipping = $order->billingInformation;
-
-    $rawPayment = $shipping->payment_method ?? 'N/A';
-    $paymentLabels = [
-    'credit_card' => 'Credit Card',
-    'stripe_card' => 'Credit Card (Stripe)',
-    'paypal_express' => 'PayPal Express',
-    'cash_on_delivery' => 'Cash on Delivery',
-    'bank_transfer' => 'Bank Transfer',
-    'cod' => 'Cash on Delivery',
-    'stripe' => 'Stripe',
-    ];
-    $paymentMethod = $paymentLabels[$rawPayment] ?? ucwords(str_replace('_', ' ', $rawPayment));
-    @endphp
-
-    <table class="two-column">
-        <tr>
-            <td>
-                <div class="section-title">Billing Details</div>
-                <div class="address-block">
-                    @if(!empty($billing))
-                    <strong>{{ $billing['name'] ?? '' }}</strong><br>
-                    @if(!empty($billing['company'])){{ $billing['company'] }}<br>@endif
-                    {{ $billing['addressLine1'] ?? '' }}<br>
-                    @if(!empty($billing['addressLine2'])){{ $billing['addressLine2'] }}<br>@endif
-                    {{ $billing['city'] ?? '' }}{{ !empty($billing['state']) ? ', ' . $billing['state'] : '' }} {{ $billing['zip'] ?? '' }}<br>
-                    {{ $billing['country'] ?? '' }}<br><br>
-                    @if(!empty($billing['phone']))Phone: {{ $billing['phone'] }}<br>@endif
-                    @if(!empty($billing['email']))Email: {{ $billing['email'] }}@endif
-                    @else
-                    <strong>{{ $shipping->first_name ?? '' }} {{ $shipping->last_name ?? '' }}</strong><br>
-                    @if($shipping->company_name){{ $shipping->company_name }}<br>@endif
-                    {{ $shipping->address_line_1 ?? '' }}<br>
-                    @if($shipping->address_line_2){{ $shipping->address_line_2 }}<br>@endif
-                    {{ $shipping->city ?? '' }}{{ $shipping->state ? ', ' . $shipping->state : '' }} {{ $shipping->zip ?? '' }}<br>
-                    {{ $shipping->country ?? '' }}<br><br>
-                    @if($shipping->phone)Phone: {{ $shipping->phone }}<br>@endif
-                    @if($shipping->email)Email: {{ $shipping->email }}@endif
-                    @endif
-                </div>
-            </td>
-            <td>
-                <div class="section-title">Shipping Details</div>
-                <div class="address-block">
-                    <strong>{{ $shipping->first_name ?? '' }} {{ $shipping->last_name ?? '' }}</strong><br>
-                    @if($shipping->company_name){{ $shipping->company_name }}<br>@endif
-                    {{ $shipping->address_line_1 ?? '' }}<br>
-                    @if($shipping->address_line_2){{ $shipping->address_line_2 }}<br>@endif
-                    {{ $shipping->city ?? '' }}{{ $shipping->state ? ', ' . $shipping->state : '' }} {{ $shipping->zip ?? '' }}<br>
-                    {{ $shipping->country ?? '' }}<br><br>
-                    @if($shipping->phone)Phone: {{ $shipping->phone }}<br>@endif
-                    @if($shipping->email)Email: {{ $shipping->email }}@endif
-                </div>
-            </td>
-        </tr>
-    </table>
-
-    {{-- Order Info --}}
-    <table class="order-info">
-        <tr>
-            <td><strong>Order:</strong></td>
-            <td>#{{ $order->order_number }}</td>
-            <td><strong>Order Date:</strong></td>
-            <td>{{ optional($order->created_at)->format('M d, Y') }}</td>
-        </tr>
-        <tr>
-            <td><strong>Payment Method:</strong></td>
-            <td>{{ $paymentMethod }} (${{ number_format($order->total_amount, 2) }})</td>
-            <td><strong>Shipping Method:</strong></td>
-            <td>{{ $shipping->shipping_method ?? 'N/A' }}</td>
-        </tr>
-    </table>
-
-    {{-- Order Items --}}
-    <div class="items-title">Order Items</div>
-
-    <table class="items-table">
-        <thead>
+        <table class="two-column">
             <tr>
-                <th class="text-center" style="width: 35px;">Qty</th>
-                <th style="width: 90px;">Code/SKU</th>
-                <th>Product Name</th>
-                <th class="text-right" style="width: 95px;">Price</th>
-                <th class="text-right" style="width: 95px;">Total</th>
+                <td>
+                    <div class="section-title">Billing Details</div>
+                    <div class="address-block">
+                        @if(!empty($billing))
+                        <strong>{{ $billing['name'] ?? '' }}</strong><br>
+                        @if(!empty($billing['company'])){{ $billing['company'] }}<br>@endif
+                        {{ $billing['addressLine1'] ?? '' }}<br>
+                        @if(!empty($billing['addressLine2'])){{ $billing['addressLine2'] }}<br>@endif
+                        {{ $billing['city'] ?? '' }}{{ !empty($billing['state']) ? ', ' . $billing['state'] : '' }} {{ $billing['zip'] ?? '' }}<br>
+                        {{ $billing['country'] ?? '' }}<br><br>
+                        @if(!empty($billing['phone']))Phone: {{ $billing['phone'] }}<br>@endif
+                        @if(!empty($billing['email']))Email: {{ $billing['email'] }}@endif
+                        @else
+                        <strong>{{ $shipping->first_name ?? '' }} {{ $shipping->last_name ?? '' }}</strong><br>
+                        @if($shipping->company_name){{ $shipping->company_name }}<br>@endif
+                        {{ $shipping->address_line_1 ?? '' }}<br>
+                        @if($shipping->address_line_2){{ $shipping->address_line_2 }}<br>@endif
+                        {{ $shipping->city ?? '' }}{{ $shipping->state ? ', ' . $shipping->state : '' }} {{ $shipping->zip ?? '' }}<br>
+                        {{ $shipping->country ?? '' }}<br><br>
+                        @if($shipping->phone)Phone: {{ $shipping->phone }}<br>@endif
+                        @if($shipping->email)Email: {{ $shipping->email }}@endif
+                        @endif
+                    </div>
+                </td>
+                <td>
+                    <div class="section-title">Shipping Details</div>
+                    <div class="address-block">
+                        <strong>{{ $shipping->first_name ?? '' }} {{ $shipping->last_name ?? '' }}</strong><br>
+                        @if($shipping->company_name){{ $shipping->company_name }}<br>@endif
+                        {{ $shipping->address_line_1 ?? '' }}<br>
+                        @if($shipping->address_line_2){{ $shipping->address_line_2 }}<br>@endif
+                        {{ $shipping->city ?? '' }}{{ $shipping->state ? ', ' . $shipping->state : '' }} {{ $shipping->zip ?? '' }}<br>
+                        {{ $shipping->country ?? '' }}<br><br>
+                        @if($shipping->phone)Phone: {{ $shipping->phone }}<br>@endif
+                        @if($shipping->email)Email: {{ $shipping->email }}@endif
+                    </div>
+                </td>
             </tr>
-        </thead>
-        <tbody>
-            @php $subtotal = 0; @endphp
-            @foreach ($order->items as $item)
-            @php
-            $lineTotal = $item->price * $item->quantity;
-            $subtotal += $lineTotal;
-            @endphp
-            <tr>
-                <td class="text-center">{{ $item->quantity }}</td>
-                <td>{{ $item->product->sku ?? 'N/A' }}</td>
-                <td>{{ $item->product->name ?? 'N/A' }}</td>
-                <td class="text-right">${{ number_format($item->price, 2) }} USD</td>
-                <td class="text-right">${{ number_format($lineTotal, 2) }} USD</td>
-            </tr>
-            @endforeach
-        </tbody>
-    </table>
+        </table>
 
-    {{-- Totals --}}
-    <table class="totals-section">
-        <tr>
-            <td class="label">Subtotal:</td>
-            <td class="value">${{ number_format($subtotal, 2) }} USD</td>
-        </tr>
-        <tr>
-            <td class="label">Shipping:</td>
-            <td class="value">${{ number_format($order->shipping_cost ?? 0, 2) }} USD</td>
-        </tr>
-        @if($order->discountAmount > 0)
-        <tr>
-            <td class="label">Discount:</td>
-            <td class="value">-${{ number_format($order->discountAmount, 2) }} USD</td>
-        </tr>
-        @endif
-        <tr>
-            <td class="label">Tax:</td>
-            <td class="value">$0.00 USD</td>
-        </tr>
-        <tr class="grand-total">
-            <td class="label">Grand total:</td>
-            <td class="value">${{ number_format($order->total_amount ?? 0, 2) }} USD</td>
-        </tr>
-    </table>
+        {{-- Order Info --}}
+        <table class="order-info">
+            <tr>
+                <td><strong>Order:</strong></td>
+                <td>#{{ $order->order_number }}</td>
+                <td><strong>Order Date:</strong></td>
+                <td>{{ optional($order->created_at)->format('M d, Y') }}</td>
+            </tr>
+            <tr>
+                <td><strong>Payment Method:</strong></td>
+                <td>{{ $paymentMethod }} (${{ number_format($order->total_amount, 2) }})</td>
+                <td><strong>Shipping Method:</strong></td>
+                <td>{{ $shipping->shipping_method ?? 'N/A' }}</td>
+            </tr>
+        </table>
+
+        {{-- Order Items --}}
+        <div class="items-title">Order Items</div>
+
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th class="text-center" style="width: 35px;">Qty</th>
+                    <th style="width: 90px;">Code/SKU</th>
+                    <th>Product Name</th>
+                    <th class="text-right" style="width: 95px;">Price</th>
+                    <th class="text-right" style="width: 95px;">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                @php $subtotal = 0; @endphp
+                @foreach ($order->items as $item)
+                @php
+                $lineTotal = $item->price * $item->quantity;
+                $subtotal += $lineTotal;
+                @endphp
+                <tr>
+                    <td class="text-center">{{ $item->quantity }}</td>
+                    <td>{{ $item->product->sku ?? 'N/A' }}</td>
+                    <td>{{ $item->product->name ?? 'N/A' }}</td>
+                    <td class="text-right">${{ number_format($item->price, 2) }} USD</td>
+                    <td class="text-right">${{ number_format($lineTotal, 2) }} USD</td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+
+        {{-- Totals --}}
+        <table class="totals-section">
+            <tr>
+                <td class="label">Subtotal:</td>
+                <td class="value">${{ number_format($subtotal, 2) }} USD</td>
+            </tr>
+            <tr>
+                <td class="label">Shipping:</td>
+                <td class="value">${{ number_format($order->shipping_cost ?? 0, 2) }} USD</td>
+            </tr>
+            @if((float) ($order->discountAmount ?? 0) > 0)
+            <tr>
+                <td class="label">Coupon Discount:</td>
+                <td class="value">-${{ number_format((float) $order->discountAmount, 2) }} USD</td>
+            </tr>
+            @endif
+
+            @if((float) ($order->manual_discount ?? 0) > 0)
+            <tr>
+                <td class="label">Manual Discount:</td>
+                <td class="value">-${{ number_format((float) $order->manual_discount, 2) }} USD</td>
+            </tr>
+            @endif
+            <tr>
+                <td class="label">Tax:</td>
+                <td class="value">$0.00 USD</td>
+            </tr>
+            <tr class="grand-total">
+                <td class="label">Grand total:</td>
+                <td class="value">${{ number_format($order->total_amount ?? 0, 2) }} USD</td>
+            </tr>
+        </table>
 
     </div>
 
-@endforeach
+    @endforeach
 
 </body>
 
