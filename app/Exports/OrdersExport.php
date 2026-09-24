@@ -187,7 +187,6 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
             $paymentMethod,
             $totalQty,
             $totalShipped,
-            $hasShipment ? $this->formatDate($shippedAt) : '0',
             $this->formatDate($shippedAt),
             $this->str($order->currency_code ?? $order->order_currency_code ?? 'USD') ?: 'USD',
             $this->num($order->exchange_rate ?? 1, 1),
