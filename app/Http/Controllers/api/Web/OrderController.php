@@ -221,44 +221,38 @@ class OrderController extends Controller
                     $columns = ['created_at'];
                 }
 
-                $dateRange = $request->input('dateRange');
+                $dateRange = strtolower(str_replace([' ', '_'], '', (string) $request->input('dateRange')));
 
-                if ($dateRange === 'custom' && $request->filled('dateFrom') && $request->filled('dateTo')) {
-                    $query->where(function ($q) use ($columns, $request) {
+                $applyDate = function ($q, $columns, $from, $to = null) {
+                    $q->where(function ($outer) use ($columns, $from, $to) {
                         foreach ($columns as $i => $col) {
                             $method = $i === 0 ? 'where' : 'orWhere';
-                            $q->$method(function ($sub) use ($col, $request) {
-                                $sub->whereDate($col, '>=', $request->input('dateFrom'))
-                                    ->whereDate($col, '<=', $request->input('dateTo'));
+                            $outer->$method(function ($sub) use ($col, $from, $to) {
+                                if ($to) {
+                                    $sub->whereDate($col, '>=', $from)
+                                        ->whereDate($col, '<=', $to);
+                                } else {
+                                    $sub->whereDate($col, $from);
+                                }
                             });
                         }
                     });
-                } else {
-                    $dateMap = [
-                        'Yesterday'   => today()->subDay(),
-                        'Today'       => today(),
-                        'Last7Days'   => now()->subDays(7),
-                        'Last30Days'  => now()->subDays(30),
-                        'Last90Days'  => now()->subDays(90),
-                        'Last365Days' => now()->subDays(365),
-                    ];
+                };
 
-                    if (isset($dateMap[$dateRange])) {
-                        $query->where(function ($q) use ($columns, $dateRange, $dateMap) {
-                            foreach ($columns as $i => $col) {
-                                $method = $i === 0 ? 'where' : 'orWhere';
-                                if ($dateRange === 'Yesterday' || $dateRange === 'Today') {
-                                    $q->$method(function ($sub) use ($col, $dateMap, $dateRange) {
-                                        $sub->whereDate($col, $dateMap[$dateRange]);
-                                    });
-                                } else {
-                                    $q->$method(function ($sub) use ($col, $dateMap, $dateRange) {
-                                        $sub->whereDate($col, '>=', $dateMap[$dateRange]);
-                                    });
-                                }
-                            }
-                        });
-                    }
+                if ($dateRange === 'custom' && $request->filled('dateFrom') && $request->filled('dateTo')) {
+                    $applyDate($query, $columns, $request->input('dateFrom'), $request->input('dateTo'));
+                } elseif ($dateRange === 'today') {
+                    $applyDate($query, $columns, today()->toDateString());
+                } elseif ($dateRange === 'yesterday') {
+                    $applyDate($query, $columns, today()->subDay()->toDateString());
+                } elseif (in_array($dateRange, ['last7days', 'last7day'], true)) {
+                    $applyDate($query, $columns, today()->subDays(6)->toDateString(), today()->toDateString());
+                } elseif (in_array($dateRange, ['last30days', 'last30day'], true)) {
+                    $applyDate($query, $columns, today()->subDays(29)->toDateString(), today()->toDateString());
+                } elseif (in_array($dateRange, ['last90days', 'last90day'], true)) {
+                    $applyDate($query, $columns, today()->subDays(89)->toDateString(), today()->toDateString());
+                } elseif (in_array($dateRange, ['last365days', 'last365day'], true)) {
+                    $applyDate($query, $columns, today()->subDays(364)->toDateString(), today()->toDateString());
                 }
             }
 
