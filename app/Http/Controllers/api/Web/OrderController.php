@@ -221,38 +221,57 @@ class OrderController extends Controller
                     $columns = ['created_at'];
                 }
 
-                $dateRange = strtolower(str_replace([' ', '_'], '', (string) $request->input('dateRange')));
+                $dateRange = strtolower(trim((string) $request->input('dateRange')));
+                $dateRange = str_replace([' ', '-', '_'], '', $dateRange);
 
-                $applyDate = function ($q, $columns, $from, $to = null) {
-                    $q->where(function ($outer) use ($columns, $from, $to) {
+                $applyBetween = function ($query, $columns, $from, $to) {
+                    $query->where(function ($q) use ($columns, $from, $to) {
                         foreach ($columns as $i => $col) {
                             $method = $i === 0 ? 'where' : 'orWhere';
-                            $outer->$method(function ($sub) use ($col, $from, $to) {
-                                if ($to) {
-                                    $sub->whereDate($col, '>=', $from)
-                                        ->whereDate($col, '<=', $to);
-                                } else {
-                                    $sub->whereDate($col, $from);
-                                }
+                            $q->$method(function ($sub) use ($col, $from, $to) {
+                                $sub->where($col, '>=', $from)
+                                    ->where($col, '<=', $to);
                             });
                         }
                     });
                 };
 
-                if ($dateRange === 'custom' && $request->filled('dateFrom') && $request->filled('dateTo')) {
-                    $applyDate($query, $columns, $request->input('dateFrom'), $request->input('dateTo'));
+                $applyDay = function ($query, $columns, $day) {
+                    $query->where(function ($q) use ($columns, $day) {
+                        foreach ($columns as $i => $col) {
+                            $method = $i === 0 ? 'where' : 'orWhere';
+                            $q->$method(function ($sub) use ($col, $day) {
+                                $sub->whereDate($col, $day);
+                            });
+                        }
+                    });
+                };
+
+                if (
+                    in_array($dateRange, ['custom', 'customperiod'], true)
+                    && $request->filled('dateFrom')
+                    && $request->filled('dateTo')
+                ) {
+                    $applyBetween(
+                        $query,
+                        $columns,
+                        $request->input('dateFrom') . ' 00:00:00',
+                        $request->input('dateTo') . ' 23:59:59'
+                    );
                 } elseif ($dateRange === 'today') {
-                    $applyDate($query, $columns, today()->toDateString());
+                    $applyDay($query, $columns, today()->toDateString());
                 } elseif ($dateRange === 'yesterday') {
-                    $applyDate($query, $columns, today()->subDay()->toDateString());
+                    $applyDay($query, $columns, today()->subDay()->toDateString());
+                } elseif (in_array($dateRange, ['last24hours', 'last24hour'], true)) {
+                    $applyBetween($query, $columns, now()->subHours(24), now());
                 } elseif (in_array($dateRange, ['last7days', 'last7day'], true)) {
-                    $applyDate($query, $columns, today()->subDays(6)->toDateString(), today()->toDateString());
+                    $applyBetween($query, $columns, today()->subDays(6)->startOfDay(), now());
                 } elseif (in_array($dateRange, ['last30days', 'last30day'], true)) {
-                    $applyDate($query, $columns, today()->subDays(29)->toDateString(), today()->toDateString());
-                } elseif (in_array($dateRange, ['last90days', 'last90day'], true)) {
-                    $applyDate($query, $columns, today()->subDays(89)->toDateString(), today()->toDateString());
-                } elseif (in_array($dateRange, ['last365days', 'last365day'], true)) {
-                    $applyDate($query, $columns, today()->subDays(364)->toDateString(), today()->toDateString());
+                    $applyBetween($query, $columns, today()->subDays(29)->startOfDay(), now());
+                } elseif (in_array($dateRange, ['thismonth'], true)) {
+                    $applyBetween($query, $columns, now()->startOfMonth(), now());
+                } elseif (in_array($dateRange, ['thisyear'], true)) {
+                    $applyBetween($query, $columns, now()->startOfYear(), now());
                 }
             }
 
