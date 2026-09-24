@@ -296,21 +296,21 @@ class OrderController extends Controller
 
             if ($sortColumn === 'customer') {
                 $query->orderByRaw("
-                    COALESCE(
+                    LOWER(TRIM(COALESCE(
                         (
-                            SELECT CONCAT(TRIM(first_name), ' ', TRIM(last_name))
+                            SELECT TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))
                             FROM customers
                             WHERE customers.id = orders.customer_id
                             LIMIT 1
                         ),
                         (
-                            SELECT CONCAT(TRIM(first_name), ' ', TRIM(last_name))
+                            SELECT TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))
                             FROM billing_informations
-                            WHERE billing_informations.order_id = orders.id
+                            WHERE billing_informations.id = orders.billing_information_id
                             LIMIT 1
                         ),
                         ''
-                    ) {$sortDirection}
+                    ))) {$sortDirection}
                 ")->orderBy('orders.id', 'desc');
             } else {
                 $query->orderBy($sortColumn, $sortDirection);
