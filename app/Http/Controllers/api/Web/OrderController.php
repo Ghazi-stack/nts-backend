@@ -2228,7 +2228,11 @@ class OrderController extends Controller
                 ], 404);
             }
 
-            return Excel::download(new OrdersExport, 'orders.xlsx');
+            return Excel::download(
+                new OrdersExport,
+                'orders.csv',
+                \Maatwebsite\Excel\Excel::CSV
+            );
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
