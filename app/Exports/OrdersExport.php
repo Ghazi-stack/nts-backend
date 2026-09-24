@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Models\Order;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -106,11 +107,7 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
         $lastName  = $this->attr($customer, 'last_name') ?: $this->attr($billing, 'last_name');
         $fullName  = trim($firstName . ' ' . $lastName) ?: $this->str($order->name ?? '');
 
-        $taxTotal     = 0;
         $shippingCost = $this->num($order->shipping_cost ?? 0);
-        $handlingCost = 0;
-        $storeCredit  = 0;
-        $refundAmount = 0;
         $orderTotal   = $this->num($order->total_amount ?? 0);
         $discountAmt  = $this->num(
             $order->discountAmount
@@ -132,11 +129,15 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
         $subtotalInc = $this->num($itemsSubtotal);
 
         $totalQty     = (int) ($order->items?->sum('quantity') ?? 0);
-        $totalShipped = (int) ($order->total_shipped ?? ($shipment ? $totalQty : 0));
+        $hasShipment = !empty($order->shipment_id ?? optional($shipment)->id);
 
-        $shippedAt = optional($shipment)->date_shipped
-            ?? $order->shipped_at
-            ?? null;
+        $totalShipped = $hasShipment
+            ? (int) ($order->total_shipped ?? 1)
+            : 0;
+
+        $shippedAt = $hasShipment
+            ? (optional($shipment)->date_shipped ?? $order->shipped_at)
+            : null;
 
         $couponDetails  = $this->couponDetails($order, $discountAmt);
         $productDetails = $this->productDetails($order);
@@ -169,23 +170,24 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
             $fullName,
             $this->attr($customer, 'email') ?: $this->str($order->email ?? '') ?: $this->attr($billing, 'email'),
             $this->attr($customer, 'phone') ?: $this->str($order->phone ?? '') ?: $this->attr($billing, 'phone'),
-            optional($order->created_at)->format('d/m/Y') ?: 0,
-            $this->str($order->status ?? '') ?: 0,
+            optional($order->created_at)->format('d/m/Y') ?: '0',
+            $this->str($order->status ?? '') ?: '0',
             $subtotalInc,
             $subtotalEx,
-            $taxTotal,
+            '0',
             $shippingCost,
             $shippingCost,
             $shipMethod,
-            $handlingCost,
-            $handlingCost,
-            $storeCredit,
+            '0',
+            '0',
+            '0',
             $couponDetails,
             $orderTotal,
             $orderTotal,
             $paymentMethod,
             $totalQty,
             $totalShipped,
+            $hasShipment ? $this->formatDate($shippedAt) : '0',
             $this->formatDate($shippedAt),
             $this->str($order->currency_code ?? $order->order_currency_code ?? 'USD') ?: 'USD',
             $this->num($order->exchange_rate ?? 1, 1),
@@ -205,8 +207,8 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
             $this->attr($billing, 'first_name'),
             $this->attr($billing, 'last_name'),
             $this->attr($billing, 'company_name') ?: $this->attr($billing, 'company'),
-            $this->shipField($billing, ['address_line1', 'addressLine1', 'address1', 'street_1', 'street1', 'address']),
-            $this->shipField($billing, ['address_line2', 'addressLine2', 'address2', 'street_2', 'street2']),
+            $this->attr($billing, 'address_line1'),
+            $this->attr($billing, 'address_line2'),
             $this->attr($billing, 'city') ?: $this->attr($billing, 'suburb'),
             $this->attr($billing, 'state'),
             $this->attr($billing, 'zip') ?: $this->attr($billing, 'postal_code'),
@@ -214,7 +216,7 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
             $this->attr($billing, 'phone'),
             $this->attr($billing, 'email'),
             $productDetails,
-            $refundAmount,
+            '0',
             $channelId,
             $channelName,
             $this->str($order->fee_details ?? ''),
@@ -269,18 +271,6 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
         }
 
         return (float) ($product->weight ?? 0);
-    }
-
-    private function shipField($model, array $keys): string
-    {
-        foreach ($keys as $key) {
-            $value = $this->attr($model, $key);
-            if ($value !== '') {
-                return $value;
-            }
-        }
-
-        return '';
     }
 
     private function couponDetails($order, $discountAmt): string
@@ -351,15 +341,27 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
         return $part === 'first' ? $first : $last;
     }
 
-    private function attr($model, string $snake): string
+    private function attr($model, string $key): string
     {
         if (!$model) {
             return '';
         }
 
-        $camel = lcfirst(str_replace(' ', '', ucwords(str_replace('_', ' ', $snake))));
+        foreach (array_unique([$key, Str::snake($key), Str::camel($key)]) as $k) {
+            $value = $model->getAttribute($k);
+            if ($value !== null && $value !== '') {
+                return $this->str($value);
+            }
+        }
 
-        return $this->str($model->{$snake} ?? $model->{$camel} ?? '');
+        $bag = array_merge($model->getAttributes(), $model->toArray());
+        foreach (array_unique([$key, Str::snake($key), Str::camel($key)]) as $k) {
+            if (isset($bag[$k]) && $bag[$k] !== null && $bag[$k] !== '') {
+                return $this->str($bag[$k]);
+            }
+        }
+
+        return '';
     }
 
     private function str($value): string
