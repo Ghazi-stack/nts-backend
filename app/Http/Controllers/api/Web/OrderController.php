@@ -1028,6 +1028,7 @@ class OrderController extends Controller
                 'isMultiAddress' => 'required|boolean',
 
                 'ipAddress'                  => 'nullable|string|max:45',
+                'orderPlaceCountry'          => 'nullable|string|max:45',
                 'isSaveAddressForShipping'   => 'nullable|boolean',
                 'isSaveAddressForBilling'    => 'nullable|boolean',
                 'billingSame'                => 'nullable|boolean',
@@ -1285,6 +1286,7 @@ class OrderController extends Controller
 
             $commonOrderFields = [
                 'ip_address'                    => $validated['ipAddress'] ?? $request->ip(),
+                'order_place_country'           => $validated['orderPlaceCountry'] ?? null,
                 'is_save_address_for_shipping'  => $validated['isSaveAddressForShipping'] ?? false,
                 'is_save_address_for_billing'   => $validated['isSaveAddressForBilling'] ?? false,
                 'billing_same'                  => $validated['billingSame'] ?? true,
@@ -2878,6 +2880,7 @@ class OrderController extends Controller
                 'discountAmount' => 'nullable|numeric',
                 'manualDiscount' => 'nullable|numeric|min:0',
                 'ipAddress'    => 'nullable|string|max:45',
+                'orderPlaceCountry' => 'nullable|string|max:45',
                 'emailInvoice' => 'nullable|boolean',
 
                 'billingAddress' => 'nullable|array',
@@ -3275,6 +3278,7 @@ class OrderController extends Controller
                 'device_type'                  => $validated['deviceType'] ?? 'desktop',
                 'channel'                      => 'admin-panel',
                 'ip_address'                   => $validated['ipAddress'] ?? null,
+                'order_place_country'          => $validated['orderPlaceCountry'] ?? null,
                 'email_invoice'                => $validated['emailInvoice'] ?? true,
                 'billing_same'                 => $validated['billingSame'] ?? true,
                 'is_save_address_for_billing'  => $saveBilling,
@@ -4414,6 +4418,7 @@ class OrderController extends Controller
                 'discountAmount' => 'nullable|numeric',
                 'manualDiscount' => 'nullable|numeric|min:0',
                 'ipAddress'      => 'nullable|string|max:45',
+                'orderPlaceCountry' => 'nullable|string|max:45',
                 'billingSame'    => 'nullable|boolean',
                 'isSaveAddressForBilling'  => 'nullable|boolean',
                 'isSaveAddressForShipping' => 'nullable|boolean',
@@ -4863,6 +4868,7 @@ class OrderController extends Controller
                     'device_type'                  => $validated['deviceType'] ?? null,
                     'channel'                      => 'admin-panel',
                     'ip_address'                   => $validated['ipAddress'] ?? null,
+                    'order_place_country'          => $validated['orderPlaceCountry'] ?? null,
                     'email_invoice'                => $validated['emailInvoice'] ?? true,
                     'billing_same'                 => $validated['billingSame'] ?? empty($validated['shippingDestinations']),
                     'is_save_address_for_billing'  => (bool) ($formAddress['saveToAddressBook'] ?? $validated['isSaveAddressForBilling'] ?? false),

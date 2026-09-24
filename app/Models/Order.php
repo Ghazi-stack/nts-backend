@@ -50,6 +50,7 @@ class Order extends Model
         'staff_notes',
         'newsletter',
         'ip_address',
+        'order_place_country',
         'email_invoice',
         'is_save_address_for_shipping',
         'is_save_address_for_billing',
