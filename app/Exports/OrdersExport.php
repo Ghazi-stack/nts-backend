@@ -131,9 +131,13 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
         $totalQty     = (int) ($order->items?->sum('quantity') ?? 0);
         $shipment = $order->shipment;
 
-        $totalShipped = $shipment?->id ? (int) $shipment->id : 0;
+        $totalShipped = $shipment && $shipment->id
+            ? (int) $shipment->id
+            : 0;
 
-        $shippedAt = $shipment?->date_shipped;
+        $dateShipped = ($shipment && $shipment->date_shipped)
+            ? $this->formatDate($shipment->date_shipped)
+            : '';
 
         $couponDetails  = $this->couponDetails($order, $discountAmt);
         $productDetails = $this->productDetails($order);
@@ -183,7 +187,7 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
             $paymentMethod,
             $totalQty,
             $totalShipped,
-            $shippedAt ? $this->formatDate($shippedAt) : '0',
+            $dateShipped,
             $this->str($order->currency_code ?? $order->order_currency_code ?? 'USD') ?: 'USD',
             $this->num($order->exchange_rate ?? 1, 1),
             $orderNotes,
