@@ -271,17 +271,29 @@ class OrderController extends Controller
                 }
             }
 
-            if ($request->filled('sortBy')) {
-                $sortBy = $request->input('sortBy', 'id');
-                $sortDirection = $request->input('sortDirection', 'DESC');
-                $allowedSorts = ['id', 'order_number', 'total_amount', 'created_at', 'updated_at', 'status', 'shipped_at'];
-                if (!in_array($sortBy, $allowedSorts)) {
-                    $sortBy = 'id';
-                }
-                $query->orderBy($sortBy, $sortDirection);
-            } else {
-                $query->latest('id');
-            }
+            $sortMap = [
+                'id'           => 'id',
+                'orderId'      => 'id',
+                'order_id'     => 'id',
+                'order_number' => 'order_number',
+                'total'        => 'total_amount',
+                'Total'        => 'total_amount',
+                'total_amount' => 'total_amount',
+                'orderTotal'   => 'total_amount',
+                'date'         => 'created_at',
+                'Date'         => 'created_at',
+                'created_at'   => 'created_at',
+                'updated_at'   => 'updated_at',
+                'status'       => 'status',
+                'Status'       => 'status',
+                'shipped_at'   => 'shipped_at',
+            ];
+
+            $sortByInput   = (string) $request->input('sortBy', 'id');
+            $sortDirection = strtoupper((string) $request->input('sortDirection', 'DESC')) === 'ASC' ? 'ASC' : 'DESC';
+            $sortColumn    = $sortMap[$sortByInput] ?? 'id';
+
+            $query->orderBy($sortColumn, $sortDirection);
 
             $orders = $query->paginate($perPage);
 
@@ -4109,7 +4121,7 @@ class OrderController extends Controller
     //     }
     // }
 
-   
+
     public function updateFromDashboard(Request $request, $orderId)
     {
         $storeId = current_store_id();
