@@ -287,13 +287,34 @@ class OrderController extends Controller
                 'status'       => 'status',
                 'Status'       => 'status',
                 'shipped_at'   => 'shipped_at',
+                'customer'     => 'customer',
             ];
 
-            $sortByInput   = (string) $request->input('sortBy', 'id');
+            $sortByInput   = strtolower((string) $request->input('sortBy', 'id'));
             $sortDirection = strtoupper((string) $request->input('sortDirection', 'DESC')) === 'ASC' ? 'ASC' : 'DESC';
             $sortColumn    = $sortMap[$sortByInput] ?? 'id';
 
-            $query->orderBy($sortColumn, $sortDirection);
+            if ($sortColumn === 'customer') {
+                $query->orderByRaw("
+                    COALESCE(
+                        (
+                            SELECT CONCAT(TRIM(first_name), ' ', TRIM(last_name))
+                            FROM customers
+                            WHERE customers.id = orders.customer_id
+                            LIMIT 1
+                        ),
+                        (
+                            SELECT CONCAT(TRIM(first_name), ' ', TRIM(last_name))
+                            FROM billing_informations
+                            WHERE billing_informations.order_id = orders.id
+                            LIMIT 1
+                        ),
+                        ''
+                    ) {$sortDirection}
+                ")->orderBy('orders.id', 'desc');
+            } else {
+                $query->orderBy($sortColumn, $sortDirection);
+            }
 
             $orders = $query->paginate($perPage);
 
