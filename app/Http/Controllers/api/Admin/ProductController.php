@@ -216,10 +216,29 @@ class ProductController extends Controller
                 $query->where('visible_on_storefront', $request->boolean('isVisible'));
             }
 
-            if ($request->filled('sortBy')) {
-                $query->orderBy($request->sortBy, $request->get('sortOrder', 'asc'));
+            $sortMap = [
+                'id'                    => 'id',
+                'name'                  => 'name',
+                'sku'                   => 'sku',
+                'stock'                 => 'current_stock',
+                'current_stock'         => 'current_stock',
+                'currentStock'          => 'current_stock',
+                'price'                 => 'price',
+                'visibility'            => 'visible_on_storefront',
+                'visible'               => 'visible_on_storefront',
+            ];
+
+            $sortByInput = strtolower((string) $request->input('sortBy', 'id'));
+            $sortOrder   = strtolower((string) $request->input('sortOrder', $request->input('sortDirection', 'desc')));
+            $sortOrder   = $sortOrder === 'asc' ? 'asc' : 'desc';
+            $sortColumn  = $sortMap[$sortByInput] ?? 'id';
+
+            if ($sortColumn === 'name' || $sortColumn === 'sku') {
+                $query->orderByRaw("LOWER({$sortColumn}) {$sortOrder}")
+                    ->orderBy('id', 'desc');
             } else {
-                $query->orderBy('id', 'desc');
+                $query->orderBy($sortColumn, $sortOrder)
+                    ->orderBy('id', 'desc');
             }
 
             $page     = (int) $request->input('page', 1);
