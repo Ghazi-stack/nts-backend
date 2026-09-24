@@ -134,21 +134,45 @@ class CustomerController extends Controller
                 });
             }
 
-            $sortBy    = strtolower((string) $request->input('sortBy', 'id'));
-            $sortOrder = strtolower((string) $request->input('sortOrder', 'desc')) === 'asc' ? 'asc' : 'desc';
+            $query->withCount([
+                'orders as orders_count' => function ($q) {
+                    $q->where('is_draft', 0);
+                },
+            ]);
 
-            if ($sortBy === 'orders') {
-                $query->withCount([
-                    'orders as orders_count' => function ($q) {
-                        $q->where('is_draft', 0);
-                    },
-                ])->orderBy('orders_count', $sortOrder);
-            } elseif ($sortBy === 'name') {
-                $query->orderBy('first_name', $sortOrder)->orderBy('last_name', $sortOrder);
-            } elseif ($sortBy === 'email') {
-                $query->orderBy('email', $sortOrder);
+            $sortBy    = strtolower((string) $request->input('sortBy', 'id'));
+            $sortOrder = strtolower((string) $request->input(
+                'sortOrder',
+                $request->input('sortDirection', 'desc')
+            ));
+            $sortOrder = $sortOrder === 'asc' ? 'asc' : 'desc';
+
+            $sortMap = [
+                'id'         => 'id',
+                'name'       => 'name',
+                'email'      => 'email',
+                'phone'      => 'phone',
+                'orders'     => 'orders_count',
+                'joinDate'   => 'created_at',
+                'join_date'  => 'created_at',
+                'datejoined' => 'created_at',
+                'date'       => 'created_at',
+                'created_at' => 'created_at',
+                'createdat'  => 'created_at',
+            ];
+
+            $sortColumn = $sortMap[$sortBy] ?? 'id';
+
+            if ($sortColumn === 'name') {
+                $query->orderBy('first_name', $sortOrder)
+                    ->orderBy('last_name', $sortOrder)
+                    ->orderBy('id', $sortOrder);
+            } elseif ($sortColumn === 'orders_count') {
+                $query->orderBy('orders_count', $sortOrder)
+                    ->orderBy('id', 'desc');
             } else {
-                $query->orderBy('id', $sortOrder);
+                $query->orderBy($sortColumn, $sortOrder)
+                    ->orderBy('id', 'desc');
             }
 
             $customers = $query->paginate($request->input('pageSize', 50));
