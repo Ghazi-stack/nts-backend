@@ -2,8 +2,6 @@
 
 namespace App\Exports;
 
-use App\Models\Product;
-
 class ProductExport
 {
     public function __construct(protected int $storeId) {}
@@ -107,7 +105,9 @@ class ProductExport
             return '';
         }
 
-        return $product->categories->map(function ($category) {
+        $parts = [];
+
+        foreach ($product->categories as $category) {
             $names = [];
             $current = $category;
             $guard = 0;
@@ -118,10 +118,10 @@ class ProductExport
                 $guard++;
             }
 
-            $path = implode('/', $names);
+            $parts[] = 'Category Name: ' . ($category->name ?? '') . ', Category Path: ' . implode('/', $names);
+        }
 
-            return 'Category Name: ' . ($category->name ?? '') . ', Category Path: ' . $path;
-        })->implode('|');
+        return implode('|', $parts);
     }
 
     private function imagesDetails($product): string
@@ -130,16 +130,15 @@ class ProductExport
             return '';
         }
 
-        return $product->images
-            ->sortByDesc('is_primary')
-            ->values()
-            ->map(function ($img) {
-                $file = $img->path ? basename($img->path) : '';
-                $url  = $img->url ?: $img->path ?: '';
+        $parts = [];
 
-                return 'Product Image File: ' . $file . ', Product Image URL: ' . $url;
-            })
-            ->implode('|');
+        foreach ($product->images->sortByDesc('is_primary') as $img) {
+            $file = $img->path ? basename($img->path) : '';
+            $url  = $img->url ?: $img->path ?: '';
+            $parts[] = 'Product Image File: ' . $file . ', Product Image URL: ' . $url;
+        }
+
+        return implode('|', $parts);
     }
 
     private function formatCustomFields($fields): string
@@ -148,13 +147,16 @@ class ProductExport
             return '';
         }
 
-        return collect($fields)->map(function ($val, $key) {
+        $parts = [];
+
+        foreach ($fields as $key => $val) {
             if (is_array($val)) {
                 $val = json_encode($val);
             }
+            $parts[] = $key . '=' . $val;
+        }
 
-            return $key . '=' . $val;
-        })->implode('; ');
+        return implode('; ', $parts);
     }
 
     private function yn($val): string
