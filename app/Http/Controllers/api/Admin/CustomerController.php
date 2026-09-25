@@ -922,7 +922,7 @@ class CustomerController extends Controller
         }
     }
 
-    public function exportCSV()
+    public function exportCSV(Request $request)
     {
         try {
             $storeId = current_store_id();
@@ -943,37 +943,43 @@ class CustomerController extends Controller
                 ], 404);
             }
 
-            return response()->streamDownload(function () use ($storeId) {
-                set_time_limit(0);
-                ini_set('memory_limit', '512M');
-                DB::disableQueryLog();
+            set_time_limit(0);
+            ini_set('memory_limit', '512M');
+            DB::disableQueryLog();
 
-                $exporter = new CustomerExport();
-                $handle   = fopen('php://output', 'w');
+            // Create temporary stream buffer in RAM (writes to disk if over 5MB)
+            $tempStream = fopen('php://temp/maxmemory:5242880', 'r+');
+            $exporter   = new CustomerExport();
 
-                fputcsv($handle, $exporter->headings());
+            // 1. Write CSV headings
+            fputcsv($tempStream, $exporter->headings());
 
-                Customer::query()
-                    ->where('store_id', $storeId)
-                    ->orderBy('id')
-                    ->chunkById(200, function ($customers) use ($handle, $exporter) {
-                        foreach ($customers as $customer) {
-                            fputcsv($handle, $exporter->map($customer));
-                        }
+            // 2. Fetch customers in chunks and write formatted rows
+            Customer::query()
+                ->where('store_id', $storeId)
+                ->orderBy('id')
+                ->chunkById(200, function ($customers) use ($tempStream, $exporter) {
+                    foreach ($customers as $customer) {
+                        fputcsv($tempStream, $exporter->map($customer));
+                    }
+                });
 
-                        unset($customers);
+            // 3. Rewind stream and get exact byte size of the entire finished CSV
+            rewind($tempStream);
+            $fileSize = fstat($tempStream)['size'];
 
-                        if (ob_get_level() > 0) {
-                            ob_flush();
-                        }
-                        flush();
-                    });
-
-                fclose($handle);
-            }, 'customers.csv', [
-                'Content-Type' => 'text/csv',
-                'total' => $total,
-                'Access-Control-Expose-Headers' => 'total',
+            // 4. Return stream response with explicit Content-Length header
+            return response()->stream(function () use ($tempStream) {
+                fpassthru($tempStream);
+                fclose($tempStream);
+            }, 200, [
+                'Content-Type'                  => 'text/csv; charset=UTF-8',
+                'Content-Disposition'           => 'attachment; filename="customers.csv"',
+                'Content-Length'                => $fileSize,
+                'total-rows'                    => $total,
+                'Access-Control-Expose-Headers' => 'Content-Length, Content-Disposition, total-rows',
+                'Cache-Control'                 => 'must-revalidate, post-check=0, pre-check=0',
+                'Pragma'                        => 'public',
             ]);
         } catch (\Throwable $e) {
             return response()->json([
