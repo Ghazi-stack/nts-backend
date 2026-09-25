@@ -7,6 +7,7 @@ use App\Models\Shipment;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use App\Events\ShipmentCreated;
+use App\Exports\ShipmentExport;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Cache;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\ShipmentTrackingMail;
 use App\Models\OrderTimeline;
 use App\Models\Store;
+use Illuminate\Support\Facades\DB;
 
 class ShipmentController extends Controller
 {
@@ -381,7 +383,7 @@ class ShipmentController extends Controller
             return response()->streamDownload(function () use ($storeId) {
                 set_time_limit(0);
                 ini_set('memory_limit', '512M');
-                \DB::disableQueryLog();
+                DB::disableQueryLog();
 
                 $exporter = new ShipmentExport();
                 $handle   = fopen('php://output', 'w');
