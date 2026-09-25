@@ -204,6 +204,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::delete('/destroy-shipment', 'destroy');
         Route::get('/packing-slip/{ids}', 'printPackingSlip');
         Route::post('/advanced-search', 'advancedSearch');
+        Route::get('/export-csv', 'exportCSV');
     });
 
     // Orders — Return Request

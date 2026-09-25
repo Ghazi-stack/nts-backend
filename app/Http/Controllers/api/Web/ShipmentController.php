@@ -358,6 +358,72 @@ class ShipmentController extends Controller
         return $pdf->download('packing-slips-' . now()->format('Ymd-His') . '.pdf');
     }
 
+
+    public function exportCSV()
+    {
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            if (!Shipment::where('store_id', $storeId)->exists()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'No shipments found to export.'
+                ], 404);
+            }
+
+            return response()->streamDownload(function () use ($storeId) {
+                set_time_limit(0);
+                ini_set('memory_limit', '512M');
+                \DB::disableQueryLog();
+
+                $exporter = new ShipmentExport();
+                $handle   = fopen('php://output', 'w');
+
+                fputcsv($handle, $exporter->headings());
+
+                Shipment::query()
+                    ->with([
+                        'order.billingInformation',
+                        'order.items.product:id,name,sku',
+                    ])
+                    ->where('store_id', $storeId)
+                    ->orderBy('id')
+                    ->chunkById(200, function ($shipments) use ($handle, $exporter) {
+                        foreach ($shipments as $shipment) {
+                            fputcsv($handle, $exporter->map($shipment));
+                        }
+
+                        unset($shipments);
+
+                        if (ob_get_level() > 0) {
+                            ob_flush();
+                        }
+                        flush();
+                    });
+
+                fclose($handle);
+            }, 'shipments.csv', [
+                'Content-Type' => 'text/csv',
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('Shipment Export Error: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Export failed: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
     /**
      * Generate tracking number.
      */
