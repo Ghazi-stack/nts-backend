@@ -2999,7 +2999,9 @@ class ProductController extends Controller
                 ], 400);
             }
 
-            if (!Product::where('store_id', $storeId)->exists()) {
+            $total = Product::where('store_id', $storeId)->count();
+
+            if ($total === 0) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'No products found to export.'
@@ -3069,6 +3071,8 @@ class ProductController extends Controller
                 fclose($handle);
             }, 'products.csv', [
                 'Content-Type' => 'text/csv',
+                'total' => $total,
+                'Access-Control-Expose-Headers' => 'total',
             ]);
         } catch (\Throwable $e) {
             \Log::error('Export CSV Error: ' . $e->getMessage(), [

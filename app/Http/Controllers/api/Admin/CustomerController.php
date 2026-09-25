@@ -924,16 +924,63 @@ class CustomerController extends Controller
 
     public function exportCSV()
     {
-        $storeId = current_store_id();
-        if (!$storeId) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Store not selected or token invalid.'
-            ], 400);
-        }
+        try {
+            $storeId = current_store_id();
 
-        $fileName = 'customers_export_' . now()->format('Ymd_His') . '.xlsx';
-        return Excel::download(new CustomerExport($storeId), $fileName);
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $total = Customer::where('store_id', $storeId)->count();
+
+            if ($total === 0) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'No customers found to export.'
+                ], 404);
+            }
+
+            return response()->streamDownload(function () use ($storeId) {
+                set_time_limit(0);
+                ini_set('memory_limit', '512M');
+                DB::disableQueryLog();
+
+                $exporter = new CustomerExport();
+                $handle   = fopen('php://output', 'w');
+
+                fputcsv($handle, $exporter->headings());
+
+                Customer::query()
+                    ->where('store_id', $storeId)
+                    ->orderBy('id')
+                    ->chunkById(200, function ($customers) use ($handle, $exporter) {
+                        foreach ($customers as $customer) {
+                            fputcsv($handle, $exporter->map($customer));
+                        }
+
+                        unset($customers);
+
+                        if (ob_get_level() > 0) {
+                            ob_flush();
+                        }
+                        flush();
+                    });
+
+                fclose($handle);
+            }, 'customers.csv', [
+                'Content-Type' => 'text/csv',
+                'total' => $total,
+                'Access-Control-Expose-Headers' => 'total',
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Export failed: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function search(Request $request)

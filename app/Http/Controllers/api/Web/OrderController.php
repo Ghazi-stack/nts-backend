@@ -2232,11 +2232,11 @@ class OrderController extends Controller
                 ], 400);
             }
 
-            $orderExists = Order::where('store_id', $storeId)
+            $total = Order::where('store_id', $storeId)
                 ->where('is_draft', 0)
-                ->exists();
+                ->count();
 
-            if (!$orderExists) {
+            if ($total === 0) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'No orders found for this store to export.'
@@ -2246,6 +2246,7 @@ class OrderController extends Controller
             return response()->streamDownload(function () use ($storeId) {
                 set_time_limit(0);
                 ini_set('memory_limit', '512M');
+                \DB::disableQueryLog();
 
                 $exporter = new OrdersExport($storeId);
                 $handle   = fopen('php://output', 'w');
@@ -2271,6 +2272,8 @@ class OrderController extends Controller
                             fputcsv($handle, $exporter->map($order));
                         }
 
+                        unset($orders);
+
                         if (ob_get_level() > 0) {
                             ob_flush();
                         }
@@ -2282,6 +2285,8 @@ class OrderController extends Controller
                 'Content-Type'        => 'text/csv',
                 'Cache-Control'       => 'no-store, no-cache',
                 'Content-Disposition' => 'attachment; filename="orders.csv"',
+                'total'               => $total,
+                'Access-Control-Expose-Headers' => 'total',
             ]);
         } catch (\Exception $e) {
             return response()->json([
