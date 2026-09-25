@@ -121,6 +121,7 @@ class ProductController extends Controller
                     'sale_price',
                     'cost_price',
                     'free_shipping',
+                    'fixed_shipping_cost',
                     'track_inventory',
                     'low_stock',
                     'allow_purchase',

@@ -52,6 +52,7 @@ class ProductListResource extends JsonResource
             'salePrice' => $this->sale_price,
             'costPrice' => $this->cost_price,
             'freeShipping' => $this->free_shipping,
+            'fixedShippingCost' => $this->fixed_shipping_cost,
             'trackInventory' => $this->track_inventory,
             'lowStock' => $this->low_stock,
             'minPurchaseQuantity' => $this->min_purchase_quantity,
