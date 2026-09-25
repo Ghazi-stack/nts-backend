@@ -2998,26 +2998,58 @@ class ProductController extends Controller
                 ], 400);
             }
 
-            $count = Product::where('store_id', $storeId)->count();
-            if ($count === 0) {
+            $exists = Product::where('store_id', $storeId)->exists();
+
+            if (!$exists) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'No products found to export.'
                 ], 404);
             }
 
-            // ✅ Increase limits for large exports
-            ini_set('memory_limit', '512M');
-            set_time_limit(300); // 5 minutes
+            return response()->streamDownload(function () use ($storeId) {
+                set_time_limit(0);
+                ini_set('memory_limit', '512M');
 
-            $fileName = 'products_export_' . now()->format('Ymd_His') . '.xlsx';
+                $exporter = new \App\Exports\ProductExport($storeId);
+                $handle   = fopen('php://output', 'w');
 
-            return Excel::download(new ProductExport($storeId), $fileName);
+                fputcsv($handle, $exporter->headings());
+
+                Product::query()
+                    ->with([
+                        'brand:id,name',
+                        'categories:id,name,parent_id',
+                        'categories.parent:id,name,parent_id',
+                        'content:id,product_id,description,warranty,availability_text',
+                        'seo:id,product_id,page_title,product_url,meta_description,meta_keywords,redirect_old_url',
+                        'images:id,product_id,path,url,is_primary,alt_text,store_id',
+                    ])
+                    ->where('store_id', $storeId)
+                    ->orderBy('id')
+                    ->chunkById(200, function ($products) use ($handle, $exporter) {
+                        foreach ($products as $product) {
+                            fputcsv($handle, $exporter->map($product));
+                        }
+
+                        if (ob_get_level() > 0) {
+                            ob_flush();
+                        }
+                        flush();
+                    });
+
+                fclose($handle);
+            }, 'products.csv', [
+                'Content-Type'        => 'text/csv',
+                'Cache-Control'       => 'no-store, no-cache',
+                'Content-Disposition' => 'attachment; filename="products.csv"',
+            ]);
         } catch (\Throwable $e) {
             \Log::error('Export CSV Error: ' . $e->getMessage(), [
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
+
             return response()->json([
                 'status'  => false,
                 'message' => 'Export failed: ' . $e->getMessage(),
