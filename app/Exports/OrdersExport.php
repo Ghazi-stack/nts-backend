@@ -2,38 +2,11 @@
 
 namespace App\Exports;
 
-use App\Models\Order;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
-use Maatwebsite\Excel\Concerns\FromCollection;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
-use Maatwebsite\Excel\Concerns\WithHeadings;
-use Maatwebsite\Excel\Concerns\WithMapping;
 
-class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldAutoSize
+class OrdersExport
 {
-    public function collection(): Collection
-    {
-        $storeId = current_store_id();
-
-        return Order::query()
-            ->with([
-                'items' => function ($q) {
-                    $q->with(['product']);
-                },
-                'customer',
-                'store',
-                'billingInformation',
-                'notes:id,order_id,note',
-                'payment',
-                'shipment:id,order_id,tracking_number,tracking_carrie,date_shipped,shipping_method,shipped_by,packing_slip_note',
-                'manualDiscounts:id,order_id,discount_amount',
-            ])
-            ->where('store_id', $storeId)
-            ->where('is_draft', 0)
-            ->latest()
-            ->get();
-    }
+    public function __construct(protected int $storeId) {}
 
     public function headings(): array
     {
@@ -128,9 +101,9 @@ class OrdersExport implements FromCollection, WithHeadings, WithMapping, ShouldA
         $subtotalEx  = $this->num($itemsSubtotal);
         $subtotalInc = $this->num($itemsSubtotal);
 
-        $totalQty     = (int) ($order->items?->sum('quantity') ?? 0);
+        $totalQty = (int) ($order->items?->sum('quantity') ?? 0);
         $shipment = $order->shipment;
-
+        
         $totalShipped = $shipment && $shipment->id
             ? (int) $shipment->id
             : 0;

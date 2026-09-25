@@ -2232,7 +2232,9 @@ class OrderController extends Controller
                 ], 400);
             }
 
-            $orderExists = Order::where('store_id', $storeId)->exists();
+            $orderExists = Order::where('store_id', $storeId)
+                ->where('is_draft', 0)
+                ->exists();
 
             if (!$orderExists) {
                 return response()->json([
@@ -2241,11 +2243,46 @@ class OrderController extends Controller
                 ], 404);
             }
 
-            return Excel::download(
-                new OrdersExport,
-                'orders.csv',
-                \Maatwebsite\Excel\Excel::CSV
-            );
+            return response()->streamDownload(function () use ($storeId) {
+                set_time_limit(0);
+                ini_set('memory_limit', '512M');
+
+                $exporter = new OrdersExport($storeId);
+                $handle   = fopen('php://output', 'w');
+
+                fputcsv($handle, $exporter->headings());
+
+                Order::query()
+                    ->with([
+                        'items.product',
+                        'customer',
+                        'store',
+                        'billingInformation',
+                        'notes:id,order_id,note',
+                        'payment',
+                        'shipment:id,order_id,tracking_number,tracking_carrie,date_shipped,shipping_method,shipped_by,packing_slip_note',
+                        'manualDiscounts:id,order_id,discount_amount',
+                    ])
+                    ->where('store_id', $storeId)
+                    ->where('is_draft', 0)
+                    ->orderBy('id')
+                    ->chunkById(500, function ($orders) use ($handle, $exporter) {
+                        foreach ($orders as $order) {
+                            fputcsv($handle, $exporter->map($order));
+                        }
+
+                        if (ob_get_level() > 0) {
+                            ob_flush();
+                        }
+                        flush();
+                    });
+
+                fclose($handle);
+            }, 'orders.csv', [
+                'Content-Type'        => 'text/csv',
+                'Cache-Control'       => 'no-store, no-cache',
+                'Content-Disposition' => 'attachment; filename="orders.csv"',
+            ]);
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
