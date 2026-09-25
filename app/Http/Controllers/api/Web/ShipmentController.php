@@ -373,7 +373,9 @@ class ShipmentController extends Controller
                 ], 400);
             }
 
-            if (!Shipment::where('store_id', $storeId)->exists()) {
+            $total = Shipment::where('store_id', $storeId)->count();
+
+            if ($total === 0) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'No shipments found to export.'
@@ -383,7 +385,7 @@ class ShipmentController extends Controller
             return response()->streamDownload(function () use ($storeId) {
                 set_time_limit(0);
                 ini_set('memory_limit', '512M');
-                DB::disableQueryLog();
+                \DB::disableQueryLog();
 
                 $exporter = new ShipmentExport();
                 $handle   = fopen('php://output', 'w');
@@ -412,7 +414,9 @@ class ShipmentController extends Controller
 
                 fclose($handle);
             }, 'shipments.csv', [
-                'Content-Type' => 'text/csv',
+                'Content-Type'        => 'text/csv',
+                'total'               => $total,
+                'Access-Control-Expose-Headers' => 'total',
             ]);
         } catch (\Throwable $e) {
             \Log::error('Shipment Export Error: ' . $e->getMessage(), [
