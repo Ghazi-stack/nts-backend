@@ -2,12 +2,21 @@
 
 namespace App\Exports;
 
+use App\Models\Store;
 use Illuminate\Support\Str;
 
 class OrdersExport
 {
-    public function __construct(protected int $storeId) {}
+    protected int $storeId;
+    protected string $channelName;
 
+    public function __construct(int $storeId)
+    {
+        $this->storeId = $storeId;
+        $this->channelName = Store::query()
+            ->where('id', $storeId)
+            ->value('name') ?: '';
+    }
     public function headings(): array
     {
         return [
@@ -103,7 +112,7 @@ class OrdersExport
 
         $totalQty = (int) ($order->items?->sum('quantity') ?? 0);
         $shipment = $order->shipment;
-        
+
         $totalShipped = $shipment && $shipment->id
             ? (int) $shipment->id
             : 0;
@@ -120,11 +129,8 @@ class OrdersExport
 
         $customerMessage = $this->str($order->comments ?? $order->customer_message ?? $order->customerMessage ?? '');
 
-        $channelName = $this->attr($order->store ?? null, 'name')
-            ?: $this->str($order->channel_name ?? '')
-            ?: $this->str($order->channel ?? '')
-            ?: 'Server Blink';
-        $channelId = $this->num($order->channel_id ?? 1, 1);
+        $channelName = $this->channelName;
+        $channelId   = $this->storeId;
 
         $shipMethod = $this->attr($billing, 'shipping_method')
             ?: $this->str($order->shipping_method ?? '')
