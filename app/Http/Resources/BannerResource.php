@@ -8,20 +8,26 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class BannerResource extends JsonResource
 {
-    /**
-     * Transform the resource into an array.
-     *
-     * @return array<string, mixed>
-     */
     public function toArray(Request $request): array
     {
+        $dateRange = $this->date_range;
+
+        if ($dateRange === '0' || $dateRange === 0) {
+            $dateRange = 0;
+        } elseif (is_string($dateRange)) {
+            $decoded = json_decode($dateRange, true);
+            $dateRange = json_last_error() === JSON_ERROR_NONE ? $decoded : $dateRange;
+        }
+
         return [
-            'id'     => $this->id,
-            'title'  => $this->title,
-            'image'  => $this->image ? url($this->image) : null, // full URL
-            'link'   => $this->link,
-            'status' => $this->status,
-            'store' => new StoreResource($this->whenLoaded('store')),
+            'id'          => $this->id,
+            'title'       => $this->title,
+            'pageContent' => $this->page_content,
+            'location'    => $this->location,
+            'dateRange'   => $dateRange,
+            'visible'     => (bool) $this->visible,
+            'placement'   => $this->placement,
+            'store'       => new StoreResource($this->whenLoaded('store')),
         ];
     }
 }

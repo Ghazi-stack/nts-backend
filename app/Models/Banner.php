@@ -9,12 +9,20 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Banner extends Model
 {
     use HasFactory;
+
     protected $fillable = [
         'title',
-        'image',
-        'link',
-        'status',
-        'store_id'
+        'page_content',
+        'location',
+        'date_range',
+        'visible',
+        'placement',
+        'store_id',
+    ];
+
+    protected $casts = [
+        'location' => 'array',
+        'visible'  => 'boolean',
     ];
 
     public function store()

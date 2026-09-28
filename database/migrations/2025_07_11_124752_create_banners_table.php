@@ -13,11 +13,16 @@ return new class extends Migration
     {
         Schema::create('banners', function (Blueprint $table) {
             $table->id();
-            $table->string('title')->nullable();
-            $table->string('image'); // path to banner image
-            $table->string('link')->nullable(); // optional link
-            $table->boolean('status')->default(1); // active by default
+            $table->unsignedBigInteger('store_id');
+            $table->string('title');
+            $table->longText('page_content')->nullable();
+            $table->json('location');
+            $table->text('date_range')->nullable();
+            $table->boolean('visible')->default(true);
+            $table->enum('placement', ['top', 'bottom']);
             $table->timestamps();
+
+            $table->foreign('store_id')->references('id')->on('stores')->onDelete('cascade');
         });
     }
 
