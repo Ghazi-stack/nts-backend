@@ -922,7 +922,7 @@ class CustomerController extends Controller
         }
     }
 
-    public function exportCSV(Request $request)
+    public function exportCSV()
     {
         try {
             $storeId = current_store_id();
@@ -943,45 +943,37 @@ class CustomerController extends Controller
                 ], 404);
             }
 
-            set_time_limit(0);
-            ini_set('memory_limit', '512M');
-            DB::disableQueryLog();
+            return response()->streamDownload(function () use ($storeId) {
+                set_time_limit(0);
+                ini_set('memory_limit', '512M');
+                DB::disableQueryLog();
 
-            $chunkSize  = 200;
-            $tempStream = fopen('php://temp/maxmemory:5242880', 'r+');
-            $exporter   = new CustomerExport();
+                $exporter = new CustomerExport();
+                $handle   = fopen('php://output', 'w');
 
-            fputcsv($tempStream, $exporter->headings());
+                fputcsv($handle, $exporter->headings());
 
-            Customer::query()
-                ->where('store_id', $storeId)
-                ->orderBy('id')
-                ->chunkById($chunkSize, function ($customers) use ($tempStream, $exporter) {
-                    foreach ($customers as $customer) {
-                        fputcsv($tempStream, $exporter->map($customer));
-                    }
-                    unset($customers);
-                });
+                Customer::query()
+                    ->where('store_id', $storeId)
+                    ->orderBy('id')
+                    ->chunkById(200, function ($customers) use ($handle, $exporter) {
+                        foreach ($customers as $customer) {
+                            fputcsv($handle, $exporter->map($customer));
+                        }
 
-            rewind($tempStream);
-            $fileSize = fstat($tempStream)['size'] ?? 0;
+                        unset($customers);
 
-            return response()->stream(function () use ($tempStream) {
-                fpassthru($tempStream);
-                fclose($tempStream);
-            }, 200, [
-                'Content-Type'        => 'text/csv; charset=UTF-8',
-                'Content-Disposition' => 'attachment; filename="customers.csv"',
-                'Content-Length'      => $fileSize,
-                'total'               => $total,
-                'total-rows'          => $total,
-                'chunk'               => $chunkSize,
-                'size'                => $fileSize,
-                'size_kb'             => round($fileSize / 1024, 2),
-                'size_mb'             => round($fileSize / 1048576, 2),
-                'Access-Control-Expose-Headers' => 'Content-Length, Content-Disposition, total, total-rows, chunk, size, size_kb, size_mb',
-                'Cache-Control'       => 'no-store, no-cache',
-                'Pragma'              => 'public',
+                        if (ob_get_level() > 0) {
+                            ob_flush();
+                        }
+                        flush();
+                    });
+
+                fclose($handle);
+            }, 'customers.csv', [
+                'Content-Type' => 'text/csv',
+                'total-rows' => $total,
+                'Access-Control-Expose-Headers' => 'total-rows',
             ]);
         } catch (\Throwable $e) {
             return response()->json([

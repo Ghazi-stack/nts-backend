@@ -415,8 +415,8 @@ class ShipmentController extends Controller
                 fclose($handle);
             }, 'shipments.csv', [
                 'Content-Type'        => 'text/csv',
-                'total'               => $total,
-                'Access-Control-Expose-Headers' => 'total',
+                'total-rows'               => $total,
+                'Access-Control-Expose-Headers' => 'total-rows',
             ]);
         } catch (\Throwable $e) {
             \Log::error('Shipment Export Error: ' . $e->getMessage(), [

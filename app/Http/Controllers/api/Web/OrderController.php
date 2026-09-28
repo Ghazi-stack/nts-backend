@@ -2230,7 +2230,7 @@ class OrderController extends Controller
                 'Content-Type'        => 'text/csv',
                 'Cache-Control'       => 'no-store, no-cache',
                 'Content-Disposition' => 'attachment; filename="orders.csv"',
-                'total'               => $total,
+                'total-rows'               => $total,
                 'Access-Control-Expose-Headers' => 'total',
             ]);
         } catch (\Exception $e) {
