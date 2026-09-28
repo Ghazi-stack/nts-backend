@@ -3008,79 +3008,71 @@ class ProductController extends Controller
                 ], 404);
             }
 
-            set_time_limit(0);
-            ini_set('memory_limit', '512M');
-            \DB::disableQueryLog();
+            return response()->streamDownload(function () use ($storeId) {
+                set_time_limit(0);
+                ini_set('memory_limit', '512M');
+                \DB::disableQueryLog();
 
-            $chunkSize  = 100;
-            $tempStream = fopen('php://temp/maxmemory:5242880', 'r+');
-            $exporter   = new \App\Exports\ProductExport($storeId);
+                $exporter = new \App\Exports\ProductExport($storeId);
+                $handle   = fopen('php://output', 'w');
 
-            fputcsv($tempStream, $exporter->headings());
+                fputcsv($handle, $exporter->headings());
 
-            Product::query()
-                ->select([
-                    'id',
-                    'store_id',
-                    'brand_id',
-                    'name',
-                    'sku',
-                    'price',
-                    'cost_price',
-                    'sale_price',
-                    'fixed_shipping_cost',
-                    'free_shipping',
-                    'allow_purchase',
-                    'visible_on_storefront',
-                    'track_inventory',
-                    'current_stock',
-                    'low_stock',
-                    'product_type',
-                    'item_type',
-                    'condition',
-                    'tax_class',
-                    'tax_provider_code',
-                    'dimensions',
-                    'custom_fields',
-                    'created_at',
-                    'updated_at',
-                ])
-                ->with([
-                    'brand:id,name',
-                    'categories:id,name,parent_id',
-                    'categories.parent:id,name,parent_id',
-                    'content:id,product_id,description,warranty,availability_text',
-                    'seo:id,product_id,page_title,product_url,meta_description,meta_keywords,redirect_old_url',
-                    'images:id,product_id,path,url,is_primary',
-                ])
-                ->where('store_id', $storeId)
-                ->orderBy('id')
-                ->chunkById($chunkSize, function ($products) use ($tempStream, $exporter) {
-                    foreach ($products as $product) {
-                        fputcsv($tempStream, $exporter->map($product));
-                    }
-                    unset($products);
-                });
+                Product::query()
+                    ->select([
+                        'id',
+                        'store_id',
+                        'brand_id',
+                        'name',
+                        'sku',
+                        'price',
+                        'cost_price',
+                        'sale_price',
+                        'fixed_shipping_cost',
+                        'free_shipping',
+                        'allow_purchase',
+                        'visible_on_storefront',
+                        'track_inventory',
+                        'current_stock',
+                        'low_stock',
+                        'product_type',
+                        'item_type',
+                        'condition',
+                        'tax_class',
+                        'tax_provider_code',
+                        'dimensions',
+                        'custom_fields',
+                        'created_at',
+                        'updated_at',
+                    ])
+                    ->with([
+                        'brand:id,name',
+                        'categories:id,name,parent_id',
+                        'categories.parent:id,name,parent_id',
+                        'content:id,product_id,description,warranty,availability_text',
+                        'seo:id,product_id,page_title,product_url,meta_description,meta_keywords,redirect_old_url',
+                        'images:id,product_id,path,url,is_primary',
+                    ])
+                    ->where('store_id', $storeId)
+                    ->orderBy('id')
+                    ->chunkById(100, function ($products) use ($handle, $exporter) {
+                        foreach ($products as $product) {
+                            fputcsv($handle, $exporter->map($product));
+                        }
 
-            rewind($tempStream);
-            $fileSize = fstat($tempStream)['size'] ?? 0;
+                        unset($products);
 
-            return response()->stream(function () use ($tempStream) {
-                fpassthru($tempStream);
-                fclose($tempStream);
-            }, 200, [
-                'Content-Type'        => 'text/csv; charset=UTF-8',
-                'Content-Disposition' => 'attachment; filename="products.csv"',
-                'Content-Length'      => $fileSize,
-                'total'               => $total,
-                'total-rows'          => $total,
-                'chunk'               => $chunkSize,
-                'size'                => $fileSize,
-                'size_kb'             => round($fileSize / 1024, 2),
-                'size_mb'             => round($fileSize / 1048576, 2),
-                'Access-Control-Expose-Headers' => 'Content-Length, Content-Disposition, total, total-rows, chunk, size, size_kb, size_mb',
-                'Cache-Control'       => 'no-store, no-cache',
-                'Pragma'              => 'public',
+                        if (ob_get_level() > 0) {
+                            ob_flush();
+                        }
+                        flush();
+                    });
+
+                fclose($handle);
+            }, 'products.csv', [
+                'Content-Type' => 'text/csv',
+                'total-rows' => $total,
+                'Access-Control-Expose-Headers' => 'total-rows',
             ]);
         } catch (\Throwable $e) {
             \Log::error('Export CSV Error: ' . $e->getMessage(), [
