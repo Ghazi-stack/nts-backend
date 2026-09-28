@@ -230,7 +230,6 @@ class BannerController extends Controller
             return response()->json([
                 'status'  => true,
                 'message' => 'Banner deleted successfully',
-                'data'    => $banner,
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([

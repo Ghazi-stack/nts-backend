@@ -488,6 +488,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         // Banners
         Route::prefix('banners')->controller(BannerController::class)->group(function () {
             Route::get('/list-banners', 'index');
+            Route::get('/list-banners-by-Id/{id}', 'show');
             Route::post('/add-banner', 'storeBanner');
             Route::post('/update-banner/{id}', 'updateBanner');
             Route::delete('/delete-banner/{id}', 'destroyBanner');
