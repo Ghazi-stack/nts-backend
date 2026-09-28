@@ -147,25 +147,46 @@ class BannerController extends Controller
             $banner = Banner::where('store_id', $storeId)->findOrFail($id);
 
             $request->validate([
-                'title'        => 'required|string|max:255',
+                'title'        => 'nullable|string|max:255',
                 'pageContent'  => 'nullable|string',
-                'locationType' => 'required|in:homepage,category,brand,search',
-                'locationId'   => 'nullable|integer|required_if:locationType,category,brand',
+                'locationType' => 'nullable|in:homepage,category,brand,search',
+                'locationId'   => 'nullable|integer',
                 'dateType'     => 'nullable|in:always,range',
-                'from'         => 'nullable|required_if:dateType,range|date',
-                'through'      => 'nullable|required_if:dateType,range|date|after_or_equal:from',
+                'from'         => 'nullable|date',
+                'through'      => 'nullable|date|after_or_equal:from',
                 'visible'      => 'nullable|boolean',
-                'placement'    => 'required|in:top,bottom',
+                'placement'    => 'nullable|in:top,bottom',
             ]);
 
-            $banner->update([
-                'title'        => $request->title,
-                'page_content' => $request->pageContent,
-                'location'     => $this->buildLocation($request),
-                'date_range'   => $this->buildDateRange($request),
-                'visible'      => $request->boolean('visible', true),
-                'placement'    => $request->placement,
-            ]);
+            $data = [];
+
+            if ($request->exists('title')) {
+                $data['title'] = $request->title;
+            }
+
+            if ($request->exists('pageContent')) {
+                $data['page_content'] = $request->pageContent;
+            }
+
+            if ($request->exists('locationType')) {
+                $data['location'] = $this->buildLocation($request);
+            }
+
+            if ($request->exists('dateType') || $request->exists('from') || $request->exists('through')) {
+                $data['date_range'] = $this->buildDateRange($request);
+            }
+
+            if ($request->exists('visible')) {
+                $data['visible'] = $request->boolean('visible');
+            }
+
+            if ($request->exists('placement')) {
+                $data['placement'] = $request->placement;
+            }
+
+            if (!empty($data)) {
+                $banner->update($data);
+            }
 
             return response()->json([
                 'status'  => true,
