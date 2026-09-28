@@ -1250,53 +1250,6 @@ class OrderController extends Controller
                         'user_used' => 1,
                     ]);
             }
-            // $coupon = null;
-
-            // if (!empty($validated['couponCode'])) {
-
-            //     $coupon = CouponCode::where('store_id', $storeId)
-            //         ->where('couponCode', $validated['couponCode'])
-            //         ->first();
-
-            //     if (!$coupon) {
-            //         return response()->json([
-            //             'status' => false,
-            //             'message' => 'Invalid coupon code.'
-            //         ], 400);
-            //     }
-
-            //     $couponUsageQuery = CouponUsage::where('store_id', $storeId)
-            //         ->where('coupon_id', $coupon->id);
-
-            //     if ($user) {
-            //         $couponUsageQuery->where('user_id', $user->id);
-            //     } else {
-            //         $sessionId = $request->header('X-Session-ID');
-
-            //         if (!$sessionId) {
-            //             return response()->json([
-            //                 'status' => false,
-            //                 'message' => 'Session ID is required for guest coupon usage.'
-            //             ], 400);
-            //         }
-
-            //         $couponUsageQuery->where('session_id', $sessionId);
-            //     }
-
-            //     $alreadyUsedByUserOrSession = $couponUsageQuery->exists();
-
-            //     $alreadyUsedByEmail = CouponUsage::where('store_id', $storeId)
-            //         ->where('coupon_id', $coupon->id)
-            //         ->whereRaw('LOWER(email) = ?', [$orderEmail])
-            //         ->exists();
-
-            //     if ($alreadyUsedByUserOrSession || $alreadyUsedByEmail) {
-            //         return response()->json([
-            //             'status' => false,
-            //             'message' => 'You have already used this coupon.'
-            //         ], 400);
-            //     }
-            // }
 
             if ($isGuest) {
                 try {
@@ -1677,17 +1630,6 @@ class OrderController extends Controller
                 'payment_status'    => 'authorized',
             ], $riskData));
 
-            // if ($coupon) {
-            //     CouponUsage::create([
-            //         'store_id'    => $storeId,
-            //         'user_id'     => $user?->id ?? null,
-            //         'session_id'  => $user ? null : $request->header('X-Session-ID'),
-            //         'coupon_id'   => $coupon->id,
-            //         'coupon_code' => $coupon->couponCode,
-            //         'email'       => $orderEmail,
-            //     ]);
-            // }
-
             foreach ($orders as $ord) {
                 $ord->load('billingInformation');
 
@@ -1730,6 +1672,38 @@ class OrderController extends Controller
             } catch (\Exception $mailError) {
                 Log::error('ORDER EMAIL FAILED', [
                     'error' => $mailError->getMessage(),
+                ]);
+            }
+
+            // Order success ke baad cart empty
+            try {
+                $cartUser = $request->user('sanctum') ?? auth('sanctum')->user();
+
+                if (!$cartUser && $request->bearerToken()) {
+                    $token    = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+                    $cartUser = $token?->tokenable;
+                }
+
+                $cartSessionId = $request->header('X-Session-ID');
+
+                $cartQuery = \App\Models\Cart::query()->where('store_id', $storeId);
+
+                if ($cartUser) {
+                    $cartQuery->where('user_id', $cartUser->id);
+                } elseif (!empty($cartSessionId)) {
+                    $cartQuery->where('session_id', $cartSessionId);
+                } else {
+                    $cartQuery = null;
+                }
+
+                if ($cartQuery) {
+                    $cartQuery->delete();
+                }
+            } catch (\Exception $cartEx) {
+                Log::warning('CART CLEAR AFTER ORDER FAILED', [
+                    'error'     => $cartEx->getMessage(),
+                    'store_id'  => $storeId,
+                    'order_ids' => collect($orders)->pluck('id'),
                 ]);
             }
 
