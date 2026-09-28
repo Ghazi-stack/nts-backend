@@ -1539,87 +1539,59 @@ class OrderController extends Controller
             try {
                 \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
 
-                $stripeIntent = \Stripe\PaymentIntent::retrieve(
+                $freshIntent = \Stripe\PaymentIntent::retrieve(
                     $validated['paymentIntentId'],
-                    ['expand' => ['latest_charge', 'latest_charge.review', 'review']]
+                    ['expand' => [
+                        'latest_charge',
+                        'latest_charge.outcome',
+                        'latest_charge.review',
+                        'review',
+                    ]]
                 );
 
-                if (empty($stripeIntent->latest_charge)) {
+                if (empty($freshIntent->latest_charge)) {
                     usleep(800000);
-                    $stripeIntent = \Stripe\PaymentIntent::retrieve(
+                    $freshIntent = \Stripe\PaymentIntent::retrieve(
                         $validated['paymentIntentId'],
-                        ['expand' => ['latest_charge', 'latest_charge.review', 'review']]
+                        ['expand' => [
+                            'latest_charge',
+                            'latest_charge.outcome',
+                            'latest_charge.review',
+                            'review',
+                        ]]
                     );
                 }
 
                 $charge = null;
-                if (!empty($stripeIntent->latest_charge)) {
-                    $charge = is_string($stripeIntent->latest_charge)
-                        ? \Stripe\Charge::retrieve($stripeIntent->latest_charge)
-                        : $stripeIntent->latest_charge;
+                if (!empty($freshIntent->latest_charge)) {
+                    $charge = is_string($freshIntent->latest_charge)
+                        ? \Stripe\Charge::retrieve(
+                            $freshIntent->latest_charge,
+                            ['expand' => ['outcome', 'review']]
+                        )
+                        : $freshIntent->latest_charge;
                 }
 
-                $classicScore  = null;
-                $classicLevel  = null;
-                $outcomeType   = null;
-                $outcomeReason = null;
+                $score = null;
+                $level = null;
 
                 if ($charge && !empty($charge->outcome)) {
-                    $classicScore  = isset($charge->outcome->risk_score)
+                    $score = isset($charge->outcome->risk_score)
                         ? (int) $charge->outcome->risk_score
                         : null;
-                    $classicLevel  = $charge->outcome->risk_level ?? null;
-                    $outcomeType   = $charge->outcome->type ?? null;
-                    $outcomeReason = $charge->outcome->reason ?? null;
-                }
-
-                $hasReview = !empty($stripeIntent->review)
-                    || (!empty($charge) && !empty($charge->review))
-                    || $outcomeType === 'manual_review';
-
-                $overallScore = $classicScore;
-                $overallLevel = $classicLevel ?: 'normal';
-
-                if ($outcomeReason === 'highest_risk_level' || $classicLevel === 'highest') {
-                    $overallLevel = 'highest';
-                } elseif ($hasReview || $classicLevel === 'elevated' || $outcomeReason === 'elevated_risk_level') {
-                    $overallLevel = 'elevated';
-                }
-
-                if ($overallScore !== null) {
-                    if ($overallScore >= 75) {
-                        $overallLevel = 'highest';
-                    } elseif ($overallScore >= 50 && $overallLevel === 'normal') {
-                        $overallLevel = 'highest';
-                    } elseif ($overallScore >= 65 && $overallLevel === 'normal') {
-                        $overallLevel = 'elevated';
-                    }
-                }
-
-                try {
-                    if (!empty($stripeIntent->payment_method)) {
-                        $pm = is_string($stripeIntent->payment_method)
-                            ? \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method)
-                            : $stripeIntent->payment_method;
-
-                        $checks = $pm->card->checks ?? null;
-                        $streetFail = $checks && (($checks->address_line1_check ?? null) === 'fail');
-                        $cvcFail    = $checks && (($checks->cvc_check ?? null) === 'fail');
-
-                        if (($streetFail || $cvcFail) && in_array($overallLevel, ['normal', null], true)) {
-                            $overallLevel = 'elevated';
-                        }
-                    }
-                } catch (\Exception $pmEx) {
-                    \Log::warning('Could not fetch PM checks: ' . $pmEx->getMessage());
+                    $level = $charge->outcome->risk_level ?? null;
                 }
 
                 $riskData = [
-                    'risk_score' => $overallScore,
-                    'risk_level' => $overallLevel,
+                    'risk_score' => $score,
+                    'risk_level' => $level ?: 'normal',
                 ];
             } catch (\Exception $e) {
                 \Log::warning('Could not fetch Stripe risk data: ' . $e->getMessage());
+                $riskData = [
+                    'risk_score' => null,
+                    'risk_level' => 'normal',
+                ];
             }
 
             Payment::create(array_merge([
@@ -1675,7 +1647,6 @@ class OrderController extends Controller
                 ]);
             }
 
-            // Order success ke baad cart empty
             try {
                 $cartUser = $request->user('sanctum') ?? auth('sanctum')->user();
 
