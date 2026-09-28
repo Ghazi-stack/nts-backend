@@ -23,8 +23,7 @@ class BannerController extends Controller
             }
 
             $perPage = $request->query('perPage', 20);
-            $banners = Banner::with('store')
-                ->where('store_id', $storeId)
+            $banners = Banner::where('store_id', $storeId)
                 ->latest()
                 ->paginate($perPage);
 

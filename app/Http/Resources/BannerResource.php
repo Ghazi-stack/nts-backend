@@ -3,7 +3,6 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
-use App\Http\Resources\StoreResource;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class BannerResource extends JsonResource
@@ -21,13 +20,13 @@ class BannerResource extends JsonResource
 
         return [
             'id'          => $this->id,
+            'storeId'     => $this->store_id,
             'title'       => $this->title,
             'pageContent' => $this->page_content,
             'location'    => $this->location,
             'dateRange'   => $dateRange,
             'visible'     => (bool) $this->visible,
             'placement'   => $this->placement,
-            'store'       => new StoreResource($this->whenLoaded('store')),
         ];
     }
 }
