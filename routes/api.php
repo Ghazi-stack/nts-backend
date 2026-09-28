@@ -490,7 +490,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
             Route::get('/list-banners', 'index');
             Route::get('/list-banners-by-Id/{id}', 'show');
             Route::post('/add-banner', 'storeBanner');
-            Route::post('/update-banner/{id}', 'updateBanner');
+            Route::patch('/update-banner/{id}', 'updateBanner');
             Route::delete('/delete-banner/{id}', 'destroyBanner');
         });
 
@@ -576,7 +576,7 @@ Route::prefix('web')->group(function () {
         Route::delete('/delete/{id}', 'destroyCart');
         Route::post('/add/shipping-by-rate', 'saveShippingRate');
         Route::get('/get/shipping-by-rate', 'getShippingRate');
-       // Route::delete('/cart-remove-product', 'removeProduct');
+        // Route::delete('/cart-remove-product', 'removeProduct');
         Route::delete('/remove-shipping-rate', 'removeShippingRate');
         Route::post('/add-by-sku', 'storeCartBySku');
         Route::delete('/clear-all', 'clearCart');
@@ -614,7 +614,6 @@ Route::prefix('web')->group(function () {
         Route::post('/return-order', 'submitReturnRequest');
         Route::post('/order-details', 'showByOrderId');
         Route::delete('/draft-orders/{id}', 'deleteDraftOrder');
-        
     });
 
 

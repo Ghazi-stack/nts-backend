@@ -23,7 +23,18 @@ class BannerController extends Controller
             }
 
             $perPage = $request->query('perPage', 20);
+            $search  = trim((string) $request->query('search', ''));
+
             $banners = Banner::where('store_id', $storeId)
+                ->when($search !== '', function ($query) use ($search) {
+                    $query->where(function ($q) use ($search) {
+                        $q->where('title', 'like', "%{$search}%")
+                            ->orWhere('page_content', 'like', "%{$search}%")
+                            ->orWhere('placement', 'like', "%{$search}%")
+                            ->orWhere('location', 'like', "%{$search}%")
+                            ->orWhere('date_range', 'like', "%{$search}%");
+                    });
+                })
                 ->latest()
                 ->paginate($perPage);
 
