@@ -32,6 +32,7 @@ class BannerController extends Controller
                             ->orWhere('page_content', 'like', "%{$search}%")
                             ->orWhere('placement', 'like', "%{$search}%")
                             ->orWhere('location', 'like', "%{$search}%")
+                            ->orWhere('visible', 'like', "%{$search}%")
                             ->orWhere('date_range', 'like', "%{$search}%");
                     });
                 })
