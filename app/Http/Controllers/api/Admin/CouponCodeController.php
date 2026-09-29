@@ -10,11 +10,16 @@ use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-
-
+use App\Services\CartContextService;
 
 class CouponCodeController extends Controller
 {
+    public function __construct(
+        CartContextService $cartContext
+    ) {
+        $this->cartContext = $cartContext;
+    }
+    
     private function getStoreId()
     {
         $storeId = current_store_id();
@@ -638,6 +643,82 @@ class CouponCodeController extends Controller
             ], 500);
         }
     }
+    // public function getMyCouponUsage(Request $request)
+    // {
+    //     try {
+    //         $storeId = $this->getStoreId();
+
+    //         $user = $request->user('sanctum') ?? auth('sanctum')->user();
+
+    //         if (!$user && $request->bearerToken()) {
+    //             $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+    //             $user  = $token?->tokenable;
+    //         }
+
+    //         $userId     = $user?->id;
+    //         $sessionId  = $request->header('X-Session-ID');
+    //         $draftToken = $request->query('draft_token')
+    //             ?: $request->input('draft_token')
+    //             ?: $request->header('X-Draft-Token');
+
+    //         $query = CouponUsage::where('store_id', $storeId)
+    //             ->where('is_delete', 0)
+    //             ->where('user_used', 0);
+
+    //         if (!empty($draftToken)) {
+    //             $byToken = (clone $query)
+    //                 ->where('is_draft', 1)
+    //                 ->where('draft_token', $draftToken)
+    //                 ->orderBy('id', 'desc')
+    //                 ->first();
+
+    //             if ($byToken) {
+    //                 return response()->json([
+    //                     'status'  => true,
+    //                     'message' => 'Coupon usages fetched successfully',
+    //                     'data'    => $byToken,
+    //                 ]);
+    //             }
+    //             // token match nahi → ignore, neeche website flow
+    //         }
+
+    //         if ($userId) {
+    //             $userEmail = strtolower(trim($user->email ?? ''));
+
+    //             $query->where(function ($q) use ($userId, $userEmail) {
+    //                 $q->where('user_id', $userId);
+
+    //                 if ($userEmail) {
+    //                     $q->orWhereRaw('LOWER(email) = ?', [$userEmail]);
+    //                 }
+    //             });
+    //         } elseif ($sessionId) {
+    //             $query->where('session_id', $sessionId);
+    //         } else {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Token or X-Session-ID is required',
+    //             ], 400);
+    //         }
+
+    //         $usage = $query
+    //             ->where('is_draft', 0)
+    //             ->orderBy('id', 'desc')
+    //             ->first();
+
+    //         return response()->json([
+    //             'status'  => true,
+    //             'message' => 'Coupon usages fetched successfully',
+    //             'data'    => $usage,
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Something went wrong',
+    //         ], 500);
+    //     }
+    // }
+
     public function getMyCouponUsage(Request $request)
     {
         try {
@@ -646,20 +727,34 @@ class CouponCodeController extends Controller
             $user = $request->user('sanctum') ?? auth('sanctum')->user();
 
             if (!$user && $request->bearerToken()) {
-                $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
-                $user  = $token?->tokenable;
+                $token = \Laravel\Sanctum\PersonalAccessToken::findToken(
+                    $request->bearerToken()
+                );
+
+                $user = $token?->tokenable;
             }
 
-            $userId     = $user?->id;
-            $sessionId  = $request->header('X-Session-ID');
-            $draftToken = $request->query('draft_token')
-                ?: $request->input('draft_token')
-                ?: $request->header('X-Draft-Token');
+            $sessionId = $user
+                ? null
+                : $request->header('X-Session-ID');
 
             $query = CouponUsage::where('store_id', $storeId)
                 ->where('is_delete', 0)
                 ->where('user_used', 0);
 
+            /*
+            * Resolve the current draft from the backend context.
+            * Do not take draft_token from the frontend.
+            */
+            $draftToken = $this->cartContext->getCurrentQuoteToken(
+                $storeId,
+                $user,
+                $sessionId
+            );
+
+            /*
+            * If a draft is currently active, fetch its coupon usage.
+            */
             if (!empty($draftToken)) {
                 $byToken = (clone $query)
                     ->where('is_draft', 1)
@@ -674,10 +769,16 @@ class CouponCodeController extends Controller
                         'data'    => $byToken,
                     ]);
                 }
-                // token match nahi → ignore, neeche website flow
+
+                // No matching draft coupon usage.
+                // Continue with the normal cart flow below.
             }
 
-            if ($userId) {
+            /*
+            * Normal logged-in user flow.
+            */
+            if ($user) {
+                $userId = $user->id;
                 $userEmail = strtolower(trim($user->email ?? ''));
 
                 $query->where(function ($q) use ($userId, $userEmail) {
@@ -687,9 +788,19 @@ class CouponCodeController extends Controller
                         $q->orWhereRaw('LOWER(email) = ?', [$userEmail]);
                     }
                 });
-            } elseif ($sessionId) {
+            }
+
+            /*
+            * Normal guest flow.
+            */
+            elseif ($sessionId) {
                 $query->where('session_id', $sessionId);
-            } else {
+            }
+
+            /*
+            * Neither authenticated user nor guest session.
+            */
+            else {
                 return response()->json([
                     'status'  => false,
                     'message' => 'Token or X-Session-ID is required',
@@ -706,6 +817,7 @@ class CouponCodeController extends Controller
                 'message' => 'Coupon usages fetched successfully',
                 'data'    => $usage,
             ]);
+
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,

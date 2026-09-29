@@ -10,6 +10,7 @@ class CartShippingRate extends Model
         'store_id',
         'user_id',
         'session_id',
+        'quote_token',
         'cart_ids',
         'country',
         'state',
