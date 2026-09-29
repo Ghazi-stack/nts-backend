@@ -448,6 +448,11 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::post('/url-settings/webpage', [UrlSettingController::class, 'updateWebpage']);
     Route::get('/url-settings/{entity}', [UrlSettingController::class, 'show']);
 
+    // Email Marketing
+    Route::prefix('email-marketings')->controller(EmailMarketingController::class)->group(function () {
+        Route::get('/get-email-marketing', 'show');
+        Route::put('/email-marketing', 'update');
+    });
 
     Route::middleware('permission:settings')->group(function () {
         // Store Setting
@@ -495,11 +500,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
             Route::get('/get-services', 'availableServices');
         });
 
-        // Email Marketing
-        Route::prefix('email-marketings')->controller(EmailMarketingController::class)->group(function () {
-            Route::get('/get-email-marketing', 'show');
-            Route::put('/email-marketing', 'update');
-        });
+
 
         // Transactional Emails
         Route::prefix('transactional-emails')->controller(TransactionalEmailController::class)->group(function () {
