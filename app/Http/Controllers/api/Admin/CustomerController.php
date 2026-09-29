@@ -18,6 +18,8 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Http\Resources\OrderResource;
 use App\Http\Resources\MyOrderResource;
 use App\Http\Resources\CustomerResource;
+use App\Models\Store;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 class CustomerController extends Controller
@@ -527,7 +529,7 @@ class CustomerController extends Controller
             }
 
             if (!empty($customer->email) && $rawPassword) {
-                User::create([
+                $storeUser = User::create([
                     'name'        => trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
                     'email'       => $customer->email,
                     'password'    => Hash::make($rawPassword),
@@ -535,6 +537,29 @@ class CustomerController extends Controller
                     'store_id'    => $storeId,
                     'userRole'    => 2,
                 ]);
+
+                try {
+                    $store = Store::find($storeId);
+                    $frontendUrl = rtrim($store?->base_url ?? '#', '/');
+
+                    $resetToken = \Illuminate\Support\Facades\Password::broker()->createToken($storeUser);
+                    $resetLink  = $frontendUrl . '/auth/reset-password?token=' . $resetToken
+                        . '&email=' . urlencode($customer->email);
+
+                    Mail::to($customer->email)->send(
+                        new \App\Mail\WelcomeLoginMail(
+                            $storeUser->name,
+                            $customer->email,
+                            $resetLink,
+                            $storeId
+                        )
+                    );
+                } catch (\Exception $mailEx) {
+                    \Log::error('NEW CUSTOMER WELCOME LOGIN EMAIL FAILED', [
+                        'error' => $mailEx->getMessage(),
+                        'email' => $customer->email,
+                    ]);
+                }
             }
 
             $customer = Customer::with('addresses')->find($customer->id);
