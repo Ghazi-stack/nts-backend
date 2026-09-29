@@ -77,8 +77,8 @@ class BannerController extends Controller
                 'locationType' => 'required|in:homepage,category,brand,search',
                 'locationId'   => 'nullable|integer|required_if:locationType,category,brand',
                 'dateType'     => 'nullable|in:always,range',
-                'from'         => 'nullable|required_if:dateType,range|date',
-                'through'      => 'nullable|required_if:dateType,range|date|after_or_equal:from',
+                'startDate'         => 'nullable|required_if:dateType,range|date',
+                'endDate'      => 'nullable|required_if:dateType,range|date|after_or_equal:startDate',
                 'visible'      => 'nullable|boolean',
                 'placement'    => 'required|in:top,bottom',
             ]);
@@ -164,8 +164,8 @@ class BannerController extends Controller
                 'locationType' => 'nullable|in:homepage,category,brand,search',
                 'locationId'   => 'nullable|integer',
                 'dateType'     => 'nullable|in:always,range',
-                'from'         => 'nullable|date',
-                'through'      => 'nullable|date|after_or_equal:from',
+                'startDate'         => 'nullable|date',
+                'endDate'      => 'nullable|date|after_or_equal:startDate',
                 'visible'      => 'nullable|boolean',
                 'placement'    => 'nullable|in:top,bottom',
             ]);
@@ -184,7 +184,7 @@ class BannerController extends Controller
                 $data['location'] = $this->buildLocation($request);
             }
 
-            if ($request->exists('dateType') || $request->exists('from') || $request->exists('through')) {
+            if ($request->exists('dateType') || $request->exists('startDate') || $request->exists('endDate')) {
                 $data['date_range'] = $this->buildDateRange($request);
             }
 
@@ -289,8 +289,8 @@ class BannerController extends Controller
         }
 
         return json_encode([
-            'from'    => $request->from,
-            'through' => $request->through,
+            'startDate'    => $request->startDate,
+            'endDate' => $request->endDate,
         ]);
     }
 }
