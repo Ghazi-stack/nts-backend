@@ -26,32 +26,56 @@ class ShipmentController extends Controller
         $storeId = current_store_id();
         $keyword = $request->get('keyword');
 
-        // Eager-load related order, items, and products
-        $query = Shipment::with(['order.items.product'])
+        $query = Shipment::with([
+            'order' => function ($q) {
+                $q->with([
+                    'items' => function ($item) {
+                        $item->select('id', 'order_id', 'product_id', 'quantity', 'price')
+                            ->with([
+                                'product' => function ($p) {
+                                    $p->with([
+                                        'images',
+                                        'brand',
+                                        'categories:id',
+                                        'seo',
+                                    ]);
+                                },
+                            ]);
+                    },
+                    'customer',
+                    'billingInformation',
+                    'notes:id,order_id,note',
+                    'payment',
+                    'shipment:id,order_id,tracking_number,tracking_carrier,date_shipped,shipping_method,shipped_by,packing_slip_note',
+                    'manualDiscounts:id,order_id,discount_amount',
+                ])->withCount('messages');
+            },
+        ])
             ->where('store_id', $storeId);
 
-        // Apply keyword search (if provided)
         if ($keyword) {
             $query->where(function ($q) use ($keyword) {
                 $q->where('shipped_to', 'like', '%' . $keyword . '%')
-                    ->orWhere('tracking_number', 'like', '%' . $keyword . '%');
+                    ->orWhere('tracking_number', 'like', '%' . $keyword . '%')
+                    ->orWhereHas('order', function ($order) use ($keyword) {
+                        $order->where('id', 'like', "%{$keyword}%")
+                            ->orWhere('order_number', 'like', "%{$keyword}%");
+                    });
             });
         }
 
-        // Paginate results
         $shipments = $query->orderByDesc('id')->paginate($request->get('pageSize', 20));
 
-        // Return response
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Shipments fetched successfully.',
-            'data' => ShipmentResource::collection($shipments),
+            'data'    => ShipmentResource::collection($shipments),
             'pagination' => [
-                'total' => $shipments->total(),
-                'page' => $shipments->currentPage(),
+                'total'    => $shipments->total(),
+                'page'     => $shipments->currentPage(),
                 'pageSize' => $shipments->perPage(),
-                'lastPage' => $shipments->lastPage()
-            ]
+                'lastPage' => $shipments->lastPage(),
+            ],
         ]);
     }
 

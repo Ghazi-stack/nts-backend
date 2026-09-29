@@ -32,6 +32,11 @@ class ShipmentResource extends JsonResource
                     'productUrl'  => $product?->seo?->product_url ?? null,
                 ];
             }) ?? [],
+
+            'order' => $this->when(
+                $this->relationLoaded('order') && $this->order,
+                fn() => new OrderResource($this->order)
+            ),
         ];
     }
 }
