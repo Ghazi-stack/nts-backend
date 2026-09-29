@@ -50,11 +50,16 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Stripe\Stripe;
 use Stripe\PaymentIntent;
 use App\Services\DraftQuoteService;
+use App\Services\CartContextService;
 
 class OrderController extends Controller
 {
 
-    public function __construct(protected DraftQuoteService $draftQuote) {}
+    public function __construct(
+    protected DraftQuoteService $draftQuote,
+    protected CartContextService $cartContext
+    ) {}
+
     public function index(Request $request)
     {
         try {
@@ -1109,18 +1114,197 @@ class OrderController extends Controller
                 return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
             }
 
+            // $orderEmail = strtolower(trim($validated['email']));
+
+            // $existingDraft = null;
+            // if (!empty($validated['orderId'])) {
+            //     $existingDraft = Order::where('id', $validated['orderId'])
+            //         ->where('store_id', $storeId)
+            //         ->first();
+
+            //     if (!$existingDraft) {
+            //         return response()->json([
+            //             'status'  => false,
+            //             'message' => 'Order not found.',
+            //         ], 404);
+            //     }
+            // }
+
             $orderEmail = strtolower(trim($validated['email']));
 
+            /*
+            |--------------------------------------------------------------------------
+            | Resolve authenticated user and current draft context
+            |--------------------------------------------------------------------------
+            |
+            | For normal checkout:
+            |   - no orderId
+            |   - existing behavior remains unchanged
+            |
+            | For draft checkout:
+            |   - orderId must belong to the currently active quoteToken
+            |   - user must be authenticated
+            |   - the draft must belong to that user
+            |
+            */
+            $currentUser = $request->user('sanctum') ?? auth('sanctum')->user();
+
+            if (!$currentUser && $request->bearerToken()) {
+                $sanctumToken = \Laravel\Sanctum\PersonalAccessToken::findToken(
+                    $request->bearerToken()
+                );
+
+                $currentUser = $sanctumToken?->tokenable;
+            }
+
+            $currentQuoteToken = null;
             $existingDraft = null;
+
             if (!empty($validated['orderId'])) {
-                $existingDraft = Order::where('id', $validated['orderId'])
+
+                /*
+                |--------------------------------------------------------------------------
+                | Draft checkout requires login
+                |--------------------------------------------------------------------------
+                */
+                if (!$currentUser) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Authentication required to checkout a draft order.',
+                    ], 401);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Get current draft from persistent user context
+                |--------------------------------------------------------------------------
+                */
+                // $currentQuoteToken = $this->cartContext->getCurrentQuoteToken(
+                //     $storeId,
+                //     $currentUser->id
+                // );
+
+                $sessionId = $currentUser
+                    ? null
+                    : $request->header('X-Session-ID');
+
+                $currentQuoteToken = $this->cartContext->getCurrentQuoteToken(
+                    $storeId,
+                    $currentUser,
+                    $sessionId
+                );
+
+                if (!$currentQuoteToken) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'No active draft context found.',
+                    ], 409);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Decode current quote token
+                |--------------------------------------------------------------------------
+                |
+                | The quote token itself contains the order_id that created the draft.
+                | This prevents Draft B's orderId from being submitted while Draft A
+                | is the currently active draft.
+                |
+                */
+                try {
+                    $quotePayload = $this->draftQuote->decode($currentQuoteToken);
+                } catch (\Exception $e) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Current draft context is invalid or expired.',
+                    ], 401);
+                }
+
+                $tokenStoreId = (int) ($quotePayload['store_id'] ?? 0);
+                $tokenOrderId = (int) ($quotePayload['order_id'] ?? 0);
+                $tokenUserId  = (int) ($quotePayload['user_id'] ?? 0);
+
+                /*
+                |--------------------------------------------------------------------------
+                | Verify token belongs to this store and authenticated user
+                |--------------------------------------------------------------------------
+                */
+                if (
+                    $tokenStoreId !== (int) $storeId ||
+                    $tokenUserId !== (int) $currentUser->id
+                ) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Draft context does not belong to the authenticated user.',
+                    ], 403);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Verify requested orderId belongs to the active quote
+                |--------------------------------------------------------------------------
+                */
+                if ($tokenOrderId !== (int) $validated['orderId']) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'The requested draft is not the currently active draft.',
+                    ], 409);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Load ONLY the authenticated user's active draft order
+                |--------------------------------------------------------------------------
+                */
+                $existingDraft = Order::query()
+                    ->where('id', $validated['orderId'])
                     ->where('store_id', $storeId)
+                    ->where('user_id', $currentUser->id)
+                    ->where('is_draft', 1)
                     ->first();
 
                 if (!$existingDraft) {
                     return response()->json([
                         'status'  => false,
-                        'message' => 'Order not found.',
+                        'message' => 'Draft order not found.',
+                    ], 404);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Make sure the active draft still has cart items
+                |--------------------------------------------------------------------------
+                */
+                $hasActiveDraftItems = Cart::query()
+                    ->where('store_id', $storeId)
+                    ->where('user_id', $currentUser->id)
+                    ->where('quote_token', $currentQuoteToken)
+                    ->where('isdraftcart', 1)
+                    ->exists();
+
+                if (!$hasActiveDraftItems) {
+                    /*
+                    | The draft is empty and should no longer be treated as active.
+                    */
+                    
+                    // $this->cartContext->setNormalCart(
+                    //     $storeId,
+                    //     $currentUser->id
+                    // );
+
+                    $sessionId = $currentUser
+                        ? null
+                        : $request->header('X-Session-ID');
+
+                    $this->cartContext->setNormalCart(
+                        $storeId,
+                        $currentUser,
+                        $sessionId
+                    );
+
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Draft cart is empty.',
                     ], 404);
                 }
             }
@@ -1224,11 +1408,21 @@ class OrderController extends Controller
                 }
             }
 
-            $user = $request->user('sanctum') ?? auth('sanctum')->user();
+            // $user = $request->user('sanctum') ?? auth('sanctum')->user();
+
+            // if (!$user && $request->bearerToken()) {
+            //     $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+            //     $user  = $token?->tokenable;
+            // }
+
+            $user = $currentUser;
 
             if (!$user && $request->bearerToken()) {
-                $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
-                $user  = $token?->tokenable;
+                $token = \Laravel\Sanctum\PersonalAccessToken::findToken(
+                    $request->bearerToken()
+                );
+
+                $user = $token?->tokenable;
             }
 
             $orderEmail = strtolower(trim($validated['email'] ?? ''));
@@ -1647,28 +1841,192 @@ class OrderController extends Controller
                 ]);
             }
 
+            // try {
+            //     $cartUser = $request->user('sanctum') ?? auth('sanctum')->user();
+
+            //     if (!$cartUser && $request->bearerToken()) {
+            //         $token    = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+            //         $cartUser = $token?->tokenable;
+            //     }
+
+            //     $cartSessionId = $request->header('X-Session-ID');
+
+            //     $cartQuery = \App\Models\Cart::query()->where('store_id', $storeId);
+
+            //     if ($cartUser) {
+            //         $cartQuery->where('user_id', $cartUser->id);
+            //     } elseif (!empty($cartSessionId)) {
+            //         $cartQuery->where('session_id', $cartSessionId);
+            //     } else {
+            //         $cartQuery = null;
+            //     }
+
+            //     if ($cartQuery) {
+            //         $cartQuery->delete();
+            //     }
+            // } catch (\Exception $cartEx) {
+            //     Log::warning('CART CLEAR AFTER ORDER FAILED', [
+            //         'error'     => $cartEx->getMessage(),
+            //         'store_id'  => $storeId,
+            //         'order_ids' => collect($orders)->pluck('id'),
+            //     ]);
+            // }
+
             try {
                 $cartUser = $request->user('sanctum') ?? auth('sanctum')->user();
 
                 if (!$cartUser && $request->bearerToken()) {
-                    $token    = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+                    $token = \Laravel\Sanctum\PersonalAccessToken::findToken(
+                        $request->bearerToken()
+                    );
+
                     $cartUser = $token?->tokenable;
                 }
 
-                $cartSessionId = $request->header('X-Session-ID');
-
-                $cartQuery = \App\Models\Cart::query()->where('store_id', $storeId);
-
                 if ($cartUser) {
-                    $cartQuery->where('user_id', $cartUser->id);
-                } elseif (!empty($cartSessionId)) {
-                    $cartQuery->where('session_id', $cartSessionId);
-                } else {
-                    $cartQuery = null;
-                }
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Draft checkout
+                    |--------------------------------------------------------------------------
+                    | If this order was opened from a saved draft, remove ONLY that
+                    | draft's cart. Other saved drafts must remain untouched.
+                    */
+                    // if ($existingDraft) {
+                    //     $draftQuoteToken = $request->input('quoteToken')
+                    //         ?? $request->query('quoteToken');
 
-                if ($cartQuery) {
-                    $cartQuery->delete();
+                    //     /*
+                    //     * If quoteToken wasn't sent by frontend, get the currently
+                    //     * active draft from the persistent user context.
+                    //     */
+                    //     if (!$draftQuoteToken) {
+                    //         $draftQuoteToken = $this->cartContext->getCurrentQuoteToken(
+                    //             $storeId,
+                    //             $cartUser->id
+                    //         );
+                    //     }
+
+                    //     if ($draftQuoteToken) {
+                    //         \App\Models\Cart::query()
+                    //             ->where('store_id', $storeId)
+                    //             ->where('user_id', $cartUser->id)
+                    //             ->where('quote_token', $draftQuoteToken)
+                    //             ->where('isdraftcart', 1)
+                    //             ->delete();
+
+                    //         /*
+                    //         * After successful checkout, the user is back on their
+                    //         * normal cart context.
+                    //         */
+                    //         $this->cartContext->setNormalCart(
+                    //             $storeId,
+                    //             $cartUser->id
+                    //         );
+                    //     }
+                    // }
+
+                    if ($existingDraft) {
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Draft checkout
+                        |--------------------------------------------------------------------------
+                        |
+                        | Use the quote token resolved from the persistent backend context.
+                        | Never use a quoteToken supplied by the frontend here.
+                        |
+                        */
+                        $draftQuoteToken = $currentQuoteToken;
+
+                        if ($draftQuoteToken) {
+
+                            \App\Models\Cart::query()
+                                ->where('store_id', $storeId)
+                                ->where('user_id', $cartUser->id)
+                                ->where('quote_token', $draftQuoteToken)
+                                ->where('isdraftcart', 1)
+                                ->delete();
+
+                            /*
+                            |--------------------------------------------------------------------------
+                            | Draft has been successfully converted to an order.
+                            | Switch user back to normal cart context.
+                            |--------------------------------------------------------------------------
+                            */
+                            // $this->cartContext->setNormalCart(
+                            //     $storeId,
+                            //     $cartUser->id
+                            // );
+
+                            $sessionId = $cartUser
+                                ? null
+                                : $request->header('X-Session-ID');
+
+                            $this->cartContext->setNormalCart(
+                                $storeId,
+                                $cartUser,
+                                $sessionId
+                            );
+                        }
+                    }
+                     else {
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Normal checkout
+                        |--------------------------------------------------------------------------
+                        | Preserve existing behavior, but only delete the normal cart.
+                        | Saved draft carts are never touched.
+                        */
+                        \App\Models\Cart::query()
+                            ->where('store_id', $storeId)
+                            ->where('user_id', $cartUser->id)
+                            ->where(function ($q) {
+                                $q->whereNull('quote_token')
+                                ->orWhere('quote_token', '');
+                            })
+                            ->where(function ($q) {
+                                $q->where('isdraftcart', 0)
+                                ->orWhereNull('isdraftcart');
+                            })
+                            ->delete();
+
+                        // $this->cartContext->setNormalCart(
+                        //     $storeId,
+                        //     $cartUser->id
+                        // );
+
+                        $sessionId = $cartUser
+                            ? null
+                            : $request->header('X-Session-ID');
+
+                        $this->cartContext->setNormalCart(
+                            $storeId,
+                            $cartUser,
+                            $sessionId
+                        );
+                    }
+                } else {
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Guest checkout
+                    |--------------------------------------------------------------------------
+                    */
+                    $cartSessionId = $request->header('X-Session-ID');
+
+                    if (!empty($cartSessionId)) {
+                        \App\Models\Cart::query()
+                            ->where('store_id', $storeId)
+                            ->where('session_id', $cartSessionId)
+                            ->whereNull('user_id')
+                            ->where(function ($q) {
+                                $q->whereNull('quote_token')
+                                ->orWhere('quote_token', '');
+                            })
+                            ->where(function ($q) {
+                                $q->where('isdraftcart', 0)
+                                ->orWhereNull('isdraftcart');
+                            })
+                            ->delete();
+                    }
                 }
             } catch (\Exception $cartEx) {
                 Log::warning('CART CLEAR AFTER ORDER FAILED', [
@@ -1694,10 +2052,98 @@ class OrderController extends Controller
         }
     }
 
+    // public function getCustomerOrderDiscounts(Request $request)
+    // {
+    //     try {
+    //         $storeId = current_store_id();
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Store not selected',
+    //             ], 400);
+    //         }
+
+    //         $customerId = null;
+    //         $orderId    = null;
+
+    //         $quoteToken = $request->input('quoteToken') ?? $request->query('quoteToken');
+
+    //         if ($quoteToken) {
+    //             try {
+    //                 $payload    = $this->draftQuote->decode($quoteToken);
+    //                 $customerId = $payload['customer_id'] ?? null;
+    //                 $orderId    = $payload['order_id'] ?? null;
+    //                 $userId     = $payload['user_id'] ?? null;
+    //             } catch (\Exception $e) {
+    //                 return response()->json([
+    //                     'status'  => false,
+    //                     'message' => 'Invalid or expired token',
+    //                 ], 401);
+    //             }
+    //         }
+
+    //         if (!$customerId) {
+    //             $user = auth('sanctum')->user();
+    //             $customerId = $user?->customer_id;
+    //         }
+
+    //         if (!$customerId && !empty($userId)) {
+    //             $tokenUser = User::where('store_id', $storeId)->where('id', $userId)->first();
+    //             $customerId = $tokenUser?->customer_id;
+    //         }
+
+    //         $query = Order::query()->where('store_id', $storeId);
+
+    //         if ($orderId) {
+    //             $query->where('id', $orderId)->where('is_draft', 1);
+    //         } elseif ($customerId) {
+    //             $query->where('customer_id', $customerId)->latest('id');
+    //         } else {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'customer_id not found in token',
+    //             ], 404);
+    //         }
+
+    //         $order = $query->first();
+
+    //         if (!$order) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Order not found',
+    //             ], 404);
+    //         }
+
+    //         $data = [
+    //             'customerId'     => $order->customer_id,
+    //             'couponCode'     => $order->coupon_code,
+    //             'discountAmount' => round((float) ($order->discountAmount ?? 0), 2),
+    //             'manualDiscount' => round((float) ($order->manual_discount ?? 0), 2),
+    //         ];
+
+    //         if ((int) $order->is_draft === 1) {
+    //             $data['orderId'] = $order->id;
+    //         }
+
+    //         return response()->json([
+    //             'status'  => true,
+    //             'message' => 'Discounts retrieved successfully',
+    //             'data'    => $data,
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Failed to retrieve discounts',
+    //             'error'   => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
     public function getCustomerOrderDiscounts(Request $request)
     {
         try {
             $storeId = current_store_id();
+
             if (!$storeId) {
                 return response()->json([
                     'status'  => false,
@@ -1705,49 +2151,105 @@ class OrderController extends Controller
                 ], 400);
             }
 
-            $customerId = null;
-            $orderId    = null;
+            $user = auth('sanctum')->user();
 
-            $quoteToken = $request->input('quoteToken') ?? $request->query('quoteToken');
-
-            if ($quoteToken) {
-                try {
-                    $payload    = $this->draftQuote->decode($quoteToken);
-                    $customerId = $payload['customer_id'] ?? null;
-                    $orderId    = $payload['order_id'] ?? null;
-                    $userId     = $payload['user_id'] ?? null;
-                } catch (\Exception $e) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'Invalid or expired token',
-                    ], 401);
-                }
-            }
-
-            if (!$customerId) {
-                $user = auth('sanctum')->user();
-                $customerId = $user?->customer_id;
-            }
-
-            if (!$customerId && !empty($userId)) {
-                $tokenUser = User::where('store_id', $storeId)->where('id', $userId)->first();
-                $customerId = $tokenUser?->customer_id;
-            }
-
-            $query = Order::query()->where('store_id', $storeId);
-
-            if ($orderId) {
-                $query->where('id', $orderId)->where('is_draft', 1);
-            } elseif ($customerId) {
-                $query->where('customer_id', $customerId)->latest('id');
-            } else {
+            if (!$user) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'customer_id not found in token',
+                    'message' => 'User not authenticated.',
+                ], 401);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Get currently active draft from user cart context
+            |--------------------------------------------------------------------------
+            */
+            // $quoteToken = $this->cartContext->getCurrentQuoteToken(
+            //     $storeId,
+            //     $user->id
+            // );
+
+            $sessionId = $user
+                ? null
+                : $request->header('X-Session-ID');
+
+            $quoteToken = $this->cartContext->getCurrentQuoteToken(
+                $storeId,
+                $user,
+                $sessionId
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Normal cart
+            |--------------------------------------------------------------------------
+            |
+            | No active draft means there is no draft-specific coupon/discount.
+            |
+            */
+            if (!$quoteToken) {
+                return response()->json([
+                    'status'  => true,
+                    'message' => 'Discounts retrieved successfully',
+                    'data'    => [
+                        'customerId'     => $user->customer_id,
+                        'couponCode'     => null,
+                        'discountAmount' => 0,
+                        'manualDiscount' => 0,
+                    ],
+                ]);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Decode current draft token
+            |--------------------------------------------------------------------------
+            */
+            try {
+                $payload = $this->draftQuote->decode($quoteToken);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid or expired token',
+                ], 401);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Validate token ownership
+            |--------------------------------------------------------------------------
+            */
+            if (
+                (int) ($payload['store_id'] ?? 0) !== (int) $storeId ||
+                (int) ($payload['user_id'] ?? 0) !== (int) $user->id
+            ) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Unauthorized draft access.',
+                ], 403);
+            }
+
+            $orderId = $payload['order_id'] ?? null;
+
+            if (!$orderId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Draft order not found in token.',
                 ], 404);
             }
 
-            $order = $query->first();
+            /*
+            |--------------------------------------------------------------------------
+            | Get the currently active draft order
+            |--------------------------------------------------------------------------
+            */
+            $order = Order::query()
+                ->where('id', $orderId)
+                ->where('store_id', $storeId)
+                ->where('user_id', $user->id)
+                ->where('is_draft', 1)
+                ->first();
 
             if (!$order) {
                 return response()->json([
@@ -1756,22 +2258,25 @@ class OrderController extends Controller
                 ], 404);
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | Return current draft discount state
+            |--------------------------------------------------------------------------
+            */
             $data = [
                 'customerId'     => $order->customer_id,
                 'couponCode'     => $order->coupon_code,
                 'discountAmount' => round((float) ($order->discountAmount ?? 0), 2),
                 'manualDiscount' => round((float) ($order->manual_discount ?? 0), 2),
+                'orderId'        => $order->id,
             ];
-
-            if ((int) $order->is_draft === 1) {
-                $data['orderId'] = $order->id;
-            }
 
             return response()->json([
                 'status'  => true,
                 'message' => 'Discounts retrieved successfully',
                 'data'    => $data,
             ]);
+
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
@@ -3375,7 +3880,7 @@ class OrderController extends Controller
                             'user_id'     => $cartUser->id,
                             'product_id'  => $productId,
                             'quantity'    => $qty,
-                            'isdraftcart' => $hasPrice ? 1 : 0,
+                            'isdraftcart' => 1,
                             'quote_token' => $quoteToken,
                         ]);
 
@@ -3425,6 +3930,7 @@ class OrderController extends Controller
                     'store_id'           => $storeId,
                     'user_id'            => $formUserId,
                     'session_id'         => null,
+                    'quote_token'        => $quoteToken,
                     'billing_form_data'  => $billingFormData,
                     'shipping_form_data' => $shippingFormData,
                 ]);
@@ -3443,6 +3949,7 @@ class OrderController extends Controller
                     'store_id'     => $storeId,
                     'user_id'      => $formUserId,
                     'session_id'   => null,
+                    'quote_token' => $quoteToken,
                     'cart_ids'     => $cartIds,
                     'country'      => $shippingFormData['country'] ?? null,
                     'state'        => $shippingFormData['state'] ?? null,
@@ -3554,10 +4061,170 @@ class OrderController extends Controller
         }
     }
 
+    // public function loadSavedQuote(Request $request)
+    // {
+    //     try {
+    //         $token = $request->input('quoteToken') ?? $request->query('quoteToken');
+
+    //         if (!$token) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'quoteToken is required',
+    //             ], 422);
+    //         }
+
+    //         try {
+    //             $payload = $this->draftQuote->decode($token);
+    //         } catch (\Exception $e) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Invalid or expired quote token',
+    //             ], 401);
+    //         }
+
+    //         $storeId = (int) ($payload['store_id'] ?? 0);
+    //         $orderId = (int) ($payload['order_id'] ?? 0);
+    //         $userId  = (int) ($payload['user_id'] ?? 0);
+    //         $email   = $payload['email'] ?? null;
+
+    //         $order = Order::query()
+    //             ->with([
+    //                 'items.product.images',
+    //                 'items.product.brand',
+    //                 'customer',
+    //                 'billingInformation',
+    //                 'notes:id,order_id,note',
+    //                 'payment',
+    //                 'shipment',
+    //                 'manualDiscounts:id,order_id,discount_amount',
+    //             ])
+    //             ->withCount('messages')
+    //             ->where('id', $orderId)
+    //             ->where('store_id', $storeId)
+    //             ->where('is_draft', 1)
+    //             ->first();
+
+    //         if (!$order) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Draft order not found',
+    //             ], 404);
+    //         }
+
+    //         $user = null;
+
+    //         if ($userId) {
+    //             $user = User::where('store_id', $storeId)->where('id', $userId)->first();
+    //         }
+
+    //         if (!$user && $email) {
+    //             $user = User::where('store_id', $storeId)->where('email', $email)->first();
+    //         }
+
+    //         if (!$user && $order->customer_id) {
+    //             $user = User::where('store_id', $storeId)
+    //                 ->where('customer_id', $order->customer_id)
+    //                 ->first();
+    //         }
+
+    //         $headerUser = auth('sanctum')->user();
+
+    //         if (!$headerUser || !$user || (int) $headerUser->id !== (int) $user->id) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'User not found',
+    //             ], 403);
+    //         }
+
+    //         $alreadyLoggedIn = true;
+    //         $authToken = null;
+
+    //         $data = (new OrderResource($order))->resolve();
+    //         unset($data['products']);
+
+    //         $billingPm = $data['billingInformation']['paymentMethod']
+    //             ?? $data['billingInformation']['payment_method']
+    //             ?? null;
+
+    //         $hasPayment = !empty($data['payment'])
+    //             || (!empty($billingPm) && strtolower((string) $billingPm) !== 'n/a');
+
+    //         $data['paymentMethod'] = $hasPayment
+    //             ? [
+    //                 'method'          => $billingPm ?: 'Credit Card (Via Stripe)',
+    //                 'paymentStatus'   => $data['payment']['payment_status'] ?? null,
+    //                 'paymentIntentId' => $data['payment']['payment_intent_id'] ?? null,
+    //                 'amount'          => $data['payment']['amount'] ?? null,
+    //                 'riskLevel'       => $data['payment']['risk_level'] ?? null,
+    //             ]
+    //             : ['method' => 'draft'];
+
+    //         $data['isDraft']    = true;
+    //         $data['isDraftUrl'] = $order->isdrafturl;
+
+    //         $savedShipping = $order->billingInformation->shipping_data ?? [];
+    //         if (is_string($savedShipping)) {
+    //             $savedShipping = json_decode($savedShipping, true) ?: [];
+    //         }
+
+    //         $rate = \App\Models\CartShippingRate::query()
+    //             ->where('store_id', $storeId)
+    //             ->where('user_id', $user->id)
+    //             ->latest('id')
+    //             ->first();
+
+    //         $displayName = $savedShipping['display_name']
+    //             ?? $savedShipping['label']
+    //             ?? $order->billingInformation->shipping_method
+    //             ?? null;
+
+    //         $data['shippingMethod'] = [
+    //             'method_id'     => $savedShipping['method_id'] ?? $order->shipping_method ?? null,
+    //             'method_type'   => $savedShipping['method_type'] ?? $rate?->method_type ?? null,
+    //             'display_name'  => $displayName,
+    //             'total_charge'  => $savedShipping['total_charge'] ?? $rate?->total_charge ?? $order->shipping_cost,
+    //             'currency'      => $savedShipping['currency'] ?? 'USD',
+    //             'transit_days'  => $savedShipping['transit_days'] ?? null,
+    //             'delivery_date' => $savedShipping['delivery_date'] ?? null,
+    //             'service_type'  => $savedShipping['service_type'] ?? $rate?->service_type ?? null,
+    //             'is_fedex'      => $savedShipping['is_fedex']
+    //                 ?? str_contains(strtolower((string) $displayName), 'fedex'),
+    //             'provider'      => $savedShipping['provider']
+    //                 ?? $order->shipping_provider
+    //                 ?? $displayName,
+    //             'method'        => $savedShipping['method']
+    //                 ?? $savedShipping['data']
+    //                 ?? $displayName,
+    //             'cost'          => $savedShipping['cost'] ?? $order->shipping_cost,
+    //             'data'          => $savedShipping['data'] ?? $savedShipping['label'] ?? $displayName,
+    //         ];
+
+    //         return response()->json([
+    //             'status'  => true,
+    //             'message' => 'Saved quote loaded',
+    //             'alreadyLoggedIn' => $alreadyLoggedIn,
+    //             'token'   => $authToken,
+    //             'user'    => [
+    //                 'id'    => $user->id,
+    //                 'email' => $user->email,
+    //                 'name'  => $user->name,
+    //             ],
+    //             'data'    => $data,
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Failed to load saved quote',
+    //             'error'   => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
     public function loadSavedQuote(Request $request)
     {
         try {
-            $token = $request->input('quoteToken') ?? $request->query('quoteToken');
+            $token = $request->input('quoteToken')
+                ?? $request->query('quoteToken');
 
             if (!$token) {
                 return response()->json([
@@ -3566,6 +4233,11 @@ class OrderController extends Controller
                 ], 422);
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | Decode quote token
+            |--------------------------------------------------------------------------
+            */
             try {
                 $payload = $this->draftQuote->decode($token);
             } catch (\Exception $e) {
@@ -3580,6 +4252,18 @@ class OrderController extends Controller
             $userId  = (int) ($payload['user_id'] ?? 0);
             $email   = $payload['email'] ?? null;
 
+            if (!$storeId || !$orderId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid quote token',
+                ], 401);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Find draft order
+            |--------------------------------------------------------------------------
+            */
             $order = Order::query()
                 ->with([
                     'items.product.images',
@@ -3604,35 +4288,134 @@ class OrderController extends Controller
                 ], 404);
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | Resolve draft owner
+            |--------------------------------------------------------------------------
+            */
             $user = null;
 
             if ($userId) {
-                $user = User::where('store_id', $storeId)->where('id', $userId)->first();
+                $user = User::query()
+                    ->where('store_id', $storeId)
+                    ->where('id', $userId)
+                    ->first();
             }
 
             if (!$user && $email) {
-                $user = User::where('store_id', $storeId)->where('email', $email)->first();
+                $user = User::query()
+                    ->where('store_id', $storeId)
+                    ->where('email', $email)
+                    ->first();
             }
 
             if (!$user && $order->customer_id) {
-                $user = User::where('store_id', $storeId)
+                $user = User::query()
+                    ->where('store_id', $storeId)
                     ->where('customer_id', $order->customer_id)
                     ->first();
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | Verify authenticated user
+            |--------------------------------------------------------------------------
+            */
             $headerUser = auth('sanctum')->user();
 
-            if (!$headerUser || !$user || (int) $headerUser->id !== (int) $user->id) {
+            if (
+                !$headerUser ||
+                !$user ||
+                (int) $headerUser->id !== (int) $user->id
+            ) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'User not found',
                 ], 403);
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | Make sure this draft still has active cart items.
+            |
+            | Cart has no relationship with OrderCartItemProduct, so we use
+            | quote_token directly.
+            |--------------------------------------------------------------------------
+            */
+            $draftCartExists = \App\Models\Cart::query()
+                ->where('store_id', $storeId)
+                ->where('user_id', $user->id)
+                ->where('quote_token', $token)
+                ->where('isdraftcart', 1)
+                ->exists();
+
+            if (!$draftCartExists) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Draft cart is no longer available',
+                ], 404);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Switch current cart context
+            |
+            | Transaction:
+            |
+            | 1. Soft-delete current normal cart.
+            | 2. Make this draft the current cart.
+            |
+            | Other draft carts are NOT touched.
+            |--------------------------------------------------------------------------
+            */
+            DB::transaction(function () use (
+                $storeId,
+                $user,
+                $token
+            ) {
+                /*
+                * Soft-delete only the user's normal cart.
+                */
+                \App\Models\Cart::query()
+                    ->where('store_id', $storeId)
+                    ->where('user_id', $user->id)
+                    ->where(function ($q) {
+                        $q->whereNull('quote_token')
+                        ->orWhere('quote_token', '');
+                    })
+                    ->where(function ($q) {
+                        $q->where('isdraftcart', 0)
+                        ->orWhereNull('isdraftcart');
+                    })
+                    ->delete();
+
+                /*
+                * Make this draft the current cart.
+                */
+                // $this->cartContext->setCurrentDraft(
+                //     $storeId,
+                //     $user->id,
+                //     $token
+                // );
+
+                $this->cartContext->setCurrentDraft(
+                    $storeId,
+                    $user,
+                    null,
+                    $token
+                );
+            });
+
+            /*
+            |--------------------------------------------------------------------------
+            | Existing response preparation
+            |--------------------------------------------------------------------------
+            */
             $alreadyLoggedIn = true;
             $authToken = null;
 
             $data = (new OrderResource($order))->resolve();
+
             unset($data['products']);
 
             $billingPm = $data['billingInformation']['paymentMethod']
@@ -3640,7 +4423,10 @@ class OrderController extends Controller
                 ?? null;
 
             $hasPayment = !empty($data['payment'])
-                || (!empty($billingPm) && strtolower((string) $billingPm) !== 'n/a');
+                || (
+                    !empty($billingPm)
+                    && strtolower((string) $billingPm) !== 'n/a'
+                );
 
             $data['paymentMethod'] = $hasPayment
                 ? [
@@ -3650,19 +4436,32 @@ class OrderController extends Controller
                     'amount'          => $data['payment']['amount'] ?? null,
                     'riskLevel'       => $data['payment']['risk_level'] ?? null,
                 ]
-                : ['method' => 'draft'];
+                : [
+                    'method' => 'draft',
+                ];
 
             $data['isDraft']    = true;
             $data['isDraftUrl'] = $order->isdrafturl;
 
+            /*
+            |--------------------------------------------------------------------------
+            | Shipping
+            |--------------------------------------------------------------------------
+            */
             $savedShipping = $order->billingInformation->shipping_data ?? [];
+
             if (is_string($savedShipping)) {
                 $savedShipping = json_decode($savedShipping, true) ?: [];
             }
 
+            /*
+            * IMPORTANT:
+            * Get the shipping rate for THIS draft only.
+            */
             $rate = \App\Models\CartShippingRate::query()
                 ->where('store_id', $storeId)
                 ->where('user_id', $user->id)
+                ->where('quote_token', $token)
                 ->latest('id')
                 ->first();
 
@@ -3672,26 +4471,106 @@ class OrderController extends Controller
                 ?? null;
 
             $data['shippingMethod'] = [
-                'method_id'     => $savedShipping['method_id'] ?? $order->shipping_method ?? null,
-                'method_type'   => $savedShipping['method_type'] ?? $rate?->method_type ?? null,
+                'method_id'     => $savedShipping['method_id']
+                    ?? $order->shipping_method
+                    ?? null,
+
+                'method_type'   => $savedShipping['method_type']
+                    ?? $rate?->method_type
+                    ?? null,
+
                 'display_name'  => $displayName,
-                'total_charge'  => $savedShipping['total_charge'] ?? $rate?->total_charge ?? $order->shipping_cost,
-                'currency'      => $savedShipping['currency'] ?? 'USD',
-                'transit_days'  => $savedShipping['transit_days'] ?? null,
-                'delivery_date' => $savedShipping['delivery_date'] ?? null,
-                'service_type'  => $savedShipping['service_type'] ?? $rate?->service_type ?? null,
+
+                'total_charge'  => $savedShipping['total_charge']
+                    ?? $rate?->total_charge
+                    ?? $order->shipping_cost,
+
+                'currency'      => $savedShipping['currency']
+                    ?? 'USD',
+
+                'transit_days'  => $savedShipping['transit_days']
+                    ?? null,
+
+                'delivery_date' => $savedShipping['delivery_date']
+                    ?? null,
+
+                'service_type'  => $savedShipping['service_type']
+                    ?? $rate?->service_type
+                    ?? null,
+
                 'is_fedex'      => $savedShipping['is_fedex']
-                    ?? str_contains(strtolower((string) $displayName), 'fedex'),
+                    ?? str_contains(
+                        strtolower((string) $displayName),
+                        'fedex'
+                    ),
+
                 'provider'      => $savedShipping['provider']
                     ?? $order->shipping_provider
                     ?? $displayName,
+
                 'method'        => $savedShipping['method']
                     ?? $savedShipping['data']
                     ?? $displayName,
-                'cost'          => $savedShipping['cost'] ?? $order->shipping_cost,
-                'data'          => $savedShipping['data'] ?? $savedShipping['label'] ?? $displayName,
+
+                'cost'          => $savedShipping['cost']
+                    ?? $order->shipping_cost,
+
+                'data'          => $savedShipping['data']
+                    ?? $savedShipping['label']
+                    ?? $displayName,
             ];
 
+            /*
+            |--------------------------------------------------------------------------
+            | Checkout form data
+            |--------------------------------------------------------------------------
+            |
+            | Load checkout information belonging ONLY to this draft.
+            | Never use the latest checkout record globally because another
+            | draft may have different billing/shipping information.
+            |
+            */
+            $checkoutFormData = CheckoutFormData::query()
+                ->where('store_id', $storeId)
+                ->where('user_id', $user->id)
+                ->where('quote_token', $token)
+                ->latest('id')
+                ->first();
+
+            if ($checkoutFormData) {
+
+                $billingFormData = $checkoutFormData->billing_form_data ?? [];
+
+                if (is_string($billingFormData)) {
+                    $billingFormData = json_decode($billingFormData, true) ?: [];
+                }
+
+                $shippingFormData = $checkoutFormData->shipping_form_data ?? [];
+
+                if (is_string($shippingFormData)) {
+                    $shippingFormData = json_decode($shippingFormData, true) ?: [];
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Restore billing information
+                |--------------------------------------------------------------------------
+                */
+                $data['billingFormData'] = $billingFormData;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Restore shipping information
+                |--------------------------------------------------------------------------
+                */
+                $data['shippingFormData'] = $shippingFormData;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Existing response - DO NOT CHANGE
+            |--------------------------------------------------------------------------
+            */
             return response()->json([
                 'status'  => true,
                 'message' => 'Saved quote loaded',
@@ -3704,6 +4583,7 @@ class OrderController extends Controller
                 ],
                 'data'    => $data,
             ]);
+
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
@@ -3712,6 +4592,7 @@ class OrderController extends Controller
             ], 500);
         }
     }
+    
     private function validateStripeCard(array $pm): array
     {
         $errors = [];
@@ -4333,6 +5214,7 @@ class OrderController extends Controller
                         'store_id'           => $storeId,
                         'user_id'            => $formUserId,
                         'session_id'         => $sessionId,
+                        'quote_token'        => $quoteToken ?? null,
                         'billing_form_data'  => $formAddress,
                         'shipping_form_data' => $billingInput,
                     ]);
@@ -4351,6 +5233,7 @@ class OrderController extends Controller
                         'store_id'     => $storeId,
                         'user_id'      => $formUserId,
                         'session_id'   => $sessionId,
+                        'quote_token' => $quoteToken,
                         'cart_ids'     => $cartIds,
                         'country'      => $billingInput['country'] ?? null,
                         'state'        => $billingInput['state'] ?? null,
@@ -4911,7 +5794,7 @@ class OrderController extends Controller
                                 'user_id'     => $storeUser->id,
                                 'product_id'  => $productId,
                                 'quantity'    => $qty,
-                                'isdraftcart' => $hasPrice ? 1 : 0,
+                                'isdraftcart' => 1,
                                 'quote_token' => $quoteToken,
                             ]);
 
@@ -4934,6 +5817,7 @@ class OrderController extends Controller
                         'store_id'           => $storeId,
                         'user_id'            => $formUserId,
                         'session_id'         => $sessionId,
+                        'quote_token'        => $quoteToken,
                         'billing_form_data'  => [
                             'firstName'    => $formAddress['firstName'] ?? $validated['firstName'] ?? null,
                             'lastName'     => $formAddress['lastName'] ?? $validated['lastName'] ?? null,
@@ -4977,6 +5861,7 @@ class OrderController extends Controller
                         'store_id'     => $storeId,
                         'user_id'      => $formUserId,
                         'session_id'   => $sessionId,
+                        'quote_token' => $quoteToken,
                         'cart_ids'     => $cartIds,
                         'country'      => $shippingAddress['country'] ?? $billingInput['country'] ?? null,
                         'state'        => $shippingAddress['state'] ?? $billingInput['state'] ?? null,
@@ -5961,5 +6846,88 @@ class OrderController extends Controller
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function getCurrentDraftOrder(
+        Request $request,
+        int $storeId,
+        $user
+    ): ?Order {
+        if (!$user) {
+            return null;
+        }
+
+        $sessionId = $user
+            ? null
+            : $request->header('X-Session-ID');
+
+        $quoteToken = $this->cartContext->getCurrentQuoteToken(
+            $storeId,
+            $user,
+            $sessionId
+        );
+
+        if (!$quoteToken) {
+            return null;
+        }
+
+        try {
+            $payload = $this->draftQuote->decode($quoteToken);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        if (
+            (int) ($payload['store_id'] ?? 0) !== $storeId ||
+            (int) ($payload['user_id'] ?? 0) !== (int) $user->id
+        ) {
+            return null;
+        }
+
+        return Order::query()
+            ->where('id', $payload['order_id'] ?? 0)
+            ->where('store_id', $storeId)
+            ->where('user_id', $user->id)
+            ->where('is_draft', 1)
+            ->first();
+    }
+
+    public function getCurrentCartDiscounts(Request $request)
+    {
+        $storeId = (int) $request->store_id;
+        $user = auth('sanctum')->user();
+
+        if (!$user) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Authentication required.',
+            ], 401);
+        }
+
+        $draftOrder = $this->getCurrentDraftOrder(
+            $request,
+            $storeId,
+            $user
+        );
+
+        if ($draftOrder) {
+            return response()->json([
+                'status' => true,
+                'data' => [
+                    'couponCode'     => $draftOrder->coupon_code,
+                    'discountAmount' => (float) ($draftOrder->discountAmount ?? 0),
+                    'manualDiscount' => (float) ($draftOrder->manualDiscount ?? 0),
+                ],
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'data' => [
+                'couponCode'     => null,
+                'discountAmount' => 0,
+                'manualDiscount' => 0,
+            ],
+        ]);
     }
 }

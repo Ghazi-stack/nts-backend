@@ -10,6 +10,7 @@ class CheckoutFormData extends Model
         'store_id',
         'user_id',
         'session_id',
+        'quote_token',
         'billing_form_data',
         'shipping_form_data',
     ];
