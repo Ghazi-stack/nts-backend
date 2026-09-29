@@ -528,6 +528,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
             Route::post('/update-promotion/{id}', 'update');
             Route::delete('/delete-promotion/{id}', 'destroy');
             Route::get('/download-codes/{id}', 'downloadCodes');
+            Route::get('/list-codes/{id}', 'listCodes');
         });
     });
 

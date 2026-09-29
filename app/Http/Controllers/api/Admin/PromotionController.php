@@ -207,19 +207,58 @@ class PromotionController extends Controller
 
     public function downloadCodes($id)
     {
-        $storeId    = current_store_id();
-        $promotion  = Promotion::where('store_id', $storeId)->findOrFail($id);
-        $codes      = PromotionCouponCode::where('promotion_id', $promotion->id)->pluck('code');
-        $filename   = 'coupon-codes-' . $promotion->id . '.csv';
+        $storeId   = current_store_id();
+        $promotion = Promotion::where('store_id', $storeId)->findOrFail($id);
+        $rows      = PromotionCouponCode::where('promotion_id', $promotion->id)
+            ->orderBy('id')
+            ->get();
 
-        return response()->streamDownload(function () use ($codes) {
+        $filename = 'coupon-codes-' . $promotion->id . '.csv';
+
+        return response()->streamDownload(function () use ($rows) {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['code']);
-            foreach ($codes as $code) {
-                fputcsv($out, [$code]);
+            fputcsv($out, ['Code', 'Uses', 'Created', 'Last used']);
+
+            foreach ($rows as $row) {
+                fputcsv($out, [
+                    $row->code,
+                    $row->status === 'used' ? 1 : 0,
+                    optional($row->created_at)?->toIso8601String(),
+                    optional($row->used_at)?->toIso8601String() ?: '',
+                ]);
             }
             fclose($out);
         }, $filename, ['Content-Type' => 'text/csv']);
+    }
+
+    public function listCodes($id)
+    {
+        $storeId   = current_store_id();
+        $promotion = Promotion::where('store_id', $storeId)->findOrFail($id);
+        $rows      = PromotionCouponCode::where('promotion_id', $promotion->id)
+            ->orderBy('id')
+            ->get();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Coupon codes fetched',
+            'data'    => [
+                'promotionId' => $promotion->id,
+                'count'       => $rows->count(),
+                'codes'       => $rows->map(function ($row) {
+                    return [
+                        'id'        => $row->id,
+                        'code'      => $row->code,
+                        'status'    => $row->status,
+                        'uses'      => $row->status === 'used' ? 1 : 0,
+                        'validFrom' => optional($row->valid_from)?->toDateTimeString(),
+                        'validUntil' => optional($row->valid_until)?->toDateTimeString(),
+                        'created'   => optional($row->created_at)?->toDateTimeString(),
+                        'lastUsed'  => optional($row->used_at)?->toDateTimeString(),
+                    ];
+                })->values(),
+            ],
+        ]);
     }
 
     private function saveCouponCodes(Promotion $promotion, $storeId, array $validated, array $coupon): int
