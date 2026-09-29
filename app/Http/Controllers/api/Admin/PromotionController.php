@@ -101,10 +101,13 @@ class PromotionController extends Controller
         try {
             $storeId = current_store_id();
             if (!$storeId) {
-                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
             }
 
-            $data = $request->validate([
+            $validated = $request->validate([
                 'kind'             => ['nullable', Rule::in(['automatic', 'coupon'])],
                 'name'             => ['required', 'string', 'max:255'],
                 'displayName'      => ['nullable', 'string', 'max:255'],
@@ -120,50 +123,43 @@ class PromotionController extends Controller
                 'canCombine'       => ['nullable', 'boolean'],
                 'startsAt'         => ['nullable', 'date'],
                 'endsAt'           => ['nullable', 'date', 'after_or_equal:startsAt'],
-
-                'rules'                    => ['required', 'array'],
-                'rules.source'             => ['required', Rule::in(['custom', 'cart', 'shipping'])],
-                'rules.template'           => ['nullable', 'string'],
-                'rules.condition'          => ['nullable', 'array'],
-                'rules.condition.type'     => ['nullable', Rule::in(['none', 'buys_products', 'order_subtotal'])],
-                'rules.reward'             => ['nullable', 'array'],
-                'rules.reward.type'        => ['nullable', 'string'],
-                'rules.apply_frequency'    => ['nullable', Rule::in(['once', 'unlimited'])],
-                'rules.apply_per'          => ['nullable', 'string'],
-
+                'rules'            => ['required', 'array'],
+                'rules.source'     => ['required', Rule::in(['custom', 'cart', 'shipping'])],
                 'schedule'         => ['nullable', 'array'],
                 'targeting'        => ['nullable', 'array'],
                 'banners'          => ['nullable', 'array'],
             ]);
 
-            $isFeatured = (bool) ($data['isFeatured'] ?? false);
-            $kind = $data['kind'] ?? 'automatic';
-            $rules = $data['rules'];
+            $isFeatured = (bool) ($validated['isFeatured'] ?? false);
+            $kind       = $validated['kind'] ?? 'automatic';
+            $rules      = $request->input('rules');
 
             $promotion = Promotion::create([
                 'store_id'           => $storeId,
                 'kind'               => $kind,
-                'type'               => $rules['source'],
-                'name'               => $data['name'],
-                'display_name'       => $data['displayName'] ?? null,
-                'status'             => $data['status'],
-                'priority'           => $data['priority'] ?? 0,
-                'currency'           => $data['currency'] ?? null,
-                'channel'            => $data['channel'] ?? 'any',
+                'type'               => $rules['source'] ?? 'custom',
+                'name'               => $validated['name'],
+                'display_name'       => $validated['displayName'] ?? null,
+                'status'             => $validated['status'],
+                'priority'           => $validated['priority'] ?? 0,
+                'currency'           => $validated['currency'] ?? null,
+                'channel'            => $validated['channel'] ?? 'any',
                 'is_featured'        => $isFeatured,
-                'featured_message'   => $isFeatured ? ($data['featuredMessage'] ?? null) : null,
-                'code'               => ($kind === 'coupon' && !empty($data['code'])) ? strtoupper($data['code']) : null,
-                'max_redemptions'    => $data['maxRedemptions'] ?? null,
-                'per_customer_limit' => $data['perCustomerLimit'] ?? null,
+                'featured_message'   => $isFeatured ? ($validated['featuredMessage'] ?? null) : null,
+                'code'               => ($kind === 'coupon' && !empty($validated['code']))
+                    ? strtoupper($validated['code'])
+                    : null,
+                'max_redemptions'    => $validated['maxRedemptions'] ?? null,
+                'per_customer_limit' => $validated['perCustomerLimit'] ?? null,
                 'redemptions'        => 0,
-                'can_combine'        => $data['canCombine'] ?? true,
+                'can_combine'        => $validated['canCombine'] ?? true,
                 'conditions'         => $rules,
                 'actions'            => $rules['reward'] ?? null,
-                'starts_at'          => $data['startsAt'] ?? null,
-                'ends_at'            => $data['endsAt'] ?? null,
-                'schedule'           => $data['schedule'] ?? null,
-                'targeting'          => $data['targeting'] ?? null,
-                'banners'            => $data['banners'] ?? null,
+                'starts_at'          => $validated['startsAt'] ?? null,
+                'ends_at'            => $validated['endsAt'] ?? null,
+                'schedule'           => $request->input('schedule'),
+                'targeting'          => $request->input('targeting'),
+                'banners'            => $request->input('banners'),
             ]);
 
             return response()->json([
@@ -175,7 +171,11 @@ class PromotionController extends Controller
             throw $e;
         } catch (\Exception $e) {
             Log::error('Error creating promotion: ' . $e->getMessage());
-            return response()->json(['status' => false, 'message' => 'Failed to create promotion'], 500);
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to create promotion',
+                'error'   => $e->getMessage(),
+            ], 500);
         }
     }
 
