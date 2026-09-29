@@ -13,6 +13,7 @@ use Illuminate\Validation\ValidationException;
 use Exception;
 use Illuminate\Support\Facades\Validator;
 use App\Services\CartContextService;
+use Illuminate\Support\Facades\DB;
 
 class CartController extends Controller
 {
