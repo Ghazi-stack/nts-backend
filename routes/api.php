@@ -323,7 +323,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
     // ===================== CUSTOMERS =====================
     Route::prefix('customers')->middleware('permission:all_customers')->group(function () {
-
+        Route::get('customers/by-email', [CustomerController::class, 'showByEmail']);
         Route::put('/update-customer/{id}', [CustomerController::class, 'update']);
         Route::delete('/delete-customer/{id?}', [CustomerController::class, 'destroy']);
     });

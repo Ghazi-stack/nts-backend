@@ -269,6 +269,45 @@ class CustomerController extends Controller
         }
     }
 
+    public function showByEmail(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.'
+                ], 400);
+            }
+
+            $request->validate([
+                'email' => 'required|email',
+            ]);
+
+            $customer = Customer::where('store_id', $storeId)
+                ->where('email', $request->query('email'))
+                ->first();
+
+            if (!$customer) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Customer not found.'
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => true,
+                'email' => $customer->email
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     // public function store(Request $request)
     // {
     //     try {
