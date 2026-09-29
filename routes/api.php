@@ -441,6 +441,14 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== SETTINGS =====================
+
+    // URL Settings
+    Route::post('/url-settings/product', [UrlSettingController::class, 'updateProduct']);
+    Route::post('/url-settings/category', [UrlSettingController::class, 'updateCategory']);
+    Route::post('/url-settings/webpage', [UrlSettingController::class, 'updateWebpage']);
+    Route::get('/url-settings/{entity}', [UrlSettingController::class, 'show']);
+
+
     Route::middleware('permission:settings')->group(function () {
         // Store Setting
         Route::prefix('store-setting')->controller(StoreSettingController::class)->group(function () {
@@ -448,11 +456,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
             Route::post('/add-store-setting', 'store');
         });
 
-        // URL Settings
-        Route::post('/url-settings/product', [UrlSettingController::class, 'updateProduct']);
-        Route::post('/url-settings/category', [UrlSettingController::class, 'updateCategory']);
-        Route::post('/url-settings/webpage', [UrlSettingController::class, 'updateWebpage']);
-        Route::get('/url-settings/{entity}', [UrlSettingController::class, 'show']);
+
 
         // Store Shipping Address
         Route::prefix('store-shipping-address')->controller(StoreShippingAddressController::class)->group(function () {
