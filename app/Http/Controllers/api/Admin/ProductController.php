@@ -1847,27 +1847,23 @@ class ProductController extends Controller
                 'query' => 'required|string|min:1'
             ]);
 
-            $queryStr = $request->input('query');
+            $queryStr = trim($request->input('query'));
             $page = (int) $request->input('page', 1);
             $pageSize = (int) $request->input('pageSize', 50);
 
-            // Cache key with query + page
-            $cacheKey = "product_search_store_{$storeId}_query_" . md5($queryStr) . "_page_{$page}_size_{$pageSize}";
+            $cacheKey = "product_search_store_{$storeId}_query_" . md5(strtolower($queryStr)) . "_page_{$page}_size_{$pageSize}";
 
-            // Cache results for 30 seconds
             $products = Cache::remember($cacheKey, 30, function () use ($queryStr, $storeId, $page, $pageSize) {
 
-                // Escape special LIKE characters to prevent SQL issues
                 $escapedQuery = str_replace(['%', '_'], ['\\%', '\\_'], $queryStr);
                 $likeQuery = "%{$escapedQuery}%";
                 $startsWithQuery = "{$escapedQuery}%";
+                $exactQuery = $queryStr;
 
-                // Step 1: Get matching category IDs separately (faster than orWhereHas subquery)
                 $matchingCategoryIds = Category::where('store_id', $storeId)
                     ->where('name', 'like', $likeQuery)
                     ->pluck('id');
 
-                // Step 2: Get matching brand IDs separately
                 $matchingBrandIds = Brand::where('store_id', $storeId)
                     ->where('name', 'like', $likeQuery)
                     ->pluck('id');
@@ -1880,7 +1876,6 @@ class ProductController extends Controller
                             ->orWhere('slug', 'like', $likeQuery)
                             ->orWhere('search_keywords', 'like', $likeQuery);
 
-                        // Use whereIn instead of orWhereHas (avoids correlated subquery)
                         if ($matchingBrandIds->isNotEmpty()) {
                             $q->orWhereIn('brand_id', $matchingBrandIds);
                         }
@@ -1897,18 +1892,31 @@ class ProductController extends Controller
                     ])
                     ->orderByRaw("
                     CASE
-                        WHEN name = ? THEN 0
-                        WHEN name LIKE ? THEN 1
-                        WHEN name LIKE ? THEN 2
-                        ELSE 3
+                        WHEN UPPER(sku) = UPPER(?) THEN 0
+                        WHEN UPPER(name) = UPPER(?) THEN 1
+                        WHEN UPPER(sku) LIKE UPPER(?) THEN 2
+                        WHEN UPPER(name) LIKE UPPER(?) THEN 3
+                        WHEN UPPER(sku) LIKE UPPER(?) THEN 4
+                        WHEN UPPER(name) LIKE UPPER(?) THEN 5
+                        WHEN UPPER(slug) LIKE UPPER(?) THEN 6
+                        WHEN UPPER(search_keywords) LIKE UPPER(?) THEN 7
+                        ELSE 8
                     END
-                ", [$queryStr, $startsWithQuery, $likeQuery])
+                ", [
+                        $exactQuery,
+                        $exactQuery,
+                        $startsWithQuery,
+                        $startsWithQuery,
+                        $likeQuery,
+                        $likeQuery,
+                        $likeQuery,
+                        $likeQuery,
+                    ])
                     ->orderBy('name', 'asc');
 
                 return $query->paginate($pageSize, ['*'], 'page', $page);
             });
 
-            // Background mein search count update (non-blocking)
             if ($products->isNotEmpty()) {
                 $productIds = $products->pluck('id')->toArray();
 
@@ -1923,7 +1931,7 @@ class ProductController extends Controller
                     DB::statement("
                     INSERT INTO product_searches (product_id, store_id, search_count, created_at, updated_at)
                     VALUES {$values}
-                    ON DUPLICATE KEY UPDATE 
+                    ON DUPLICATE KEY UPDATE
                         search_count = search_count + 1,
                         updated_at = NOW()
                 ");
