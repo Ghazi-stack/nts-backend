@@ -152,7 +152,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
     // ===================== ORDERS =====================
     Route::prefix('orders')->middleware('permission:all_orders')->controller(OrderController::class)->group(function () {
-        Route::get('/list-orders', 'index');
+
         Route::get('/dashboard/overview', 'overview');
         Route::get('/show-order/{id}', 'show');
         Route::patch('/update-status/{id}', 'updateOrderStatus');
@@ -173,6 +173,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         ->middleware('auth:sanctum');
     // Orders — Add
     Route::prefix('orders')->middleware('permission:add_order')->controller(OrderController::class)->group(function () {
+
         Route::post('/existing-customer', 'storeFromDashboard');
         Route::post('/new-customer', 'storeNewCustomerOrder');
     });
@@ -188,7 +189,8 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Orders — Draft
-    Route::prefix('orders')->middleware('permission:draft_orders')->controller(OrderController::class)->group(function () {
+    Route::prefix('orders')->controller(OrderController::class)->group(function () {
+        Route::get('/list-orders', 'index');
         Route::get('/list-drafts', 'listDraftOrders');
         Route::post('/create-draft', 'createDraftOrder');
         Route::get('/get-draft-order', 'getDraftOrders');
@@ -196,15 +198,17 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
     // Orders — Shipments
     Route::prefix('shipments')->middleware('permission:shipments')->controller(ShipmentController::class)->group(function () {
-        Route::get('/list-shipment', 'index');
-        Route::get('/get-shipment/{id}', 'show');
-        Route::get('/shipment-by-order', 'getShipmentByOrderId');
         Route::post('/add-shipment', 'store');
         Route::put('/update-shipment/{id}', 'update');
         Route::delete('/destroy-shipment', 'destroy');
         Route::get('/packing-slip/{ids}', 'printPackingSlip');
         Route::post('/advanced-search', 'advancedSearch');
         Route::get('/export-csv', 'exportCSV');
+    });
+    Route::prefix('shipments')->controller(ShipmentController::class)->group(function () {
+        Route::get('/list-shipment', 'index');
+        Route::get('/get-shipment/{id}', 'show');
+        Route::get('/shipment-by-order', 'getShipmentByOrderId');
     });
 
     // Orders — Return Request
@@ -223,25 +227,27 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
     // Order Items
     Route::prefix('order-items')->middleware('permission:all_orders')->controller(OrderItemController::class)->group(function () {
-        Route::get('/{orderId}', 'index');
         Route::post('/add/{orderId}', 'store');
         Route::put('/update/{id}', 'update');
         Route::delete('/delete/{id}', 'destroy');
     });
+    Route::prefix('order-items')->controller(OrderItemController::class)->group(function () {
+        Route::get('/{orderId}', 'index');
+    });
 
     // ===================== PRODUCTS =====================
     Route::prefix('products')->middleware('permission:all_products')->controller(ProductController::class)->group(function () {
+        Route::put('/update-product', 'updateProduct');
+        Route::post('/update-single-product/{id}', 'updateSingleProduct');
+        Route::get('/product/{id}', 'show');
+        Route::delete('/delete-product/categories', 'destroyProductCategories');
+        Route::delete('/delete-product/{id?}', 'destroyProduct');
+    });
+    Route::prefix('products')->controller(ProductController::class)->group(function () {
         Route::get('/products-list', 'index');
         Route::get('/purchasable-products', 'purchasableProducts');
         Route::get('/products-filter', 'filterProducts');
-        Route::get('/product/{id}', 'show');
         Route::get('/show-product/{slug}', 'showProduct');
-        Route::put('/update-product', 'updateProduct');
-        Route::post('/update-single-product/{id}', 'updateSingleProduct');
-
-        Route::delete('/delete-product/categories', 'destroyProductCategories');
-        Route::delete('/delete-product/{id?}', 'destroyProduct');
-
         Route::get('/featured-products', 'featuredProducts');
     });
 
@@ -270,9 +276,6 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
     // Products — Categories
     Route::prefix('categories')->middleware('permission:categories')->controller(CategoryController::class)->group(function () {
-        Route::get('/list-categories', 'listCategory');
-        Route::get('/category/{id}', 'show');
-        Route::get('/slug/{slug}', 'showBySlug');
         Route::post('/add-categories', 'storeCategory');
         Route::put('/update-category/{id}', 'updateSingleCategory');
         Route::put('/update-bulk-category', 'updateBulkCategory');
@@ -280,11 +283,15 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::delete('/delete-subcategories/{id}', 'destroyOnlySubcategories');
         Route::post('/update-categorySingle/{id}', 'updateCategoryExtras');
     });
+    Route::prefix('categories')->controller(CategoryController::class)->group(function () {
+        Route::get('/list-categories', 'listCategory');
+        Route::get('/category/{id}', 'show');
+        Route::get('/slug/{slug}', 'showBySlug');
+    });
 
     // Products — Reviews
+
     Route::prefix('reviews')->middleware('permission:reviews')->controller(ReviewController::class)->group(function () {
-        Route::get('/admin', 'adminIndex');
-        Route::get('/get-by-id/{id}', 'show');
         Route::put('/update-review/{id}', 'update');
         Route::put('/bulk-status-review', 'bulkStatusUpdate');
         Route::post('/approve', 'approveSelected');
@@ -292,28 +299,37 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/delete', 'deleteSelected');
         Route::delete('/bulk-delete-review', 'bulkDelete');
     });
-
+    Route::prefix('reviews')->controller(ReviewController::class)->group(function () {
+        Route::get('/admin', 'adminIndex');
+        Route::get('/get-by-id/{id}', 'show');
+    });
     // Products — Brands
     Route::prefix('brands')->middleware('permission:brands')->controller(BrandController::class)->group(function () {
-        Route::get('/brand-list', 'index');
-        Route::get('/brand/{id}', 'showBrands');
+
         Route::post('/add-brand', 'storeBrands');
         Route::post('/update-brand/{id}', 'updateBrands');
         Route::delete('/delete-brand/{id}', 'destroyBrands');
     });
+    Route::prefix('brands')->controller(BrandController::class)->group(function () {
+        Route::get('/brand-list', 'index');
+        Route::get('/brand/{id}', 'showBrands');
+    });
 
     // Product Filters
-    Route::prefix('product-filters')->middleware('permission:all_products')->controller(ProductFilterController::class)->group(function () {
-        Route::get('/filter-products', 'index');
-        Route::get('/filter-visibility', 'updateVisibility');
-    });
+    // Route::prefix('product-filters')->middleware('permission:all_products')->controller(ProductFilterController::class)->group(function () {
+    //     Route::get('/filter-products', 'index');
+    //     Route::get('/filter-visibility', 'updateVisibility');
+    // });
 
     // ===================== CUSTOMERS =====================
     Route::prefix('customers')->middleware('permission:all_customers')->group(function () {
-        Route::get('/get-customers', [CustomerController::class, 'index']);
-        Route::get('/get-customer/{id}', [CustomerController::class, 'show']);
+
         Route::put('/update-customer/{id}', [CustomerController::class, 'update']);
         Route::delete('/delete-customer/{id?}', [CustomerController::class, 'destroy']);
+    });
+    Route::prefix('customers')->group(function () {
+        Route::get('/get-customers', [CustomerController::class, 'index']);
+        Route::get('/get-customer/{id}', [CustomerController::class, 'show']);
     });
 
     // Customers — Add
@@ -392,24 +408,30 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
     // ===================== STOREFRONT — BLOG =====================
     Route::prefix('blogs')->middleware('permission:blog')->controller(BlogPostController::class)->group(function () {
-        Route::get('/get-blog', 'index');
-        Route::get('/get-blogSingle/{id}', 'show');
+
         Route::post('/add-blog', 'store');
         Route::post('/update-blog/{id}', 'update');
         Route::delete('/delete-blog/{ids}', 'destroy');
+    });
+    Route::prefix('blogs')->controller(BlogPostController::class)->group(function () {
+        Route::get('/get-blog', 'index');
+        Route::get('/get-blogSingle/{id}', 'show');
         Route::get('/draft-blogs', 'drafts');
     });
 
 
     // ===================== MARKETING — COUPONS =====================
     Route::prefix('coupons')->middleware('permission:coupon_codes')->controller(CouponCodeController::class)->group(function () {
-        Route::get('/get-couponcode', 'index');
-        Route::get('/get-couponcode/{id}', 'show');
+
         Route::post('/add-couponcode', 'store');
         Route::put('/update-couponcode/{id}', 'update');
         Route::put('/update-enabled/{id}', 'updateEnabled');
 
         Route::delete('/delete-couponcode/{id}', 'destroy');
+    });
+    Route::prefix('coupons')->controller(CouponCodeController::class)->group(function () {
+        Route::get('/get-couponcode', 'index');
+        Route::get('/get-couponcode/{id}', 'show');
     });
 
     Route::prefix('coupons')->controller(CouponCodeController::class)->group(function () {
