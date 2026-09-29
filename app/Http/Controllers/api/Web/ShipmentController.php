@@ -24,7 +24,12 @@ class ShipmentController extends Controller
     public function index(Request $request)
     {
         $storeId = current_store_id();
-        $keyword = $request->get('keyword');
+
+        $keyword = $request->input('keyword', $request->input('searchKeywords'));
+        if ($keyword === 0 || $keyword === '0') {
+            $keyword = null;
+        }
+        $keyword = is_string($keyword) ? trim($keyword) : $keyword;
 
         $query = Shipment::with([
             'order' => function ($q) {
@@ -37,6 +42,7 @@ class ShipmentController extends Controller
                                         'images',
                                         'brand',
                                         'categories:id',
+                                        'seo',
                                     ]);
                                 },
                             ]);
@@ -52,18 +58,142 @@ class ShipmentController extends Controller
         ])
             ->where('store_id', $storeId);
 
-        if ($keyword) {
+        if ($keyword !== null && $keyword !== '') {
             $query->where(function ($q) use ($keyword) {
-                $q->where('shipped_to', 'like', '%' . $keyword . '%')
-                    ->orWhere('tracking_number', 'like', '%' . $keyword . '%')
-                    ->orWhereHas('order', function ($order) use ($keyword) {
-                        $order->where('id', 'like', "%{$keyword}%")
-                            ->orWhere('order_number', 'like', "%{$keyword}%");
-                    });
+                if (is_numeric($keyword)) {
+                    $q->where('id', $keyword)
+                        ->orWhere('tracking_number', $keyword)
+                        ->orWhere('order_id', $keyword)
+                        ->orWhereHas('order', function ($order) use ($keyword) {
+                            $order->where('id', (int) $keyword)
+                                ->orWhere('order_number', $keyword);
+                        });
+                } else {
+                    $q->where('shipped_by', 'like', "%{$keyword}%")
+                        ->orWhere('shipped_to', 'like', "%{$keyword}%")
+                        ->orWhere('tracking_number', 'like', "%{$keyword}%")
+                        ->orWhere('shipping_method', 'like', "%{$keyword}%")
+                        ->orWhereHas('order', function ($order) use ($keyword) {
+                            $order->where('order_number', 'like', "%{$keyword}%")
+                                ->orWhere('id', 'like', "%{$keyword}%");
+                        });
+                }
             });
         }
 
-        $shipments = $query->orderByDesc('id')->paginate($request->get('pageSize', 20));
+        if ($request->filled('shipmentIdFrom') && $request->shipmentIdFrom != 0) {
+            $query->where('id', '>=', $request->shipmentIdFrom);
+        }
+
+        if ($request->filled('shipmentIdTo') && $request->shipmentIdTo != 0) {
+            $query->where('id', '<=', $request->shipmentIdTo);
+        }
+
+        if ($request->filled('orderIdFrom') && $request->orderIdFrom != 0) {
+            $query->where('order_id', '>=', $request->orderIdFrom);
+        }
+
+        if ($request->filled('orderIdTo') && $request->orderIdTo != 0) {
+            $query->where('order_id', '<=', $request->orderIdTo);
+        }
+
+        if ($request->filled('shippingDate')) {
+            $query->whereDate('date_shipped', $request->shippingDate);
+        }
+
+        if ($request->filled('orderDate')) {
+            $query->whereHas('order', function ($q) use ($request) {
+                $q->whereDate('created_at', $request->orderDate);
+            });
+        }
+
+        $sortMap = [
+            'id'           => 'id',
+            'orderid'      => 'order_id',
+            'order_id'     => 'order_id',
+            'order_number' => 'order_id',
+            'total'        => 'total',
+            'total_amount' => 'total',
+            'ordertotal'   => 'total',
+            'date'         => 'date',
+            'created_at'   => 'date',
+            'updated_at'   => 'updated_at',
+            'status'       => 'status',
+            'shipped_at'   => 'date_shipped',
+            'date_shipped' => 'date_shipped',
+            'customer'     => 'customer',
+            'messages'     => 'messages',
+        ];
+
+        $sortByInput   = strtolower((string) $request->input('sortBy', $request->input('sortField', 'id')));
+        $sortDirection = strtoupper((string) $request->input('sortDirection', $request->input('sortOrder', 'DESC')));
+        $sortDirection = $sortDirection === 'ASC' ? 'ASC' : 'DESC';
+        $sortColumn    = $sortMap[$sortByInput] ?? 'id';
+
+        if ($sortColumn === 'customer') {
+            $query->orderByRaw("
+            LOWER(TRIM(COALESCE(
+                (
+                    SELECT TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))
+                    FROM customers
+                    INNER JOIN orders ON orders.customer_id = customers.id
+                    WHERE orders.id = shipments.order_id
+                    LIMIT 1
+                ),
+                (
+                    SELECT TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))
+                    FROM billing_informations
+                    INNER JOIN orders ON orders.billing_information_id = billing_informations.id
+                    WHERE orders.id = shipments.order_id
+                    LIMIT 1
+                ),
+                shipped_to,
+                ''
+            ))) {$sortDirection}
+        ")->orderBy('shipments.id', 'desc');
+        } elseif ($sortColumn === 'status') {
+            $query->orderByRaw("
+            (
+                SELECT status
+                FROM orders
+                WHERE orders.id = shipments.order_id
+                LIMIT 1
+            ) {$sortDirection}
+        ")->orderBy('shipments.id', 'desc');
+        } elseif ($sortColumn === 'total') {
+            $query->orderByRaw("
+            (
+                SELECT total_amount
+                FROM orders
+                WHERE orders.id = shipments.order_id
+                LIMIT 1
+            ) {$sortDirection}
+        ")->orderBy('shipments.id', 'desc');
+        } elseif ($sortColumn === 'messages') {
+            $query->orderByRaw("
+            (
+                SELECT COUNT(*)
+                FROM messages
+                WHERE messages.order_id = shipments.order_id
+            ) {$sortDirection}
+        ")->orderBy('shipments.id', 'desc');
+        } elseif ($sortColumn === 'date') {
+            $query->orderByRaw("
+            (
+                SELECT created_at
+                FROM orders
+                WHERE orders.id = shipments.order_id
+                LIMIT 1
+            ) {$sortDirection}
+        ")->orderBy('shipments.id', 'desc');
+        } elseif ($sortColumn === 'updated_at') {
+            $query->orderBy('shipments.updated_at', $sortDirection)
+                ->orderBy('shipments.id', 'desc');
+        } else {
+            $query->orderBy('shipments.' . $sortColumn, $sortDirection);
+        }
+
+        $shipments = $query->paginate($request->get('pageSize', 20));
 
         return response()->json([
             'status'  => true,
