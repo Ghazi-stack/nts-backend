@@ -3528,6 +3528,16 @@ class OrderController extends Controller
 
             $customer = Customer::where('store_id', $storeId)
                 ->findOrFail($validated['customerId']);
+            $customerUser = $customer->user;    
+
+            if (!$customerUser) {
+                DB::rollBack();
+
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Selected customer is not associated with a user account.',
+                ], 422);
+            }
 
             $formAddress  = $validated['billingAddress'] ?? [];
             $billingInput = $validated['billingInformation'] ?? [];
@@ -3725,7 +3735,7 @@ class OrderController extends Controller
             $billing = BillingInformation::create([
                 'store_id'        => $storeId,
                 'customer_id'     => $customer->id,
-                'user_id'         => $user?->id,
+                'user_id'         => $customerUser?->id,
                 'first_name'      => $shippingInfo['firstName'],
                 'last_name'       => $shippingInfo['lastName'],
                 'email'           => $shippingInfo['email'] ?? $customer->email,
@@ -3767,7 +3777,7 @@ class OrderController extends Controller
             $order = Order::create([
                 'store_id'                     => $storeId,
                 'customer_id'                  => $customer->id,
-                'user_id'                      => $user?->id,
+                'user_id'                      => $customerUser?->id,
                 'billing_information_id'       => $billing->id,
                 'order_number'                 => '',
                 'status'                       => 'Awaiting Payment',
@@ -3814,7 +3824,7 @@ class OrderController extends Controller
 
                 SavedAddress::create([
                     'store_id'          => $storeId,
-                    'user_id'           => $user?->id,
+                    'user_id'           => $customerUser->id,
                     'order_id'          => $order->id,
                     'billing_address'   => $saveBilling ? $billingAddressJson : null,
                     'shipping_address'  => $saveShipping ? $shippingAddressJson : null,
@@ -3836,27 +3846,13 @@ class OrderController extends Controller
             }
 
             if ($isDraft) {
-                $cartUser = User::where('store_id', $storeId)
-                    ->where('customer_id', $validated['customerId'])
-                    ->first();
+                $cartUser = $customer->user;
 
-                if (!$cartUser) {
-                    $cartUser = User::where('store_id', $storeId)
-                        ->where('id', $validated['customerId'])
-                        ->first();
-                }
-
-                if (!$cartUser && !empty($customer->user_id)) {
-                    $cartUser = User::where('store_id', $storeId)
-                        ->where('id', $customer->user_id)
-                        ->first();
-                }
-
-                $formUserId = $cartUser?->id ?? $customer->user_id ?? $user?->id;
+                $formUserId = $cartUser?->id ?? null;
 
                 $quoteUrl = $this->draftQuote->makeDraftQuoteUrl(
                     $order->fresh('customer'),
-                    $cartUser ?? null,
+                    $cartUser,
                     $storeId
                 );
 
@@ -3983,7 +3979,7 @@ class OrderController extends Controller
             foreach ($products as $item) {
                 ManualDiscount::create([
                     'store_id'        => $storeId ?: null,
-                    'user_id'         => $manualUserId,
+                    'user_id'         => $customerUser->id,
                     'customer_id'     => $manualCustomerId ?: null,
                     'order_id'        => $order->id,
                     'product_id'      => $item['product_id'] ?? null,
