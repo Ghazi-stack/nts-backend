@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PromotionResource;
 use App\Http\Resources\PromotionsResource;
+use App\Models\PromotionCouponCode;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class PromotionController extends Controller
@@ -108,35 +109,51 @@ class PromotionController extends Controller
             }
 
             $validated = $request->validate([
-                'kind'             => ['nullable', Rule::in(['automatic', 'coupon'])],
-                'name'             => ['required', 'string', 'max:255'],
-                'displayName'      => ['nullable', 'string', 'max:255'],
-                'status'           => ['required', Rule::in(['draft', 'active', 'inactive', 'archived'])],
-                'priority'         => ['nullable', 'integer', 'min:0'],
-                'currency'         => ['nullable', 'string', 'max:10'],
-                'channel'          => ['nullable', 'string', 'max:50'],
-                'isFeatured'       => ['nullable', 'boolean'],
-                'featuredMessage'  => ['nullable', 'string', 'max:80'],
-                'code'             => ['nullable', 'string', 'max:100'],
-                'maxRedemptions'   => ['nullable', 'integer', 'min:0'],
-                'perCustomerLimit' => ['nullable', 'integer', 'min:0'],
-                'canCombine'       => ['nullable', 'boolean'],
-                'startsAt'         => ['nullable', 'date'],
-                'endsAt'           => ['nullable', 'date', 'after_or_equal:startsAt'],
-                'rules'            => ['required', 'array'],
-                'rules.source'     => ['required', Rule::in(['custom', 'cart', 'shipping'])],
-                'schedule'         => ['nullable', 'array'],
-                'targeting'        => ['nullable', 'array'],
-                'banners'          => ['nullable', 'array'],
+                'kind'                => ['nullable', Rule::in(['automatic', 'coupon'])],
+                'editor'              => ['nullable', Rule::in(['standard', 'legacy'])],
+                'name'                => ['required', 'string', 'max:255'],
+                'displayName'         => ['nullable', 'string', 'max:255'],
+                'status'              => ['required', Rule::in(['draft', 'active', 'inactive', 'archived'])],
+                'priority'            => ['nullable', 'integer', 'min:0'],
+                'currency'            => ['nullable', 'string', 'max:10'],
+                'channel'             => ['nullable', 'string', 'max:50'],
+                'isFeatured'          => ['nullable', 'boolean'],
+                'featuredMessage'     => ['nullable', 'string', 'max:80'],
+                'code'                => ['nullable', 'string', 'max:100'],
+                'maxRedemptions'      => ['nullable', 'integer', 'min:0'],
+                'perCustomerLimit'    => ['nullable', 'integer', 'min:0'],
+                'canCombine'          => ['nullable', 'boolean'],
+                'startsAt'            => ['nullable', 'date'],
+                'endsAt'              => ['nullable', 'date', 'after_or_equal:startsAt'],
+                'rules'               => ['required', 'array'],
+                'rules.source'        => ['required', Rule::in(['custom', 'cart', 'shipping'])],
+                'schedule'            => ['nullable', 'array'],
+                'targeting'           => ['nullable', 'array'],
+                'banners'             => ['nullable', 'array'],
+                'coupon'              => ['nullable', 'array'],
+                'coupon.mode'         => ['nullable', Rule::in(['single', 'bulk'])],
+                'coupon.count'        => ['nullable', 'integer', 'min:1'],
+                'coupon.length'       => ['nullable', 'integer', 'min:1', 'max:20'],
+                'coupon.format'       => ['nullable', Rule::in(['alphanumeric', 'numbers', 'letters'])],
+                'coupon.prefix'       => ['nullable', 'string', 'max:30'],
+                'coupon.suffix'       => ['nullable', 'string', 'max:30'],
+                'coupon.separator'    => ['nullable', 'string', 'max:5'],
+                'coupon.scheduleMode' => ['nullable', Rule::in(['promotion', 'custom'])],
+                'coupon.validFrom'    => ['nullable', 'date'],
+                'coupon.validUntil'   => ['nullable', 'date'],
             ]);
 
             $isFeatured = (bool) ($validated['isFeatured'] ?? false);
             $kind       = $validated['kind'] ?? 'automatic';
             $rules      = $request->input('rules');
+            $couponCfg  = $kind === 'coupon'
+                ? ($request->input('coupon') ?: ['mode' => 'single'])
+                : null;
 
             $promotion = Promotion::create([
                 'store_id'           => $storeId,
                 'kind'               => $kind,
+                'editor'             => $validated['editor'] ?? 'standard',
                 'type'               => $rules['source'] ?? 'custom',
                 'name'               => $validated['name'],
                 'display_name'       => $validated['displayName'] ?? null,
@@ -146,9 +163,8 @@ class PromotionController extends Controller
                 'channel'            => $validated['channel'] ?? 'any',
                 'is_featured'        => $isFeatured,
                 'featured_message'   => $isFeatured ? ($validated['featuredMessage'] ?? null) : null,
-                'code'               => ($kind === 'coupon' && !empty($validated['code']))
-                    ? strtoupper($validated['code'])
-                    : null,
+                'code'               => null,
+                'coupon'             => $couponCfg,
                 'max_redemptions'    => $validated['maxRedemptions'] ?? null,
                 'per_customer_limit' => $validated['perCustomerLimit'] ?? null,
                 'redemptions'        => 0,
@@ -162,10 +178,20 @@ class PromotionController extends Controller
                 'banners'            => $request->input('banners'),
             ]);
 
+            $generated   = 0;
+            $downloadUrl = null;
+
+            if ($kind === 'coupon') {
+                $generated   = $this->saveCouponCodes($promotion, $storeId, $validated, $couponCfg ?: []);
+                $downloadUrl = url('/api/promotions/download-codes/' . $promotion->id);
+            }
+
             return response()->json([
-                'status'  => true,
-                'message' => 'Promotion created successfully',
-                'data'    => new PromotionResource($promotion),
+                'status'         => true,
+                'message'        => 'Promotion created successfully',
+                'codesGenerated' => $generated,
+                'downloadUrl'    => $downloadUrl,
+                'data'           => new PromotionResource($promotion->fresh()),
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e;
@@ -177,6 +203,118 @@ class PromotionController extends Controller
                 'error'   => $e->getMessage(),
             ], 500);
         }
+    }
+
+    public function downloadCodes($id)
+    {
+        $storeId    = current_store_id();
+        $promotion  = Promotion::where('store_id', $storeId)->findOrFail($id);
+        $codes      = PromotionCouponCode::where('promotion_id', $promotion->id)->pluck('code');
+        $filename   = 'coupon-codes-' . $promotion->id . '.csv';
+
+        return response()->streamDownload(function () use ($codes) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['code']);
+            foreach ($codes as $code) {
+                fputcsv($out, [$code]);
+            }
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv']);
+    }
+
+    private function saveCouponCodes(Promotion $promotion, $storeId, array $validated, array $coupon): int
+    {
+        $mode = $coupon['mode'] ?? 'single';
+
+        $validFrom  = $promotion->starts_at;
+        $validUntil = $promotion->ends_at;
+        if (($coupon['scheduleMode'] ?? 'promotion') === 'custom') {
+            $validFrom  = $coupon['validFrom'] ?? $validFrom;
+            $validUntil = $coupon['validUntil'] ?? $validUntil;
+        }
+
+        if ($mode === 'single') {
+            $single = strtoupper(trim((string) ($validated['code'] ?? '')));
+            if ($single === '') {
+                throw new \Exception('Coupon code required');
+            }
+
+            $exists = PromotionCouponCode::where('store_id', $storeId)->where('code', $single)->exists();
+            if ($exists) {
+                throw new \Exception('Coupon code already exists for this store.');
+            }
+
+            PromotionCouponCode::create([
+                'store_id'     => $storeId,
+                'promotion_id' => $promotion->id,
+                'code'         => $single,
+                'status'       => 'unused',
+                'valid_from'   => $validFrom,
+                'valid_until'  => $validUntil,
+            ]);
+
+            $promotion->update(['code' => $single]);
+            return 1;
+        }
+
+        $count     = (int) ($coupon['count'] ?? 0);
+        $length    = (int) ($coupon['length'] ?? 6);
+        $format    = $coupon['format'] ?? 'alphanumeric';
+        $prefix    = (string) ($coupon['prefix'] ?? '');
+        $suffix    = (string) ($coupon['suffix'] ?? '');
+        $separator = (string) ($coupon['separator'] ?? '');
+
+        if ($count < 1) {
+            throw new \Exception('Number of codes required');
+        }
+
+        $rows  = [];
+        $tries = 0;
+        while (count($rows) < $count && $tries < $count * 30) {
+            $tries++;
+            $body = $this->makeCouponBody($length, $format);
+            $code = strtoupper(trim(
+                $prefix . ($prefix !== '' ? $separator : '') . $body . ($suffix !== '' ? $separator . $suffix : ''),
+                $separator ?: ' '
+            ));
+
+            if (isset($rows[$code])) {
+                continue;
+            }
+            if (PromotionCouponCode::where('store_id', $storeId)->where('code', $code)->exists()) {
+                continue;
+            }
+
+            $rows[$code] = [
+                'store_id'     => $storeId,
+                'promotion_id' => $promotion->id,
+                'code'         => $code,
+                'status'       => 'unused',
+                'valid_from'   => $validFrom,
+                'valid_until'  => $validUntil,
+                'created_at'   => now(),
+                'updated_at'   => now(),
+            ];
+        }
+
+        PromotionCouponCode::insert(array_values($rows));
+        return count($rows);
+    }
+
+    private function makeCouponBody(int $length, string $format): string
+    {
+        $pool = match ($format) {
+            'numbers' => '0123456789',
+            'letters' => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+            default   => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+        };
+
+        $out = '';
+        $max = strlen($pool) - 1;
+        for ($i = 0; $i < $length; $i++) {
+            $out .= $pool[random_int(0, $max)];
+        }
+        return $out;
     }
 
     public function update(Request $request, $id)

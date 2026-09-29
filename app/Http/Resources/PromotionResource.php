@@ -31,6 +31,7 @@ class PromotionResource extends JsonResource
         return [
             'id'               => $p->id,
             'kind'             => $p->kind,
+            'editor'           => $p->editor,
             'name'             => $p->name,
             'displayName'      => $p->display_name,
             'status'           => $p->status,
@@ -40,6 +41,10 @@ class PromotionResource extends JsonResource
             'isFeatured'       => (bool) $p->is_featured,
             'featuredMessage'  => $p->featured_message,
             'code'             => $p->code,
+            'coupon'           => $p->coupon,
+            'codesCount'       => $p->relationLoaded('couponCodes')
+                ? $p->couponCodes->count()
+                : $p->couponCodes()->count(),
             'maxRedemptions'   => $p->max_redemptions,
             'perCustomerLimit' => $p->per_customer_limit,
             'redemptions'      => $p->redemptions,

@@ -527,6 +527,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
             Route::post('/add-promotion', 'store');
             Route::post('/update-promotion/{id}', 'update');
             Route::delete('/delete-promotion/{id}', 'destroy');
+            Route::get('/download-codes/{id}', 'downloadCodes');
         });
     });
 
