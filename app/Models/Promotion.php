@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\Store;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -22,7 +21,9 @@ class Promotion extends Model
         'channel',
         'is_featured',
         'featured_message',
+        'code',
         'max_redemptions',
+        'per_customer_limit',
         'redemptions',
         'can_combine',
         'conditions',
@@ -35,18 +36,19 @@ class Promotion extends Model
     ];
 
     protected $casts = [
-        'is_featured'     => 'boolean',
-        'can_combine'     => 'boolean',
-        'conditions'      => 'array',
-        'actions'         => 'array',
-        'schedule'        => 'array',
-        'targeting'       => 'array',
-        'banners'         => 'array',
-        'starts_at'       => 'datetime',
-        'ends_at'         => 'datetime',
-        'max_redemptions' => 'integer',
-        'redemptions'     => 'integer',
-        'priority'        => 'integer',
+        'is_featured'        => 'boolean',
+        'can_combine'        => 'boolean',
+        'conditions'         => 'array',
+        'actions'            => 'array',
+        'schedule'           => 'array',
+        'targeting'          => 'array',
+        'banners'            => 'array',
+        'starts_at'          => 'datetime',
+        'ends_at'            => 'datetime',
+        'max_redemptions'    => 'integer',
+        'per_customer_limit' => 'integer',
+        'redemptions'        => 'integer',
+        'priority'           => 'integer',
     ];
 
     protected $attributes = [
@@ -59,9 +61,4 @@ class Promotion extends Model
         'redemptions' => 0,
         'priority'    => 0,
     ];
-
-    public function storeRelation()
-    {
-        return $this->belongsTo(Store::class, 'store_id');
-    }
 }
