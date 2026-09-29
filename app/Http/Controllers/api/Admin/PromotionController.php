@@ -16,60 +16,88 @@ class PromotionController extends Controller
 {
     public function index(Request $request)
     {
-        try {
-            $storeId = current_store_id();
-            if (!$storeId) {
-                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
-            }
-
-            // validate query params (optional)
-            $validated = $request->validate([
-                'status'  => 'nullable|in:active,inactive',
-                'type'    => 'nullable|in:automatic,coupon',
-                'perPage' => 'nullable|integer|min:1|max:100',
-            ]);
-
-            $query = Promotion::where('store_id', $storeId)
-                ->when(isset($validated['status']), function ($q) use ($validated) {
-                    $q->where('status', $validated['status']);   // active/inactive only if provided
-                })
-                ->when(isset($validated['type']), function ($q) use ($validated) {
-                    $q->where('type', $validated['type']);       // automatic/coupon only if provided
-                })
-                ->orderByDesc('priority')
-                ->orderByDesc('id');
-
-            // pagination only if perPage provided, otherwise return all
-            if (!empty($validated['perPage'])) {
-                $paginator  = $query->paginate((int)$validated['perPage']);
-                $collection = collect($paginator->items());
-
-                return response()->json([
-                    'status'     => true,
-                    'message'    => 'Promotions retrieved successfully',
-                    'data'       => (new \App\Http\Resources\PromotionResource($collection))->resolve(),
-                    'pagination' => [
-                        'total'        => $paginator->total(),
-                        'count'        => $paginator->count(),
-                        'perPage'      => $paginator->perPage(),
-                        'currentPage'  => $paginator->currentPage(),
-                        'totalPages'   => $paginator->lastPage(),
-                    ],
-                ], 200);
-            }
-
-            // no pagination: return all
-            $items = $query->get();
-
-            return response()->json([
-                'status'  => true,
-                'message' => 'Promotions retrieved successfully',
-                'data'    => (new PromotionResource($items))->resolve(),
-            ], 200);
-        } catch (\Exception $e) {
-            \Log::error('Error fetching promotions: ' . $e->getMessage());
-            return response()->json(['status' => false, 'message' => 'Failed to retrieve promotions'], 500);
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
         }
+
+        $kind   = $request->get('kind', 'automatic'); // automatic | coupon
+        $status = $request->get('status', 'all');     // all | active | inactive | archived
+        $search = trim((string) $request->get('search', ''));
+
+        $q = Promotion::where('store_id', $storeId)
+            ->where('kind', $kind)
+            ->withCount('couponCodes');
+
+        if ($status === 'all') {
+            $q->where('status', '!=', 'archived');
+        } elseif (in_array($status, ['active', 'inactive', 'archived', 'draft'], true)) {
+            $q->where('status', $status);
+        }
+
+        if ($request->filled('currency')) {
+            $q->where('currency', $request->get('currency'));
+        }
+        if ($request->filled('type')) {
+            $q->where('type', $request->get('type')); // custom | cart | shipping
+        }
+        if ($request->filled('channel')) {
+            $q->where('channel', $request->get('channel'));
+        }
+
+        if ($search !== '') {
+            $q->where(function ($w) use ($search, $kind) {
+                $w->where('name', 'like', "%{$search}%");
+                if ($kind === 'coupon') {
+                    $w->orWhere('code', 'like', "%{$search}%")
+                        ->orWhereHas('couponCodes', function ($c) use ($search) {
+                            $c->where('code', 'like', "%{$search}%");
+                        });
+                }
+            });
+        }
+
+        $rows = $q->orderByDesc('id')->get();
+
+        $data = $rows->map(function ($p) {
+            $max  = $p->max_redemptions;
+            $used = (int) $p->redemptions;
+
+            return [
+                'id'           => $p->id,
+                'kind'         => $p->kind,
+                'name'         => $p->name,
+                'displayName'  => $p->display_name,
+                'isFeatured'   => (bool) $p->is_featured,
+                'currency'     => $p->currency,
+                'type'         => $p->type,
+                'channel'      => $p->channel,
+                'status'       => $p->status,
+                'active'       => $p->status === 'active',
+                'usesUsed'     => $used,
+                'usesLimit'    => $max,
+                'usesLabel'    => is_null($max) ? $used . '/Unlimited' : $used . '/' . $max,
+                'codesCount'   => (int) $p->coupon_codes_count,
+                'codesLabel'   => $p->kind === 'coupon'
+                    ? (($p->coupon_codes_count ?: 0) . ' codes')
+                    : null,
+                'code'         => $p->code,
+                'startsAt'     => optional($p->starts_at)->toDateTimeString(),
+                'endsAt'       => optional($p->ends_at)->toDateTimeString(),
+                'startLabel'   => optional($p->starts_at)?->format('D, M j, Y g:i A'),
+                'endLabel'     => $p->ends_at ? $p->ends_at->format('D, M j, Y g:i A') : 'Not set',
+            ];
+        })->values();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Promotions fetched',
+            'data'    => [
+                'kind'  => $kind,
+                'total' => $data->count(),
+                'items' => $data,
+            ],
+        ]);
     }
 
 
