@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BannerResource;
 use App\Models\Banner;
+use App\Models\Brand;
+use App\Models\Category;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class BannerController extends Controller
@@ -18,7 +20,7 @@ class BannerController extends Controller
             if (!$storeId) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'Store not selected or token invalid.'
+                    'message' => 'Store not selected or token invalid.',
                 ], 400);
             }
 
@@ -39,6 +41,46 @@ class BannerController extends Controller
                 ->latest()
                 ->paginate($perPage);
 
+            $categoryIds = [];
+            $brandIds    = [];
+
+            foreach ($banners as $banner) {
+                [$type, $id] = $this->resolveBannerLocation($banner);
+
+                if ($type === 'category' && $id) {
+                    $categoryIds[] = $id;
+                }
+
+                if ($type === 'brand' && $id) {
+                    $brandIds[] = $id;
+                }
+            }
+
+            $categories = $categoryIds
+                ? Category::where('store_id', $storeId)->whereIn('id', array_unique($categoryIds))->get()->keyBy('id')
+                : collect();
+
+            $brands = $brandIds
+                ? Brand::where('store_id', $storeId)->whereIn('id', array_unique($brandIds))->get()->keyBy('id')
+                : collect();
+
+            $banners->getCollection()->transform(function ($banner) use ($categories, $brands) {
+                [$type, $id] = $this->resolveBannerLocation($banner);
+
+                $banner->resolved_location_type = $type;
+                $banner->resolved_location_id   = $id;
+                $banner->location_category      = null;
+                $banner->location_brand         = null;
+
+                if ($type === 'category') {
+                    $banner->location_category = $categories->get($id);
+                } elseif ($type === 'brand') {
+                    $banner->location_brand = $brands->get($id);
+                }
+
+                return $banner;
+            });
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Banners retrieved successfully',
@@ -49,7 +91,7 @@ class BannerController extends Controller
                     'perPage'     => $banners->perPage(),
                     'currentPage' => $banners->currentPage(),
                     'totalPages'  => $banners->lastPage(),
-                ]
+                ],
             ], 200);
         } catch (\Exception $e) {
             Log::error('Error fetching banners: ' . $e->getMessage());
@@ -67,7 +109,7 @@ class BannerController extends Controller
             if (!$storeId) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'Store not selected or token invalid.'
+                    'message' => 'Store not selected or token invalid.',
                 ], 400);
             }
 
@@ -77,7 +119,7 @@ class BannerController extends Controller
                 'locationType' => 'required|in:homepage,category,brand,search',
                 'locationId'   => 'nullable|integer|required_if:locationType,category,brand',
                 'dateType'     => 'nullable|in:always,range',
-                'startDate'         => 'nullable|required_if:dateType,range|date',
+                'startDate'    => 'nullable|required_if:dateType,range|date',
                 'endDate'      => 'nullable|required_if:dateType,range|date|after_or_equal:startDate',
                 'visible'      => 'nullable|boolean',
                 'placement'    => 'required|in:top,bottom',
@@ -92,6 +134,8 @@ class BannerController extends Controller
                 'visible'      => $request->boolean('visible', true),
                 'placement'    => $request->placement,
             ]);
+
+            $banner = $this->attachLocationEntity($banner, $storeId);
 
             return response()->json([
                 'status'  => true,
@@ -120,11 +164,12 @@ class BannerController extends Controller
             if (!$storeId) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'Store not selected or token invalid.'
+                    'message' => 'Store not selected or token invalid.',
                 ], 400);
             }
 
             $banner = Banner::where('store_id', $storeId)->findOrFail($id);
+            $banner = $this->attachLocationEntity($banner, $storeId);
 
             return response()->json([
                 'status'  => true,
@@ -152,7 +197,7 @@ class BannerController extends Controller
             if (!$storeId) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'Store not selected or token invalid.'
+                    'message' => 'Store not selected or token invalid.',
                 ], 400);
             }
 
@@ -164,7 +209,7 @@ class BannerController extends Controller
                 'locationType' => 'nullable|in:homepage,category,brand,search',
                 'locationId'   => 'nullable|integer',
                 'dateType'     => 'nullable|in:always,range',
-                'startDate'         => 'nullable|date',
+                'startDate'    => 'nullable|date',
                 'endDate'      => 'nullable|date|after_or_equal:startDate',
                 'visible'      => 'nullable|boolean',
                 'placement'    => 'nullable|in:top,bottom',
@@ -200,10 +245,12 @@ class BannerController extends Controller
                 $banner->update($data);
             }
 
+            $banner = $this->attachLocationEntity($banner->fresh(), $storeId);
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Banner updated successfully',
-                'banner'  => new BannerResource($banner->fresh()),
+                'banner'  => new BannerResource($banner),
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
@@ -232,7 +279,7 @@ class BannerController extends Controller
             if (!$storeId) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'Store not selected or token invalid.'
+                    'message' => 'Store not selected or token invalid.',
                 ], 400);
             }
 
@@ -257,9 +304,62 @@ class BannerController extends Controller
         }
     }
 
+    private function resolveBannerLocation($banner): array
+    {
+        $location = is_array($banner->location) ? $banner->location : [];
+
+        $type = strtolower(trim((string) (
+            $location['key']
+            ?? $banner->location_type
+            ?? data_get($location, 'type')
+            ?? data_get($location, 'locationType')
+            ?? ''
+        )));
+
+        $id = $location['id']
+            ?? $banner->location_id
+            ?? data_get($location, 'locationId');
+
+        $id = $id ? (int) $id : null;
+
+        if ($type === 'homepage') {
+            return ['homepage', null];
+        }
+
+        if (!in_array($type, ['category', 'brand'], true)) {
+            return [$type ?: null, null];
+        }
+
+        return [$type, $id];
+    }
+
+    private function attachLocationEntity($banner, $storeId)
+    {
+        [$type, $id] = $this->resolveBannerLocation($banner);
+
+        $banner->resolved_location_type = $type;
+        $banner->resolved_location_id   = $id;
+        $banner->location_category      = null;
+        $banner->location_brand         = null;
+
+        if ($type === 'category' && $id) {
+            $banner->location_category = Category::where('store_id', $storeId)
+                ->where('id', $id)
+                ->first();
+        }
+
+        if ($type === 'brand' && $id) {
+            $banner->location_brand = Brand::where('store_id', $storeId)
+                ->where('id', $id)
+                ->first();
+        }
+
+        return $banner;
+    }
+
     private function buildLocation(Request $request): array
     {
-        $type = strtolower($request->locationType);
+        $type = strtolower((string) $request->locationType);
 
         if ($type === 'homepage') {
             return ['key' => 'Homepage'];
@@ -289,8 +389,8 @@ class BannerController extends Controller
         }
 
         return json_encode([
-            'startDate'    => $request->startDate,
-            'endDate' => $request->endDate,
+            'startDate' => $request->startDate,
+            'endDate'   => $request->endDate,
         ]);
     }
 }
