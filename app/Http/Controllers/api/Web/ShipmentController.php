@@ -37,7 +37,6 @@ class ShipmentController extends Controller
                                         'images',
                                         'brand',
                                         'categories:id',
-                                        'seo',
                                     ]);
                                 },
                             ]);
