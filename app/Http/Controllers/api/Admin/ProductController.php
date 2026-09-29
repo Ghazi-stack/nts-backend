@@ -606,22 +606,33 @@ class ProductController extends Controller
         $storeId = current_store_id();
         if (!$storeId) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Store not selected.'
             ], 400);
         }
 
-        $ids = $id ?? $request->get('ids');
+        $ids = $request->get('ids', []);
 
         if (is_string($ids)) {
             $ids = explode(',', $ids);
         }
 
-        $ids = array_filter(array_map('intval', (array) $ids));
+        $ids = array_values(array_filter(array_map('intval', (array) $ids)));
+
+        // naya viewed product first pe
+        if ($id) {
+            $id  = (int) $id;
+            $ids = array_values(array_filter($ids, fn($x) => $x !== $id));
+            array_unshift($ids, $id);
+        }
+
+        // duplicate hatao, sirf last 5 (newest first)
+        $ids = array_values(array_unique($ids));
+        $ids = array_slice($ids, 0, 5);
 
         if (empty($ids)) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Product id required.'
             ], 422);
         }
@@ -636,19 +647,20 @@ class ProductController extends Controller
                 'identifiers',
                 'seo'
             ])
+            ->orderByRaw('FIELD(id, ' . implode(',', $ids) . ')')
             ->get();
 
         if ($products->isEmpty()) {
             return response()->json([
                 'status' => false,
-                'error' => 'Product not found'
+                'error'  => 'Product not found'
             ], 404);
         }
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Product Retrieved',
-            'data' => ProductResource::collection($products)
+            'data'    => ProductResource::collection($products)
         ]);
     }
     public function showProductByUrl($slug, Request $request)
