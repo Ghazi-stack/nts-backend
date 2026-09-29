@@ -183,7 +183,7 @@ class PromotionController extends Controller
 
             if ($kind === 'coupon') {
                 $generated   = $this->saveCouponCodes($promotion, $storeId, $validated, $couponCfg ?: []);
-                $downloadUrl = url('/api/promotions/download-codes/' . $promotion->id);
+                $downloadUrl = url('/api/dashboard/promotions/download-codes/' . $promotion->id);
             }
 
             return response()->json([
