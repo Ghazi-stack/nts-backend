@@ -1851,14 +1851,12 @@ class ProductController extends Controller
             $page = (int) $request->input('page', 1);
             $pageSize = (int) $request->input('pageSize', 50);
 
-            $cacheKey = "product_search_store_{$storeId}_query_" . md5(strtolower($queryStr)) . "_page_{$page}_size_{$pageSize}";
+            $cacheKey = "product_search_v4_store_{$storeId}_query_" . md5(strtolower($queryStr)) . "_page_{$page}_size_{$pageSize}";
 
             $products = Cache::remember($cacheKey, 30, function () use ($queryStr, $storeId, $page, $pageSize) {
 
                 $escapedQuery = str_replace(['%', '_'], ['\\%', '\\_'], $queryStr);
                 $likeQuery = "%{$escapedQuery}%";
-                $startsWithQuery = "{$escapedQuery}%";
-                $exactQuery = $queryStr;
 
                 $matchingCategoryIds = Category::where('store_id', $storeId)
                     ->where('name', 'like', $likeQuery)
@@ -1885,33 +1883,19 @@ class ProductController extends Controller
                         }
                     })
                     ->select('id', 'name', 'sku', 'price', 'slug', 'brand_id')
+                    ->selectRaw("
+                    CASE
+                        WHEN UPPER(sku) = UPPER(?) THEN 0
+                        WHEN UPPER(name) = UPPER(?) THEN 1
+                        ELSE 2
+                    END as relevance
+                ", [$queryStr, $queryStr])
                     ->with([
                         'categories:id,name',
                         'images:id,product_id,path,is_primary',
                         'brand:id,name,logo'
                     ])
-                    ->orderByRaw("
-                    CASE
-                        WHEN UPPER(sku) = UPPER(?) THEN 0
-                        WHEN UPPER(name) = UPPER(?) THEN 1
-                        WHEN UPPER(sku) LIKE UPPER(?) THEN 2
-                        WHEN UPPER(name) LIKE UPPER(?) THEN 3
-                        WHEN UPPER(sku) LIKE UPPER(?) THEN 4
-                        WHEN UPPER(name) LIKE UPPER(?) THEN 5
-                        WHEN UPPER(slug) LIKE UPPER(?) THEN 6
-                        WHEN UPPER(search_keywords) LIKE UPPER(?) THEN 7
-                        ELSE 8
-                    END
-                ", [
-                        $exactQuery,
-                        $exactQuery,
-                        $startsWithQuery,
-                        $startsWithQuery,
-                        $likeQuery,
-                        $likeQuery,
-                        $likeQuery,
-                        $likeQuery,
-                    ])
+                    ->orderBy('relevance', 'asc')
                     ->orderBy('name', 'asc');
 
                 return $query->paginate($pageSize, ['*'], 'page', $page);
