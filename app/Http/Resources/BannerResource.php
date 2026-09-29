@@ -41,6 +41,8 @@ class BannerResource extends JsonResource
             'through'      => $isAlways ? null : ($dateRange['through'] ?? null),
             'visible'      => (bool) $this->visible,
             'placement'    => $this->placement,
+            'createdAt'    => $this->created_at,
+            'updatedAt'    => $this->updated_at,
         ];
     }
 }
