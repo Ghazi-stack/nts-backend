@@ -18,7 +18,7 @@ class PromotionController extends Controller
         try {
             $storeId = current_store_id();
             if (!$storeId) {
-                return response()->json(['status'=>false,'message'=>'Store not selected or token invalid.'], 400);
+                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
             }
 
             // validate query params (optional)
@@ -65,10 +65,9 @@ class PromotionController extends Controller
                 'message' => 'Promotions retrieved successfully',
                 'data'    => (new PromotionResource($items))->resolve(),
             ], 200);
-
         } catch (\Exception $e) {
-            \Log::error('Error fetching promotions: '.$e->getMessage());
-            return response()->json(['status'=>false,'message'=>'Failed to retrieve promotions'], 500);
+            \Log::error('Error fetching promotions: ' . $e->getMessage());
+            return response()->json(['status' => false, 'message' => 'Failed to retrieve promotions'], 500);
         }
     }
 
@@ -78,7 +77,7 @@ class PromotionController extends Controller
         try {
             $storeId = current_store_id();
             if (!$storeId) {
-                return response()->json(['status'=>false,'message'=>'Store not selected or token invalid.'], 400);
+                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
             }
 
             $promotion = Promotion::where('store_id', $storeId)->findOrFail($id);
@@ -89,12 +88,11 @@ class PromotionController extends Controller
                 'message' => 'Promotion retrieved successfully',
                 'data'    => (new PromotionResource($collection))->resolve(),
             ], 200);
-
         } catch (ModelNotFoundException $e) {
-            return response()->json(['status'=>false,'message'=>'Promotion not found'], 404);
+            return response()->json(['status' => false, 'message' => 'Promotion not found'], 404);
         } catch (\Exception $e) {
-            Log::error('Error fetching promotion: '.$e->getMessage());
-            return response()->json(['status'=>false,'message'=>'Failed to retrieve promotion'], 500);
+            Log::error('Error fetching promotion: ' . $e->getMessage());
+            return response()->json(['status' => false, 'message' => 'Failed to retrieve promotion'], 500);
         }
     }
 
@@ -103,65 +101,71 @@ class PromotionController extends Controller
         try {
             $storeId = current_store_id();
             if (!$storeId) {
-                return response()->json(['status'=>false,'message'=>'Store not selected or token invalid.'], 400);
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
             }
 
             $data = $request->validate([
-                'type'      => ['required', Rule::in(['automatic','coupon'])],
-                'name'      => 'required|string|max:255',
-                'status'    => ['required', Rule::in(['active','inactive'])],
-                'priority'  => 'nullable|integer|min:0',
-                'currency'  => 'nullable|string|max:10',
-                'channel'   => 'nullable|string|max:255',
-
-                // coupon-only
-                'code'              => 'nullable|required_if:type,coupon|string|max:100',
-                'maxRedemptions'    => 'nullable|required_if:type,coupon|integer|min:1',
-                'perCustomerLimit'  => 'nullable|required_if:type,coupon|integer|min:1',
-
-                'conditions' => 'nullable|array',
-                'actions'    => 'nullable|array',
-                'startsAt'   => 'nullable|date',
-                'endsAt'     => 'nullable|date|after_or_equal:startsAt',
-                'extra'      => 'nullable|array',
+                'kind'             => ['nullable', Rule::in(['automatic', 'coupon'])],
+                'type'             => ['required', Rule::in(['custom', 'cart', 'shipping'])],
+                'name'             => ['required', 'string', 'max:255'],
+                'displayName'      => ['nullable', 'string', 'max:255'],
+                'status'           => ['required', Rule::in(['draft', 'active', 'inactive', 'archived'])],
+                'priority'         => ['nullable', 'integer', 'min:0'],
+                'currency'         => ['nullable', 'string', 'max:10'],
+                'channel'          => ['nullable', 'string', 'max:50'],
+                'isFeatured'       => ['nullable', 'boolean'],
+                'featuredMessage'  => ['nullable', 'string', 'max:80'],
+                'maxRedemptions'   => ['nullable', 'integer', 'min:0'],
+                'canCombine'       => ['nullable', 'boolean'],
+                'startsAt'         => ['nullable', 'date'],
+                'endsAt'           => ['nullable', 'date', 'after_or_equal:startsAt'],
+                'conditions'       => ['nullable', 'array'],
+                'actions'          => ['nullable', 'array'],
+                'schedule'         => ['nullable', 'array'],
+                'targeting'        => ['nullable', 'array'],
+                'banners'          => ['nullable', 'array'],
             ]);
 
-            if (($data['type'] ?? null) === 'coupon' && !empty($data['code'])) {
-                $exists = Promotion::where('store_id', $storeId)
-                    ->where('code', strtoupper($data['code']))
-                    ->exists();
-                if ($exists) {
-                    return response()->json(['status'=>false,'message'=>'Coupon code already exists for this store.'], 422);
-                }
-            }
-
             $promotion = Promotion::create([
-                'store_id'           => $storeId,
-                'type'               => $data['type'],
-                'name'               => $data['name'],
-                'status'             => $data['status'],
-                'priority'           => $data['priority'] ?? 0,
-                'currency'           => $data['currency'] ?? null,
-                'channel'            => $data['channel'] ?? null,
-                'code'               => ($data['type'] === 'coupon' && !empty($data['code'])) ? strtoupper($data['code']) : null,
-                'max_redemptions'    => $data['type'] === 'coupon' ? ($data['maxRedemptions'] ?? null) : null,
-                'per_customer_limit' => $data['type'] === 'coupon' ? ($data['perCustomerLimit'] ?? null) : null,
-                'conditions'         => $data['conditions'] ?? null,
-                'actions'            => $data['actions'] ?? null,
-                'starts_at'          => $data['startsAt'] ?? null,
-                'ends_at'            => $data['endsAt'] ?? null,
-                'extra'              => $data['extra'] ?? null,
+                'store_id'         => $storeId,
+                'kind'             => $data['kind'] ?? 'automatic',
+                'type'             => $data['type'],
+                'name'             => $data['name'],
+                'display_name'     => $data['displayName'] ?? null,
+                'status'           => $data['status'],
+                'priority'         => $data['priority'] ?? 0,
+                'currency'         => $data['currency'] ?? null,
+                'channel'          => $data['channel'] ?? 'any',
+                'is_featured'      => $data['isFeatured'] ?? false,
+                'featured_message' => $data['featuredMessage'] ?? null,
+                'max_redemptions'  => $data['maxRedemptions'] ?? null,
+                'redemptions'      => 0,
+                'can_combine'      => $data['canCombine'] ?? true,
+                'conditions'       => $data['conditions'] ?? null,
+                'actions'          => $data['actions'] ?? null,
+                'starts_at'        => $data['startsAt'] ?? null,
+                'ends_at'          => $data['endsAt'] ?? null,
+                'schedule'         => $data['schedule'] ?? null,
+                'targeting'        => $data['targeting'] ?? null,
+                'banners'          => $data['banners'] ?? null,
             ]);
 
             return response()->json([
                 'status'  => true,
                 'message' => 'Promotion created successfully',
-                'data'    => (new PromotionResource(collect([$promotion])))->resolve(),
+                'data'    => new PromotionResource($promotion),
             ], 201);
-
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            Log::error('Error creating promotion: '.$e->getMessage());
-            return response()->json(['status'=>false,'message'=>'Failed to create promotion'], 500);
+            Log::error('Error creating promotion: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to create promotion',
+            ], 500);
         }
     }
 
@@ -170,15 +174,15 @@ class PromotionController extends Controller
         try {
             $storeId = current_store_id();
             if (!$storeId) {
-                return response()->json(['status'=>false,'message'=>'Store not selected or token invalid.'], 400);
+                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
             }
 
             $promotion = Promotion::where('store_id', $storeId)->findOrFail($id);
 
             $data = $request->validate([
-                'type'      => ['sometimes', Rule::in(['automatic','coupon'])],
+                'type'      => ['sometimes', Rule::in(['automatic', 'coupon'])],
                 'name'      => 'sometimes|string|max:255',
-                'status'    => ['sometimes', Rule::in(['active','inactive'])],
+                'status'    => ['sometimes', Rule::in(['active', 'inactive'])],
                 'priority'  => 'sometimes|integer|min:0',
                 'currency'  => 'nullable|string|max:10',
                 'channel'   => 'nullable|string|max:255',
@@ -203,7 +207,7 @@ class PromotionController extends Controller
                     ->where('id', '!=', $promotion->id)
                     ->exists();
                 if ($exists) {
-                    return response()->json(['status'=>false,'message'=>'Coupon code already exists for this store.'], 422);
+                    return response()->json(['status' => false, 'message' => 'Coupon code already exists for this store.'], 422);
                 }
             }
 
@@ -239,12 +243,11 @@ class PromotionController extends Controller
                 'message' => 'Promotion updated successfully',
                 'data'    => (new PromotionResource(collect([$promotion->fresh()])))->resolve(),
             ], 200);
-
         } catch (ModelNotFoundException $e) {
-            return response()->json(['status'=>false,'message'=>'Promotion not found'], 404);
+            return response()->json(['status' => false, 'message' => 'Promotion not found'], 404);
         } catch (\Exception $e) {
-            Log::error('Error updating promotion: '.$e->getMessage());
-            return response()->json(['status'=>false,'message'=>'Failed to update promotion'], 500);
+            Log::error('Error updating promotion: ' . $e->getMessage());
+            return response()->json(['status' => false, 'message' => 'Failed to update promotion'], 500);
         }
     }
 
@@ -253,7 +256,7 @@ class PromotionController extends Controller
         try {
             $storeId = current_store_id();
             if (!$storeId) {
-                return response()->json(['status'=>false,'message'=>'Store not selected or token invalid.'], 400);
+                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
             }
 
             $promotion = Promotion::where('store_id', $storeId)->findOrFail($id);
@@ -263,12 +266,11 @@ class PromotionController extends Controller
                 'status'  => true,
                 'message' => 'Promotion deleted successfully',
             ], 200);
-
         } catch (ModelNotFoundException $e) {
-            return response()->json(['status'=>false,'message'=>'Promotion not found'], 404);
+            return response()->json(['status' => false, 'message' => 'Promotion not found'], 404);
         } catch (\Exception $e) {
-            Log::error('Error deleting promotion: '.$e->getMessage());
-            return response()->json(['status'=>false,'message'=>'Failed to delete promotion'], 500);
+            Log::error('Error deleting promotion: ' . $e->getMessage());
+            return response()->json(['status' => false, 'message' => 'Failed to delete promotion'], 500);
         }
     }
 }
