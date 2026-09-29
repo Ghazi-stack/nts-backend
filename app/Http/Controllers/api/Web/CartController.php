@@ -1981,7 +1981,21 @@ class CartController extends Controller
                 'service_type' => 'nullable|string',
                 'method_type' => 'nullable|string',
                 'total_charge' => 'nullable|numeric',
+
+                'rate' => 'nullable|array',
+                'rate.service_type' => 'nullable|string',
+                'rate.method_type' => 'nullable|string',
+                'rate.total_charge' => 'nullable|numeric',
             ]);
+
+            $serviceType = $validated['service_type']
+                ?? data_get($validated, 'rate.service_type');
+
+            $methodType = $validated['method_type']
+                ?? data_get($validated, 'rate.method_type');
+
+            $totalCharge = $validated['total_charge']
+                ?? data_get($validated, 'rate.total_charge');
 
             /*
             |--------------------------------------------------------------------------
@@ -2079,9 +2093,9 @@ class CartController extends Controller
                 'state'        => $validated['state'] ?? null,
                 'city'         => $validated['city'] ?? null,
                 'zip'          => $validated['zip'] ?? null,
-                'service_type' => $validated['service_type'] ?? null,
-                'method_type'  => $validated['method_type'] ?? null,
-                'total_charge' => (float) ($validated['total_charge'] ?? 0),
+                'service_type' => $serviceType,
+                'method_type'  => $methodType,
+                'total_charge' => (float) ($totalCharge ?? 0),
             ];
 
             if ($shippingRate) {
