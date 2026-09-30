@@ -24,30 +24,30 @@ class BannerResource extends JsonResource
 
         $hasLocationEntity = (bool) ($this->location_category || $this->location_brand);
 
-        $location = null;
-
-        if ($this->location_category) {
-            $location = [
-                'id'   => $this->location_category->id,
-                'name' => $this->location_category->name,
-                'slug' => $this->location_category->slug ?: Str::slug($this->location_category->name),
-            ];
-        } elseif ($this->location_brand) {
-            $location = [
-                'id'   => $this->location_brand->id,
-                'name' => $this->location_brand->name,
-                'slug' => $this->location_brand->slug ?: Str::slug($this->location_brand->name),
-            ];
-        }
-
         return [
             'id'           => $this->id,
             'storeId'      => $this->store_id,
             'title'        => $this->title,
             'pageContent'  => $this->page_content,
             'locationType' => $type,
-            'locationId'   => $this->when($id !== null, $id),
-            'location'     => $this->when($hasLocationEntity, $location),
+            'locationId'   => $this->when(!$hasLocationEntity, $id),
+            'location'     => $this->when($hasLocationEntity, function () {
+                if ($this->location_category) {
+                    return [
+                        'id'   => $this->location_category->id,
+                        'name' => $this->location_category->name,
+                        'slug' => $this->location_category->slug
+                            ?: Str::slug($this->location_category->name),
+                    ];
+                }
+
+                return [
+                    'id'   => $this->location_brand->id,
+                    'name' => $this->location_brand->name,
+                    'slug' => $this->location_brand->slug
+                        ?: Str::slug($this->location_brand->name),
+                ];
+            }),
             'dateType'     => $dateType,
             'startDate'    => $startDate,
             'endDate'      => $endDate,
