@@ -934,7 +934,7 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            $allowedTokenNames = ['customerToken', 'customer_login'];
+            $allowedTokenNames = ['customerToken', 'customer_login','auth_token'];
 
             if (!in_array($accessToken->name, $allowedTokenNames, true)) {
                 return response()->json([
