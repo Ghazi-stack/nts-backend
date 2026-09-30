@@ -2105,40 +2105,33 @@ class CouponCodeController extends Controller
 
             $updatedIds = $usages->pluck('id')->values();
 
-            DB::transaction(function () use (
-                $usages,
-                $storeId,
-                $user,
-                $draftToken
-            ) {
+            /*
+            |--------------------------------------------------------------------------
+            | Soft delete coupon usage
+            |--------------------------------------------------------------------------
+            |
+            | IMPORTANT:
+            | Keep is_draft and draft_token unchanged.
+            |
+            */
+            CouponUsage::whereIn('id', $updatedIds)
+                ->update([
+                    'is_delete' => 1,
+                ]);
 
-                /*
-                |--------------------------------------------------------------------------
-                | Soft-delete coupon usage
-                |
-                | IMPORTANT:
-                | Do NOT change is_draft here.
-                |--------------------------------------------------------------------------
-                */
-                CouponUsage::whereIn('id', $usages->pluck('id'))
-                    ->update([
-                        'is_delete' => 1,
-                    ]);
+            /*
+            |--------------------------------------------------------------------------
+            | Sync active draft order
+            |--------------------------------------------------------------------------
+            */
+            if (!empty($draftToken) && $user) {
 
-                /*
-                |--------------------------------------------------------------------------
-                | If this is an active draft, synchronize the draft order
-                |--------------------------------------------------------------------------
-                */
-                if (!empty($draftToken) && $user) {
-
-                    $this->syncDraftCouponToOrder(
-                        $storeId,
-                        $user,
-                        $draftToken
-                    );
-                }
-            });
+                $this->syncDraftCouponToOrder(
+                    $storeId,
+                    $user,
+                    $draftToken
+                );
+            }
 
             return response()->json([
                 'status'     => true,
@@ -2148,9 +2141,18 @@ class CouponCodeController extends Controller
 
         } catch (\Throwable $e) {
 
+            /*
+            |--------------------------------------------------------------------------
+            | Temporarily return the actual error
+            |--------------------------------------------------------------------------
+            | Remove "error" after testing.
+            */
             return response()->json([
                 'status'  => false,
                 'message' => 'Something went wrong',
+                'error'   => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
             ], 500);
         }
     }
