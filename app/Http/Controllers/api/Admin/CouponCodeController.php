@@ -1727,7 +1727,7 @@ class CouponCodeController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Resolve user
+            | RESOLVE USER
             |--------------------------------------------------------------------------
             */
             $user = $request->user('sanctum') ?? auth('sanctum')->user();
@@ -1746,7 +1746,7 @@ class CouponCodeController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Get current persistent cart/draft context
+            | GET CURRENT QUOTE TOKEN
             |--------------------------------------------------------------------------
             */
             $draftToken = $this->cartContext->getCurrentQuoteToken(
@@ -1757,26 +1757,39 @@ class CouponCodeController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Manual discount
+            | MANUAL DISCOUNT
             |--------------------------------------------------------------------------
             */
             $manualDiscount = 0;
+            $orderId = null;
 
-            if (!empty($draftToken) && $user) {
+            if (!empty($draftToken)) {
 
                 try {
+
                     $payload = $this->draftQuote->decode($draftToken);
 
                     $tokenStoreId = (int) ($payload['store_id'] ?? 0);
                     $orderId      = (int) ($payload['order_id'] ?? 0);
                     $tokenUserId  = (int) ($payload['user_id'] ?? 0);
 
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Validate token ownership
+                    |--------------------------------------------------------------------------
+                    */
+                    $storeMatches = $tokenStoreId === (int) $storeId;
+                    $orderExists  = $orderId > 0;
+                    $userMatches  = !$user || $tokenUserId === (int) $user->id;
+
                     if (
-                        $tokenStoreId === (int) $storeId &&
-                        $orderId > 0 &&
-                        $tokenUserId === (int) $user->id
+                        $storeMatches &&
+                        $orderExists &&
+                        $userMatches &&
+                        $user
                     ) {
-                        $order = Order::query()
+
+                        $order = \App\Models\Order::query()
                             ->where('id', $orderId)
                             ->where('store_id', $storeId)
                             ->where('user_id', $user->id)
@@ -1784,20 +1797,30 @@ class CouponCodeController extends Controller
                             ->first();
 
                         if ($order) {
+
+                            /*
+                            |--------------------------------------------------------------------------
+                            | IMPORTANT:
+                            | Keep reading manual_discount exactly like the
+                            | working version.
+                            |--------------------------------------------------------------------------
+                            */
                             $manualDiscount = round(
                                 (float) ($order->manual_discount ?? 0),
                                 2
                             );
                         }
                     }
+
                 } catch (\Throwable $e) {
+
                     $manualDiscount = 0;
                 }
             }
 
             /*
             |--------------------------------------------------------------------------
-            | Base coupon query
+            | COUPON QUERY
             |--------------------------------------------------------------------------
             */
             $query = CouponUsage::where('store_id', $storeId)
@@ -1827,7 +1850,7 @@ class CouponCodeController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | NORMAL LOGGED-IN CART
+            | NORMAL CART
             |--------------------------------------------------------------------------
             */
             if ($user) {
@@ -1847,11 +1870,6 @@ class CouponCodeController extends Controller
                     }
                 });
 
-            /*
-            |--------------------------------------------------------------------------
-            | NORMAL GUEST CART
-            |--------------------------------------------------------------------------
-            */
             } elseif ($sessionId) {
 
                 $query->where('session_id', $sessionId);
