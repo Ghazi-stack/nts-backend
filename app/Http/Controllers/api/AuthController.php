@@ -839,13 +839,25 @@ class AuthController extends Controller
             }
 
             /*
-        |--------------------------------------------------------------------------
-        | SINGLE SESSION — purana token expire
-        |--------------------------------------------------------------------------
-        */
-            $customer->tokens()
+            |--------------------------------------------------------------------------
+            | SINGLE SESSION
+            |--------------------------------------------------------------------------
+            | Create the new token first.
+            | Then remove only the customer's previous customer sessions.
+            |--------------------------------------------------------------------------
+            */
+
+            
+            $existingTokenIds = $customer->tokens()
                 ->whereIn('name', ['customerToken', 'customer_login'])
-                ->delete();
+                ->pluck('id')
+                ->toArray();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Create new customer token
+            |--------------------------------------------------------------------------
+            */
 
             $tokenResult    = $customer->createToken('customerToken');
             $plainTextToken = $tokenResult->plainTextToken;
@@ -856,6 +868,27 @@ class AuthController extends Controller
 
             if ($accessToken) {
                 $accessToken->expires_at = $expireAt;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Delete previous sessions only
+            |--------------------------------------------------------------------------
+            */
+
+            if (!empty($existingTokenIds)) {
+                $customer->tokens()
+                    ->whereIn('id', $existingTokenIds)
+                    ->delete();
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Save new token expiry
+            |--------------------------------------------------------------------------
+            */
+
+            if ($accessToken) {
                 $accessToken->save();
             }
 
