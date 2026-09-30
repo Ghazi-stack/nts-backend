@@ -115,6 +115,7 @@ class BannerController extends Controller
             }
 
             $location = strtolower(trim((string) $request->query('islocation', $request->query('isLocation', ''))));
+            $locationId = $request->query('locationId');
 
             if ($location === '') {
                 return response()->json([
@@ -125,13 +126,18 @@ class BannerController extends Controller
 
             $perPage = $request->query('perPage', 20);
 
-            $banners = Banner::where('store_id', $storeId)
+            $query = Banner::where('store_id', $storeId)
                 ->where(function ($q) use ($location) {
                     $q->where('location->key', $location)
                         ->orWhere('location->key', ucfirst($location))
                         ->orWhere('location->key', strtolower($location));
-                })
-                ->orderBy('created_at', 'asc')
+                });
+
+            if (in_array($location, ['category', 'brand'], true) && $locationId !== null && $locationId !== '') {
+                $query->where('location->id', (int) $locationId);
+            }
+
+            $banners = $query->orderBy('created_at', 'asc')
                 ->orderBy('id', 'asc')
                 ->paginate($perPage);
 
