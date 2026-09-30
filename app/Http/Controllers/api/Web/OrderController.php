@@ -56,18 +56,19 @@ class OrderController extends Controller
 {
 
     public function __construct(
-    protected DraftQuoteService $draftQuote,
-    protected CartContextService $cartContext
+        protected DraftQuoteService $draftQuote,
+        protected CartContextService $cartContext
     ) {}
 
     public function index(Request $request)
     {
         try {
-            $perPage   = min((int) $request->query('perPage', 20), 50);
-            $keyword   = trim((string) $request->query('keyword', ''));
-            $status    = $request->query('status');
-            $productId = $request->query('productId');
-            $storeId   = current_store_id();
+            $perPage    = min((int) $request->query('perPage', 20), 50);
+            $keyword    = trim((string) $request->query('keyword', ''));
+            $status     = $request->query('status');
+            $productId  = $request->query('productId');
+            $customerId = $request->query('customerId');
+            $storeId    = current_store_id();
 
             if (!$storeId) {
                 return response()->json([
@@ -118,6 +119,9 @@ class OrderController extends Controller
                     $q->whereHas('items', function ($item) use ($productId) {
                         $item->where('product_id', (int) $productId);
                     });
+                })
+                ->when($customerId, function ($q) use ($customerId) {
+                    $q->where('customer_id', (int) $customerId);
                 })
                 ->when($keyword !== '', function ($q) use ($keyword) {
                     $q->where(function ($query) use ($keyword) {
@@ -1286,7 +1290,7 @@ class OrderController extends Controller
                     /*
                     | The draft is empty and should no longer be treated as active.
                     */
-                    
+
                     // $this->cartContext->setNormalCart(
                     //     $storeId,
                     //     $currentUser->id
@@ -1967,8 +1971,7 @@ class OrderController extends Controller
                                 $sessionId
                             );
                         }
-                    }
-                     else {
+                    } else {
                         /*
                         |--------------------------------------------------------------------------
                         | Normal checkout
@@ -1981,11 +1984,11 @@ class OrderController extends Controller
                             ->where('user_id', $cartUser->id)
                             ->where(function ($q) {
                                 $q->whereNull('quote_token')
-                                ->orWhere('quote_token', '');
+                                    ->orWhere('quote_token', '');
                             })
                             ->where(function ($q) {
                                 $q->where('isdraftcart', 0)
-                                ->orWhereNull('isdraftcart');
+                                    ->orWhereNull('isdraftcart');
                             })
                             ->delete();
 
@@ -2019,11 +2022,11 @@ class OrderController extends Controller
                             ->whereNull('user_id')
                             ->where(function ($q) {
                                 $q->whereNull('quote_token')
-                                ->orWhere('quote_token', '');
+                                    ->orWhere('quote_token', '');
                             })
                             ->where(function ($q) {
                                 $q->where('isdraftcart', 0)
-                                ->orWhereNull('isdraftcart');
+                                    ->orWhereNull('isdraftcart');
                             })
                             ->delete();
                     }
@@ -2276,7 +2279,6 @@ class OrderController extends Controller
                 'message' => 'Discounts retrieved successfully',
                 'data'    => $data,
             ]);
-
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
@@ -3528,7 +3530,7 @@ class OrderController extends Controller
 
             $customer = Customer::where('store_id', $storeId)
                 ->findOrFail($validated['customerId']);
-            $customerUser = $customer->user;    
+            $customerUser = $customer->user;
 
             if (!$customerUser) {
                 DB::rollBack();
@@ -4377,11 +4379,11 @@ class OrderController extends Controller
                     ->where('user_id', $user->id)
                     ->where(function ($q) {
                         $q->whereNull('quote_token')
-                        ->orWhere('quote_token', '');
+                            ->orWhere('quote_token', '');
                     })
                     ->where(function ($q) {
                         $q->where('isdraftcart', 0)
-                        ->orWhereNull('isdraftcart');
+                            ->orWhereNull('isdraftcart');
                     })
                     ->delete();
 
@@ -4579,7 +4581,6 @@ class OrderController extends Controller
                 ],
                 'data'    => $data,
             ]);
-
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
@@ -4588,7 +4589,7 @@ class OrderController extends Controller
             ], 500);
         }
     }
-    
+
     private function validateStripeCard(array $pm): array
     {
         $errors = [];
