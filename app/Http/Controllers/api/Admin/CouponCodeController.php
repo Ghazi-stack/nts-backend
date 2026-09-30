@@ -491,6 +491,11 @@ class CouponCodeController extends Controller
         try {
             $storeId = $this->getStoreId();
 
+            /*
+            |--------------------------------------------------------------------------
+            | FIND COUPON
+            |--------------------------------------------------------------------------
+            */
             $query = CouponCode::where('store_id', $storeId);
 
             if ($request->filled('couponCode')) {
@@ -513,6 +518,11 @@ class CouponCodeController extends Controller
                 ], 404);
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | COUPON STATUS
+            |--------------------------------------------------------------------------
+            */
             if (!$coupon->enabled) {
                 return response()->json([
                     'status'  => false,
@@ -531,9 +541,9 @@ class CouponCodeController extends Controller
             }
 
             /*
-            * ============================================================
-            * RESOLVE USER / SESSION
-            * ============================================================
+            |--------------------------------------------------------------------------
+            | RESOLVE USER / SESSION
+            |--------------------------------------------------------------------------
             */
             $user = $request->user('sanctum') ?? auth('sanctum')->user();
 
@@ -552,9 +562,9 @@ class CouponCodeController extends Controller
                 : $request->header('X-Session-ID');
 
             /*
-            * ============================================================
-            * RESOLVE CURRENT PERSISTENT CART
-            * ============================================================
+            |--------------------------------------------------------------------------
+            | RESOLVE CURRENT CART / DRAFT
+            |--------------------------------------------------------------------------
             */
             $draftToken = $this->cartContext->getCurrentQuoteToken(
                 $storeId,
@@ -563,78 +573,16 @@ class CouponCodeController extends Controller
             );
 
             /*
-            * ============================================================
-            * FIND EXISTING COUPON USAGE
-            * ============================================================
-            *
-            * If a draft is active, ONLY search inside that draft.
-            */
-            $usageQuery = CouponUsage::where('store_id', $storeId)
-                ->where(function ($q) use ($coupon) {
-                    $q->where('coupon_id', $coupon->id)
-                        ->orWhere('coupon_code', $coupon->couponCode);
-                })
-                ->where('is_delete', 0);
-
-            if (!empty($draftToken)) {
-
-                $usageQuery
-                    ->where('is_draft', 1)
-                    ->where('draft_token', $draftToken);
-
-            } elseif ($userId) {
-
-                $userEmail = strtolower(trim($user->email ?? ''));
-
-                $usageQuery->where(function ($q) use ($userId, $userEmail) {
-                    $q->where('user_id', $userId);
-
-                    if ($userEmail) {
-                        $q->orWhereRaw(
-                            'LOWER(email) = ?',
-                            [$userEmail]
-                        );
-                    }
-                });
-
-                $usageQuery->where('is_draft', 0);
-
-            } elseif ($sessionId) {
-
-                $usageQuery
-                    ->where('session_id', $sessionId)
-                    ->where('is_draft', 0);
-
-            } else {
-
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Token or X-Session-ID is required',
-                ], 400);
-            }
-
-            $existingUsage = $usageQuery
-                ->orderBy('id', 'desc')
-                ->first();
-
-            if ($existingUsage && (int) $existingUsage->user_used === 1) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'You have already used this coupon.',
-                ], 400);
-            }
-
-            /*
-            * ============================================================
-            * FORMAT COUPON
-            * ============================================================
+            |--------------------------------------------------------------------------
+            | FORMAT COUPON
+            |--------------------------------------------------------------------------
             */
             $coupon = $this->formatCoupon($coupon);
 
             /*
-            * ============================================================
-            * PRODUCT IDS
-            * ============================================================
+            |--------------------------------------------------------------------------
+            | PRODUCT IDS
+            |--------------------------------------------------------------------------
             */
             $productIds = $this->normalizeIds(
                 $request->input(
@@ -644,9 +592,7 @@ class CouponCodeController extends Controller
             );
 
             if (empty($productIds) && $request->filled('cart')) {
-
                 foreach ((array) $request->input('cart') as $item) {
-
                     if (
                         isset($item['productId']) ||
                         isset($item['product_id'])
@@ -666,9 +612,9 @@ class CouponCodeController extends Controller
             }
 
             /*
-            * ============================================================
-            * CATEGORY VALIDATION
-            * ============================================================
+            |--------------------------------------------------------------------------
+            | CATEGORY VALIDATION
+            |--------------------------------------------------------------------------
             */
             if ($coupon->appliesToCategories) {
 
@@ -692,7 +638,7 @@ class CouponCodeController extends Controller
 
                 $productCategoryIds = collect($pivotCategoryIds)
                     ->merge($productTableCategoryIds)
-                    ->map(fn($id) => (int) $id)
+                    ->map(fn ($id) => (int) $id)
                     ->filter()
                     ->unique()
                     ->values()
@@ -718,9 +664,9 @@ class CouponCodeController extends Controller
             }
 
             /*
-            * ============================================================
-            * PRODUCT VALIDATION
-            * ============================================================
+            |--------------------------------------------------------------------------
+            | PRODUCT VALIDATION
+            |--------------------------------------------------------------------------
             */
             if ($coupon->appliesToProducts) {
 
@@ -751,13 +697,98 @@ class CouponCodeController extends Controller
             }
 
             /*
-            * ============================================================
-            * CREATE COUPON USAGE
-            * ============================================================
+            |--------------------------------------------------------------------------
+            | CHECK EXISTING COUPON USAGE
+            |--------------------------------------------------------------------------
+            |
+            | Dashboard logic:
+            | - For a draft, only check the current draft_token.
+            | - For normal website cart, check user/email or session.
+            |
+            */
+            if (!empty($draftToken)) {
+
+                $existingUsage = CouponUsage::where('store_id', $storeId)
+                    ->where('coupon_id', $coupon->id)
+                    ->where('is_draft', 1)
+                    ->where('draft_token', $draftToken)
+                    ->where('is_delete', 0)
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+            } elseif ($user) {
+
+                $userEmail = strtolower(
+                    trim($user->email ?? '')
+                );
+
+                $existingUsageQuery = CouponUsage::where(
+                    'store_id',
+                    $storeId
+                )
+                    ->where('coupon_id', $coupon->id)
+                    ->where('is_draft', 0)
+                    ->where('is_delete', 0)
+                    ->where(function ($q) use ($userId, $userEmail) {
+
+                        $q->where('user_id', $userId);
+
+                        if ($userEmail) {
+                            $q->orWhereRaw(
+                                'LOWER(email) = ?',
+                                [$userEmail]
+                            );
+                        }
+                    });
+
+                $existingUsage = $existingUsageQuery
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+            } elseif ($sessionId) {
+
+                $existingUsage = CouponUsage::where(
+                    'store_id',
+                    $storeId
+                )
+                    ->where('coupon_id', $coupon->id)
+                    ->where('session_id', $sessionId)
+                    ->where('is_draft', 0)
+                    ->where('is_delete', 0)
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+            } else {
+
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Token or X-Session-ID is required',
+                ], 400);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | ALREADY USED
+            |--------------------------------------------------------------------------
+            */
+            if (
+                $existingUsage &&
+                (int) $existingUsage->user_used === 1
+            ) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'You have already used this coupon.',
+                ], 400);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | CREATE / REUSE COUPON USAGE
+            |--------------------------------------------------------------------------
             */
             if (!$existingUsage) {
 
-                CouponUsage::create([
+                $usage = CouponUsage::create([
                     'store_id'        => $storeId,
                     'user_id'         => $userId,
                     'session_id'      => $userId ? null : $sessionId,
@@ -769,13 +800,34 @@ class CouponCodeController extends Controller
                     'email'           => $user->email ?? null,
 
                     /*
-                    * Persistent draft support.
+                    |--------------------------------------------------------------------------
+                    | Draft support
+                    |--------------------------------------------------------------------------
                     */
                     'is_draft'        => !empty($draftToken) ? 1 : 0,
                     'draft_token'     => $draftToken ?: null,
                 ]);
+
+            } else {
+
+                /*
+                |--------------------------------------------------------------------------
+                | Existing draft usage
+                |--------------------------------------------------------------------------
+                |
+                | Keep the existing usage tied to the current draft.
+                | This prevents duplicate CouponUsage rows every time
+                | the website calls the coupon API again.
+                |
+                */
+                $usage = $existingUsage;
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | RESPONSE
+            |--------------------------------------------------------------------------
+            */
             return response()->json([
                 'status'  => true,
                 'message' => 'Coupon is valid.',
