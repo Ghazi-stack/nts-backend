@@ -282,6 +282,205 @@ class CouponCodeController extends Controller
     }
 
     // show CouponCode web
+    // public function showWebCouponCode(Request $request, $id = null)
+    // {
+    //     try {
+    //         $storeId = $this->getStoreId();
+
+    //         $query = CouponCode::where('store_id', $storeId);
+
+    //         if ($request->filled('couponCode')) {
+    //             $query->where('couponCode', $request->couponCode);
+    //         } elseif ($id) {
+    //             $query->where('id', $id);
+    //         } else {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'CouponCode or ID is required',
+    //             ], 400);
+    //         }
+
+    //         $coupon = $query->first();
+
+    //         if (!$coupon) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Invalid coupon code',
+    //             ], 404);
+    //         }
+
+    //         if (!$coupon->enabled) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'This coupon is not enabled.',
+    //             ], 400);
+    //         }
+
+    //         if (!empty($coupon->expiration) && strtotime($coupon->expiration) < strtotime(date('Y-m-d'))) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'This coupon has expired.',
+    //             ], 400);
+    //         }
+
+    //         $user = $request->user('sanctum') ?? auth('sanctum')->user();
+
+    //         if (!$user && $request->bearerToken()) {
+    //             $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+    //             $user  = $token?->tokenable;
+    //         }
+
+    //         $userId    = $user?->id;
+    //         $sessionId = $request->header('X-Session-ID');
+
+    //         $usageQuery = CouponUsage::where('store_id', $storeId)
+    //             ->where(function ($q) use ($coupon) {
+    //                 $q->where('coupon_id', $coupon->id)
+    //                     ->orWhere('coupon_code', $coupon->couponCode);
+    //             });
+
+    //         if ($userId) {
+    //             $userEmail = strtolower(trim($user->email ?? ''));
+
+    //             $usageQuery->where(function ($q) use ($userId, $userEmail) {
+    //                 $q->where('user_id', $userId);
+
+    //                 if ($userEmail) {
+    //                     $q->orWhereRaw('LOWER(email) = ?', [$userEmail]);
+    //                 }
+    //             });
+    //         } elseif ($sessionId) {
+    //             $usageQuery->where('session_id', $sessionId);
+    //         } else {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Token or X-Session-ID is required',
+    //             ], 400);
+    //         }
+
+    //         $existingUsage = $usageQuery->orderBy('id', 'desc')->first();
+
+    //         if ($existingUsage && (int) $existingUsage->is_delete === 1) {
+    //             $existingUsage = null;
+    //         }
+
+    //         if ($existingUsage && (int) $existingUsage->user_used === 1) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'You have already used this coupon.',
+    //             ], 400);
+    //         }
+
+    //         $coupon = $this->formatCoupon($coupon);
+
+    //         $productIds = $this->normalizeIds($request->input('productIds', $request->input('product_id')));
+
+    //         if (empty($productIds) && $request->filled('cart')) {
+    //             foreach ((array) $request->input('cart') as $item) {
+    //                 if (isset($item['productId']) || isset($item['product_id'])) {
+    //                     $productIds[] = (int) ($item['productId'] ?? $item['product_id']);
+    //                 }
+    //             }
+    //             $productIds = array_values(array_unique(array_filter($productIds)));
+    //         }
+
+    //         if ($coupon->appliesToCategories) {
+    //             if (empty($productIds)) {
+    //                 return response()->json([
+    //                     'status'  => false,
+    //                     'message' => 'Product IDs are required to apply this coupon.',
+    //                 ], 400);
+    //             }
+
+    //             $pivotCategoryIds = DB::table('category_product')
+    //                 ->whereIn('product_id', $productIds)
+    //                 ->pluck('category_id')
+    //                 ->toArray();
+
+    //             $productTableCategoryIds = DB::table('products')
+    //                 ->whereIn('id', $productIds)
+    //                 ->whereNotNull('category_id')
+    //                 ->pluck('category_id')
+    //                 ->toArray();
+
+    //             $productCategoryIds = collect($pivotCategoryIds)
+    //                 ->merge($productTableCategoryIds)
+    //                 ->map(fn($id) => (int) $id)
+    //                 ->filter()
+    //                 ->unique()
+    //                 ->values()
+    //                 ->toArray();
+
+    //             $allowedCategoryIds = $coupon->categoryIds ?? [];
+    //             $matchedCategoryIds = array_values(array_intersect($productCategoryIds, $allowedCategoryIds));
+
+    //             if (empty($matchedCategoryIds)) {
+    //                 return response()->json([
+    //                     'status'  => false,
+    //                     'message' => 'This coupon is not applicable to the products in your cart.',
+    //                 ], 400);
+    //             }
+
+    //             $coupon->applicableCategoryIds = $matchedCategoryIds;
+    //         }
+
+    //         if ($coupon->appliesToProducts) {
+    //             if (empty($productIds)) {
+    //                 return response()->json([
+    //                     'status'  => false,
+    //                     'message' => 'Product IDs are required to apply this coupon.',
+    //                 ], 400);
+    //             }
+
+    //             $allowedProductIds = $coupon->productIds ?? [];
+    //             $matchedProductIds = array_values(array_intersect($productIds, $allowedProductIds));
+
+    //             if (empty($matchedProductIds)) {
+    //                 return response()->json([
+    //                     'status'  => false,
+    //                     'message' => 'This coupon is not applicable to the products in your cart.',
+    //                 ], 400);
+    //             }
+
+    //             $coupon->applicableProductIds = $matchedProductIds;
+    //         }
+
+    //         if (!$existingUsage) {
+    //             [$currentUser, $currentSessionId] = $this->resolveIdentity($request);
+
+    //             $draftToken = $this->cartContext->getCurrentQuoteToken(
+    //                 $storeId,
+    //                 $currentUser,
+    //                 $currentSessionId
+    //             );
+
+    //             $usage = CouponUsage::create([
+    //                 'store_id'        => $storeId,
+    //                 'user_id'         => $currentUser?->id,
+    //                 'session_id'      => $currentSessionId,
+    //                 'coupon_id'       => $coupon->id,
+    //                 'coupon_code'     => $coupon->couponCode,
+    //                 'discount_amount' => $coupon->discountAmount,
+    //                 'user_used'       => 0,
+    //                 'email'           => $email,
+    //                 'is_draft'        => 1,
+    //                 'draft_token'     => $draftToken,
+    //             ]);
+    //         }
+
+    //         return response()->json([
+    //             'status'  => true,
+    //             'message' => 'Coupon is valid.',
+    //             'data'    => $coupon,
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Something went wrong',
+    //             'error'   => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
     public function showWebCouponCode(Request $request, $id = null)
     {
         try {
@@ -316,53 +515,102 @@ class CouponCodeController extends Controller
                 ], 400);
             }
 
-            if (!empty($coupon->expiration) && strtotime($coupon->expiration) < strtotime(date('Y-m-d'))) {
+            if (
+                !empty($coupon->expiration) &&
+                strtotime($coupon->expiration) < strtotime(date('Y-m-d'))
+            ) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'This coupon has expired.',
                 ], 400);
             }
 
+            /*
+            * ============================================================
+            * RESOLVE USER / SESSION
+            * ============================================================
+            */
             $user = $request->user('sanctum') ?? auth('sanctum')->user();
 
             if (!$user && $request->bearerToken()) {
-                $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
-                $user  = $token?->tokenable;
+                $token = \Laravel\Sanctum\PersonalAccessToken::findToken(
+                    $request->bearerToken()
+                );
+
+                $user = $token?->tokenable;
             }
 
-            $userId    = $user?->id;
-            $sessionId = $request->header('X-Session-ID');
+            $userId = $user?->id;
 
+            $sessionId = $user
+                ? null
+                : $request->header('X-Session-ID');
+
+            /*
+            * ============================================================
+            * RESOLVE CURRENT PERSISTENT CART
+            * ============================================================
+            */
+            $draftToken = $this->cartContext->getCurrentQuoteToken(
+                $storeId,
+                $user,
+                $sessionId
+            );
+
+            /*
+            * ============================================================
+            * FIND EXISTING COUPON USAGE
+            * ============================================================
+            *
+            * If a draft is active, ONLY search inside that draft.
+            */
             $usageQuery = CouponUsage::where('store_id', $storeId)
                 ->where(function ($q) use ($coupon) {
                     $q->where('coupon_id', $coupon->id)
                         ->orWhere('coupon_code', $coupon->couponCode);
-                });
+                })
+                ->where('is_delete', 0);
 
-            if ($userId) {
+            if (!empty($draftToken)) {
+
+                $usageQuery
+                    ->where('is_draft', 1)
+                    ->where('draft_token', $draftToken);
+
+            } elseif ($userId) {
+
                 $userEmail = strtolower(trim($user->email ?? ''));
 
                 $usageQuery->where(function ($q) use ($userId, $userEmail) {
                     $q->where('user_id', $userId);
 
                     if ($userEmail) {
-                        $q->orWhereRaw('LOWER(email) = ?', [$userEmail]);
+                        $q->orWhereRaw(
+                            'LOWER(email) = ?',
+                            [$userEmail]
+                        );
                     }
                 });
+
+                $usageQuery->where('is_draft', 0);
+
             } elseif ($sessionId) {
-                $usageQuery->where('session_id', $sessionId);
+
+                $usageQuery
+                    ->where('session_id', $sessionId)
+                    ->where('is_draft', 0);
+
             } else {
+
                 return response()->json([
                     'status'  => false,
                     'message' => 'Token or X-Session-ID is required',
                 ], 400);
             }
 
-            $existingUsage = $usageQuery->orderBy('id', 'desc')->first();
-
-            if ($existingUsage && (int) $existingUsage->is_delete === 1) {
-                $existingUsage = null;
-            }
+            $existingUsage = $usageQuery
+                ->orderBy('id', 'desc')
+                ->first();
 
             if ($existingUsage && (int) $existingUsage->user_used === 1) {
                 return response()->json([
@@ -371,20 +619,54 @@ class CouponCodeController extends Controller
                 ], 400);
             }
 
+            /*
+            * ============================================================
+            * FORMAT COUPON
+            * ============================================================
+            */
             $coupon = $this->formatCoupon($coupon);
 
-            $productIds = $this->normalizeIds($request->input('productIds', $request->input('product_id')));
+            /*
+            * ============================================================
+            * PRODUCT IDS
+            * ============================================================
+            */
+            $productIds = $this->normalizeIds(
+                $request->input(
+                    'productIds',
+                    $request->input('product_id')
+                )
+            );
 
             if (empty($productIds) && $request->filled('cart')) {
+
                 foreach ((array) $request->input('cart') as $item) {
-                    if (isset($item['productId']) || isset($item['product_id'])) {
-                        $productIds[] = (int) ($item['productId'] ?? $item['product_id']);
+
+                    if (
+                        isset($item['productId']) ||
+                        isset($item['product_id'])
+                    ) {
+                        $productIds[] = (int) (
+                            $item['productId']
+                            ?? $item['product_id']
+                        );
                     }
                 }
-                $productIds = array_values(array_unique(array_filter($productIds)));
+
+                $productIds = array_values(
+                    array_unique(
+                        array_filter($productIds)
+                    )
+                );
             }
 
+            /*
+            * ============================================================
+            * CATEGORY VALIDATION
+            * ============================================================
+            */
             if ($coupon->appliesToCategories) {
+
                 if (empty($productIds)) {
                     return response()->json([
                         'status'  => false,
@@ -412,7 +694,13 @@ class CouponCodeController extends Controller
                     ->toArray();
 
                 $allowedCategoryIds = $coupon->categoryIds ?? [];
-                $matchedCategoryIds = array_values(array_intersect($productCategoryIds, $allowedCategoryIds));
+
+                $matchedCategoryIds = array_values(
+                    array_intersect(
+                        $productCategoryIds,
+                        $allowedCategoryIds
+                    )
+                );
 
                 if (empty($matchedCategoryIds)) {
                     return response()->json([
@@ -424,7 +712,13 @@ class CouponCodeController extends Controller
                 $coupon->applicableCategoryIds = $matchedCategoryIds;
             }
 
+            /*
+            * ============================================================
+            * PRODUCT VALIDATION
+            * ============================================================
+            */
             if ($coupon->appliesToProducts) {
+
                 if (empty($productIds)) {
                     return response()->json([
                         'status'  => false,
@@ -433,7 +727,13 @@ class CouponCodeController extends Controller
                 }
 
                 $allowedProductIds = $coupon->productIds ?? [];
-                $matchedProductIds = array_values(array_intersect($productIds, $allowedProductIds));
+
+                $matchedProductIds = array_values(
+                    array_intersect(
+                        $productIds,
+                        $allowedProductIds
+                    )
+                );
 
                 if (empty($matchedProductIds)) {
                     return response()->json([
@@ -445,26 +745,29 @@ class CouponCodeController extends Controller
                 $coupon->applicableProductIds = $matchedProductIds;
             }
 
+            /*
+            * ============================================================
+            * CREATE COUPON USAGE
+            * ============================================================
+            */
             if (!$existingUsage) {
-                [$currentUser, $currentSessionId] = $this->resolveIdentity($request);
 
-                $draftToken = $this->cartContext->getCurrentQuoteToken(
-                    $storeId,
-                    $currentUser,
-                    $currentSessionId
-                );
-
-                $usage = CouponUsage::create([
+                CouponUsage::create([
                     'store_id'        => $storeId,
-                    'user_id'         => $currentUser?->id,
-                    'session_id'      => $currentSessionId,
+                    'user_id'         => $userId,
+                    'session_id'      => $userId ? null : $sessionId,
                     'coupon_id'       => $coupon->id,
                     'coupon_code'     => $coupon->couponCode,
                     'discount_amount' => $coupon->discountAmount,
                     'user_used'       => 0,
-                    'email'           => $email,
-                    'is_draft'        => 1,
-                    'draft_token'     => $draftToken,
+                    'is_delete'       => 0,
+                    'email'           => $user->email ?? null,
+
+                    /*
+                    * Persistent draft support.
+                    */
+                    'is_draft'        => !empty($draftToken) ? 1 : 0,
+                    'draft_token'     => $draftToken ?: null,
                 ]);
             }
 
@@ -473,7 +776,9 @@ class CouponCodeController extends Controller
                 'message' => 'Coupon is valid.',
                 'data'    => $coupon,
             ]);
+
         } catch (\Exception $e) {
+
             return response()->json([
                 'status'  => false,
                 'message' => 'Something went wrong',
@@ -851,6 +1156,11 @@ class CouponCodeController extends Controller
         try {
             $storeId = $this->getStoreId();
 
+            /*
+            * ============================================================
+            * RESOLVE USER / SESSION
+            * ============================================================
+            */
             $user = $request->user('sanctum') ?? auth('sanctum')->user();
 
             if (!$user && $request->bearerToken()) {
@@ -866,7 +1176,9 @@ class CouponCodeController extends Controller
                 : $request->header('X-Session-ID');
 
             /*
-            * Resolve the current persistent cart context.
+            * ============================================================
+            * GET CURRENT PERSISTENT CART CONTEXT
+            * ============================================================
             */
             $draftToken = $this->cartContext->getCurrentQuoteToken(
                 $storeId,
@@ -876,37 +1188,54 @@ class CouponCodeController extends Controller
 
             /*
             * ============================================================
-            * GET MANUAL DISCOUNT FROM CURRENT DRAFT ORDER
+            * MANUAL DISCOUNT
             * ============================================================
             *
             * user_cart_contexts.quote_token
-            *        ↓
-            * draftQuote->decode()
-            *        ↓
+            *          ↓
+            * decode quote token
+            *          ↓
             * order_id
-            *        ↓
-            * orders.manualDiscount
+            *          ↓
+            * manual_discounts.order_id
+            *          ↓
+            * discount_amount
             */
             $manualDiscount = 0;
 
             if (!empty($draftToken)) {
+
                 try {
-                    $quotePayload = $this->draftQuote->decode($draftToken);
+                    $payload = $this->draftQuote->decode($draftToken);
 
-                    $orderId = (int) ($quotePayload['order_id'] ?? 0);
+                    $tokenStoreId = (int) ($payload['store_id'] ?? 0);
+                    $orderId      = (int) ($payload['order_id'] ?? 0);
+                    $tokenUserId  = (int) ($payload['user_id'] ?? 0);
 
-                    if ($orderId > 0) {
-                        $order = \App\Models\Order::query()
-                            ->where('id', $orderId)
+                    /*
+                    * Make sure the decoded token belongs
+                    * to the current store/user.
+                    */
+                    if (
+                        $tokenStoreId === (int) $storeId &&
+                        $orderId > 0 &&
+                        (
+                            !$user ||
+                            $tokenUserId === (int) $user->id
+                        )
+                    ) {
+                        /*
+                        * manual_discounts can contain multiple
+                        * discount rows for the same order.
+                        *
+                        * Sum them to get the total manual discount.
+                        */
+                        $manualDiscount = (float) DB::table('manual_discounts')
                             ->where('store_id', $storeId)
-                            ->first();
-
-                        if ($order) {
-                            $manualDiscount = (float) (
-                                $order->manual_discount ?? 0
-                            );
-                        }
+                            ->where('order_id', $orderId)
+                            ->sum('discount_amount');
                     }
+
                 } catch (\Exception $e) {
                     $manualDiscount = 0;
                 }
@@ -914,7 +1243,7 @@ class CouponCodeController extends Controller
 
             /*
             * ============================================================
-            * COUPON USAGE
+            * COUPON USAGE QUERY
             * ============================================================
             */
             $query = CouponUsage::where('store_id', $storeId)
@@ -944,7 +1273,7 @@ class CouponCodeController extends Controller
 
             /*
             * ============================================================
-            * NORMAL CART
+            * NORMAL LOGGED-IN CART
             * ============================================================
             */
             if ($user) {
@@ -964,11 +1293,23 @@ class CouponCodeController extends Controller
                     }
                 });
 
-            } elseif ($sessionId) {
+            }
+            /*
+            * ============================================================
+            * NORMAL GUEST CART
+            * ============================================================
+            */
+            elseif ($sessionId) {
 
                 $query->where('session_id', $sessionId);
 
-            } else {
+            }
+            /*
+            * ============================================================
+            * NO IDENTITY
+            * ============================================================
+            */
+            else {
 
                 return response()->json([
                     'status'  => false,
@@ -977,7 +1318,9 @@ class CouponCodeController extends Controller
             }
 
             /*
-            * Normal cart coupon usage.
+            * ============================================================
+            * NORMAL CART COUPON
+            * ============================================================
             */
             $usage = $query
                 ->where('is_draft', 0)
