@@ -277,13 +277,33 @@ class PromotionController extends Controller
         }, $filename, ['Content-Type' => 'text/csv']);
     }
 
-    public function listCodes($id)
+    public function listCodes(Request $request, $id)
     {
-        $storeId   = current_store_id();
-        $promotion = Promotion::where('store_id', $storeId)->findOrFail($id);
-        $rows      = PromotionCouponCode::where('promotion_id', $promotion->id)
-            ->orderBy('id')
-            ->get();
+        $storeId = current_store_id();
+        if (!$storeId) {
+            return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
+        }
+
+        $promotion = Promotion::where('store_id', $storeId)->find($id);
+        if (!$promotion) {
+            return response()->json(['status' => false, 'message' => 'Promotion not found.'], 404);
+        }
+
+        $q = PromotionCouponCode::where('promotion_id', $promotion->id);
+
+        $search = trim((string) $request->get('search', ''));
+        if ($search !== '') {
+            $q->where('code', 'like', "%{$search}%");
+        }
+
+        if ($request->filled('validFrom')) {
+            $q->whereDate('valid_from', '>=', $request->get('validFrom'));
+        }
+        if ($request->filled('validUntil')) {
+            $q->whereDate('valid_until', '<=', $request->get('validUntil'));
+        }
+
+        $rows = $q->orderBy('id')->get();
 
         return response()->json([
             'status'  => true,
@@ -292,15 +312,24 @@ class PromotionController extends Controller
                 'promotionId' => $promotion->id,
                 'count'       => $rows->count(),
                 'codes'       => $rows->map(function ($row) {
+                    $from = $row->valid_from
+                        ? $row->valid_from->format('D, M j, Y, g:i A')
+                        : 'Not set';
+                    $until = $row->valid_until
+                        ? $row->valid_until->format('D, M j, Y, g:i A')
+                        : 'Not set';
+
                     return [
-                        'id'        => $row->id,
-                        'code'      => $row->code,
-                        'status'    => $row->status,
-                        'uses'      => $row->status === 'used' ? 1 : 0,
-                        'validFrom' => optional($row->valid_from)?->toDateTimeString(),
+                        'id'         => $row->id,
+                        'code'       => $row->code,
+                        'status'     => $row->status,
+                        'uses'       => $row->status === 'used' ? 1 : 0,
+                        'created'    => optional($row->created_at)?->toDateTimeString(),
+                        'createdLabel' => optional($row->created_at)?->format('D, M j, Y, g:i A'),
+                        'validFrom'  => optional($row->valid_from)?->toDateTimeString(),
                         'validUntil' => optional($row->valid_until)?->toDateTimeString(),
-                        'created'   => optional($row->created_at)?->toDateTimeString(),
-                        'lastUsed'  => optional($row->used_at)?->toDateTimeString(),
+                        'validLabel' => $from . ' - ' . $until,
+                        'lastUsed'   => optional($row->used_at)?->toDateTimeString(),
                     ];
                 })->values(),
             ],
