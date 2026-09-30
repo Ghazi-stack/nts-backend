@@ -3934,18 +3934,16 @@ class OrderController extends Controller
                 }
 
                 $billingFormData = [
-                    'firstName'    => $formAddress['firstName'] ?? null,
-                    'lastName'     => $formAddress['lastName'] ?? null,
-                    'name'         => $formAddress['name'] ?? null,
-                    'email'        => $formAddress['email'] ?? null,
-                    'phone'        => $formAddress['phone'] ?? null,
-                    'companyName'  => $formAddress['companyName'] ?? null,
-                    'addressLine1' => $formAddress['addressLine1'] ?? null,
-                    'addressLine2' => $formAddress['addressLine2'] ?? null,
-                    'city'         => $formAddress['city'] ?? null,
-                    'state'        => $formAddress['state'] ?? null,
-                    'zip'          => $formAddress['zip'] ?? null,
-                    'country'      => $formAddress['country'] ?? null,
+                    'billingFirstName'    => $formAddress['firstName'] ?? null,
+                    'billingLastName'     => $formAddress['lastName'] ?? null,
+                    'billingPhone'        => $formAddress['phone'] ?? null,
+                    'billingCompany'  => $formAddress['companyName'] ?? null,
+                    'billingAddress1' => $formAddress['addressLine1'] ?? null,
+                    'billingAddress2' => $formAddress['addressLine2'] ?? null,
+                    'billingCity'         => $formAddress['city'] ?? null,
+                    'billingState'        => $formAddress['state'] ?? null,
+                    'billingZip'          => $formAddress['zip'] ?? null,
+                    'billingCountry'      => $formAddress['country'] ?? null,
                 ];
 
                 $shippingFormData = [
@@ -3953,9 +3951,9 @@ class OrderController extends Controller
                     'lastName'     => $billingInput['lastName'] ?? $shippingInfo['lastName'] ?? null,
                     'email'        => $billingInput['email'] ?? $shippingInfo['email'] ?? null,
                     'phone'        => $billingInput['phone'] ?? $shippingInfo['phone'] ?? null,
-                    'companyName'  => $billingInput['companyName'] ?? $shippingInfo['companyName'] ?? null,
-                    'addressLine1' => $billingInput['addressLine1'] ?? $shippingInfo['addressLine1'] ?? null,
-                    'addressLine2' => $billingInput['addressLine2'] ?? $shippingInfo['addressLine2'] ?? null,
+                    'company'  => $billingInput['companyName'] ?? $shippingInfo['companyName'] ?? null,
+                    'address1' => $billingInput['addressLine1'] ?? $shippingInfo['addressLine1'] ?? null,
+                    'address2' => $billingInput['addressLine2'] ?? $shippingInfo['addressLine2'] ?? null,
                     'city'         => $billingInput['city'] ?? $shippingInfo['city'] ?? null,
                     'state'        => $billingInput['state'] ?? $shippingInfo['state'] ?? null,
                     'zip'          => $billingInput['zip'] ?? $shippingInfo['zip'] ?? null,
