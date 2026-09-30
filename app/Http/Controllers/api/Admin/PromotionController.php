@@ -277,6 +277,94 @@ class PromotionController extends Controller
         }, $filename, ['Content-Type' => 'text/csv']);
     }
 
+    public function addCodes(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
+            }
+
+            $validated = $request->validate([
+                'promotionId'  => ['required', 'integer'],
+                'count'        => ['required', 'integer', 'min:1'],
+                'length'       => ['nullable', 'integer', 'min:1', 'max:20'],
+                'format'       => ['nullable', Rule::in(['alphanumeric', 'numbers', 'letters'])],
+                'prefix'       => ['nullable', 'string', 'max:30'],
+                'suffix'       => ['nullable', 'string', 'max:30'],
+                'separator'    => ['nullable', 'string', 'max:5'],
+                'scheduleMode' => ['nullable', Rule::in(['promotion', 'custom'])],
+                'validFrom'    => ['nullable', 'date'],
+                'validUntil'   => ['nullable', 'date'],
+            ]);
+
+            $promotion = Promotion::where('store_id', $storeId)->find($validated['promotionId']);
+            if (!$promotion) {
+                return response()->json(['status' => false, 'message' => 'Promotion not found.'], 404);
+            }
+
+            $count     = (int) $validated['count'];
+            $length    = (int) ($validated['length'] ?? 6);
+            $format    = $validated['format'] ?? 'alphanumeric';
+            $prefix    = (string) ($validated['prefix'] ?? '');
+            $suffix    = (string) ($validated['suffix'] ?? '');
+            $separator = (string) ($validated['separator'] ?? '');
+
+            $validFrom  = $promotion->starts_at;
+            $validUntil = $promotion->ends_at;
+            if (($validated['scheduleMode'] ?? 'promotion') === 'custom') {
+                $validFrom  = $validated['validFrom'] ?? $validFrom;
+                $validUntil = $validated['validUntil'] ?? $validUntil;
+            }
+
+            $rows  = [];
+            $tries = 0;
+            while (count($rows) < $count && $tries < $count * 30) {
+                $tries++;
+                $body = $this->makeCouponBody($length, $format);
+                $code = strtoupper(trim(
+                    $prefix . ($prefix !== '' ? $separator : '') . $body . ($suffix !== '' ? $separator . $suffix : ''),
+                    $separator ?: ' '
+                ));
+
+                if (isset($rows[$code])) {
+                    continue;
+                }
+                if (PromotionCouponCode::where('store_id', $storeId)->where('code', $code)->exists()) {
+                    continue;
+                }
+
+                $rows[$code] = [
+                    'store_id'     => $storeId,
+                    'promotion_id' => $promotion->id,
+                    'code'         => $code,
+                    'status'       => 'unused',
+                    'valid_from'   => $validFrom,
+                    'valid_until'  => $validUntil,
+                    'created_at'   => now(),
+                    'updated_at'   => now(),
+                ];
+            }
+
+            PromotionCouponCode::insert(array_values($rows));
+
+            return response()->json([
+                'status'         => true,
+                'message'        => count($rows) . ' coupon codes generated successfully',
+                'codesGenerated' => count($rows),
+                'downloadUrl'    => url('/api/dashboard/promotions/download-codes/' . $promotion->id),
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to generate coupon codes',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function listCodes(Request $request, $id)
     {
         $storeId = current_store_id();
