@@ -903,7 +903,7 @@ class CouponCodeController extends Controller
 
                         if ($order) {
                             $manualDiscount = (float) (
-                                $order->manualDiscount ?? 0
+                                $order->manual_discount ?? 0
                             );
                         }
                     }
