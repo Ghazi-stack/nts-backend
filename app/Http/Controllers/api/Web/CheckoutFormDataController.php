@@ -4,10 +4,18 @@ namespace App\Http\Controllers\Api\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\CheckoutFormData;
+use App\Services\CartContextService;
 use Illuminate\Http\Request;
 
 class CheckoutFormDataController extends Controller
 {
+    protected CartContextService $cartContext;
+
+    public function __construct(CartContextService $cartContext)
+    {
+        $this->cartContext = $cartContext;
+    }
+
     /**
      * Save Checkout Form
      */
@@ -29,10 +37,18 @@ class CheckoutFormDataController extends Controller
 
         $user = auth('sanctum')->user();
 
-        // Session ID from Header
-        $sessionId = $request->header('x-session-id');
+        /*
+        |--------------------------------------------------------------------------
+        | Session ID from header
+        |--------------------------------------------------------------------------
+        */
+        $sessionId = $request->header('X-Session-ID');
 
-        // Guest user must send sessionId
+        /*
+        |--------------------------------------------------------------------------
+        | Guest user must send session ID
+        |--------------------------------------------------------------------------
+        */
         if (!$user && !$sessionId) {
             return response()->json([
                 'status' => false,
@@ -40,23 +56,86 @@ class CheckoutFormDataController extends Controller
             ], 422);
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Get current draft/cart context
+        |--------------------------------------------------------------------------
+        |
+        | If a draft is currently open, this returns its quote token.
+        |
+        */
+        $quoteToken = $this->cartContext->getCurrentQuoteToken(
+            $storeId,
+            $user,
+            $user ? null : $sessionId
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Build lookup conditions
+        |--------------------------------------------------------------------------
+        */
         $conditions = [
             'store_id' => $storeId,
         ];
 
         if ($user) {
+
             $conditions['user_id'] = $user->id;
+
+            /*
+            |--------------------------------------------------------------------------
+            | Draft checkout
+            |--------------------------------------------------------------------------
+            */
+            if ($quoteToken) {
+                $conditions['quote_token'] = $quoteToken;
+            } else {
+
+                /*
+                |--------------------------------------------------------------------------
+                | Normal cart checkout
+                |--------------------------------------------------------------------------
+                |
+                | quote_token must be NULL for normal checkout.
+                |
+                */
+                $conditions['quote_token'] = null;
+            }
+
         } else {
+
+            /*
+            |--------------------------------------------------------------------------
+            | Guest checkout
+            |--------------------------------------------------------------------------
+            */
             $conditions['session_id'] = $sessionId;
+
+            if ($quoteToken) {
+                $conditions['quote_token'] = $quoteToken;
+            } else {
+                $conditions['quote_token'] = null;
+            }
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Save checkout form
+        |--------------------------------------------------------------------------
+        */
         $checkout = CheckoutFormData::updateOrCreate(
             $conditions,
             [
                 'user_id' => $user?->id,
                 'session_id' => $user ? null : $sessionId,
-                'billing_form_data' => $validated['billingFormData'] ?? null,
-                'shipping_form_data' => $validated['shippingFormData'] ?? null,
+                'quote_token' => $quoteToken,
+
+                'billing_form_data' =>
+                    $validated['billingFormData'] ?? null,
+
+                'shipping_form_data' =>
+                    $validated['shippingFormData'] ?? null,
             ]
         );
 
@@ -81,35 +160,109 @@ class CheckoutFormDataController extends Controller
             ], 400);
         }
 
-        $sessionId = $request->header('x-session-id');
+        $sessionId = $request->header('X-Session-ID');
         $user = auth('sanctum')->user();
 
-        $checkout = null;
-
-        if ($user) {
-            $checkout = CheckoutFormData::where('store_id', $storeId)
-                ->where('user_id', $user->id)
-                ->first();
-
-            if (!$checkout && $sessionId) {
-                $checkout = CheckoutFormData::where('store_id', $storeId)
-                    ->where('session_id', $sessionId)
-                    ->first();
-            }
-        } elseif ($sessionId) {
-            $checkout = CheckoutFormData::where('store_id', $storeId)
-                ->where('session_id', $sessionId)
-                ->first();
-        } else {
+        /*
+        |--------------------------------------------------------------------------
+        | Validate identity
+        |--------------------------------------------------------------------------
+        */
+        if (!$user && !$sessionId) {
             return response()->json([
                 'status' => false,
                 'message' => 'Authorization token or sessionId is required.'
             ], 422);
         }
 
-        // Check if expired (24 hours)
-        if ($checkout && $checkout->updated_at->diffInHours(now()) >= 24) {
+        /*
+        |--------------------------------------------------------------------------
+        | Get current quote context
+        |--------------------------------------------------------------------------
+        |
+        | If the customer opened a draft, this gives us that draft's
+        | quote token.
+        |
+        */
+        $quoteToken = $this->cartContext->getCurrentQuoteToken(
+            $storeId,
+            $user,
+            $user ? null : $sessionId
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Get checkout form for CURRENT context
+        |--------------------------------------------------------------------------
+        */
+        $checkoutQuery = CheckoutFormData::query()
+            ->where('store_id', $storeId);
+
+        if ($user) {
+
+            $checkoutQuery->where(
+                'user_id',
+                $user->id
+            );
+
+        } else {
+
+            $checkoutQuery
+                ->whereNull('user_id')
+                ->where(
+                    'session_id',
+                    $sessionId
+                );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Draft checkout
+        |--------------------------------------------------------------------------
+        |
+        | The currently opened draft has its own checkout form data.
+        |
+        */
+        if ($quoteToken) {
+
+            $checkoutQuery->where(
+                'quote_token',
+                $quoteToken
+            );
+
+        } else {
+
+            /*
+            |--------------------------------------------------------------------------
+            | Normal checkout
+            |--------------------------------------------------------------------------
+            |
+            | Do NOT return a previous draft's billing/shipping information.
+            |
+            */
+            $checkoutQuery->where(function ($query) {
+                $query
+                    ->whereNull('quote_token')
+                    ->orWhere('quote_token', '');
+            });
+        }
+
+        $checkout = $checkoutQuery
+            ->latest('id')
+            ->first();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Check if expired (24 hours)
+        |--------------------------------------------------------------------------
+        */
+        if (
+            $checkout &&
+            $checkout->updated_at &&
+            $checkout->updated_at->diffInHours(now()) >= 24
+        ) {
             $checkout->delete();
+
             $checkout = null;
         }
 
