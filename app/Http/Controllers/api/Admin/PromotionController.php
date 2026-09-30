@@ -543,21 +543,35 @@ class PromotionController extends Controller
         try {
             $storeId = current_store_id();
             if (!$storeId) {
-                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
             }
 
-            $promotion = Promotion::where('store_id', $storeId)->findOrFail($id);
+            $promotion = Promotion::where('store_id', $storeId)->find($id);
+            if (!$promotion) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Promotion not found.',
+                ], 404);
+            }
+
+            $codesDeleted = PromotionCouponCode::where('promotion_id', $promotion->id)->delete();
             $promotion->delete();
 
             return response()->json([
-                'status'  => true,
-                'message' => 'Promotion deleted successfully',
-            ], 200);
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['status' => false, 'message' => 'Promotion not found'], 404);
+                'status'       => true,
+                'message'      => 'Promotion deleted successfully',
+                'codesDeleted' => $codesDeleted,
+            ]);
         } catch (\Exception $e) {
             Log::error('Error deleting promotion: ' . $e->getMessage());
-            return response()->json(['status' => false, 'message' => 'Failed to delete promotion'], 500);
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to delete promotion',
+                'error'   => $e->getMessage(),
+            ], 500);
         }
     }
 }
