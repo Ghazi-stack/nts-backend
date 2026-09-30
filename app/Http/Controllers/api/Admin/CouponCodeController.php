@@ -1188,24 +1188,18 @@ class CouponCodeController extends Controller
 
             /*
             * ============================================================
-            * MANUAL DISCOUNT
+            * GET MANUAL DISCOUNT FROM CURRENT DRAFT ORDER
             * ============================================================
-            *
-            * user_cart_contexts.quote_token
-            *          ↓
-            * decode quote token
-            *          ↓
-            * order_id
-            *          ↓
-            * manual_discounts.order_id
-            *          ↓
-            * discount_amount
             */
             $manualDiscount = 0;
 
             if (!empty($draftToken)) {
 
                 try {
+                    /*
+                    * Decode the same quote token used by
+                    * getCustomerOrderDiscounts()
+                    */
                     $payload = $this->draftQuote->decode($draftToken);
 
                     $tokenStoreId = (int) ($payload['store_id'] ?? 0);
@@ -1213,27 +1207,39 @@ class CouponCodeController extends Controller
                     $tokenUserId  = (int) ($payload['user_id'] ?? 0);
 
                     /*
-                    * Make sure the decoded token belongs
-                    * to the current store/user.
+                    * Validate token ownership.
                     */
                     if (
                         $tokenStoreId === (int) $storeId &&
                         $orderId > 0 &&
-                        (
-                            !$user ||
-                            $tokenUserId === (int) $user->id
-                        )
+                        $user &&
+                        $tokenUserId === (int) $user->id
                     ) {
+
                         /*
-                        * manual_discounts can contain multiple
-                        * discount rows for the same order.
-                        *
-                        * Sum them to get the total manual discount.
+                        * Get the SAME active draft order as
+                        * getCustomerOrderDiscounts()
                         */
-                        $manualDiscount = (float) DB::table('manual_discounts')
+                        $order = \App\Models\Order::query()
+                            ->where('id', $orderId)
                             ->where('store_id', $storeId)
-                            ->where('order_id', $orderId)
-                            ->sum('discount_amount');
+                            ->where('user_id', $user->id)
+                            ->where('is_draft', 1)
+                            ->first();
+
+                        if ($order) {
+                            /*
+                            * This is the important part.
+                            *
+                            * Your working API uses:
+                            *
+                            * $order->manual_discount
+                            */
+                            $manualDiscount = round(
+                                (float) ($order->manual_discount ?? 0),
+                                2
+                            );
+                        }
                     }
 
                 } catch (\Exception $e) {
