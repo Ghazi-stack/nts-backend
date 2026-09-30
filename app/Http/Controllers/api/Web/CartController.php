@@ -14,6 +14,8 @@ use Exception;
 use Illuminate\Support\Facades\Validator;
 use App\Services\CartContextService;
 use Illuminate\Support\Facades\DB;
+use App\Models\Order;
+use App\Models\OrderCartItemProduct;
 
 class CartController extends Controller
 {
@@ -103,6 +105,263 @@ class CartController extends Controller
                 $q->where('isdraftcart', 0)
                     ->orWhereNull('isdraftcart');
             });
+    }
+
+    /**
+     * Synchronize the active draft order from its current cart.
+     *
+     * Cart is the source of truth while a draft is active.
+     *
+     * Synchronizes:
+     * - order_items
+     * - order_cart_item_products quantity
+     * - order subtotal
+     * - shipping cost
+     * - discount
+     * - manual discount
+     * - total_amount
+     *
+     * If the draft cart becomes empty:
+     * - soft-delete the draft order
+     * - clear the current cart context
+     *
+     * Existing response structures are not changed.
+     */
+    private function syncDraftOrderFromCart(
+        int $storeId,
+        $user,
+        ?string $quoteToken
+    ): void {
+        if (!$user || !$quoteToken) {
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Decode quote token and get order ID
+        |--------------------------------------------------------------------------
+        */
+        try {
+            $payload = app(\App\Services\DraftQuoteService::class)
+                ->decode($quoteToken);
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        $orderId = (int) ($payload['order_id'] ?? 0);
+
+        if (!$orderId) {
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Find the draft order
+        |--------------------------------------------------------------------------
+        */
+        $order = Order::query()
+            ->where('id', $orderId)
+            ->where('store_id', $storeId)
+            ->where('user_id', $user->id)
+            ->where('is_draft', 1)
+            ->first();
+
+        if (!$order) {
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Get current active cart items for THIS draft only
+        |--------------------------------------------------------------------------
+        */
+        $cartItems = Cart::query()
+            ->with('product')
+            ->where('store_id', $storeId)
+            ->where('user_id', $user->id)
+            ->where('quote_token', $quoteToken)
+            ->where('isdraftcart', 1)
+            ->get();
+
+        /*
+        |--------------------------------------------------------------------------
+        | If cart is empty, this draft is no longer active/reusable.
+        |--------------------------------------------------------------------------
+        */
+        if ($cartItems->isEmpty()) {
+
+            /*
+            * Remove bridge records first.
+            */
+            OrderCartItemProduct::query()
+                ->where('order_id', $order->id)
+                ->delete();
+
+            /*
+            * Remove order items.
+            */
+            $order->items()->delete();
+
+            /*
+            * Soft delete the draft order.
+            */
+            $order->delete();
+
+            /*
+            * Switch current context back to normal cart.
+            */
+            $this->cartContext->setNormalCart(
+                $storeId,
+                $user,
+                null
+            );
+
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Build current cart product map
+        |--------------------------------------------------------------------------
+        */
+        $cartProductIds = $cartItems
+            ->pluck('product_id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Remove order items that no longer exist in cart
+        |--------------------------------------------------------------------------
+        */
+        $order->items()
+            ->whereNotIn('product_id', $cartProductIds)
+            ->delete();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Remove bridge records that no longer exist in cart
+        |--------------------------------------------------------------------------
+        */
+        OrderCartItemProduct::query()
+            ->where('order_id', $order->id)
+            ->whereNotIn('cart_id', $cartItems->pluck('id'))
+            ->delete();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Calculate current cart subtotal
+        |--------------------------------------------------------------------------
+        */
+        $cartSubtotal = 0;
+
+        foreach ($cartItems as $cartItem) {
+
+            $product = $cartItem->product;
+
+            if (!$product) {
+                continue;
+            }
+
+            /*
+            * Draft price override has priority over product price.
+            */
+            $override = OrderCartItemProduct::query()
+                ->where('order_id', $order->id)
+                ->where('cart_id', $cartItem->id)
+                ->where('product_id', $cartItem->product_id)
+                ->latest('id')
+                ->first();
+
+            $price = $override
+                ? (float) $override->price
+                : (float) $product->price;
+
+            $quantity = (int) $cartItem->quantity;
+
+            /*
+            |--------------------------------------------------------------------------
+            | Keep OrderCartItemProduct quantity synchronized
+            |--------------------------------------------------------------------------
+            */
+            if ($override) {
+                $override->update([
+                    'qty' => $quantity,
+                ]);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Keep OrderItem synchronized
+            |--------------------------------------------------------------------------
+            */
+            $orderItem = $order->items()
+                ->where('product_id', $cartItem->product_id)
+                ->first();
+
+            if ($orderItem) {
+
+                $orderItem->update([
+                    'quantity' => $quantity,
+                    'price'    => $price,
+                ]);
+
+            } else {
+
+                $order->items()->create([
+                    'store_id'   => $storeId,
+                    'product_id' => $cartItem->product_id,
+                    'quantity'   => $quantity,
+                    'price'      => $price,
+                ]);
+            }
+
+            $cartSubtotal += $price * $quantity;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Shipping
+        |
+        | Cart changes invalidate the previous shipping rate.
+        | Therefore shipping_cost should be reset until a new rate is selected.
+        |--------------------------------------------------------------------------
+        */
+        $shippingCost = 0;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Preserve existing discounts
+        |--------------------------------------------------------------------------
+        */
+        $discount = (float) ($order->discountAmount ?? 0);
+
+        $manualDiscount = (float) ($order->manual_discount ?? 0);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Calculate new draft total
+        |--------------------------------------------------------------------------
+        */
+        $totalAmount =
+            $cartSubtotal
+            + $shippingCost
+            - $discount
+            - $manualDiscount;
+
+        if ($totalAmount < 0) {
+            $totalAmount = 0;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Update draft order
+        |--------------------------------------------------------------------------
+        */
+        $order->update([
+            'shipping_cost' => $shippingCost,
+            'total_amount'  => $totalAmount,
+        ]);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -577,6 +836,18 @@ class CartController extends Controller
                     ->where('quote_token', $quoteToken)
                     ->delete();
 
+                     /*
+                    |--------------------------------------------------------------------------
+                    | Synchronize draft order
+                    |--------------------------------------------------------------------------
+                    */
+                    if ($user) {
+                        $this->syncDraftOrderFromCart(
+                            $storeId,
+                            $user,
+                            $quoteToken
+                        );
+                    }
             } else {
 
                 CartShippingRate::query()
@@ -697,7 +968,7 @@ class CartController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Current cart context
+            | Get current quote context
             |--------------------------------------------------------------------------
             */
             $quoteToken = $this->getCurrentQuoteToken(
@@ -708,11 +979,15 @@ class CartController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Build current cart query
+            | Get items from CURRENT cart context only
             |--------------------------------------------------------------------------
             */
             $currentCartQuery = $this->applyCurrentCartContext(
-                $this->cartQuery($user, $sessionId, $storeId),
+                $this->cartQuery(
+                    $user,
+                    $sessionId,
+                    $storeId
+                ),
                 $quoteToken
             );
 
@@ -725,6 +1000,11 @@ class CartController extends Controller
                 ], 200);
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | Save IDs before soft deleting
+            |--------------------------------------------------------------------------
+            */
             $cartIds = $cartItems
                 ->pluck('id')
                 ->values()
@@ -735,11 +1015,13 @@ class CartController extends Controller
             DB::transaction(function () use (
                 $storeId,
                 $user,
+                $sessionId,
                 $quoteToken,
                 $cartItems,
                 $cartIds,
                 &$deletedCount
             ) {
+
                 /*
                 |--------------------------------------------------------------------------
                 | Soft delete current cart items
@@ -747,21 +1029,54 @@ class CartController extends Controller
                 */
                 foreach ($cartItems as $cartItem) {
                     $cartItem->delete();
+
                     $deletedCount++;
                 }
 
                 /*
                 |--------------------------------------------------------------------------
-                | Remove shipping rate belonging to THIS cart context only
+                | Remove shipping rate for CURRENT cart context only
                 |--------------------------------------------------------------------------
                 */
                 $shippingQuery = CartShippingRate::query()
                     ->where('store_id', $storeId);
 
-                if ($quoteToken) {
-                    $shippingQuery
-                        ->where('quote_token', $quoteToken);
+                if ($user) {
+
+                    $shippingQuery->where(
+                        'user_id',
+                        $user->id
+                    );
+
                 } else {
+
+                    $shippingQuery
+                        ->whereNull('user_id')
+                        ->where(
+                            'session_id',
+                            $sessionId
+                        );
+                }
+
+                if ($quoteToken) {
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Draft cart
+                    |--------------------------------------------------------------------------
+                    */
+                    $shippingQuery->where(
+                        'quote_token',
+                        $quoteToken
+                    );
+
+                } else {
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Normal cart
+                    |--------------------------------------------------------------------------
+                    */
                     $shippingQuery
                         ->where(function ($query) {
                             $query
@@ -769,13 +1084,18 @@ class CartController extends Controller
                                 ->orWhere('quote_token', '');
                         })
                         ->where(function ($query) use ($cartIds) {
+
                             foreach ($cartIds as $index => $cartId) {
+
                                 if ($index === 0) {
+
                                     $query->whereJsonContains(
                                         'cart_ids',
                                         $cartId
                                     );
+
                                 } else {
+
                                     $query->orWhereJsonContains(
                                         'cart_ids',
                                         $cartId
@@ -789,16 +1109,29 @@ class CartController extends Controller
 
                 /*
                 |--------------------------------------------------------------------------
-                | If this was a draft, it is now empty.
-                |
-                | Therefore this draft is no longer the current cart.
-                | Other drafts remain completely untouched.
+                | Synchronize draft order
                 |--------------------------------------------------------------------------
+                |
+                | At this point all active cart items belonging to the current
+                | draft have been soft deleted.
+                |
+                | syncDraftOrderFromCart() will therefore detect an empty draft
+                | and:
+                |
+                | 1. Remove OrderCartItemProduct bridge records.
+                | 2. Remove draft order items.
+                | 3. Soft-delete the draft order.
+                | 4. Reset the current cart context to normal cart.
+                |
+                | Other draft carts remain untouched.
+                |
                 */
                 if ($quoteToken && $user) {
-                    $this->cartContext->setNormalCart(
+
+                    $this->syncDraftOrderFromCart(
                         $storeId,
-                        $user->id
+                        $user,
+                        $quoteToken
                     );
                 }
             });
@@ -1320,7 +1653,8 @@ class CartController extends Controller
                 ->where('id', $id)
                 ->firstOrFail();
 
-            $product = Product::find($cartItem->product_id);
+            $product = Product::where('store_id', $storeId)
+                ->find($cartItem->product_id);
 
             if (!$product) {
                 return response()->json([
@@ -1330,8 +1664,9 @@ class CartController extends Controller
             }
 
             $quantity = (int) $validated['quantity'];
-            $minQty   = (int) $product->min_purchase_quantity;
-            $maxQty   = (int) $product->max_purchase_quantity;
+
+            $minQty = (int) $product->min_purchase_quantity;
+            $maxQty = (int) $product->max_purchase_quantity;
 
             if ($minQty > 0 && $quantity < $minQty) {
                 return response()->json([
@@ -1347,52 +1682,95 @@ class CartController extends Controller
                 ], 422);
             }
 
-            $cartItem->update([
-                'quantity' => $quantity,
-            ]);
-
             /*
             |--------------------------------------------------------------------------
-            | Quantity changed → invalidate shipping rate for CURRENT context only
+            | Update cart + synchronize draft atomically
             |--------------------------------------------------------------------------
             */
-            $shippingQuery = CartShippingRate::query()
-                ->where('store_id', $storeId);
+            DB::transaction(function () use (
+                $cartItem,
+                $quantity,
+                $storeId,
+                $user,
+                $quoteToken
+            ) {
+                $cartItem->update([
+                    'quantity' => $quantity,
+                ]);
 
-            if ($user) {
-                $shippingQuery->where('user_id', $user->id);
-            } else {
-                $shippingQuery
-                    ->whereNull('user_id')
-                    ->where('session_id', $sessionId);
-            }
+                /*
+                |--------------------------------------------------------------------------
+                | If this is a draft, synchronize its OrderCartItemProduct quantity.
+                |--------------------------------------------------------------------------
+                */
+                if ($quoteToken && $user) {
 
-            if ($quoteToken) {
-                $shippingQuery->where('quote_token', $quoteToken);
-            } else {
-                $shippingQuery->where(function ($q) {
-                    $q->whereNull('quote_token')
-                    ->orWhere('quote_token', '');
-                });
-            }
+                    OrderCartItemProduct::query()
+                        ->where('cart_id', $cartItem->id)
+                        ->where('product_id', $cartItem->product_id)
+                        ->update([
+                            'qty' => $quantity,
+                        ]);
+                }
 
-            $shippingQuery->delete();
+                /*
+                |--------------------------------------------------------------------------
+                | Quantity changed → invalidate shipping rate
+                |--------------------------------------------------------------------------
+                */
+                $shippingQuery = CartShippingRate::query()
+                    ->where('store_id', $storeId);
+
+                if ($user) {
+                    $shippingQuery->where('user_id', $user->id);
+                } else {
+                    $shippingQuery
+                        ->whereNull('user_id')
+                        ->where('session_id', request()->header('X-Session-ID'));
+                }
+
+                if ($quoteToken) {
+                    $shippingQuery->where('quote_token', $quoteToken);
+                } else {
+                    $shippingQuery->where(function ($q) {
+                        $q->whereNull('quote_token')
+                        ->orWhere('quote_token', '');
+                    });
+                }
+
+                $shippingQuery->delete();
+
+                /*
+                |--------------------------------------------------------------------------
+                | Synchronize draft order
+                |--------------------------------------------------------------------------
+                */
+                if ($quoteToken && $user) {
+                    $this->syncDraftOrderFromCart(
+                        $storeId,
+                        $user,
+                        $quoteToken
+                    );
+                }
+            });
 
             return response()->json([
                 'status'  => true,
                 'message' => 'Cart item updated successfully',
                 'data'    => new CartResource(
-                    $cartItem->load($this->productRelations())
+                    $cartItem->fresh()->load($this->productRelations())
                 ),
             ], 200);
 
         } catch (ModelNotFoundException $e) {
+
             return response()->json([
                 'status'  => false,
                 'message' => 'Cart item not found',
             ], 404);
 
         } catch (Exception $e) {
+
             return response()->json([
                 'status'  => false,
                 'message' => 'Failed to update cart item',
@@ -1504,9 +1882,11 @@ class CartController extends Controller
             DB::transaction(function () use (
                 $storeId,
                 $user,
+                $sessionId,
                 $quoteToken,
                 $cartItem
             ) {
+
                 /*
                 |--------------------------------------------------------------------------
                 | Soft delete cart item
@@ -1516,60 +1896,76 @@ class CartController extends Controller
 
                 /*
                 |--------------------------------------------------------------------------
-                | Remove shipping rate belonging to this cart context
+                | Remove bridge record for this cart item
                 |--------------------------------------------------------------------------
+                |
+                | This bridge is only relevant for draft carts.
+                |
                 */
-                if ($quoteToken) {
-
-                    CartShippingRate::query()
-                        ->where('store_id', $storeId)
-                        ->where('quote_token', $quoteToken)
-                        ->delete();
-
-                } else {
-
-                    CartShippingRate::query()
-                        ->where('store_id', $storeId)
-                        ->where(function ($query) {
-                            $query
-                                ->whereNull('quote_token')
-                                ->orWhere('quote_token', '');
-                        })
-                        ->whereJsonContains('cart_ids', $cartItem->id)
+                if ($quoteToken && $user) {
+                    OrderCartItemProduct::query()
+                        ->where('cart_id', $cartItem->id)
+                        ->where('product_id', $cartItem->product_id)
                         ->delete();
                 }
 
                 /*
                 |--------------------------------------------------------------------------
-                | IMPORTANT:
-                | Check whether the current draft still contains products.
+                | Remove shipping rate belonging to THIS cart context
                 |--------------------------------------------------------------------------
                 */
+                $shippingQuery = CartShippingRate::query()
+                    ->where('store_id', $storeId);
+
+                if ($user) {
+                    $shippingQuery->where('user_id', $user->id);
+                } else {
+                    $shippingQuery
+                        ->whereNull('user_id')
+                        ->where('session_id', $sessionId);
+                }
+
+                if ($quoteToken) {
+
+                    $shippingQuery
+                        ->where('quote_token', $quoteToken);
+
+                } else {
+
+                    $shippingQuery
+                        ->where(function ($query) {
+                            $query
+                                ->whereNull('quote_token')
+                                ->orWhere('quote_token', '');
+                        })
+                        ->whereJsonContains('cart_ids', $cartItem->id);
+                }
+
+                $shippingQuery->delete();
+
+                /*
+                |--------------------------------------------------------------------------
+                | Synchronize draft order
+                |--------------------------------------------------------------------------
+                |
+                | If this is a draft cart:
+                |
+                | - Recalculate order items
+                | - Recalculate subtotal/total
+                | - Update quantities
+                | - Preserve custom draft prices
+                | - If cart is now empty, soft-delete the draft order
+                | - Switch current context back to normal cart
+                |
+                | Other drafts remain untouched.
+                |
+                */
                 if ($quoteToken && $user) {
-
-                    $remainingDraftItems = Cart::query()
-                        ->where('store_id', $storeId)
-                        ->where('user_id', $user->id)
-                        ->where('quote_token', $quoteToken)
-                        ->where('isdraftcart', 1)
-                        ->exists();
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | No products left:
-                    |
-                    | 1. Draft cart is already empty/soft deleted.
-                    | 2. Remove current draft context.
-                    | 3. Other drafts remain untouched.
-                    |--------------------------------------------------------------------------
-                    */
-                    if (!$remainingDraftItems) {
-
-                        $this->cartContext->setNormalCart(
-                            $storeId,
-                            $user->id
-                        );
-                    }
+                    $this->syncDraftOrderFromCart(
+                        $storeId,
+                        $user,
+                        $quoteToken
+                    );
                 }
             });
 
