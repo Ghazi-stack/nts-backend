@@ -11,13 +11,16 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use App\Services\CartContextService;
+use App\Services\DraftQuote;
 
 class CouponCodeController extends Controller
 {
     public function __construct(
-        CartContextService $cartContext
+        CartContextService $cartContext,
+        DraftQuote $draftQuote
     ) {
         $this->cartContext = $cartContext;
+        $this->draftQuote = $draftQuote;
     }
     
     private function getStoreId()
