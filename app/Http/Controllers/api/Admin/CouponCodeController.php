@@ -865,21 +865,11 @@ class CouponCodeController extends Controller
                 ? null
                 : $request->header('X-Session-ID');
 
-            $query = CouponUsage::where('store_id', $storeId)
-                ->where('is_delete', 0)
-                ->where('user_used', 0);
-
             /*
             * Resolve the current persistent cart context.
             *
-            * The current quote_token is stored in:
-            * user_cart_contexts.quote_token
-            *
-            * We use that same value as:
-            * coupon_usages.draft_token
-            *
-            * Do NOT decode the token.
-            * Do NOT look for an order using the token.
+            * user_cart_contexts.quote_token is the source of truth
+            * for the currently active draft.
             */
             $draftToken = $this->cartContext->getCurrentQuoteToken(
                 $storeId,
@@ -888,43 +878,113 @@ class CouponCodeController extends Controller
             );
 
             /*
-            * Active draft cart.
+            * ============================================================
+            * GET MANUAL DISCOUNT FROM CURRENT DRAFT ORDER
+            * ============================================================
             *
-            * Find coupon usage belonging to the currently
-            * active persistent draft cart.
+            * The orders table does not contain quote_token.
+            *
+            * The quote token contains the order_id, so use the existing
+            * DraftQuote service to decode it.
+            *
+            * Do NOT manually base64_decode the token.
+            */
+            $manualDiscount = 0;
+            $orderId = null;
+
+            if (!empty($draftToken)) {
+                try {
+                    $quotePayload = $this->draftQuote->decode($draftToken);
+
+                    $orderId = (int) ($quotePayload['order_id'] ?? 0);
+
+                    if ($orderId > 0) {
+                        $order = \App\Models\Order::query()
+                            ->where('id', $orderId)
+                            ->where('store_id', $storeId)
+                            ->first();
+
+                        if ($order) {
+                            $manualDiscount = (float) (
+                                $order->manual_discount ?? 0
+                            );
+                        }
+                    }
+                } catch (\Exception $e) {
+                    /*
+                    * If the draft token cannot be decoded, do not break
+                    * the coupon API. Manual discount remains 0.
+                    */
+                    $manualDiscount = 0;
+                    $orderId = null;
+                }
+            }
+
+            /*
+            * ============================================================
+            * COUPON USAGE QUERY
+            * ============================================================
+            */
+            $query = CouponUsage::where('store_id', $storeId)
+                ->where('is_delete', 0)
+                ->where('user_used', 0);
+
+            /*
+            * ============================================================
+            * ACTIVE DRAFT CART
+            * ============================================================
+            *
+            * The same quote token is stored in:
+            *
+            * user_cart_contexts.quote_token
+            *              ↓
+            * coupon_usages.draft_token
             */
             if (!empty($draftToken)) {
-                $byToken = (clone $query)
+
+                $usage = (clone $query)
                     ->where('is_draft', 1)
                     ->where('draft_token', $draftToken)
                     ->orderBy('id', 'desc')
                     ->first();
 
-                if ($byToken) {
-                    return response()->json([
-                        'status'  => true,
-                        'message' => 'Coupon usages fetched successfully',
-                        'data'    => $byToken,
-                    ]);
+                /*
+                * Preserve the existing response structure while also
+                * returning the manual discount from the draft order.
+                */
+                if ($usage) {
+                    $usage->manualDiscount = $manualDiscount;
+                } else {
+                    /*
+                    * No coupon exists for this draft, but the draft may
+                    * still have a manual discount.
+                    *
+                    * Return the same data structure as much as possible.
+                    */
+                    $usage = (object) [
+                        'manualDiscount' => $manualDiscount,
+                    ];
                 }
 
-                /*
-                * There is an active draft cart but no coupon
-                * has been applied to it.
-                *
-                * Return the same response structure used
-                * by the normal cart flow.
-                */
+                return response()->json([
+                    'status'  => true,
+                    'message' => 'Coupon usages fetched successfully',
+                    'data'    => $usage,
+                ]);
             }
 
             /*
-            * Normal logged-in user flow.
+            * ============================================================
+            * NORMAL CART
+            * ============================================================
             */
             if ($user) {
+
                 $userId = $user->id;
                 $userEmail = strtolower(trim($user->email ?? ''));
 
                 $query->where(function ($q) use ($userId, $userEmail) {
+
                     $q->where('user_id', $userId);
 
                     if ($userEmail) {
@@ -934,19 +994,13 @@ class CouponCodeController extends Controller
                         );
                     }
                 });
-            }
 
-            /*
-            * Normal guest flow.
-            */
-            elseif ($sessionId) {
+            } elseif ($sessionId) {
+
                 $query->where('session_id', $sessionId);
-            }
 
-            /*
-            * Neither authenticated user nor guest session.
-            */
-            else {
+            } else {
+
                 return response()->json([
                     'status'  => false,
                     'message' => 'Token or X-Session-ID is required',
@@ -955,6 +1009,9 @@ class CouponCodeController extends Controller
 
             /*
             * Normal cart coupon usage.
+            *
+            * Manual discount is only associated with the saved draft
+            * order, so normal cart behavior remains unchanged.
             */
             $usage = $query
                 ->where('is_draft', 0)
@@ -968,6 +1025,7 @@ class CouponCodeController extends Controller
             ]);
 
         } catch (\Exception $e) {
+
             return response()->json([
                 'status'  => false,
                 'message' => 'Something went wrong',
