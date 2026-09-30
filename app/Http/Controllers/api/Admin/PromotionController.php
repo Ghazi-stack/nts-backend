@@ -538,38 +538,37 @@ class PromotionController extends Controller
         }
     }
 
-    public function updateStatus(Request $request, $id)
+    public function updateStatus(Request $request)
     {
         try {
             $storeId = current_store_id();
             if (!$storeId) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Store not selected or token invalid.',
-                ], 400);
+                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
             }
 
             $validated = $request->validate([
                 'status' => ['required', Rule::in(['active', 'inactive', 'archived'])],
+                'ids'    => ['required', 'array', 'min:1'],
+                'ids.*'  => ['integer'],
             ]);
 
-            $promotion = Promotion::where('store_id', $storeId)->find($id);
-            if (!$promotion) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Promotion not found.',
-                ], 404);
-            }
+            $ids = array_values(array_unique($validated['ids']));
 
-            $promotion->update(['status' => $validated['status']]);
+            $updated = Promotion::where('store_id', $storeId)
+                ->whereIn('id', $ids)
+                ->update(['status' => $validated['status']]);
+
+            if (!$updated) {
+                return response()->json(['status' => false, 'message' => 'Promotion not found.'], 404);
+            }
 
             return response()->json([
                 'status'  => true,
                 'message' => 'Promotion status updated',
+                'updated' => $updated,
                 'data'    => [
-                    'id'     => $promotion->id,
-                    'status' => $promotion->status,
-                    'active' => $promotion->status === 'active',
+                    'ids'    => $ids,
+                    'status' => $validated['status'],
                 ],
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -583,35 +582,39 @@ class PromotionController extends Controller
         }
     }
 
-    public function destroy($id)
+    public function destroy(Request $request)
     {
         try {
             $storeId = current_store_id();
             if (!$storeId) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Store not selected or token invalid.',
-                ], 400);
+                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
             }
 
-            $promotion = Promotion::where('store_id', $storeId)->find($id);
-            if (!$promotion) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Promotion not found.',
-                ], 404);
+            $validated = $request->validate([
+                'ids'   => ['required', 'array', 'min:1'],
+                'ids.*' => ['integer'],
+            ]);
+
+            $ids = array_values(array_unique($validated['ids']));
+
+            $promos = Promotion::where('store_id', $storeId)->whereIn('id', $ids)->get();
+            if ($promos->isEmpty()) {
+                return response()->json(['status' => false, 'message' => 'Promotion not found.'], 404);
             }
 
-            $codesDeleted = PromotionCouponCode::where('promotion_id', $promotion->id)->delete();
-            $promotion->delete();
+            $promoIds = $promos->pluck('id');
+            $codesDeleted = PromotionCouponCode::whereIn('promotion_id', $promoIds)->delete();
+            $deleted = Promotion::where('store_id', $storeId)->whereIn('id', $promoIds)->delete();
 
             return response()->json([
                 'status'       => true,
                 'message'      => 'Promotion deleted successfully',
+                'deleted'      => $deleted,
                 'codesDeleted' => $codesDeleted,
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            Log::error('Error deleting promotion: ' . $e->getMessage());
             return response()->json([
                 'status'  => false,
                 'message' => 'Failed to delete promotion',
