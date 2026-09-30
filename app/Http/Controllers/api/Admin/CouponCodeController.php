@@ -12,6 +12,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use App\Services\CartContextService;
 use App\Services\DraftQuoteService;
+use App\Models\Order;
 
 class CouponCodeController extends Controller
 {
