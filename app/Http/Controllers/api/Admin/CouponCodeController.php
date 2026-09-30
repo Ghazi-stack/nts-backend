@@ -867,9 +867,6 @@ class CouponCodeController extends Controller
 
             /*
             * Resolve the current persistent cart context.
-            *
-            * user_cart_contexts.quote_token is the source of truth
-            * for the currently active draft.
             */
             $draftToken = $this->cartContext->getCurrentQuoteToken(
                 $storeId,
@@ -882,15 +879,15 @@ class CouponCodeController extends Controller
             * GET MANUAL DISCOUNT FROM CURRENT DRAFT ORDER
             * ============================================================
             *
-            * The orders table does not contain quote_token.
-            *
-            * The quote token contains the order_id, so use the existing
-            * DraftQuote service to decode it.
-            *
-            * Do NOT manually base64_decode the token.
+            * user_cart_contexts.quote_token
+            *        ↓
+            * draftQuote->decode()
+            *        ↓
+            * order_id
+            *        ↓
+            * orders.manualDiscount
             */
             $manualDiscount = 0;
-            $orderId = null;
 
             if (!empty($draftToken)) {
                 try {
@@ -906,23 +903,18 @@ class CouponCodeController extends Controller
 
                         if ($order) {
                             $manualDiscount = (float) (
-                                $order->manual_discount ?? 0
+                                $order->manualDiscount ?? 0
                             );
                         }
                     }
                 } catch (\Exception $e) {
-                    /*
-                    * If the draft token cannot be decoded, do not break
-                    * the coupon API. Manual discount remains 0.
-                    */
                     $manualDiscount = 0;
-                    $orderId = null;
                 }
             }
 
             /*
             * ============================================================
-            * COUPON USAGE QUERY
+            * COUPON USAGE
             * ============================================================
             */
             $query = CouponUsage::where('store_id', $storeId)
@@ -931,14 +923,8 @@ class CouponCodeController extends Controller
 
             /*
             * ============================================================
-            * ACTIVE DRAFT CART
+            * ACTIVE DRAFT
             * ============================================================
-            *
-            * The same quote token is stored in:
-            *
-            * user_cart_contexts.quote_token
-            *              ↓
-            * coupon_usages.draft_token
             */
             if (!empty($draftToken)) {
 
@@ -948,28 +934,11 @@ class CouponCodeController extends Controller
                     ->orderBy('id', 'desc')
                     ->first();
 
-                /*
-                * Preserve the existing response structure while also
-                * returning the manual discount from the draft order.
-                */
-                if ($usage) {
-                    $usage->manualDiscount = $manualDiscount;
-                } else {
-                    /*
-                    * No coupon exists for this draft, but the draft may
-                    * still have a manual discount.
-                    *
-                    * Return the same data structure as much as possible.
-                    */
-                    $usage = (object) [
-                        'manualDiscount' => $manualDiscount,
-                    ];
-                }
-
                 return response()->json([
-                    'status'  => true,
-                    'message' => 'Coupon usages fetched successfully',
-                    'data'    => $usage,
+                    'status'         => true,
+                    'message'        => 'Coupon usages fetched successfully',
+                    'data'           => $usage,
+                    'manualDiscount' => $manualDiscount,
                 ]);
             }
 
@@ -1009,9 +978,6 @@ class CouponCodeController extends Controller
 
             /*
             * Normal cart coupon usage.
-            *
-            * Manual discount is only associated with the saved draft
-            * order, so normal cart behavior remains unchanged.
             */
             $usage = $query
                 ->where('is_draft', 0)
@@ -1019,9 +985,10 @@ class CouponCodeController extends Controller
                 ->first();
 
             return response()->json([
-                'status'  => true,
-                'message' => 'Coupon usages fetched successfully',
-                'data'    => $usage,
+                'status'         => true,
+                'message'        => 'Coupon usages fetched successfully',
+                'data'           => $usage,
+                'manualDiscount' => $manualDiscount,
             ]);
 
         } catch (\Exception $e) {
