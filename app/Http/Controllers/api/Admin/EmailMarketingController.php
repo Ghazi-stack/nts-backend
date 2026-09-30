@@ -28,10 +28,17 @@ class EmailMarketingController extends Controller
                 ]
             );
 
+            $subscriptionsCount = \App\Models\Newsletter::query()
+                ->where('store_id', $storeId)
+                ->count();
+
+            $data = (new EmailMarketingSettingResource($settings))->toArray($request);
+            $data['subscriptionsCount'] = $subscriptionsCount;
+
             return response()->json([
                 'status' => true,
                 'message' => 'Email marketing settings fetched.',
-                'data' => new EmailMarketingSettingResource($settings),
+                'data' => $data,
             ]);
         } catch (Exception $e) {
             return response()->json(['status' => false, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
