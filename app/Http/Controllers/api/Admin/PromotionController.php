@@ -538,6 +538,51 @@ class PromotionController extends Controller
         }
     }
 
+    public function updateStatus(Request $request, $id)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
+            $validated = $request->validate([
+                'status' => ['required', Rule::in(['active', 'inactive', 'archived'])],
+            ]);
+
+            $promotion = Promotion::where('store_id', $storeId)->find($id);
+            if (!$promotion) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Promotion not found.',
+                ], 404);
+            }
+
+            $promotion->update(['status' => $validated['status']]);
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Promotion status updated',
+                'data'    => [
+                    'id'     => $promotion->id,
+                    'status' => $promotion->status,
+                    'active' => $promotion->status === 'active',
+                ],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to update status',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function destroy($id)
     {
         try {
