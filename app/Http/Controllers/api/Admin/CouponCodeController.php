@@ -11,13 +11,15 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use App\Services\CartContextService;
-use App\Services\DraftQuote;
+use App\Services\DraftQuoteService;
 
 class CouponCodeController extends Controller
 {
+    private $draftQuote;
+
     public function __construct(
         CartContextService $cartContext,
-        DraftQuote $draftQuote
+        DraftQuoteService $draftQuote
     ) {
         $this->cartContext = $cartContext;
         $this->draftQuote = $draftQuote;
