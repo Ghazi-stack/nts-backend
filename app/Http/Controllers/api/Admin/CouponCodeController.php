@@ -520,12 +520,12 @@ class CouponCodeController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Validate token ownership
+        | Validate token
         |--------------------------------------------------------------------------
         */
         if (
-            $tokenStoreId !== $storeId ||
-            !$orderId ||
+            $tokenStoreId !== (int) $storeId ||
+            $orderId <= 0 ||
             $tokenUserId !== (int) $user->id
         ) {
             return;
@@ -533,7 +533,7 @@ class CouponCodeController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Find current draft order
+        | Get exact draft order
         |--------------------------------------------------------------------------
         */
         $order = Order::query()
@@ -549,7 +549,7 @@ class CouponCodeController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Get currently active coupon for THIS draft
+        | Get currently active coupon for this exact draft
         |--------------------------------------------------------------------------
         */
         $usage = CouponUsage::query()
@@ -561,6 +561,11 @@ class CouponCodeController extends Controller
             ->orderBy('id', 'desc')
             ->first();
 
+        /*
+        |--------------------------------------------------------------------------
+        | Coupon values
+        |--------------------------------------------------------------------------
+        */
         $discount = $usage
             ? (float) ($usage->discount_amount ?? 0)
             : 0;
@@ -571,15 +576,16 @@ class CouponCodeController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | IMPORTANT:
-        | Use the already synchronized draft order items.
+        | Calculate current draft subtotal
         |
-        | CartController keeps these items synchronized with the cart.
+        | Cart synchronization already keeps order items synchronized.
         |--------------------------------------------------------------------------
         */
         $subtotal = 0;
 
-        foreach ($order->items as $item) {
+        $orderItems = $order->items()->get();
+
+        foreach ($orderItems as $item) {
             $subtotal +=
                 ((float) ($item->price ?? 0))
                 * ((int) ($item->quantity ?? 0));
@@ -587,18 +593,22 @@ class CouponCodeController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Preserve shipping and manual discount
+        | Preserve existing shipping
         |--------------------------------------------------------------------------
         */
         $shippingCost = (float) ($order->shipping_cost ?? 0);
 
-        $manualDiscount = (float) (
-            $order->manual_discount ?? 0
-        );
+        /*
+        |--------------------------------------------------------------------------
+        | IMPORTANT:
+        | Preserve existing manual discount exactly as it is.
+        |--------------------------------------------------------------------------
+        */
+        $manualDiscount = (float) ($order->manual_discount ?? 0);
 
         /*
         |--------------------------------------------------------------------------
-        | Recalculate draft total
+        | Recalculate total
         |--------------------------------------------------------------------------
         */
         $totalAmount =
@@ -613,7 +623,9 @@ class CouponCodeController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Update draft order
+        | Update ONLY coupon-related order fields + total
+        |
+        | manual_discount is NOT changed.
         |--------------------------------------------------------------------------
         */
         $order->update([
@@ -2005,7 +2017,7 @@ class CouponCodeController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Get current persistent cart context
+            | Get current draft context
             |--------------------------------------------------------------------------
             */
             $draftToken = $this->cartContext->getCurrentQuoteToken(
@@ -2034,11 +2046,6 @@ class CouponCodeController extends Controller
                     ->where('is_draft', 1)
                     ->where('draft_token', $draftToken);
 
-            /*
-            |--------------------------------------------------------------------------
-            | NORMAL LOGGED-IN CART
-            |--------------------------------------------------------------------------
-            */
             } elseif ($user) {
 
                 $userId = $user->id;
@@ -2058,11 +2065,6 @@ class CouponCodeController extends Controller
 
                 $query->where('is_draft', 0);
 
-            /*
-            |--------------------------------------------------------------------------
-            | NORMAL GUEST CART
-            |--------------------------------------------------------------------------
-            */
             } elseif ($sessionId) {
 
                 $query
@@ -2079,7 +2081,7 @@ class CouponCodeController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Optional specific usage ID
+            | Specific usage ID
             |--------------------------------------------------------------------------
             */
             if ($id) {
@@ -2088,7 +2090,7 @@ class CouponCodeController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Optional coupon ID
+            | Specific coupon ID
             |--------------------------------------------------------------------------
             */
             if ($request->filled('coupon_id')) {
@@ -2108,12 +2110,8 @@ class CouponCodeController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Soft delete coupon usage
+            | Soft delete
             |--------------------------------------------------------------------------
-            |
-            | IMPORTANT:
-            | Keep is_draft and draft_token unchanged.
-            |
             */
             CouponUsage::whereIn('id', $updatedIds)
                 ->update([
@@ -2122,7 +2120,7 @@ class CouponCodeController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Sync active draft order
+            | Sync active draft
             |--------------------------------------------------------------------------
             */
             if (!empty($draftToken) && $user) {
@@ -2142,18 +2140,10 @@ class CouponCodeController extends Controller
 
         } catch (\Throwable $e) {
 
-            /*
-            |--------------------------------------------------------------------------
-            | Temporarily return the actual error
-            |--------------------------------------------------------------------------
-            | Remove "error" after testing.
-            */
             return response()->json([
                 'status'  => false,
                 'message' => 'Something went wrong',
                 'error'   => $e->getMessage(),
-                'file'    => $e->getFile(),
-                'line'    => $e->getLine(),
             ], 500);
         }
     }
