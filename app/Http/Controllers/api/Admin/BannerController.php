@@ -102,6 +102,99 @@ class BannerController extends Controller
         }
     }
 
+
+    public function getByLocation(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
+            $location = strtolower(trim((string) $request->query('islocation', $request->query('isLocation', ''))));
+
+            if ($location === '') {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'islocation is required.',
+                ], 422);
+            }
+
+            $perPage = $request->query('perPage', 20);
+
+            $banners = Banner::where('store_id', $storeId)
+                ->where(function ($q) use ($location) {
+                    $q->where('location->key', $location)
+                        ->orWhere('location->key', ucfirst($location))
+                        ->orWhere('location->key', strtolower($location));
+                })
+                ->orderBy('created_at', 'asc')
+                ->orderBy('id', 'asc')
+                ->paginate($perPage);
+
+            $categoryIds = [];
+            $brandIds    = [];
+
+            foreach ($banners as $banner) {
+                [$type, $id] = $this->resolveBannerLocation($banner);
+
+                if ($type === 'category' && $id) {
+                    $categoryIds[] = $id;
+                }
+
+                if ($type === 'brand' && $id) {
+                    $brandIds[] = $id;
+                }
+            }
+
+            $categories = $categoryIds
+                ? Category::where('store_id', $storeId)->whereIn('id', array_unique($categoryIds))->get()->keyBy('id')
+                : collect();
+
+            $brands = $brandIds
+                ? Brand::where('store_id', $storeId)->whereIn('id', array_unique($brandIds))->get()->keyBy('id')
+                : collect();
+
+            $banners->getCollection()->transform(function ($banner) use ($categories, $brands) {
+                [$type, $id] = $this->resolveBannerLocation($banner);
+
+                $banner->resolved_location_type = $type;
+                $banner->resolved_location_id   = $id;
+                $banner->location_category      = null;
+                $banner->location_brand         = null;
+
+                if ($type === 'category') {
+                    $banner->location_category = $categories->get($id);
+                } elseif ($type === 'brand') {
+                    $banner->location_brand = $brands->get($id);
+                }
+
+                return $banner;
+            });
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Banners retrieved successfully',
+                'data'    => BannerResource::collection($banners),
+                'pagination' => [
+                    'total'       => $banners->total(),
+                    'count'       => $banners->count(),
+                    'perPage'     => $banners->perPage(),
+                    'currentPage' => $banners->currentPage(),
+                    'totalPages'  => $banners->lastPage(),
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Error fetching banners by location: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to retrieve banners',
+            ], 500);
+        }
+    }
     public function storeBanner(Request $request)
     {
         try {

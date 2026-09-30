@@ -724,6 +724,8 @@ Route::prefix('web')->group(function () {
         Route::get('/get-script/{id}', 'show');   // Get single logo by ID
     });
 
+    // banner get
+    Route::get('banners/by-location', [BannerController::class, 'getByLocation']);
     //Newsletters
     Route::apiResource('newsletters', NewsletterController::class);
 
