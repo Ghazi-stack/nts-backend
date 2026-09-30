@@ -486,6 +486,141 @@ class CouponCodeController extends Controller
     //         ], 500);
     //     }
     // }
+
+    /**
+     * Synchronize the coupon state with the currently active draft order.
+     *
+     * Cart remains the source of truth for products/quantities.
+     * CouponUsage remains the source of truth for coupon/discount.
+     */
+    private function syncDraftCouponToOrder(
+        int $storeId,
+        $user,
+        ?string $quoteToken
+    ): void {
+        if (!$user || !$quoteToken) {
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Decode current draft token
+        |--------------------------------------------------------------------------
+        */
+        try {
+            $payload = $this->draftQuote->decode($quoteToken);
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        $tokenStoreId = (int) ($payload['store_id'] ?? 0);
+        $orderId      = (int) ($payload['order_id'] ?? 0);
+        $tokenUserId  = (int) ($payload['user_id'] ?? 0);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Validate token ownership
+        |--------------------------------------------------------------------------
+        */
+        if (
+            $tokenStoreId !== $storeId ||
+            !$orderId ||
+            $tokenUserId !== (int) $user->id
+        ) {
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Find current draft order
+        |--------------------------------------------------------------------------
+        */
+        $order = Order::query()
+            ->where('id', $orderId)
+            ->where('store_id', $storeId)
+            ->where('user_id', $user->id)
+            ->where('is_draft', 1)
+            ->first();
+
+        if (!$order) {
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Get currently active coupon for THIS draft
+        |--------------------------------------------------------------------------
+        */
+        $usage = CouponUsage::query()
+            ->where('store_id', $storeId)
+            ->where('is_draft', 1)
+            ->where('draft_token', $quoteToken)
+            ->where('is_delete', 0)
+            ->where('user_used', 0)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        $discount = $usage
+            ? (float) ($usage->discount_amount ?? 0)
+            : 0;
+
+        $couponCode = $usage
+            ? $usage->coupon_code
+            : null;
+
+        /*
+        |--------------------------------------------------------------------------
+        | IMPORTANT:
+        | Use the already synchronized draft order items.
+        |
+        | CartController keeps these items synchronized with the cart.
+        |--------------------------------------------------------------------------
+        */
+        $subtotal = 0;
+
+        foreach ($order->items as $item) {
+            $subtotal +=
+                ((float) ($item->price ?? 0))
+                * ((int) ($item->quantity ?? 0));
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Preserve shipping and manual discount
+        |--------------------------------------------------------------------------
+        */
+        $shippingCost = (float) ($order->shipping_cost ?? 0);
+
+        $manualDiscount = (float) (
+            $order->manual_discount ?? 0
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Recalculate draft total
+        |--------------------------------------------------------------------------
+        */
+        $totalAmount =
+            $subtotal
+            + $shippingCost
+            - $discount
+            - $manualDiscount;
+
+        if ($totalAmount < 0) {
+            $totalAmount = 0;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Update draft order
+        |--------------------------------------------------------------------------
+        */
+        $order->update([
+            'discountAmount' => $discount,
+            'coupon_code'    => $couponCode,
+            'total_amount'   => $totalAmount,
+        ]);
+    }
     public function showWebCouponCode(Request $request, $id = null)
     {
         try {
@@ -788,26 +923,48 @@ class CouponCodeController extends Controller
             */
             if (!$existingUsage) {
 
-                $usage = CouponUsage::create([
-                    'store_id'        => $storeId,
-                    'user_id'         => $userId,
-                    'session_id'      => $userId ? null : $sessionId,
-                    'coupon_id'       => $coupon->id,
-                    'coupon_code'     => $coupon->couponCode,
-                    'discount_amount' => $coupon->discountAmount,
-                    'user_used'       => 0,
-                    'is_delete'       => 0,
-                    'email'           => $user->email ?? null,
+                DB::transaction(function () use (
+                    $storeId,
+                    $userId,
+                    $sessionId,
+                    $user,
+                    $coupon,
+                    $draftToken
+                ) {
+
+                    CouponUsage::create([
+                        'store_id'        => $storeId,
+                        'user_id'         => $userId,
+                        'session_id'      => $userId ? null : $sessionId,
+                        'coupon_id'       => $coupon->id,
+                        'coupon_code'     => $coupon->couponCode,
+                        'discount_amount' => $coupon->discountAmount,
+                        'user_used'       => 0,
+                        'is_delete'       => 0,
+                        'email'           => $user->email ?? null,
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Draft coupon belongs to the persistent draft context
+                        |--------------------------------------------------------------------------
+                        */
+                        'is_draft'    => !empty($draftToken) ? 1 : 0,
+                        'draft_token' => $draftToken ?: null,
+                    ]);
 
                     /*
                     |--------------------------------------------------------------------------
-                    | Draft support
+                    | Sync coupon immediately to active draft order
                     |--------------------------------------------------------------------------
                     */
-                    'is_draft'        => !empty($draftToken) ? 1 : 0,
-                    'draft_token'     => $draftToken ?: null,
-                ]);
-
+                    if (!empty($draftToken) && $user) {
+                        $this->syncDraftCouponToOrder(
+                            $storeId,
+                            $user,
+                            $draftToken
+                        );
+                    }
+                });
             } else {
 
                 /*
@@ -1208,65 +1365,389 @@ class CouponCodeController extends Controller
     //     }
     // }
 
+    // public function getMyCouponUsage(Request $request)
+    // {
+    //     try {
+    //         $storeId = $this->getStoreId();
+
+    //         \Log::info('=== getMyCouponUsage START ===');
+
+    //         /*
+    //         * ============================================================
+    //         * STORE
+    //         * ============================================================
+    //         */
+    //         \Log::info('getMyCouponUsage storeId', [
+    //             'store_id' => $storeId,
+    //         ]);
+
+    //         /*
+    //         * ============================================================
+    //         * RESOLVE USER
+    //         * ============================================================
+    //         */
+    //         $user = $request->user('sanctum') ?? auth('sanctum')->user();
+
+    //         \Log::info('getMyCouponUsage authenticated user', [
+    //             'user_exists' => (bool) $user,
+    //             'user_id'     => $user?->id,
+    //             'user_email'  => $user?->email,
+    //         ]);
+
+    //         if (!$user && $request->bearerToken()) {
+
+    //             \Log::info('getMyCouponUsage bearer token found');
+
+    //             $token = \Laravel\Sanctum\PersonalAccessToken::findToken(
+    //                 $request->bearerToken()
+    //             );
+
+    //             $user = $token?->tokenable;
+
+    //             \Log::info('getMyCouponUsage bearer token resolved user', [
+    //                 'user_exists' => (bool) $user,
+    //                 'user_id'     => $user?->id,
+    //                 'user_email'  => $user?->email,
+    //             ]);
+    //         }
+
+    //         $sessionId = $user
+    //             ? null
+    //             : $request->header('X-Session-ID');
+
+    //         \Log::info('getMyCouponUsage identity', [
+    //             'user_id'    => $user?->id,
+    //             'session_id' => $sessionId,
+    //         ]);
+
+    //         /*
+    //         * ============================================================
+    //         * GET CURRENT QUOTE TOKEN
+    //         * ============================================================
+    //         */
+    //         $draftToken = $this->cartContext->getCurrentQuoteToken(
+    //             $storeId,
+    //             $user,
+    //             $sessionId
+    //         );
+
+    //         \Log::info('getMyCouponUsage current cart context', [
+    //             'draft_token_exists' => !empty($draftToken),
+    //             'draft_token_length' => $draftToken ? strlen($draftToken) : 0,
+    //             'draft_token_prefix' => $draftToken
+    //                 ? substr($draftToken, 0, 30)
+    //                 : null,
+    //         ]);
+
+    //         /*
+    //         * ============================================================
+    //         * MANUAL DISCOUNT
+    //         * ============================================================
+    //         */
+    //         $manualDiscount = 0;
+    //         $orderId = null;
+    //         $payload = null;
+
+    //         if (!empty($draftToken)) {
+
+    //             \Log::info('getMyCouponUsage draft token exists');
+
+    //             try {
+
+    //                 /*
+    //                 * Decode current draft token.
+    //                 */
+    //                 $payload = $this->draftQuote->decode($draftToken);
+
+    //                 \Log::info('getMyCouponUsage decoded quote payload', [
+    //                     'payload' => $payload,
+    //                 ]);
+
+    //                 $tokenStoreId = (int) ($payload['store_id'] ?? 0);
+    //                 $orderId      = (int) ($payload['order_id'] ?? 0);
+    //                 $tokenUserId  = (int) ($payload['user_id'] ?? 0);
+
+    //                 \Log::info('getMyCouponUsage decoded identifiers', [
+    //                     'token_store_id' => $tokenStoreId,
+    //                     'token_order_id' => $orderId,
+    //                     'token_user_id'  => $tokenUserId,
+    //                     'current_store_id' => (int) $storeId,
+    //                     'current_user_id'  => $user?->id,
+    //                 ]);
+
+    //                 /*
+    //                 * Check token ownership.
+    //                 */
+    //                 $storeMatches = $tokenStoreId === (int) $storeId;
+    //                 $orderExists  = $orderId > 0;
+    //                 $userMatches  = !$user || $tokenUserId === (int) $user->id;
+
+    //                 \Log::info('getMyCouponUsage token validation', [
+    //                     'store_matches' => $storeMatches,
+    //                     'order_exists'  => $orderExists,
+    //                     'user_matches'  => $userMatches,
+    //                 ]);
+
+    //                 if (
+    //                     $storeMatches &&
+    //                     $orderExists &&
+    //                     $userMatches
+    //                 ) {
+
+    //                     \Log::info('getMyCouponUsage loading draft order', [
+    //                         'order_id' => $orderId,
+    //                     ]);
+
+    //                     $order = \App\Models\Order::query()
+    //                         ->where('id', $orderId)
+    //                         ->where('store_id', $storeId)
+    //                         ->where('user_id', $user->id)
+    //                         ->where('is_draft', 1)
+    //                         ->first();
+
+    //                     \Log::info('getMyCouponUsage order lookup result', [
+    //                         'order_found' => (bool) $order,
+    //                         'order_id'    => $order?->id,
+    //                         'order_store_id' => $order?->store_id,
+    //                         'order_user_id' => $order?->user_id,
+    //                         'order_is_draft' => $order?->is_draft,
+    //                     ]);
+
+    //                     if ($order) {
+
+    //                         \Log::info('getMyCouponUsage order manual discount inspection', [
+    //                             'manual_discount_property' => $order->manual_discount ?? null,
+    //                             'manualDiscount_property'  => $order->manualDiscount ?? null,
+    //                             'attributes'               => $order->getAttributes(),
+    //                         ]);
+
+    //                         $manualDiscount = round(
+    //                             (float) ($order->manual_discount ?? 0),
+    //                             2
+    //                         );
+
+    //                         \Log::info('getMyCouponUsage manual discount resolved', [
+    //                             'manual_discount' => $manualDiscount,
+    //                         ]);
+    //                     } else {
+
+    //                         \Log::warning(
+    //                             'getMyCouponUsage draft order NOT FOUND',
+    //                             [
+    //                                 'order_id' => $orderId,
+    //                                 'store_id' => $storeId,
+    //                                 'user_id'  => $user?->id,
+    //                             ]
+    //                         );
+    //                     }
+
+    //                 } else {
+
+    //                     \Log::warning(
+    //                         'getMyCouponUsage token validation FAILED',
+    //                         [
+    //                             'store_matches' => $storeMatches,
+    //                             'order_exists'  => $orderExists,
+    //                             'user_matches'  => $userMatches,
+    //                             'token_store_id' => $tokenStoreId,
+    //                             'token_user_id'  => $tokenUserId,
+    //                             'current_store_id' => (int) $storeId,
+    //                             'current_user_id' => $user?->id,
+    //                             'order_id' => $orderId,
+    //                         ]
+    //                     );
+    //                 }
+
+    //             } catch (\Throwable $e) {
+
+    //                 \Log::error(
+    //                     'getMyCouponUsage quote token decode FAILED',
+    //                     [
+    //                         'message' => $e->getMessage(),
+    //                         'file'    => $e->getFile(),
+    //                         'line'    => $e->getLine(),
+    //                         'trace'   => $e->getTraceAsString(),
+    //                     ]
+    //                 );
+
+    //                 $manualDiscount = 0;
+    //             }
+
+    //         } else {
+
+    //             \Log::warning(
+    //                 'getMyCouponUsage NO ACTIVE DRAFT TOKEN'
+    //             );
+    //         }
+
+    //         /*
+    //         * ============================================================
+    //         * COUPON QUERY
+    //         * ============================================================
+    //         */
+    //         $query = CouponUsage::where('store_id', $storeId)
+    //             ->where('is_delete', 0)
+    //             ->where('user_used', 0);
+
+    //         \Log::info('getMyCouponUsage coupon base query', [
+    //             'store_id' => $storeId,
+    //             'draft_token_exists' => !empty($draftToken),
+    //             'draft_token_prefix' => $draftToken
+    //                 ? substr($draftToken, 0, 30)
+    //                 : null,
+    //         ]);
+
+    //         /*
+    //         * ============================================================
+    //         * ACTIVE DRAFT
+    //         * ============================================================
+    //         */
+    //         if (!empty($draftToken)) {
+
+    //             $usage = (clone $query)
+    //                 ->where('is_draft', 1)
+    //                 ->where('draft_token', $draftToken)
+    //                 ->orderBy('id', 'desc')
+    //                 ->first();
+
+    //             \Log::info('getMyCouponUsage draft coupon lookup', [
+    //                 'usage_found' => (bool) $usage,
+    //                 'usage_id'    => $usage?->id,
+    //                 'coupon_code' => $usage?->coupon_code,
+    //                 'discount_amount' => $usage?->discount_amount,
+    //                 'usage_is_draft' => $usage?->is_draft,
+    //                 'usage_draft_token_prefix' => $usage?->draft_token
+    //                     ? substr($usage->draft_token, 0, 30)
+    //                     : null,
+    //             ]);
+
+    //             \Log::info('getMyCouponUsage FINAL RESULT', [
+    //                 'manual_discount' => $manualDiscount,
+    //                 'order_id'        => $orderId,
+    //                 'coupon_usage_id' => $usage?->id,
+    //             ]);
+
+    //             return response()->json([
+    //                 'status'         => true,
+    //                 'message'        => 'Coupon usages fetched successfully',
+    //                 'data'           => $usage,
+    //                 'manualDiscount' => $manualDiscount,
+    //             ]);
+    //         }
+
+    //         /*
+    //         * ============================================================
+    //         * NORMAL CART
+    //         * ============================================================
+    //         */
+    //         if ($user) {
+
+    //             $userId = $user->id;
+    //             $userEmail = strtolower(trim($user->email ?? ''));
+
+    //             \Log::info('getMyCouponUsage normal user coupon lookup', [
+    //                 'user_id' => $userId,
+    //                 'email'   => $userEmail,
+    //             ]);
+
+    //             $query->where(function ($q) use ($userId, $userEmail) {
+
+    //                 $q->where('user_id', $userId);
+
+    //                 if ($userEmail) {
+    //                     $q->orWhereRaw(
+    //                         'LOWER(email) = ?',
+    //                         [$userEmail]
+    //                     );
+    //                 }
+    //             });
+
+    //         } elseif ($sessionId) {
+
+    //             \Log::info('getMyCouponUsage guest coupon lookup', [
+    //                 'session_id' => $sessionId,
+    //             ]);
+
+    //             $query->where('session_id', $sessionId);
+
+    //         } else {
+
+    //             \Log::warning(
+    //                 'getMyCouponUsage no user or session'
+    //             );
+
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Token or X-Session-ID is required',
+    //             ], 400);
+    //         }
+
+    //         $usage = $query
+    //             ->where('is_draft', 0)
+    //             ->orderBy('id', 'desc')
+    //             ->first();
+
+    //         \Log::info('getMyCouponUsage normal coupon result', [
+    //             'usage_found' => (bool) $usage,
+    //             'usage_id'    => $usage?->id,
+    //             'coupon_code' => $usage?->coupon_code,
+    //             'discount_amount' => $usage?->discount_amount,
+    //             'manual_discount' => $manualDiscount,
+    //         ]);
+
+    //         \Log::info('=== getMyCouponUsage END ===');
+
+    //         return response()->json([
+    //             'status'         => true,
+    //             'message'        => 'Coupon usages fetched successfully',
+    //             'data'           => $usage,
+    //             'manualDiscount' => $manualDiscount,
+    //         ]);
+
+    //     } catch (\Throwable $e) {
+
+    //         \Log::error('getMyCouponUsage FATAL ERROR', [
+    //             'message' => $e->getMessage(),
+    //             'file'    => $e->getFile(),
+    //             'line'    => $e->getLine(),
+    //             'trace'   => $e->getTraceAsString(),
+    //         ]);
+
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Something went wrong',
+    //         ], 500);
+    //     }
+    // }
+
     public function getMyCouponUsage(Request $request)
     {
         try {
             $storeId = $this->getStoreId();
 
-            \Log::info('=== getMyCouponUsage START ===');
-
             /*
-            * ============================================================
-            * STORE
-            * ============================================================
-            */
-            \Log::info('getMyCouponUsage storeId', [
-                'store_id' => $storeId,
-            ]);
-
-            /*
-            * ============================================================
-            * RESOLVE USER
-            * ============================================================
+            |--------------------------------------------------------------------------
+            | Resolve user
+            |--------------------------------------------------------------------------
             */
             $user = $request->user('sanctum') ?? auth('sanctum')->user();
 
-            \Log::info('getMyCouponUsage authenticated user', [
-                'user_exists' => (bool) $user,
-                'user_id'     => $user?->id,
-                'user_email'  => $user?->email,
-            ]);
-
             if (!$user && $request->bearerToken()) {
-
-                \Log::info('getMyCouponUsage bearer token found');
-
                 $token = \Laravel\Sanctum\PersonalAccessToken::findToken(
                     $request->bearerToken()
                 );
 
                 $user = $token?->tokenable;
-
-                \Log::info('getMyCouponUsage bearer token resolved user', [
-                    'user_exists' => (bool) $user,
-                    'user_id'     => $user?->id,
-                    'user_email'  => $user?->email,
-                ]);
             }
 
             $sessionId = $user
                 ? null
                 : $request->header('X-Session-ID');
 
-            \Log::info('getMyCouponUsage identity', [
-                'user_id'    => $user?->id,
-                'session_id' => $sessionId,
-            ]);
-
             /*
-            * ============================================================
-            * GET CURRENT QUOTE TOKEN
-            * ============================================================
+            |--------------------------------------------------------------------------
+            | Get current persistent cart/draft context
+            |--------------------------------------------------------------------------
             */
             $draftToken = $this->cartContext->getCurrentQuoteToken(
                 $storeId,
@@ -1274,176 +1755,59 @@ class CouponCodeController extends Controller
                 $sessionId
             );
 
-            \Log::info('getMyCouponUsage current cart context', [
-                'draft_token_exists' => !empty($draftToken),
-                'draft_token_length' => $draftToken ? strlen($draftToken) : 0,
-                'draft_token_prefix' => $draftToken
-                    ? substr($draftToken, 0, 30)
-                    : null,
-            ]);
-
             /*
-            * ============================================================
-            * MANUAL DISCOUNT
-            * ============================================================
+            |--------------------------------------------------------------------------
+            | Manual discount
+            |--------------------------------------------------------------------------
             */
             $manualDiscount = 0;
-            $orderId = null;
-            $payload = null;
 
-            if (!empty($draftToken)) {
-
-                \Log::info('getMyCouponUsage draft token exists');
+            if (!empty($draftToken) && $user) {
 
                 try {
-
-                    /*
-                    * Decode current draft token.
-                    */
                     $payload = $this->draftQuote->decode($draftToken);
-
-                    \Log::info('getMyCouponUsage decoded quote payload', [
-                        'payload' => $payload,
-                    ]);
 
                     $tokenStoreId = (int) ($payload['store_id'] ?? 0);
                     $orderId      = (int) ($payload['order_id'] ?? 0);
                     $tokenUserId  = (int) ($payload['user_id'] ?? 0);
 
-                    \Log::info('getMyCouponUsage decoded identifiers', [
-                        'token_store_id' => $tokenStoreId,
-                        'token_order_id' => $orderId,
-                        'token_user_id'  => $tokenUserId,
-                        'current_store_id' => (int) $storeId,
-                        'current_user_id'  => $user?->id,
-                    ]);
-
-                    /*
-                    * Check token ownership.
-                    */
-                    $storeMatches = $tokenStoreId === (int) $storeId;
-                    $orderExists  = $orderId > 0;
-                    $userMatches  = !$user || $tokenUserId === (int) $user->id;
-
-                    \Log::info('getMyCouponUsage token validation', [
-                        'store_matches' => $storeMatches,
-                        'order_exists'  => $orderExists,
-                        'user_matches'  => $userMatches,
-                    ]);
-
                     if (
-                        $storeMatches &&
-                        $orderExists &&
-                        $userMatches
+                        $tokenStoreId === (int) $storeId &&
+                        $orderId > 0 &&
+                        $tokenUserId === (int) $user->id
                     ) {
-
-                        \Log::info('getMyCouponUsage loading draft order', [
-                            'order_id' => $orderId,
-                        ]);
-
-                        $order = \App\Models\Order::query()
+                        $order = Order::query()
                             ->where('id', $orderId)
                             ->where('store_id', $storeId)
                             ->where('user_id', $user->id)
                             ->where('is_draft', 1)
                             ->first();
 
-                        \Log::info('getMyCouponUsage order lookup result', [
-                            'order_found' => (bool) $order,
-                            'order_id'    => $order?->id,
-                            'order_store_id' => $order?->store_id,
-                            'order_user_id' => $order?->user_id,
-                            'order_is_draft' => $order?->is_draft,
-                        ]);
-
                         if ($order) {
-
-                            \Log::info('getMyCouponUsage order manual discount inspection', [
-                                'manual_discount_property' => $order->manual_discount ?? null,
-                                'manualDiscount_property'  => $order->manualDiscount ?? null,
-                                'attributes'               => $order->getAttributes(),
-                            ]);
-
                             $manualDiscount = round(
                                 (float) ($order->manual_discount ?? 0),
                                 2
                             );
-
-                            \Log::info('getMyCouponUsage manual discount resolved', [
-                                'manual_discount' => $manualDiscount,
-                            ]);
-                        } else {
-
-                            \Log::warning(
-                                'getMyCouponUsage draft order NOT FOUND',
-                                [
-                                    'order_id' => $orderId,
-                                    'store_id' => $storeId,
-                                    'user_id'  => $user?->id,
-                                ]
-                            );
                         }
-
-                    } else {
-
-                        \Log::warning(
-                            'getMyCouponUsage token validation FAILED',
-                            [
-                                'store_matches' => $storeMatches,
-                                'order_exists'  => $orderExists,
-                                'user_matches'  => $userMatches,
-                                'token_store_id' => $tokenStoreId,
-                                'token_user_id'  => $tokenUserId,
-                                'current_store_id' => (int) $storeId,
-                                'current_user_id' => $user?->id,
-                                'order_id' => $orderId,
-                            ]
-                        );
                     }
-
                 } catch (\Throwable $e) {
-
-                    \Log::error(
-                        'getMyCouponUsage quote token decode FAILED',
-                        [
-                            'message' => $e->getMessage(),
-                            'file'    => $e->getFile(),
-                            'line'    => $e->getLine(),
-                            'trace'   => $e->getTraceAsString(),
-                        ]
-                    );
-
                     $manualDiscount = 0;
                 }
-
-            } else {
-
-                \Log::warning(
-                    'getMyCouponUsage NO ACTIVE DRAFT TOKEN'
-                );
             }
 
             /*
-            * ============================================================
-            * COUPON QUERY
-            * ============================================================
+            |--------------------------------------------------------------------------
+            | Base coupon query
+            |--------------------------------------------------------------------------
             */
             $query = CouponUsage::where('store_id', $storeId)
                 ->where('is_delete', 0)
                 ->where('user_used', 0);
 
-            \Log::info('getMyCouponUsage coupon base query', [
-                'store_id' => $storeId,
-                'draft_token_exists' => !empty($draftToken),
-                'draft_token_prefix' => $draftToken
-                    ? substr($draftToken, 0, 30)
-                    : null,
-            ]);
-
             /*
-            * ============================================================
-            * ACTIVE DRAFT
-            * ============================================================
+            |--------------------------------------------------------------------------
+            | ACTIVE DRAFT
+            |--------------------------------------------------------------------------
             */
             if (!empty($draftToken)) {
 
@@ -1452,23 +1816,6 @@ class CouponCodeController extends Controller
                     ->where('draft_token', $draftToken)
                     ->orderBy('id', 'desc')
                     ->first();
-
-                \Log::info('getMyCouponUsage draft coupon lookup', [
-                    'usage_found' => (bool) $usage,
-                    'usage_id'    => $usage?->id,
-                    'coupon_code' => $usage?->coupon_code,
-                    'discount_amount' => $usage?->discount_amount,
-                    'usage_is_draft' => $usage?->is_draft,
-                    'usage_draft_token_prefix' => $usage?->draft_token
-                        ? substr($usage->draft_token, 0, 30)
-                        : null,
-                ]);
-
-                \Log::info('getMyCouponUsage FINAL RESULT', [
-                    'manual_discount' => $manualDiscount,
-                    'order_id'        => $orderId,
-                    'coupon_usage_id' => $usage?->id,
-                ]);
 
                 return response()->json([
                     'status'         => true,
@@ -1479,19 +1826,14 @@ class CouponCodeController extends Controller
             }
 
             /*
-            * ============================================================
-            * NORMAL CART
-            * ============================================================
+            |--------------------------------------------------------------------------
+            | NORMAL LOGGED-IN CART
+            |--------------------------------------------------------------------------
             */
             if ($user) {
 
                 $userId = $user->id;
                 $userEmail = strtolower(trim($user->email ?? ''));
-
-                \Log::info('getMyCouponUsage normal user coupon lookup', [
-                    'user_id' => $userId,
-                    'email'   => $userEmail,
-                ]);
 
                 $query->where(function ($q) use ($userId, $userEmail) {
 
@@ -1505,19 +1847,16 @@ class CouponCodeController extends Controller
                     }
                 });
 
+            /*
+            |--------------------------------------------------------------------------
+            | NORMAL GUEST CART
+            |--------------------------------------------------------------------------
+            */
             } elseif ($sessionId) {
-
-                \Log::info('getMyCouponUsage guest coupon lookup', [
-                    'session_id' => $sessionId,
-                ]);
 
                 $query->where('session_id', $sessionId);
 
             } else {
-
-                \Log::warning(
-                    'getMyCouponUsage no user or session'
-                );
 
                 return response()->json([
                     'status'  => false,
@@ -1530,16 +1869,6 @@ class CouponCodeController extends Controller
                 ->orderBy('id', 'desc')
                 ->first();
 
-            \Log::info('getMyCouponUsage normal coupon result', [
-                'usage_found' => (bool) $usage,
-                'usage_id'    => $usage?->id,
-                'coupon_code' => $usage?->coupon_code,
-                'discount_amount' => $usage?->discount_amount,
-                'manual_discount' => $manualDiscount,
-            ]);
-
-            \Log::info('=== getMyCouponUsage END ===');
-
             return response()->json([
                 'status'         => true,
                 'message'        => 'Coupon usages fetched successfully',
@@ -1549,13 +1878,6 @@ class CouponCodeController extends Controller
 
         } catch (\Throwable $e) {
 
-            \Log::error('getMyCouponUsage FATAL ERROR', [
-                'message' => $e->getMessage(),
-                'file'    => $e->getFile(),
-                'line'    => $e->getLine(),
-                'trace'   => $e->getTraceAsString(),
-            ]);
-
             return response()->json([
                 'status'  => false,
                 'message' => 'Something went wrong',
@@ -1563,48 +1885,193 @@ class CouponCodeController extends Controller
         }
     }
 
+    // public function deleteMyCouponUsage(Request $request, $id = null)
+    // {
+    //     try {
+    //         $storeId = $this->getStoreId();
+
+    //         $user = $request->user('sanctum') ?? auth('sanctum')->user();
+
+    //         if (!$user && $request->bearerToken()) {
+    //             $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+    //             $user  = $token?->tokenable;
+    //         }
+
+    //         $userId    = $user?->id;
+    //         $sessionId = $request->header('X-Session-ID');
+
+    //         $query = CouponUsage::where('store_id', $storeId)
+    //             ->where('is_delete', 0)
+    //             ->where('user_used', 0);
+
+    //         if ($userId) {
+    //             $userEmail = strtolower(trim($user->email ?? ''));
+
+    //             $query->where(function ($q) use ($userId, $userEmail) {
+    //                 $q->where('user_id', $userId);
+
+    //                 if ($userEmail) {
+    //                     $q->orWhereRaw('LOWER(email) = ?', [$userEmail]);
+    //                 }
+    //             });
+    //         } elseif ($sessionId) {
+    //             $query->where('session_id', $sessionId);
+    //         } else {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Token or X-Session-ID is required',
+    //             ], 400);
+    //         }
+
+    //         if ($id) {
+    //             $query->where('id', $id);
+    //         }
+
+    //         if ($request->filled('coupon_id')) {
+    //             $query->where('coupon_id', $request->coupon_id);
+    //         }
+
+    //         $usages = $query->get();
+
+    //         if ($usages->isEmpty()) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Record not found',
+    //             ], 404);
+    //         }
+
+    //         $updatedIds = $usages->pluck('id')->values();
+
+    //         $query->update([
+    //             'is_delete' => 1,
+    //             'is_draft'  => 0,
+    //         ]);
+
+    //         return response()->json([
+    //             'status'     => true,
+    //             'message'    => 'Coupon usage deleted successfully',
+    //             'deletedIds' => $updatedIds,
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Something went wrong',
+    //         ], 500);
+    //     }
+    // }
+
     public function deleteMyCouponUsage(Request $request, $id = null)
     {
         try {
             $storeId = $this->getStoreId();
 
+            /*
+            |--------------------------------------------------------------------------
+            | Resolve user
+            |--------------------------------------------------------------------------
+            */
             $user = $request->user('sanctum') ?? auth('sanctum')->user();
 
             if (!$user && $request->bearerToken()) {
-                $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
-                $user  = $token?->tokenable;
+                $token = \Laravel\Sanctum\PersonalAccessToken::findToken(
+                    $request->bearerToken()
+                );
+
+                $user = $token?->tokenable;
             }
 
-            $userId    = $user?->id;
-            $sessionId = $request->header('X-Session-ID');
+            $sessionId = $user
+                ? null
+                : $request->header('X-Session-ID');
 
+            /*
+            |--------------------------------------------------------------------------
+            | Get current persistent cart context
+            |--------------------------------------------------------------------------
+            */
+            $draftToken = $this->cartContext->getCurrentQuoteToken(
+                $storeId,
+                $user,
+                $sessionId
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Base query
+            |--------------------------------------------------------------------------
+            */
             $query = CouponUsage::where('store_id', $storeId)
                 ->where('is_delete', 0)
                 ->where('user_used', 0);
 
-            if ($userId) {
+            /*
+            |--------------------------------------------------------------------------
+            | ACTIVE DRAFT
+            |--------------------------------------------------------------------------
+            */
+            if (!empty($draftToken)) {
+
+                $query
+                    ->where('is_draft', 1)
+                    ->where('draft_token', $draftToken);
+
+            /*
+            |--------------------------------------------------------------------------
+            | NORMAL LOGGED-IN CART
+            |--------------------------------------------------------------------------
+            */
+            } elseif ($user) {
+
+                $userId = $user->id;
                 $userEmail = strtolower(trim($user->email ?? ''));
 
                 $query->where(function ($q) use ($userId, $userEmail) {
+
                     $q->where('user_id', $userId);
 
                     if ($userEmail) {
-                        $q->orWhereRaw('LOWER(email) = ?', [$userEmail]);
+                        $q->orWhereRaw(
+                            'LOWER(email) = ?',
+                            [$userEmail]
+                        );
                     }
                 });
+
+                $query->where('is_draft', 0);
+
+            /*
+            |--------------------------------------------------------------------------
+            | NORMAL GUEST CART
+            |--------------------------------------------------------------------------
+            */
             } elseif ($sessionId) {
-                $query->where('session_id', $sessionId);
+
+                $query
+                    ->where('session_id', $sessionId)
+                    ->where('is_draft', 0);
+
             } else {
+
                 return response()->json([
                     'status'  => false,
                     'message' => 'Token or X-Session-ID is required',
                 ], 400);
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | Optional specific usage ID
+            |--------------------------------------------------------------------------
+            */
             if ($id) {
                 $query->where('id', $id);
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | Optional coupon ID
+            |--------------------------------------------------------------------------
+            */
             if ($request->filled('coupon_id')) {
                 $query->where('coupon_id', $request->coupon_id);
             }
@@ -1620,17 +2087,49 @@ class CouponCodeController extends Controller
 
             $updatedIds = $usages->pluck('id')->values();
 
-            $query->update([
-                'is_delete' => 1,
-                'is_draft'  => 0,
-            ]);
+            DB::transaction(function () use (
+                $usages,
+                $storeId,
+                $user,
+                $draftToken
+            ) {
+
+                /*
+                |--------------------------------------------------------------------------
+                | Soft-delete coupon usage
+                |
+                | IMPORTANT:
+                | Do NOT change is_draft here.
+                |--------------------------------------------------------------------------
+                */
+                CouponUsage::whereIn('id', $usages->pluck('id'))
+                    ->update([
+                        'is_delete' => 1,
+                    ]);
+
+                /*
+                |--------------------------------------------------------------------------
+                | If this is an active draft, synchronize the draft order
+                |--------------------------------------------------------------------------
+                */
+                if (!empty($draftToken) && $user) {
+
+                    $this->syncDraftCouponToOrder(
+                        $storeId,
+                        $user,
+                        $draftToken
+                    );
+                }
+            });
 
             return response()->json([
                 'status'     => true,
                 'message'    => 'Coupon usage deleted successfully',
                 'deletedIds' => $updatedIds,
             ]);
-        } catch (\Exception $e) {
+
+        } catch (\Throwable $e) {
+
             return response()->json([
                 'status'  => false,
                 'message' => 'Something went wrong',
