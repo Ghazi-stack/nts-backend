@@ -336,6 +336,118 @@ class PromotionController extends Controller
         ]);
     }
 
+    public function updateCodes(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
+            }
+
+            $validated = $request->validate([
+                'ids'        => ['required', 'array', 'min:1'],
+                'ids.*'      => ['integer'],
+                'code'       => ['nullable', 'string', 'max:120'],
+                'validFrom'  => ['nullable', 'date'],
+                'validUntil' => ['nullable', 'date'],
+                'status'     => ['nullable', Rule::in(['unused', 'used'])],
+            ]);
+
+            $ids  = array_values(array_unique($validated['ids']));
+            $rows = PromotionCouponCode::where('store_id', $storeId)->whereIn('id', $ids)->get();
+
+            if ($rows->isEmpty()) {
+                return response()->json(['status' => false, 'message' => 'Coupon code not found.'], 404);
+            }
+
+            if (count($ids) === 1 && !empty($validated['code'])) {
+                $code = strtoupper(trim($validated['code']));
+                $taken = PromotionCouponCode::where('store_id', $storeId)
+                    ->where('code', $code)
+                    ->where('id', '!=', $ids[0])
+                    ->exists();
+                if ($taken) {
+                    return response()->json(['status' => false, 'message' => 'Coupon code already exists.'], 422);
+                }
+            }
+
+            foreach ($rows as $row) {
+                $data = [];
+                if (count($ids) === 1 && !empty($validated['code'])) {
+                    $data['code'] = strtoupper(trim($validated['code']));
+                }
+                if (array_key_exists('validFrom', $validated)) {
+                    $data['valid_from'] = $validated['validFrom'] ?? null;
+                }
+                if (array_key_exists('validUntil', $validated)) {
+                    $data['valid_until'] = $validated['validUntil'] ?? null;
+                }
+                if (!empty($validated['status'])) {
+                    $data['status'] = $validated['status'];
+                    if ($validated['status'] === 'unused') {
+                        $data['used_at'] = null;
+                    }
+                }
+                if (!empty($data)) {
+                    $row->update($data);
+                }
+            }
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Coupon codes updated',
+                'updated' => $rows->count(),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to update coupon codes',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function deleteCodes(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
+            }
+
+            $validated = $request->validate([
+                'ids'   => ['required', 'array', 'min:1'],
+                'ids.*' => ['integer'],
+            ]);
+
+            $ids = array_values(array_unique($validated['ids']));
+            $deleted = PromotionCouponCode::where('store_id', $storeId)
+                ->whereIn('id', $ids)
+                ->delete();
+
+            if (!$deleted) {
+                return response()->json(['status' => false, 'message' => 'Coupon code not found.'], 404);
+            }
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Coupon codes deleted',
+                'deleted' => $deleted,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to delete coupon codes',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
     private function saveCouponCodes(Promotion $promotion, $storeId, array $validated, array $coupon): int
     {
         $mode = $coupon['mode'] ?? 'single';

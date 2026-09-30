@@ -531,6 +531,8 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
             Route::post('/update-status', 'updateStatus');
             Route::get('/download-codes/{id}', 'downloadCodes');
             Route::get('/list-codes/{id}', 'listCodes');
+            Route::post('/update-codes', 'updateCodes');
+            Route::delete('/delete-codes', 'deleteCodes');
         });
     });
 
