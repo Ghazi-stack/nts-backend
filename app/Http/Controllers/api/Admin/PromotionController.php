@@ -105,22 +105,41 @@ class PromotionController extends Controller
         try {
             $storeId = current_store_id();
             if (!$storeId) {
-                return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
             }
 
-            $promotion = Promotion::where('store_id', $storeId)->findOrFail($id);
-            $collection = collect([$promotion]); // keep grouped shape
+            $promotion = Promotion::where('store_id', $storeId)
+                ->withCount('couponCodes')
+                ->find($id);
+
+            if (!$promotion) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Promotion not found.',
+                ], 404);
+            }
+
+            $downloadUrl = $promotion->kind === 'coupon'
+                ? url('/api/dashboard/promotions/download-codes/' . $promotion->id)
+                : null;
 
             return response()->json([
-                'status'  => true,
-                'message' => 'Promotion retrieved successfully',
-                'data'    => (new PromotionResource($collection))->resolve(),
-            ], 200);
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['status' => false, 'message' => 'Promotion not found'], 404);
+                'status'         => true,
+                'message'        => 'Promotion fetched successfully',
+                'codesGenerated' => (int) $promotion->coupon_codes_count,
+                'downloadUrl'    => $downloadUrl,
+                'data'           => new PromotionResource($promotion),
+            ]);
         } catch (\Exception $e) {
             Log::error('Error fetching promotion: ' . $e->getMessage());
-            return response()->json(['status' => false, 'message' => 'Failed to retrieve promotion'], 500);
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to fetch promotion',
+                'error'   => $e->getMessage(),
+            ], 500);
         }
     }
 
