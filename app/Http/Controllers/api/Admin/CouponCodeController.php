@@ -866,8 +866,12 @@ class CouponCodeController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Resolve current cart context
+            | Resolve current persistent cart context
             |--------------------------------------------------------------------------
+            |
+            | quote_token is now the only identifier used for the current
+            | persistent draft cart.
+            |
             */
             $quoteToken = $this->cartContext->getCurrentQuoteToken(
                 $storeId,
@@ -891,7 +895,7 @@ class CouponCodeController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | DRAFT ORDER
+            | CURRENT PERSISTENT DRAFT CART
             |--------------------------------------------------------------------------
             */
             if (!empty($quoteToken)) {
@@ -905,7 +909,7 @@ class CouponCodeController extends Controller
 
                 /*
                 |--------------------------------------------------------------------------
-                | Decode current draft token
+                | Resolve persistent draft
                 |--------------------------------------------------------------------------
                 */
                 try {
@@ -966,10 +970,6 @@ class CouponCodeController extends Controller
                 |--------------------------------------------------------------------------
                 | Manual discount
                 |--------------------------------------------------------------------------
-                |
-                | IMPORTANT:
-                | This is independent of the coupon.
-                |
                 */
                 $manualDiscount = round(
                     (float) ($order->manual_discount ?? 0),
@@ -978,25 +978,45 @@ class CouponCodeController extends Controller
 
                 /*
                 |--------------------------------------------------------------------------
-                | Get draft coupon usage
+                | Get coupon usage
                 |--------------------------------------------------------------------------
+                |
+                | IMPORTANT:
+                | draft_token has been completely removed.
+                |
+                | quote_token identifies the current persistent draft cart.
+                |
                 */
                 $couponUsage = CouponUsage::query()
                     ->where('store_id', $storeId)
                     ->where('is_delete', 0)
                     ->where('user_used', 0)
                     ->where('is_draft', 1)
-                    ->where('draft_token', $quoteToken)
+                    ->where(function ($query) use ($user, $sessionId, $quoteToken) {
+
+                        /*
+                        | Current persistent draft
+                        */
+                        if (\Schema::hasColumn('coupon_usages', 'quote_token')) {
+                            $query->where('quote_token', $quoteToken);
+                        }
+
+                        /*
+                        | Fallback ownership protection
+                        */
+                        $query->orWhere(function ($q) use ($user, $sessionId) {
+
+                            if ($user) {
+                                $q->where('user_id', $user->id);
+                            } elseif ($sessionId) {
+                                $q->where('session_id', $sessionId);
+                            }
+                        });
+                    })
                     ->orderBy('id', 'desc')
                     ->first();
 
-                /*
-                |--------------------------------------------------------------------------
-                | Coupon exists
-                |--------------------------------------------------------------------------
-                */
                 if ($couponUsage) {
-
                     $couponCode = $couponUsage->coupon_code;
 
                     $discountAmount = round(
@@ -1004,15 +1024,6 @@ class CouponCodeController extends Controller
                         2
                     );
                 }
-
-                /*
-                |--------------------------------------------------------------------------
-                | No coupon
-                |--------------------------------------------------------------------------
-                |
-                | Coupon was removed, but manual discount remains.
-                |
-                */
             }
 
             /*
@@ -1062,6 +1073,7 @@ class CouponCodeController extends Controller
                 |--------------------------------------------------------------------------
                 */
                 else {
+
                     $query->where(
                         'session_id',
                         $sessionId
@@ -1087,14 +1099,6 @@ class CouponCodeController extends Controller
                     );
                 }
 
-                /*
-                |--------------------------------------------------------------------------
-                | Normal cart manual discount
-                |--------------------------------------------------------------------------
-                |
-                | Currently manual discounts are attached to draft orders.
-                |
-                */
                 $manualDiscount = 0;
             }
 
@@ -1110,28 +1114,18 @@ class CouponCodeController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Single discount API response
+            | Response
             |--------------------------------------------------------------------------
+            |
+            | Response structure remains unchanged.
+            |
             */
             return response()->json([
                 'status'  => true,
                 'message' => 'Coupon usages fetched successfully',
 
-                /*
-                |--------------------------------------------------------------------------
-                | Existing CouponUsage response
-                |--------------------------------------------------------------------------
-                |
-                | Keep this so existing frontend code doesn't break.
-                |
-                */
                 'data' => $couponUsage,
 
-                /*
-                |--------------------------------------------------------------------------
-                | Combined discount information
-                |--------------------------------------------------------------------------
-                */
                 'discounts' => [
                     'customerId'     => $customerId,
                     'couponCode'     => $couponCode,
