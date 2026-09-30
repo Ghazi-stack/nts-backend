@@ -41,12 +41,20 @@ class BannerResource extends JsonResource
             'createdAt'    => $this->created_at,
             'updatedAt'    => $this->updated_at,
 
-            'category' => $type === 'category'
-                ? ($this->location_category ?: null)
+            'category' => $type === 'category' && $this->location_category
+                ? [
+                    'id'   => $this->location_category->id,
+                    'name' => $this->location_category->name,
+                    'slug' => $this->location_category->slug ?: \Illuminate\Support\Str::slug($this->location_category->name),
+                ]
                 : null,
 
-            'brand' => $type === 'brand'
-                ? ($this->location_brand ?: null)
+            'brand' => $type === 'brand' && $this->location_brand
+                ? [
+                    'id'   => $this->location_brand->id,
+                    'name' => $this->location_brand->name,
+                    'slug' => $this->location_brand->slug ?: \Illuminate\Support\Str::slug($this->location_brand->name),
+                ]
                 : null,
         ];
     }
