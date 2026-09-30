@@ -1156,28 +1156,59 @@ class CouponCodeController extends Controller
         try {
             $storeId = $this->getStoreId();
 
+            \Log::info('=== getMyCouponUsage START ===');
+
             /*
             * ============================================================
-            * RESOLVE USER / SESSION
+            * STORE
+            * ============================================================
+            */
+            \Log::info('getMyCouponUsage storeId', [
+                'store_id' => $storeId,
+            ]);
+
+            /*
+            * ============================================================
+            * RESOLVE USER
             * ============================================================
             */
             $user = $request->user('sanctum') ?? auth('sanctum')->user();
 
+            \Log::info('getMyCouponUsage authenticated user', [
+                'user_exists' => (bool) $user,
+                'user_id'     => $user?->id,
+                'user_email'  => $user?->email,
+            ]);
+
             if (!$user && $request->bearerToken()) {
+
+                \Log::info('getMyCouponUsage bearer token found');
+
                 $token = \Laravel\Sanctum\PersonalAccessToken::findToken(
                     $request->bearerToken()
                 );
 
                 $user = $token?->tokenable;
+
+                \Log::info('getMyCouponUsage bearer token resolved user', [
+                    'user_exists' => (bool) $user,
+                    'user_id'     => $user?->id,
+                    'user_email'  => $user?->email,
+                ]);
             }
 
             $sessionId = $user
                 ? null
                 : $request->header('X-Session-ID');
 
+            \Log::info('getMyCouponUsage identity', [
+                'user_id'    => $user?->id,
+                'session_id' => $sessionId,
+            ]);
+
             /*
             * ============================================================
-            * GET CURRENT PERSISTENT CART CONTEXT
+            * GET CURRENT QUOTE TOKEN
             * ============================================================
             */
             $draftToken = $this->cartContext->getCurrentQuoteToken(
@@ -1186,40 +1217,73 @@ class CouponCodeController extends Controller
                 $sessionId
             );
 
+            \Log::info('getMyCouponUsage current cart context', [
+                'draft_token_exists' => !empty($draftToken),
+                'draft_token_length' => $draftToken ? strlen($draftToken) : 0,
+                'draft_token_prefix' => $draftToken
+                    ? substr($draftToken, 0, 30)
+                    : null,
+            ]);
+
             /*
             * ============================================================
-            * GET MANUAL DISCOUNT FROM CURRENT DRAFT ORDER
+            * MANUAL DISCOUNT
             * ============================================================
             */
             $manualDiscount = 0;
+            $orderId = null;
+            $payload = null;
 
             if (!empty($draftToken)) {
 
+                \Log::info('getMyCouponUsage draft token exists');
+
                 try {
+
                     /*
-                    * Decode the same quote token used by
-                    * getCustomerOrderDiscounts()
+                    * Decode current draft token.
                     */
                     $payload = $this->draftQuote->decode($draftToken);
+
+                    \Log::info('getMyCouponUsage decoded quote payload', [
+                        'payload' => $payload,
+                    ]);
 
                     $tokenStoreId = (int) ($payload['store_id'] ?? 0);
                     $orderId      = (int) ($payload['order_id'] ?? 0);
                     $tokenUserId  = (int) ($payload['user_id'] ?? 0);
 
+                    \Log::info('getMyCouponUsage decoded identifiers', [
+                        'token_store_id' => $tokenStoreId,
+                        'token_order_id' => $orderId,
+                        'token_user_id'  => $tokenUserId,
+                        'current_store_id' => (int) $storeId,
+                        'current_user_id'  => $user?->id,
+                    ]);
+
                     /*
-                    * Validate token ownership.
+                    * Check token ownership.
                     */
+                    $storeMatches = $tokenStoreId === (int) $storeId;
+                    $orderExists  = $orderId > 0;
+                    $userMatches  = !$user || $tokenUserId === (int) $user->id;
+
+                    \Log::info('getMyCouponUsage token validation', [
+                        'store_matches' => $storeMatches,
+                        'order_exists'  => $orderExists,
+                        'user_matches'  => $userMatches,
+                    ]);
+
                     if (
-                        $tokenStoreId === (int) $storeId &&
-                        $orderId > 0 &&
-                        $user &&
-                        $tokenUserId === (int) $user->id
+                        $storeMatches &&
+                        $orderExists &&
+                        $userMatches
                     ) {
 
-                        /*
-                        * Get the SAME active draft order as
-                        * getCustomerOrderDiscounts()
-                        */
+                        \Log::info('getMyCouponUsage loading draft order', [
+                            'order_id' => $orderId,
+                        ]);
+
                         $order = \App\Models\Order::query()
                             ->where('id', $orderId)
                             ->where('store_id', $storeId)
@@ -1227,34 +1291,97 @@ class CouponCodeController extends Controller
                             ->where('is_draft', 1)
                             ->first();
 
+                        \Log::info('getMyCouponUsage order lookup result', [
+                            'order_found' => (bool) $order,
+                            'order_id'    => $order?->id,
+                            'order_store_id' => $order?->store_id,
+                            'order_user_id' => $order?->user_id,
+                            'order_is_draft' => $order?->is_draft,
+                        ]);
+
                         if ($order) {
-                            /*
-                            * This is the important part.
-                            *
-                            * Your working API uses:
-                            *
-                            * $order->manual_discount
-                            */
+
+                            \Log::info('getMyCouponUsage order manual discount inspection', [
+                                'manual_discount_property' => $order->manual_discount ?? null,
+                                'manualDiscount_property'  => $order->manualDiscount ?? null,
+                                'attributes'               => $order->getAttributes(),
+                            ]);
+
                             $manualDiscount = round(
                                 (float) ($order->manual_discount ?? 0),
                                 2
                             );
+
+                            \Log::info('getMyCouponUsage manual discount resolved', [
+                                'manual_discount' => $manualDiscount,
+                            ]);
+                        } else {
+
+                            \Log::warning(
+                                'getMyCouponUsage draft order NOT FOUND',
+                                [
+                                    'order_id' => $orderId,
+                                    'store_id' => $storeId,
+                                    'user_id'  => $user?->id,
+                                ]
+                            );
                         }
+
+                    } else {
+
+                        \Log::warning(
+                            'getMyCouponUsage token validation FAILED',
+                            [
+                                'store_matches' => $storeMatches,
+                                'order_exists'  => $orderExists,
+                                'user_matches'  => $userMatches,
+                                'token_store_id' => $tokenStoreId,
+                                'token_user_id'  => $tokenUserId,
+                                'current_store_id' => (int) $storeId,
+                                'current_user_id' => $user?->id,
+                                'order_id' => $orderId,
+                            ]
+                        );
                     }
 
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
+
+                    \Log::error(
+                        'getMyCouponUsage quote token decode FAILED',
+                        [
+                            'message' => $e->getMessage(),
+                            'file'    => $e->getFile(),
+                            'line'    => $e->getLine(),
+                            'trace'   => $e->getTraceAsString(),
+                        ]
+                    );
+
                     $manualDiscount = 0;
                 }
+
+            } else {
+
+                \Log::warning(
+                    'getMyCouponUsage NO ACTIVE DRAFT TOKEN'
+                );
             }
 
             /*
             * ============================================================
-            * COUPON USAGE QUERY
+            * COUPON QUERY
             * ============================================================
             */
             $query = CouponUsage::where('store_id', $storeId)
                 ->where('is_delete', 0)
                 ->where('user_used', 0);
+
+            \Log::info('getMyCouponUsage coupon base query', [
+                'store_id' => $storeId,
+                'draft_token_exists' => !empty($draftToken),
+                'draft_token_prefix' => $draftToken
+                    ? substr($draftToken, 0, 30)
+                    : null,
+            ]);
 
             /*
             * ============================================================
@@ -1269,6 +1396,23 @@ class CouponCodeController extends Controller
                     ->orderBy('id', 'desc')
                     ->first();
 
+                \Log::info('getMyCouponUsage draft coupon lookup', [
+                    'usage_found' => (bool) $usage,
+                    'usage_id'    => $usage?->id,
+                    'coupon_code' => $usage?->coupon_code,
+                    'discount_amount' => $usage?->discount_amount,
+                    'usage_is_draft' => $usage?->is_draft,
+                    'usage_draft_token_prefix' => $usage?->draft_token
+                        ? substr($usage->draft_token, 0, 30)
+                        : null,
+                ]);
+
+                \Log::info('getMyCouponUsage FINAL RESULT', [
+                    'manual_discount' => $manualDiscount,
+                    'order_id'        => $orderId,
+                    'coupon_usage_id' => $usage?->id,
+                ]);
+
                 return response()->json([
                     'status'         => true,
                     'message'        => 'Coupon usages fetched successfully',
@@ -1279,13 +1423,18 @@ class CouponCodeController extends Controller
 
             /*
             * ============================================================
-            * NORMAL LOGGED-IN CART
+            * NORMAL CART
             * ============================================================
             */
             if ($user) {
 
                 $userId = $user->id;
                 $userEmail = strtolower(trim($user->email ?? ''));
+
+                \Log::info('getMyCouponUsage normal user coupon lookup', [
+                    'user_id' => $userId,
+                    'email'   => $userEmail,
+                ]);
 
                 $query->where(function ($q) use ($userId, $userEmail) {
 
@@ -1299,23 +1448,19 @@ class CouponCodeController extends Controller
                     }
                 });
 
-            }
-            /*
-            * ============================================================
-            * NORMAL GUEST CART
-            * ============================================================
-            */
-            elseif ($sessionId) {
+            } elseif ($sessionId) {
+
+                \Log::info('getMyCouponUsage guest coupon lookup', [
+                    'session_id' => $sessionId,
+                ]);
 
                 $query->where('session_id', $sessionId);
 
-            }
-            /*
-            * ============================================================
-            * NO IDENTITY
-            * ============================================================
-            */
-            else {
+            } else {
+
+                \Log::warning(
+                    'getMyCouponUsage no user or session'
+                );
 
                 return response()->json([
                     'status'  => false,
@@ -1323,15 +1468,20 @@ class CouponCodeController extends Controller
                 ], 400);
             }
 
-            /*
-            * ============================================================
-            * NORMAL CART COUPON
-            * ============================================================
-            */
             $usage = $query
                 ->where('is_draft', 0)
                 ->orderBy('id', 'desc')
                 ->first();
+
+            \Log::info('getMyCouponUsage normal coupon result', [
+                'usage_found' => (bool) $usage,
+                'usage_id'    => $usage?->id,
+                'coupon_code' => $usage?->coupon_code,
+                'discount_amount' => $usage?->discount_amount,
+                'manual_discount' => $manualDiscount,
+            ]);
+
+            \Log::info('=== getMyCouponUsage END ===');
 
             return response()->json([
                 'status'         => true,
@@ -1340,7 +1490,14 @@ class CouponCodeController extends Controller
                 'manualDiscount' => $manualDiscount,
             ]);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+
+            \Log::error('getMyCouponUsage FATAL ERROR', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
 
             return response()->json([
                 'status'  => false,
