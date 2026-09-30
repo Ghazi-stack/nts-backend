@@ -1164,33 +1164,19 @@ class OrderController extends Controller
             $currentQuoteToken = null;
             $existingDraft = null;
 
-            if (!empty($validated['orderId'])) {
+            /*
+            |--------------------------------------------------------------------------
+            | Resolve current draft from persistent backend context
+            |--------------------------------------------------------------------------
+            |
+            | The frontend does NOT need to send orderId.
+            | The active quoteToken identifies the draft order.
+            |
+            */
 
-                /*
-                |--------------------------------------------------------------------------
-                | Draft checkout requires login
-                |--------------------------------------------------------------------------
-                */
-                if (!$currentUser) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'Authentication required to checkout a draft order.',
-                    ], 401);
-                }
+            if ($currentUser) {
 
-                /*
-                |--------------------------------------------------------------------------
-                | Get current draft from persistent user context
-                |--------------------------------------------------------------------------
-                */
-                // $currentQuoteToken = $this->cartContext->getCurrentQuoteToken(
-                //     $storeId,
-                //     $currentUser->id
-                // );
-
-                $sessionId = $currentUser
-                    ? null
-                    : $request->header('X-Session-ID');
+                $sessionId = null;
 
                 $currentQuoteToken = $this->cartContext->getCurrentQuoteToken(
                     $storeId,
@@ -1198,118 +1184,96 @@ class OrderController extends Controller
                     $sessionId
                 );
 
-                if (!$currentQuoteToken) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'No active draft context found.',
-                    ], 409);
-                }
+                if ($currentQuoteToken) {
 
-                /*
-                |--------------------------------------------------------------------------
-                | Decode current quote token
-                |--------------------------------------------------------------------------
-                |
-                | The quote token itself contains the order_id that created the draft.
-                | This prevents Draft B's orderId from being submitted while Draft A
-                | is the currently active draft.
-                |
-                */
-                try {
-                    $quotePayload = $this->draftQuote->decode($currentQuoteToken);
-                } catch (\Exception $e) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'Current draft context is invalid or expired.',
-                    ], 401);
-                }
-
-                $tokenStoreId = (int) ($quotePayload['store_id'] ?? 0);
-                $tokenOrderId = (int) ($quotePayload['order_id'] ?? 0);
-                $tokenUserId  = (int) ($quotePayload['user_id'] ?? 0);
-
-                /*
-                |--------------------------------------------------------------------------
-                | Verify token belongs to this store and authenticated user
-                |--------------------------------------------------------------------------
-                */
-                if (
-                    $tokenStoreId !== (int) $storeId ||
-                    $tokenUserId !== (int) $currentUser->id
-                ) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'Draft context does not belong to the authenticated user.',
-                    ], 403);
-                }
-
-                /*
-                |--------------------------------------------------------------------------
-                | Verify requested orderId belongs to the active quote
-                |--------------------------------------------------------------------------
-                */
-                if ($tokenOrderId !== (int) $validated['orderId']) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'The requested draft is not the currently active draft.',
-                    ], 409);
-                }
-
-                /*
-                |--------------------------------------------------------------------------
-                | Load ONLY the authenticated user's active draft order
-                |--------------------------------------------------------------------------
-                */
-                $existingDraft = Order::query()
-                    ->where('id', $validated['orderId'])
-                    ->where('store_id', $storeId)
-                    ->where('user_id', $currentUser->id)
-                    ->where('is_draft', 1)
-                    ->first();
-
-                if (!$existingDraft) {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'Draft order not found.',
-                    ], 404);
-                }
-
-                /*
-                |--------------------------------------------------------------------------
-                | Make sure the active draft still has cart items
-                |--------------------------------------------------------------------------
-                */
-                $hasActiveDraftItems = Cart::query()
-                    ->where('store_id', $storeId)
-                    ->where('user_id', $currentUser->id)
-                    ->where('quote_token', $currentQuoteToken)
-                    ->where('isdraftcart', 1)
-                    ->exists();
-
-                if (!$hasActiveDraftItems) {
                     /*
-                    | The draft is empty and should no longer be treated as active.
+                    |--------------------------------------------------------------------------
+                    | Decode current quote token
+                    |--------------------------------------------------------------------------
                     */
+                    try {
 
-                    // $this->cartContext->setNormalCart(
-                    //     $storeId,
-                    //     $currentUser->id
-                    // );
+                        $quotePayload = $this->draftQuote->decode(
+                            $currentQuoteToken
+                        );
 
-                    $sessionId = $currentUser
-                        ? null
-                        : $request->header('X-Session-ID');
+                    } catch (\Exception $e) {
 
-                    $this->cartContext->setNormalCart(
-                        $storeId,
-                        $currentUser,
-                        $sessionId
-                    );
+                        return response()->json([
+                            'status'  => false,
+                            'message' => 'Current draft context is invalid or expired.',
+                        ], 401);
+                    }
 
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'Draft cart is empty.',
-                    ], 404);
+                    $tokenStoreId = (int) ($quotePayload['store_id'] ?? 0);
+                    $tokenOrderId = (int) ($quotePayload['order_id'] ?? 0);
+                    $tokenUserId  = (int) ($quotePayload['user_id'] ?? 0);
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Validate current draft ownership
+                    |--------------------------------------------------------------------------
+                    */
+                    if (
+                        $tokenStoreId !== (int) $storeId ||
+                        $tokenUserId !== (int) $currentUser->id
+                    ) {
+                        return response()->json([
+                            'status'  => false,
+                            'message' => 'Draft context does not belong to the authenticated user.',
+                        ], 403);
+                    }
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Load the current draft order directly from quoteToken
+                    |--------------------------------------------------------------------------
+                    */
+                    if ($tokenOrderId > 0) {
+
+                        $existingDraft = Order::query()
+                            ->where('id', $tokenOrderId)
+                            ->where('store_id', $storeId)
+                            ->where('user_id', $currentUser->id)
+                            ->where('is_draft', 1)
+                            ->first();
+
+                        if (!$existingDraft) {
+                            return response()->json([
+                                'status'  => false,
+                                'message' => 'Draft order not found.',
+                            ], 404);
+                        }
+                    }
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Make sure the active draft still has cart items
+                    |--------------------------------------------------------------------------
+                    */
+                    if ($existingDraft) {
+
+                        $hasActiveDraftItems = Cart::query()
+                            ->where('store_id', $storeId)
+                            ->where('user_id', $currentUser->id)
+                            ->where('quote_token', $currentQuoteToken)
+                            ->where('isdraftcart', 1)
+                            ->exists();
+
+                        if (!$hasActiveDraftItems) {
+
+                            $this->cartContext->setNormalCart(
+                                $storeId,
+                                $currentUser,
+                                null
+                            );
+
+                            return response()->json([
+                                'status'  => false,
+                                'message' => 'Draft cart is empty.',
+                            ], 404);
+                        }
+                    }
                 }
             }
 
@@ -3867,6 +3831,80 @@ class OrderController extends Controller
                     $quoteToken = substr($quoteUrl, strpos($quoteUrl, 'quoteToken=') + 11);
                 }
 
+                /*
+                |--------------------------------------------------------------------------
+                | Attach current draft token to the coupon usage
+                |--------------------------------------------------------------------------
+                |
+                | The frontend does NOT send draft_token.
+                | The backend has just generated the quote token, so attach it here.
+                |
+                */
+                if ($quoteToken) {
+
+                    $couponEmail = strtolower(
+                        trim(
+                            $formAddress['email']
+                            ?? $billingInfo['email']
+                            ?? $shippingInfo['email']
+                            ?? $customer->email
+                            ?? ''
+                        )
+                    );
+
+                    $couponQuery = CouponUsage::query()
+                        ->where('store_id', $storeId)
+                        ->where('is_draft', 1)
+                        ->where('is_delete', 0)
+                        ->where('user_used', 0)
+                        ->whereNull('draft_token');
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Match the coupon to the customer email
+                    |--------------------------------------------------------------------------
+                    */
+                    if ($couponEmail) {
+                        $couponQuery->whereRaw(
+                            'LOWER(email) = ?',
+                            [$couponEmail]
+                        );
+                    }
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | If a coupon code was supplied, match that too
+                    |--------------------------------------------------------------------------
+                    */
+                    if (!empty($validated['couponCode'])) {
+                        $couponQuery->where(
+                            'coupon_code',
+                            $validated['couponCode']
+                        );
+                    }
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Get the latest unused draft coupon
+                    |--------------------------------------------------------------------------
+                    */
+                    $couponUsage = $couponQuery
+                        ->orderBy('id', 'desc')
+                        ->first();
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Attach the generated draft token
+                    |--------------------------------------------------------------------------
+                    */
+                    if ($couponUsage) {
+                        $couponUsage->update([
+                            'draft_token' => $quoteToken,
+                            'user_id'     => $formUserId,
+                        ]);
+                    }
+                }
+
                 if ($cartUser) {
                     foreach ($validated['products'] as $raw) {
                         $productId = $raw['product_id'] ?? $raw['productId'];
@@ -5810,39 +5848,141 @@ class OrderController extends Controller
 
                     $sessionId = $request->header('X-Session-ID') ?? session()->getId();
 
-                    CheckoutFormData::create([
-                        'store_id'           => $storeId,
-                        'user_id'            => $formUserId,
-                        'session_id'         => $sessionId,
-                        'quote_token'        => $quoteToken,
-                        'billing_form_data'  => [
-                            'firstName'    => $formAddress['firstName'] ?? $validated['firstName'] ?? null,
-                            'lastName'     => $formAddress['lastName'] ?? $validated['lastName'] ?? null,
-                            'name'         => $formAddress['name'] ?? null,
-                            'email'        => $formAddress['email'] ?? $validated['email'] ?? null,
-                            'phone'        => $formAddress['phone'] ?? $validated['phone'] ?? null,
-                            'companyName'  => $formAddress['companyName'] ?? $validated['companyName'] ?? null,
-                            'addressLine1' => $formAddress['addressLine1'] ?? null,
-                            'addressLine2' => $formAddress['addressLine2'] ?? null,
-                            'city'         => $formAddress['city'] ?? null,
-                            'state'        => $formAddress['state'] ?? null,
-                            'zip'          => $formAddress['zip'] ?? null,
-                            'country'      => $formAddress['country'] ?? null,
-                        ],
+                    CheckoutFormData::updateOrCreate(
+                    [
+                        'store_id'   => $storeId,
+                        'user_id'    => $formUserId,
+                        'quote_token' => $quoteToken ?? null,
+                    ],
+                    [
+                        'session_id' => $sessionId,
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Store frontend shipping structure exactly
+                        |--------------------------------------------------------------------------
+                        */
                         'shipping_form_data' => [
-                            'firstName'    => $shippingAddress['firstName'] ?? $billingInput['firstName'] ?? $validated['firstName'] ?? null,
-                            'lastName'     => $shippingAddress['lastName'] ?? $billingInput['lastName'] ?? $validated['lastName'] ?? null,
-                            'email'        => $shippingAddress['email'] ?? $billingInput['email'] ?? $validated['email'] ?? null,
-                            'phone'        => $shippingAddress['phone'] ?? $billingInput['phone'] ?? $validated['phone'] ?? null,
-                            'companyName'  => $shippingAddress['companyName'] ?? $billingInput['companyName'] ?? $validated['companyName'] ?? null,
-                            'addressLine1' => $shippingAddress['addressLine1'] ?? $billingInput['addressLine1'] ?? null,
-                            'addressLine2' => $shippingAddress['addressLine2'] ?? $billingInput['addressLine2'] ?? null,
-                            'city'         => $shippingAddress['city'] ?? $billingInput['city'] ?? null,
-                            'state'        => $shippingAddress['state'] ?? $billingInput['state'] ?? null,
-                            'zip'          => $shippingAddress['zip'] ?? $billingInput['zip'] ?? null,
-                            'country'      => $shippingAddress['country'] ?? $billingInput['country'] ?? null,
+                            'email' => $billingInput['email']
+                                ?? $validated['email']
+                                ?? '',
+
+                            'firstName' => $billingInput['firstName']
+                                ?? $validated['firstName']
+                                ?? '',
+
+                            'lastName' => $billingInput['lastName']
+                                ?? $validated['lastName']
+                                ?? '',
+
+                            'company' => $billingInput['company']
+                                ?? $billingInput['companyName']
+                                ?? $validated['company']
+                                ?? $validated['companyName']
+                                ?? '',
+
+                            'phone' => $billingInput['phone']
+                                ?? $validated['phone']
+                                ?? '',
+
+                            'address1' => $billingInput['address1']
+                                ?? $billingInput['addressLine1']
+                                ?? $validated['address1']
+                                ?? $validated['addressLine1']
+                                ?? '',
+
+                            'address2' => $billingInput['address2']
+                                ?? $billingInput['addressLine2']
+                                ?? $validated['address2']
+                                ?? $validated['addressLine2']
+                                ?? '',
+
+                            'city' => $billingInput['city']
+                                ?? $validated['city']
+                                ?? '',
+
+                            'country' => $billingInput['country']
+                                ?? $validated['country']
+                                ?? '',
+
+                            'state' => $billingInput['state']
+                                ?? $validated['state']
+                                ?? '',
+
+                            'zip' => $billingInput['zip']
+                                ?? $validated['zip']
+                                ?? '',
+
+                            'newsletter' => $validated['newsletter']
+                                ?? $validated['receiveOffers']
+                                ?? false,
+
+                            'shippingMethod' => $billingInput['shippingMethod']
+                                ?? $validated['shippingMethod']
+                                ?? '',
+
+                            'billingSame' => $validated['billingSame']
+                                ?? true,
+
+                            'orderComment' => $validated['orderComment']
+                                ?? $validated['comments']
+                                ?? '',
                         ],
-                    ]);
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Store frontend billing structure exactly
+                        |--------------------------------------------------------------------------
+                        */
+                        'billing_form_data' => [
+                            'billingFirstName' => $formAddress['firstName']
+                                ?? $validated['firstName']
+                                ?? '',
+
+                            'billingLastName' => $formAddress['lastName']
+                                ?? $validated['lastName']
+                                ?? '',
+
+                            'billingCompany' => $formAddress['company']
+                                ?? $formAddress['companyName']
+                                ?? $validated['company']
+                                ?? $validated['companyName']
+                                ?? '',
+
+                            'billingPhone' => $formAddress['phone']
+                                ?? $validated['phone']
+                                ?? '',
+
+                            'billingAddress1' => $formAddress['address1']
+                                ?? $formAddress['addressLine1']
+                                ?? $validated['address1']
+                                ?? $validated['addressLine1']
+                                ?? '',
+
+                            'billingAddress2' => $formAddress['address2']
+                                ?? $formAddress['addressLine2']
+                                ?? $validated['address2']
+                                ?? $validated['addressLine2']
+                                ?? '',
+
+                            'billingCity' => $formAddress['city']
+                                ?? $validated['city']
+                                ?? '',
+
+                            'billingCountry' => $formAddress['country']
+                                ?? $validated['country']
+                                ?? '',
+
+                            'billingState' => $formAddress['state']
+                                ?? $validated['state']
+                                ?? '',
+
+                            'billingZip' => $formAddress['zip']
+                                ?? $validated['zip']
+                                ?? '',
+                        ],
+                    ]
+                );
 
                     $cartIds = [];
                     if (!empty($storeUser?->id)) {
