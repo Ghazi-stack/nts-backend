@@ -125,6 +125,7 @@ class BannerController extends Controller
             }
 
             $perPage = $request->query('perPage', 20);
+            $now = now();
 
             $query = Banner::where('store_id', $storeId)
                 ->where('visible', 1)
@@ -138,11 +139,14 @@ class BannerController extends Controller
                 $query->where('location->id', (int) $locationId);
             }
 
-            // Same placement par sirf pehla created visible banner
+            // visible = 1, current time date_range ke andar, same placement par sirf pehla created
             $selectedIds = (clone $query)
                 ->orderBy('created_at', 'asc')
                 ->orderBy('id', 'asc')
                 ->get()
+                ->filter(function ($banner) use ($now) {
+                    return $this->bannerIsWithinDateRange($banner->date_range, $now);
+                })
                 ->unique(function ($banner) {
                     $placement = $banner->placement;
 
@@ -220,6 +224,41 @@ class BannerController extends Controller
                 'message' => 'Failed to retrieve banners',
             ], 500);
         }
+    }
+
+    private function bannerIsWithinDateRange($dateRange, $now = null): bool
+    {
+        $now = $now ?: now();
+
+        if ($dateRange === null || $dateRange === '' || $dateRange === 0 || $dateRange === '0') {
+            return true;
+        }
+
+        if (is_string($dateRange)) {
+            $decoded = json_decode($dateRange, true);
+            $dateRange = is_array($decoded) ? $decoded : null;
+        }
+
+        if (!is_array($dateRange)) {
+            return true;
+        }
+
+        $start = $dateRange['startDate'] ?? null;
+        $end   = $dateRange['endDate'] ?? null;
+
+        if (!$start && !$end) {
+            return true;
+        }
+
+        if ($start && $now->lt(\Carbon\Carbon::parse($start))) {
+            return false;
+        }
+
+        if ($end && $now->gt(\Carbon\Carbon::parse($end))) {
+            return false;
+        }
+
+        return true;
     }
     public function storeBanner(Request $request)
     {
