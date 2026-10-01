@@ -295,44 +295,47 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 ->where('entity_type', 'product')
                 ->first();
 
-            if ($urlSetting && $urlSetting->custom_format) {
-                $customFormat = $urlSetting->custom_format;
+            $cleanName = str_replace(
+                ['.', '/', '\\', ',', '(', ')', '&', '+', '#', '@', '!', '?', ';', ':', "'", '"'],
+                '-',
+                $productName
+            );
+            $sluggedTitle = Str::slug($cleanName);
 
-                // Load category name for placeholder
+            // Table mein custom_format hai to wahi use karo
+            if ($urlSetting && filled($urlSetting->custom_format)) {
                 $categoryName = '';
                 if ($categoryId) {
                     $category = \App\Models\Category::find($categoryId);
                     $categoryName = $category ? $category->name : '';
                 }
 
-                // Pre-generate slugged title — special characters ko pehle dash mein convert karo
-                $cleanName = str_replace(['.', '/', '\\', ',', '(', ')', '&', '+', '#', '@', '!', '?', ';', ':', "'", '"'], '-', $productName);
-                $sluggedTitle = Str::slug($cleanName);
-
-                // Build a map of all possible placeholders to their actual values
                 $placeholders = [
-                    '%title%'         => $sluggedTitle,
-                    '%brand%'         => \Illuminate\Support\Str::slug($brandName),
-                    '%sku%'           => \Illuminate\Support\Str::slug($sku),
-                    '%name%'          => $sluggedTitle,
-                    '%product_name%'  => $sluggedTitle,
-                    '%category%'      => \Illuminate\Support\Str::slug($categoryName),
-                    '%id%'            => $product->id,
-                    '%slug%'          => $product->slug,
-                    '%price%'         => $price,
-                    '%mpn%'           => \Illuminate\Support\Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
-                    '%upc%'           => \Illuminate\Support\Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
+                    '%title%'        => $sluggedTitle,
+                    '%brand%'        => Str::slug($brandName),
+                    '%sku%'          => Str::slug($sku),
+                    '%name%'         => $sluggedTitle,
+                    '%product_name%' => $sluggedTitle,
+                    '%category%'     => Str::slug($categoryName),
+                    '%id%'           => $product->id,
+                    '%slug%'         => $product->slug,
+                    '%price%'        => $price,
+                    '%mpn%'          => Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
+                    '%upc%'          => Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
                 ];
 
-                // Replace all placeholders in custom_format
                 $productUrl = str_replace(
                     array_keys($placeholders),
                     array_values($placeholders),
-                    $customFormat
+                    $urlSetting->custom_format
                 );
 
-                // Remove trailing slash to match Reset button behavior
-                $productUrl = rtrim($productUrl, '/');
+                $productUrl = trim($productUrl, '/');
+            }
+
+            // Row nahi / custom_format NULL → title se default
+            if (!filled($productUrl)) {
+                $productUrl = $sluggedTitle;
             }
 
             ProductSeo::updateOrCreate(
