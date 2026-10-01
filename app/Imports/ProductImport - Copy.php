@@ -116,6 +116,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             ]);
 
             $productName = $this->getField($data, [
+                'Product Name',
                 'product name',
                 'name',
                 'product_name',
