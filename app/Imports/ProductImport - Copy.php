@@ -601,7 +601,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
             // --- Progress update for successful row ---------------------------
             $this->updateProgress();
-        } catch (\Throwable $e) {
+        } }catch (\Throwable $e) {
             // Do not stop the whole job if one row fails
             Log::error('Import row error', [
                 'row'   => $rowIndex,
