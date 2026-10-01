@@ -840,10 +840,61 @@ class CustomerController extends Controller
     // }
 
 
+    // public function myOrders(Request $request)
+    // {
+    //     try {
+    //         $user = auth()->user();
+    //         if (!$user) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'User not authenticated.'
+    //             ], 401);
+    //         }
+
+    //         $orders = Order::with([
+    //             'items.product.images',
+    //             'returnRequest',
+    //         ])
+    //             ->where('user_id', $user->id)
+    //             ->orderBy('created_at', 'desc')
+    //             ->get();
+
+    //         // Remove product-less items
+    //         $orders->each(function ($order) {
+    //             $order->setRelation(
+    //                 'items',
+    //                 $order->items->filter(fn($item) => $item->product !== null)->values()
+    //             );
+    //         });
+
+    //         $result = [];
+    //         foreach ($orders as $order) {
+    //             try {
+    //                 $result[] = (new MyOrderResource($order))->resolve();
+    //             } catch (\Throwable $e) {
+    //                 // yeh order skip — baqi orders chalte rahein
+    //                 continue;
+    //             }
+    //         }
+
+    //         return response()->json([
+    //             'status' => true,
+    //             'orders' => $result,
+    //         ], 200);
+    //     } catch (\Throwable $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Unable to load orders right now. Please try again.'
+    //         ], 500);
+    //     }
+    // }
+
+
     public function myOrders(Request $request)
     {
         try {
             $user = auth()->user();
+
             if (!$user) {
                 return response()->json([
                     'status'  => false,
@@ -851,28 +902,69 @@ class CustomerController extends Controller
                 ], 401);
             }
 
-            $orders = Order::with([
+            $query = Order::with([
                 'items.product.images',
                 'returnRequest',
             ])
-                ->where('user_id', $user->id)
+                ->where('user_id', $user->id);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Optional Draft Filter
+            |--------------------------------------------------------------------------
+            |
+            | /my-orders
+            |     -> all orders
+            |
+            | /my-orders?isDraft=true
+            |     -> draft orders only
+            |
+            | /my-orders?isDraft=false
+            |     -> non-draft orders only
+            |
+            */
+            if ($request->has('isDraft')) {
+                $isDraft = filter_var(
+                    $request->query('isDraft'),
+                    FILTER_VALIDATE_BOOLEAN,
+                    FILTER_NULL_ON_FAILURE
+                );
+
+                if ($isDraft !== null) {
+                    $query->where('is_draft', $isDraft ? 1 : 0);
+                }
+            }
+
+            $orders = $query
                 ->orderBy('created_at', 'desc')
                 ->get();
 
-            // product-less items hatao taake resource null->id na read kare
+            /*
+            |--------------------------------------------------------------------------
+            | Remove product-less items
+            |--------------------------------------------------------------------------
+            */
             $orders->each(function ($order) {
                 $order->setRelation(
                     'items',
-                    $order->items->filter(fn($item) => $item->product !== null)->values()
+                    $order->items
+                        ->filter(fn($item) => $item->product !== null)
+                        ->values()
                 );
             });
 
+            /*
+            |--------------------------------------------------------------------------
+            | Build resources
+            |--------------------------------------------------------------------------
+            */
             $result = [];
+
             foreach ($orders as $order) {
                 try {
                     $result[] = (new MyOrderResource($order))->resolve();
                 } catch (\Throwable $e) {
-                    // yeh order skip — baqi orders chalte rahein
+                    // Skip problematic order and continue processing others
                     continue;
                 }
             }
@@ -881,6 +973,7 @@ class CustomerController extends Controller
                 'status' => true,
                 'orders' => $result,
             ], 200);
+
         } catch (\Throwable $e) {
             return response()->json([
                 'status'  => false,
@@ -888,7 +981,7 @@ class CustomerController extends Controller
             ], 500);
         }
     }
-
+    
     public function destroy(Request $request, $id = null)
     {
         try {
