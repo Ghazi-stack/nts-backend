@@ -138,7 +138,26 @@ class BannerController extends Controller
                 $query->where('location->id', (int) $locationId);
             }
 
-            $banners = $query->orderBy('created_at', 'asc')
+            // Same placement par sirf pehla created visible banner
+            $selectedIds = (clone $query)
+                ->orderBy('created_at', 'asc')
+                ->orderBy('id', 'asc')
+                ->get()
+                ->unique(function ($banner) {
+                    $placement = $banner->placement;
+
+                    if (is_array($placement)) {
+                        return strtolower(json_encode($placement));
+                    }
+
+                    return strtolower(trim((string) $placement));
+                })
+                ->pluck('id')
+                ->all();
+
+            $banners = Banner::where('store_id', $storeId)
+                ->whereIn('id', $selectedIds ?: [0])
+                ->orderBy('created_at', 'asc')
                 ->orderBy('id', 'asc')
                 ->paginate($perPage);
 
