@@ -60,7 +60,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
     public function chunkSize(): int
     {
         // Safe for t3.medium + Redis + swap
-        return 15;
+        return 50;
     }
 
     public function onRow(Row $row)
@@ -286,50 +286,64 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             );
 
             // --- SEO ----------------------------------------------------------
-         // custom_format ho to table se, warna product name se default
-            $productUrl = Str::slug($productName);
+            $baseUrl = rtrim(config('app.url'), '/');
+
+            // ALWAYS generate product_url from url_settings custom_format
+            $productUrl = null;
 
             $urlSetting = \App\Models\UrlSetting::where('store_id', $this->storeId)
                 ->where('entity_type', 'product')
                 ->first();
 
-            if ($urlSetting && filled($urlSetting->custom_format)) {
-                $categoryName = $categoryId
-                    ? (optional(\App\Models\Category::find($categoryId))->name ?? '')
-                    : '';
+            if ($urlSetting && $urlSetting->custom_format) {
+                $customFormat = $urlSetting->custom_format;
 
-                $built = str_replace(
-                    ['%title%', '%name%', '%product_name%', '%brand%', '%sku%', '%category%', '%id%', '%slug%'],
-                    [
-                        $productUrl,
-                        $productUrl,
-                        $productUrl,
-                        Str::slug($brandName),
-                        Str::slug($sku),
-                        Str::slug($categoryName),
-                        $product->id,
-                        $product->slug,
-                    ],
-                    $urlSetting->custom_format
+                // Load category name for placeholder
+                $categoryName = '';
+                if ($categoryId) {
+                    $category = \App\Models\Category::find($categoryId);
+                    $categoryName = $category ? $category->name : '';
+                }
+
+                // Pre-generate slugged title — special characters ko pehle dash mein convert karo
+                $cleanName = str_replace(['.', '/', '\\', ',', '(', ')', '&', '+', '#', '@', '!', '?', ';', ':', "'", '"'], '-', $productName);
+                $sluggedTitle = Str::slug($cleanName);
+
+                // Build a map of all possible placeholders to their actual values
+                $placeholders = [
+                    '%title%'         => $sluggedTitle,
+                    '%brand%'         => \Illuminate\Support\Str::slug($brandName),
+                    '%sku%'           => \Illuminate\Support\Str::slug($sku),
+                    '%name%'          => $sluggedTitle,
+                    '%product_name%'  => $sluggedTitle,
+                    '%category%'      => \Illuminate\Support\Str::slug($categoryName),
+                    '%id%'            => $product->id,
+                    '%slug%'          => $product->slug,
+                    '%price%'         => $price,
+                    '%mpn%'           => \Illuminate\Support\Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
+                    '%upc%'           => \Illuminate\Support\Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
+                ];
+
+                // Replace all placeholders in custom_format
+                $productUrl = str_replace(
+                    array_keys($placeholders),
+                    array_values($placeholders),
+                    $customFormat
                 );
 
-                $built = trim($built, '/');
-                if ($built !== '') {
-                    $productUrl = $built;
-                }
+                // Remove trailing slash to match Reset button behavior
+                $productUrl = rtrim($productUrl, '/');
             }
 
-            $seo = ProductSeo::updateOrCreate(
+            ProductSeo::updateOrCreate(
                 ['product_id' => $product->id, 'store_id' => $this->storeId],
                 [
                     'page_title'       => $this->getField($data, ['page title', 'meta title']) ?? $productName,
                     'meta_description' => $this->getField($data, ['meta description', 'meta_description']) ?? '',
                     'meta_keywords'    => $this->getField($data, ['meta keywords', 'meta_keywords']) ?? '',
+                    'product_url'      => $productUrl,
                 ]
             );
-
-            $seo->product_url = $productUrl;
-            $seo->save();
 
             // --- Images (primary from "product image file - 1") ---------------
             // ----------------------------------------
@@ -583,8 +597,6 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             }
         }
     }
-
-
 
     /**
      * Centralized progress update.
