@@ -307,43 +307,60 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
                 // Pre-generate slugged title — special characters ko pehle dash mein convert karo
                 $cleanName = str_replace(['.', '/', '\\', ',', '(', ')', '&', '+', '#', '@', '!', '?', ';', ':', "'", '"'], '-', $productName);
-                $sluggedTitle = Str::slug($cleanName);
+                    $sluggedTitle = Str::slug($cleanName);
 
-                // Build a map of all possible placeholders to their actual values
-                $placeholders = [
-                    '%title%'         => $sluggedTitle,
-                    '%brand%'         => \Illuminate\Support\Str::slug($brandName),
-                    '%sku%'           => \Illuminate\Support\Str::slug($sku),
-                    '%name%'          => $sluggedTitle,
-                    '%product_name%'  => $sluggedTitle,
-                    '%category%'      => \Illuminate\Support\Str::slug($categoryName),
-                    '%id%'            => $product->id,
-                    '%slug%'          => $product->slug,
-                    '%price%'         => $price,
-                    '%mpn%'           => \Illuminate\Support\Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
-                    '%upc%'           => \Illuminate\Support\Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
-                ];
+                    // default = /%title%/
+                    $productUrl = $sluggedTitle;
 
-                // Replace all placeholders in custom_format
-                $productUrl = str_replace(
-                    array_keys($placeholders),
-                    array_values($placeholders),
-                    $customFormat
-                );
+                    $urlSetting = \App\Models\UrlSetting::where('store_id', $this->storeId)
+                        ->where('entity_type', 'product')
+                        ->first();
 
-                // Remove trailing slash to match Reset button behavior
-                $productUrl = rtrim($productUrl, '/');
-            }
+                    if ($urlSetting && $urlSetting->custom_format) {
+                        $customFormat = $urlSetting->custom_format;
 
-            ProductSeo::updateOrCreate(
-                ['product_id' => $product->id, 'store_id' => $this->storeId],
-                [
-                    'page_title'       => $this->getField($data, ['page title', 'meta title']) ?? $productName,
-                    'meta_description' => $this->getField($data, ['meta description', 'meta_description']) ?? '',
-                    'meta_keywords'    => $this->getField($data, ['meta keywords', 'meta_keywords']) ?? '',
-                    'product_url'      => $productUrl,
-                ]
-            );
+                        $categoryName = '';
+                        if ($categoryId) {
+                            $category = \App\Models\Category::find($categoryId);
+                            $categoryName = $category ? $category->name : '';
+                        }
+
+                        $placeholders = [
+                            '%title%'         => $sluggedTitle,
+                            '%brand%'         => \Illuminate\Support\Str::slug($brandName),
+                            '%sku%'           => \Illuminate\Support\Str::slug($sku),
+                            '%name%'          => $sluggedTitle,
+                            '%product_name%'  => $sluggedTitle,
+                            '%category%'      => \Illuminate\Support\Str::slug($categoryName),
+                            '%id%'            => $product->id,
+                            '%slug%'          => $product->slug,
+                            '%price%'         => $price,
+                            '%mpn%'           => \Illuminate\Support\Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
+                            '%upc%'           => \Illuminate\Support\Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
+                        ];
+
+                        $productUrl = str_replace(
+                            array_keys($placeholders),
+                            array_values($placeholders),
+                            $customFormat
+                        );
+
+                        $productUrl = trim($productUrl, '/');
+
+                        if ($productUrl === '') {
+                            $productUrl = $sluggedTitle;
+                        }
+                    }
+
+                    ProductSeo::updateOrCreate(
+                        ['product_id' => $product->id, 'store_id' => $this->storeId],
+                        [
+                            'page_title'       => $this->getField($data, ['page title', 'meta title']) ?? $productName,
+                            'meta_description' => $this->getField($data, ['meta description', 'meta_description']) ?? '',
+                            'meta_keywords'    => $this->getField($data, ['meta keywords', 'meta_keywords']) ?? '',
+                            'product_url'      => $productUrl,
+                        ]
+                    );
 
             // --- Images (primary from "product image file - 1") ---------------
             // ----------------------------------------
