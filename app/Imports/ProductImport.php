@@ -116,6 +116,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             ]);
 
             $productName = $this->getField($data, [
+                'Product Name',
                 'product name',
                 'name',
                 'product_name',
@@ -134,6 +135,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 }
                 return;
             }
+
 
             // --- Brand --------------------------------------------------------
             $brandName = $this->getField($data, ['brand name', 'brand', 'manufacturer']) ?? 'Unknown Brand';
@@ -184,6 +186,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             }
 
             $brandId = self::$brandCache[$brandKey];
+
             // --- Category -----------------------------------------------------
             $categoryRaw = $this->getField($data, ['category', 'gps category', 'gps_category'], 'Uncategorized');
             $categoryId  = $this->resolveCategory($categoryRaw);
@@ -281,8 +284,8 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'bpn'  => $this->getField($data, ['bin picking number', 'bpn']) ?? '',
                 ]
             );
-            // --- SEO ----------------------------------------------------------
 
+            // --- SEO ----------------------------------------------------------
             $baseUrl = rtrim(config('app.url'), '/');
 
             // ALWAYS generate product_url from url_settings custom_format
@@ -341,6 +344,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'product_url'      => $productUrl,
                 ]
             );
+
             // --- Images (primary from "product image file - 1") ---------------
             // ----------------------------------------
             // IMAGE IMPORT (Product Image File - 1)
