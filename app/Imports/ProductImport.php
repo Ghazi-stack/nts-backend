@@ -286,58 +286,35 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             );
 
             // --- SEO ----------------------------------------------------------
-            $baseUrl = rtrim(config('app.url'), '/');
-
-            // ALWAYS generate product_url from url_settings custom_format
-            $productUrl = null;
+         // custom_format ho to table se, warna product name se default
+            $productUrl = Str::slug($productName);
 
             $urlSetting = \App\Models\UrlSetting::where('store_id', $this->storeId)
                 ->where('entity_type', 'product')
                 ->first();
-
-            $cleanName = str_replace(
-                ['.', '/', '\\', ',', '(', ')', '&', '+', '#', '@', '!', '?', ';', ':', "'", '"'],
-                '-',
-                $productName
-            );
-            $sluggedTitle = Str::slug($cleanName);
-
-            $urlSetting = \App\Models\UrlSetting::where('store_id', $this->storeId)
-                ->where('entity_type', 'product')
-                ->first();
-
-            $productUrl = $sluggedTitle; // default: title
 
             if ($urlSetting && filled($urlSetting->custom_format)) {
-                $categoryName = '';
-                if (!empty($categoryId)) {
-                    $category = \App\Models\Category::find($categoryId);
-                    $categoryName = $category->name ?? '';
-                }
-
-                $placeholders = [
-                    '%title%'        => $sluggedTitle,
-                    '%brand%'        => Str::slug($brandName),
-                    '%sku%'          => Str::slug($sku),
-                    '%name%'         => $sluggedTitle,
-                    '%product_name%' => $sluggedTitle,
-                    '%category%'     => Str::slug($categoryName),
-                    '%id%'           => $product->id,
-                    '%slug%'         => $product->slug,
-                    '%price%'        => $price,
-                    '%mpn%'          => Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
-                    '%upc%'          => Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
-                ];
+                $categoryName = $categoryId
+                    ? (optional(\App\Models\Category::find($categoryId))->name ?? '')
+                    : '';
 
                 $built = str_replace(
-                    array_keys($placeholders),
-                    array_values($placeholders),
+                    ['%title%', '%name%', '%product_name%', '%brand%', '%sku%', '%category%', '%id%', '%slug%'],
+                    [
+                        $productUrl,
+                        $productUrl,
+                        $productUrl,
+                        Str::slug($brandName),
+                        Str::slug($sku),
+                        Str::slug($categoryName),
+                        $product->id,
+                        $product->slug,
+                    ],
                     $urlSetting->custom_format
                 );
 
                 $built = trim($built, '/');
-
-                if (filled($built)) {
+                if ($built !== '') {
                     $productUrl = $built;
                 }
             }
@@ -348,15 +325,11 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'page_title'       => $this->getField($data, ['page title', 'meta title']) ?? $productName,
                     'meta_description' => $this->getField($data, ['meta description', 'meta_description']) ?? '',
                     'meta_keywords'    => $this->getField($data, ['meta keywords', 'meta_keywords']) ?? '',
-                    'product_url'      => $productUrl,
                 ]
             );
 
-            // fillable na ho to bhi column update ho
-            if ($seo->product_url !== $productUrl) {
-                $seo->product_url = $productUrl;
-                $seo->save();
-            }
+            $seo->product_url = $productUrl;
+            $seo->save();
 
             // --- Images (primary from "product image file - 1") ---------------
             // ----------------------------------------
