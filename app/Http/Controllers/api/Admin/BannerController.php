@@ -127,6 +127,7 @@ class BannerController extends Controller
             $perPage = $request->query('perPage', 20);
 
             $query = Banner::where('store_id', $storeId)
+                ->where('visible', 1)
                 ->where(function ($q) use ($location) {
                     $q->where('location->key', $location)
                         ->orWhere('location->key', ucfirst($location))
