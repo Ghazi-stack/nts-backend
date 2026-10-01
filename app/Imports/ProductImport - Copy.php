@@ -302,12 +302,17 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             );
             $sluggedTitle = Str::slug($cleanName);
 
-            // Table mein custom_format hai to wahi use karo
+            $urlSetting = \App\Models\UrlSetting::where('store_id', $this->storeId)
+                ->where('entity_type', 'product')
+                ->first();
+
+            $productUrl = $sluggedTitle; // default: title
+
             if ($urlSetting && filled($urlSetting->custom_format)) {
                 $categoryName = '';
-                if ($categoryId) {
+                if (!empty($categoryId)) {
                     $category = \App\Models\Category::find($categoryId);
-                    $categoryName = $category ? $category->name : '';
+                    $categoryName = $category->name ?? '';
                 }
 
                 $placeholders = [
@@ -324,21 +329,20 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     '%upc%'          => Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
                 ];
 
-                $productUrl = str_replace(
+                $built = str_replace(
                     array_keys($placeholders),
                     array_values($placeholders),
                     $urlSetting->custom_format
                 );
 
-                $productUrl = trim($productUrl, '/');
+                $built = trim($built, '/');
+
+                if (filled($built)) {
+                    $productUrl = $built;
+                }
             }
 
-            // Row nahi / custom_format NULL → title se default
-            if (!filled($productUrl)) {
-                $productUrl = $sluggedTitle;
-            }
-
-            ProductSeo::updateOrCreate(
+            $seo = ProductSeo::updateOrCreate(
                 ['product_id' => $product->id, 'store_id' => $this->storeId],
                 [
                     'page_title'       => $this->getField($data, ['page title', 'meta title']) ?? $productName,
@@ -347,6 +351,12 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     'product_url'      => $productUrl,
                 ]
             );
+
+            // fillable na ho to bhi column update ho
+            if ($seo->product_url !== $productUrl) {
+                $seo->product_url = $productUrl;
+                $seo->save();
+            }
 
             // --- Images (primary from "product image file - 1") ---------------
             // ----------------------------------------
