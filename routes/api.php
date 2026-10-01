@@ -694,6 +694,10 @@ Route::prefix('web')->group(function () {
         Route::get('/get-logo/{id}', 'showById');   // Get single logo by ID
     });
 
+     Route::prefix('email-marketings')->controller(EmailMarketingController::class)->group(function () {
+        Route::get('/get-email-marketing', 'show');
+    });
+
     //Contact Us
     Route::prefix('contact-requests')->controller(ContactRequestController::class)->group(function () {
 
