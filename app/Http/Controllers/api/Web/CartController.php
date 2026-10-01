@@ -364,6 +364,143 @@ class CartController extends Controller
         ]);
     }
 
+    private function syncDraftShippingToOrder(
+        int $storeId,
+        $user,
+        ?string $quoteToken,
+        float $shippingCost
+    ): void {
+        if (!$user || !$quoteToken) {
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Decode quote token and get order ID
+        |--------------------------------------------------------------------------
+        */
+        try {
+            $payload = app(\App\Services\DraftQuoteService::class)
+                ->decode($quoteToken);
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        $orderId = (int) ($payload['order_id'] ?? 0);
+
+        if (!$orderId) {
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Find the current draft order
+        |--------------------------------------------------------------------------
+        */
+        $order = Order::query()
+            ->where('id', $orderId)
+            ->where('store_id', $storeId)
+            ->where('user_id', $user->id)
+            ->where('is_draft', 1)
+            ->first();
+
+        if (!$order) {
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Get current draft cart items
+        |--------------------------------------------------------------------------
+        */
+        $cartItems = Cart::query()
+            ->with('product')
+            ->where('store_id', $storeId)
+            ->where('user_id', $user->id)
+            ->where('quote_token', $quoteToken)
+            ->where('isdraftcart', 1)
+            ->get();
+
+        if ($cartItems->isEmpty()) {
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Calculate current cart subtotal
+        |--------------------------------------------------------------------------
+        */
+        $cartSubtotal = 0;
+
+        foreach ($cartItems as $cartItem) {
+
+            $product = $cartItem->product;
+
+            if (!$product) {
+                continue;
+            }
+
+            /*
+            | Draft price override has priority over product price.
+            */
+            $override = OrderCartItemProduct::query()
+                ->where('order_id', $order->id)
+                ->where('cart_id', $cartItem->id)
+                ->where('product_id', $cartItem->product_id)
+                ->latest('id')
+                ->first();
+
+            $price = $override
+                ? (float) $override->price
+                : (float) $product->price;
+
+            $quantity = (int) $cartItem->quantity;
+
+            $cartSubtotal += $price * $quantity;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Preserve existing coupon discount
+        |--------------------------------------------------------------------------
+        */
+        $discount = (float) ($order->discountAmount ?? 0);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Preserve existing manual discount
+        |--------------------------------------------------------------------------
+        */
+        $manualDiscount = (float) ($order->manual_discount ?? 0);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Calculate new draft total
+        |--------------------------------------------------------------------------
+        */
+        $shippingCost = max(0, $shippingCost);
+
+        $totalAmount =
+            $cartSubtotal
+            + $shippingCost
+            - $discount
+            - $manualDiscount;
+
+        if ($totalAmount < 0) {
+            $totalAmount = 0;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Update draft order
+        |--------------------------------------------------------------------------
+        */
+        $order->update([
+            'shipping_cost' => $shippingCost,
+            'total_amount'  => $totalAmount,
+        ]);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Helper: Product ke sab relations jo ProductResource use karta hai
     // ─────────────────────────────────────────────────────────────
@@ -2499,6 +2636,15 @@ class CartController extends Controller
                 $shippingRate->update($shippingData);
             } else {
                 $shippingRate = CartShippingRate::create($shippingData);
+            }
+
+            if (!empty($quoteToken) && $user) {
+                $this->syncDraftShippingToOrder(
+                    $storeId,
+                    $user,
+                    $quoteToken,
+                    (float) ($shippingRate->total_charge ?? 0)
+                );
             }
 
             /*
