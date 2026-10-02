@@ -286,8 +286,10 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             );
 
             // --- SEO ----------------------------------------------------------
-            // setting ho to custom_format, warna products.slug
-            $productUrl = $product->slug;
+            $cleanName = str_replace(['.', '/', '\\', ',', '(', ')', '&', '+', '#', '@', '!', '?', ';', ':', "'", '"'], '-', $productName);
+            $sluggedTitle = Str::slug($cleanName);
+
+            $productUrl = '/' . $sluggedTitle;
 
             $urlSetting = \App\Models\UrlSetting::where('store_id', $this->storeId)
                 ->where('entity_type', 'product')
@@ -299,9 +301,6 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     $category = \App\Models\Category::find($categoryId);
                     $categoryName = $category ? $category->name : '';
                 }
-
-                $cleanName = str_replace(['.', '/', '\\', ',', '(', ')', '&', '+', '#', '@', '!', '?', ';', ':', "'", '"'], '-', $productName);
-                $sluggedTitle = Str::slug($cleanName);
 
                 $placeholders = [
                     '%title%'        => $sluggedTitle,
@@ -324,7 +323,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 ), '/');
 
                 if ($built !== '') {
-                    $productUrl = $built;
+                    $productUrl = '/' . $built;
                 }
             }
 
