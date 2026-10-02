@@ -862,42 +862,41 @@ class CategoryController extends Controller
                 $query->where('price', '<=', $request->maxPrice);
             }
 
-            $sortMap = [
-                'default'          => ['id', 'desc'],
-                'sortby'           => ['id', 'desc'],
-                'bestselling'      => ['sold_count', 'desc'],
-                'best_selling'     => ['sold_count', 'desc'],
-                'atoz'             => ['name', 'asc'],
-                'a_to_z'           => ['name', 'asc'],
-                'ztoa'             => ['name', 'desc'],
-                'z_to_a'           => ['name', 'desc'],
-                'featureditems'    => ['is_featured', 'desc'],
-                'featured'         => ['is_featured', 'desc'],
-                'newestitems'      => ['created_at', 'desc'],
-                'newest'           => ['created_at', 'desc'],
-                'latest'           => ['created_at', 'desc'],
-                'priceascending'   => ['price', 'asc'],
-                'pricelowtohigh'   => ['price', 'asc'],
-                'pricedescending'  => ['price', 'desc'],
-                'pricehightolow'   => ['price', 'desc'],
-            ];
-
             $sortByInput = strtolower(preg_replace('/[^a-z]/', '', (string) $request->input('sortBy', 'default')));
-            [$sortColumn, $sortOrder] = $sortMap[$sortByInput] ?? ['id', 'desc'];
 
-            if ($sortColumn === 'sold_count') {
-                $query->orderByRaw('COALESCE(sold_count, 0) DESC')
-                    ->orderBy('id', 'desc');
-            } elseif ($sortColumn === 'name') {
-                $query->orderByRaw("LOWER(name) {$sortOrder}")
-                    ->orderBy('id', 'desc');
-            } else {
-                $query->orderBy($sortColumn, $sortOrder)
-                    ->orderBy('id', 'desc');
+            $query->reorder();
+
+            switch ($sortByInput) {
+                case 'atoz':
+                    $query->orderBy('name', 'asc')->orderBy('id', 'asc');
+                    break;
+                case 'ztoa':
+                    $query->orderBy('name', 'desc')->orderBy('id', 'desc');
+                    break;
+                case 'bestselling':
+                    $query->orderByRaw('COALESCE(sold_count, 0) DESC')->orderBy('id', 'desc');
+                    break;
+                case 'featureditems':
+                case 'featured':
+                    $query->orderBy('is_featured', 'desc')->orderBy('id', 'desc');
+                    break;
+                case 'newestitems':
+                case 'newest':
+                case 'latest':
+                    $query->orderBy('created_at', 'desc')->orderBy('id', 'desc');
+                    break;
+                case 'priceascending':
+                case 'pricelowtohigh':
+                    $query->orderBy('price', 'asc')->orderBy('id', 'asc');
+                    break;
+                case 'pricedescending':
+                case 'pricehightolow':
+                    $query->orderBy('price', 'desc')->orderBy('id', 'desc');
+                    break;
+                default:
+                    $query->orderBy('id', 'desc');
+                    break;
             }
-
-            $maxProducts = 10000;
-            $query->take($maxProducts);
 
             $page = (int) $request->input('page', 1);
             $pageSize = (int) $request->input('pageSize', 12);
@@ -909,10 +908,10 @@ class CategoryController extends Controller
                 'message' => 'Filtered products retrieved successfully',
                 'data' => PopularProductResource::collection($products),
                 'pagination' => [
-                    'total' => min($products->total(), $maxProducts),
+                    'total' => $products->total(),
                     'page' => $products->currentPage(),
                     'pageSize' => $products->perPage(),
-                    'lastPage' => ceil(min($products->total(), $maxProducts) / $products->perPage())
+                    'lastPage' => $products->lastPage(),
                 ]
             ]);
         } catch (\Exception $e) {
