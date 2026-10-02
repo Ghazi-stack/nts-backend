@@ -904,7 +904,11 @@ class CategoryController extends Controller
                     default:
                         return (int) $product->id;
                 }
-            }, SORT_REGULAR, $descending)->values();
+            })->values();
+
+            if ($descending) {
+                $sorted = $sorted->reverse()->values();
+            }
 
             $products->setCollection($sorted);
 
