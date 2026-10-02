@@ -833,12 +833,13 @@ class CategoryController extends Controller
                     'seo:product_id,product_url,page_title,meta_description'
                 ]);
 
+            // ✅ CATEGORY FILTER
             if ($request->filled('categoryIds')) {
                 $categoryIds = explode(',', $request->categoryIds);
                 $allCategoryIds = [];
 
                 foreach ($categoryIds as $catId) {
-                    $allCategoryIds[] = (int) $catId;
+                    $allCategoryIds[] = (int)$catId;
 
                     $category = Category::with('childrenRecursive')->find($catId);
                     if ($category) {
@@ -851,10 +852,12 @@ class CategoryController extends Controller
                 });
             }
 
+            // ✅ BRAND FILTER
             if ($request->filled('brandId')) {
                 $query->where('brand_id', $request->brandId);
             }
 
+            // ✅ PRICE FILTERS
             if ($request->filled('minPrice')) {
                 $query->where('price', '>=', $request->minPrice);
             }
@@ -862,65 +865,62 @@ class CategoryController extends Controller
                 $query->where('price', '<=', $request->maxPrice);
             }
 
-            $sortBy = strtolower(preg_replace('/[^a-z]/', '', (string) $request->input('sortBy', 'default')));
+            // ✅ SORTING
+            $sortBy = strtolower(preg_replace('/[^a-z]/', '', (string) $request->input('sortBy', '')));
 
+            $query->reorder();
+
+            switch ($sortBy) {
+                case 'bestselling':
+                    $query->orderBy('sold_count', 'desc');
+                    break;
+                case 'atoz':
+                    $query->orderBy('name', 'asc');
+                    break;
+                case 'ztoa':
+                    $query->orderBy('name', 'desc');
+                    break;
+                case 'featureditems':
+                case 'featured':
+                    $query->orderBy('is_featured', 'desc');
+                    break;
+                case 'newestitems':
+                case 'newest':
+                case 'latest':
+                    $query->orderBy('created_at', 'desc');
+                    break;
+                case 'priceascending':
+                case 'pricelowtohigh':
+                    $query->orderBy('price', 'asc');
+                    break;
+                case 'pricedescending':
+                case 'pricehightolow':
+                    $query->orderBy('price', 'desc');
+                    break;
+                default:
+                    $query->orderBy('id', 'desc');
+                    break;
+            }
+
+            // ✅ LIMIT TOTAL PRODUCTS
+            $maxProducts = 10000;
+            $query->take($maxProducts); // ensures only first 10k products considered
+
+            // ✅ PAGINATION
             $page = (int) $request->input('page', 1);
             $pageSize = (int) $request->input('pageSize', 12);
 
             $products = $query->paginate($pageSize, ['*'], 'page', $page);
-
-            $descending = in_array($sortBy, [
-                'ztoa',
-                'bestselling',
-                'featureditems',
-                'featured',
-                'newestitems',
-                'newest',
-                'latest',
-                'pricedescending',
-                'pricehightolow',
-                'default',
-            ], true);
-
-            $sorted = $products->getCollection()->sortBy(function ($product) use ($sortBy) {
-                switch ($sortBy) {
-                    case 'atoz':
-                    case 'ztoa':
-                        return strtolower((string) $product->name);
-                    case 'bestselling':
-                        return (int) ($product->sold_count ?? 0);
-                    case 'featureditems':
-                    case 'featured':
-                        return (int) ($product->is_featured ?? 0);
-                    case 'newestitems':
-                    case 'newest':
-                    case 'latest':
-                        return optional($product->created_at)->timestamp ?? 0;
-                    case 'priceascending':
-                    case 'pricelowtohigh':
-                    case 'pricedescending':
-                    case 'pricehightolow':
-                        return (float) $product->price;
-                    default:
-                        return (int) $product->id;
-                }
-            })->values();
-
-            if ($descending) {
-                $sorted = $sorted->reverse()->values();
-            }
-
-            $products->setCollection($sorted);
 
             return response()->json([
                 'status' => true,
                 'message' => 'Filtered products retrieved successfully',
                 'data' => PopularProductResource::collection($products),
                 'pagination' => [
-                    'total' => $products->total(),
+                    'total' => min($products->total(), $maxProducts),
                     'page' => $products->currentPage(),
                     'pageSize' => $products->perPage(),
-                    'lastPage' => $products->lastPage(),
+                    'lastPage' => ceil(min($products->total(), $maxProducts) / $products->perPage())
                 ]
             ]);
         } catch (\Exception $e) {
