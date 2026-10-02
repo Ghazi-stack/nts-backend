@@ -862,46 +862,51 @@ class CategoryController extends Controller
                 $query->where('price', '<=', $request->maxPrice);
             }
 
-            $sortByInput = strtolower(preg_replace('/[^a-z]/', '', (string) $request->input('sortBy', 'default')));
-
-            $query->reorder();
-
-            switch ($sortByInput) {
-                case 'atoz':
-                    $query->orderBy('name', 'asc')->orderBy('id', 'asc');
-                    break;
-                case 'ztoa':
-                    $query->orderBy('name', 'desc')->orderBy('id', 'desc');
-                    break;
-                case 'bestselling':
-                    $query->orderByRaw('COALESCE(sold_count, 0) DESC')->orderBy('id', 'desc');
-                    break;
-                case 'featureditems':
-                case 'featured':
-                    $query->orderBy('is_featured', 'desc')->orderBy('id', 'desc');
-                    break;
-                case 'newestitems':
-                case 'newest':
-                case 'latest':
-                    $query->orderBy('created_at', 'desc')->orderBy('id', 'desc');
-                    break;
-                case 'priceascending':
-                case 'pricelowtohigh':
-                    $query->orderBy('price', 'asc')->orderBy('id', 'asc');
-                    break;
-                case 'pricedescending':
-                case 'pricehightolow':
-                    $query->orderBy('price', 'desc')->orderBy('id', 'desc');
-                    break;
-                default:
-                    $query->orderBy('id', 'desc');
-                    break;
-            }
+            $sortBy = strtolower(preg_replace('/[^a-z]/', '', (string) $request->input('sortBy', 'default')));
 
             $page = (int) $request->input('page', 1);
             $pageSize = (int) $request->input('pageSize', 12);
 
             $products = $query->paginate($pageSize, ['*'], 'page', $page);
+
+            $descending = in_array($sortBy, [
+                'ztoa',
+                'bestselling',
+                'featureditems',
+                'featured',
+                'newestitems',
+                'newest',
+                'latest',
+                'pricedescending',
+                'pricehightolow',
+                'default',
+            ], true);
+
+            $sorted = $products->getCollection()->sortBy(function ($product) use ($sortBy) {
+                switch ($sortBy) {
+                    case 'atoz':
+                    case 'ztoa':
+                        return strtolower((string) $product->name);
+                    case 'bestselling':
+                        return (int) ($product->sold_count ?? 0);
+                    case 'featureditems':
+                    case 'featured':
+                        return (int) ($product->is_featured ?? 0);
+                    case 'newestitems':
+                    case 'newest':
+                    case 'latest':
+                        return optional($product->created_at)->timestamp ?? 0;
+                    case 'priceascending':
+                    case 'pricelowtohigh':
+                    case 'pricedescending':
+                    case 'pricehightolow':
+                        return (float) $product->price;
+                    default:
+                        return (int) $product->id;
+                }
+            }, SORT_REGULAR, $descending)->values();
+
+            $products->setCollection($sorted);
 
             return response()->json([
                 'status' => true,
@@ -922,7 +927,6 @@ class CategoryController extends Controller
             ], 500);
         }
     }
-
 
 
     // Recursive helper function
