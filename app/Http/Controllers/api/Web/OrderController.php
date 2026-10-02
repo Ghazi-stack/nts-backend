@@ -3959,6 +3959,10 @@ class OrderController extends Controller
                     'state'        => $billingInput['state'] ?? $shippingInfo['state'] ?? null,
                     'zip'          => $billingInput['zip'] ?? $shippingInfo['zip'] ?? null,
                     'country'      => $billingInput['country'] ?? $shippingInfo['country'] ?? null,
+                    'shippingMethod' => $shippingMethod['method']
+                    ?? $shippingMethod['data']
+                    ?? $shippingMethod['provider']
+                    ?? '',
                 ];
 
                 CheckoutFormData::create([
@@ -7800,10 +7804,10 @@ class OrderController extends Controller
                                     ?? false,
 
                                 'shippingMethod' =>
-                                    $billingInput['shippingMethod']
-                                    ?? $validated['shippingMethod']
+                                    $shippingMethod['method']
+                                    ?? $shippingMethod['data']
+                                    ?? $shippingMethod['provider']
                                     ?? '',
-
                                 'billingSame' =>
                                     $validated['billingSame']
                                     ?? true,
