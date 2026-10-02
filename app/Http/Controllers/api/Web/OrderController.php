@@ -44,6 +44,7 @@ use App\Models\Logo;
 use App\Models\ManualDiscount;
 use App\Models\OrderCartItemProduct;
 use App\Models\OrderTimeline;
+use App\Models\CustomerAddress;
 use App\Models\Store;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
