@@ -286,81 +286,57 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
             );
 
             // --- SEO ----------------------------------------------------------
-            $baseUrl = rtrim(config('app.url'), '/');
-
-            // ALWAYS generate product_url from url_settings custom_format
-            $productUrl = null;
+            // setting ho to custom_format, warna products.slug
+            $productUrl = $product->slug;
 
             $urlSetting = \App\Models\UrlSetting::where('store_id', $this->storeId)
                 ->where('entity_type', 'product')
                 ->first();
 
             if ($urlSetting && $urlSetting->custom_format) {
-                $customFormat = $urlSetting->custom_format;
-
-                // Load category name for placeholder
                 $categoryName = '';
                 if ($categoryId) {
                     $category = \App\Models\Category::find($categoryId);
                     $categoryName = $category ? $category->name : '';
                 }
 
-                // Pre-generate slugged title — special characters ko pehle dash mein convert karo
                 $cleanName = str_replace(['.', '/', '\\', ',', '(', ')', '&', '+', '#', '@', '!', '?', ';', ':', "'", '"'], '-', $productName);
-                    $sluggedTitle = Str::slug($cleanName);
+                $sluggedTitle = Str::slug($cleanName);
 
-                    // default = /%title%/
-                    $productUrl = $sluggedTitle;
+                $placeholders = [
+                    '%title%'        => $sluggedTitle,
+                    '%brand%'        => Str::slug($brandName),
+                    '%sku%'          => Str::slug($sku),
+                    '%name%'         => $sluggedTitle,
+                    '%product_name%' => $sluggedTitle,
+                    '%category%'     => Str::slug($categoryName),
+                    '%id%'           => $product->id,
+                    '%slug%'         => $product->slug,
+                    '%price%'        => $price,
+                    '%mpn%'          => Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
+                    '%upc%'          => Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
+                ];
 
-                    $urlSetting = \App\Models\UrlSetting::where('store_id', $this->storeId)
-                        ->where('entity_type', 'product')
-                        ->first();
+                $built = trim(str_replace(
+                    array_keys($placeholders),
+                    array_values($placeholders),
+                    $urlSetting->custom_format
+                ), '/');
 
-                    if ($urlSetting && $urlSetting->custom_format) {
-                        $customFormat = $urlSetting->custom_format;
+                if ($built !== '') {
+                    $productUrl = $built;
+                }
+            }
 
-                        $categoryName = '';
-                        if ($categoryId) {
-                            $category = \App\Models\Category::find($categoryId);
-                            $categoryName = $category ? $category->name : '';
-                        }
-
-                        $placeholders = [
-                            '%title%'         => $sluggedTitle,
-                            '%brand%'         => \Illuminate\Support\Str::slug($brandName),
-                            '%sku%'           => \Illuminate\Support\Str::slug($sku),
-                            '%name%'          => $sluggedTitle,
-                            '%product_name%'  => $sluggedTitle,
-                            '%category%'      => \Illuminate\Support\Str::slug($categoryName),
-                            '%id%'            => $product->id,
-                            '%slug%'          => $product->slug,
-                            '%price%'         => $price,
-                            '%mpn%'           => \Illuminate\Support\Str::slug($this->getField($data, ['gps manufacturer part number', 'mpn']) ?? ''),
-                            '%upc%'           => \Illuminate\Support\Str::slug($this->getField($data, ['product upc/ean', 'upc']) ?? ''),
-                        ];
-
-                        $productUrl = str_replace(
-                            array_keys($placeholders),
-                            array_values($placeholders),
-                            $customFormat
-                        );
-
-                        $productUrl = trim($productUrl, '/');
-
-                        if ($productUrl === '') {
-                            $productUrl = $sluggedTitle;
-                        }
-                    }
-
-                    ProductSeo::updateOrCreate(
-                        ['product_id' => $product->id, 'store_id' => $this->storeId],
-                        [
-                            'page_title'       => $this->getField($data, ['page title', 'meta title']) ?? $productName,
-                            'meta_description' => $this->getField($data, ['meta description', 'meta_description']) ?? '',
-                            'meta_keywords'    => $this->getField($data, ['meta keywords', 'meta_keywords']) ?? '',
-                            'product_url'      => $productUrl,
-                        ]
-                    );
+            ProductSeo::updateOrCreate(
+                ['product_id' => $product->id, 'store_id' => $this->storeId],
+                [
+                    'page_title'       => $this->getField($data, ['page title', 'meta title']) ?? $productName,
+                    'meta_description' => $this->getField($data, ['meta description', 'meta_description']) ?? '',
+                    'meta_keywords'    => $this->getField($data, ['meta keywords', 'meta_keywords']) ?? '',
+                    'product_url'      => $productUrl,
+                ]
+            );
 
             // --- Images (primary from "product image file - 1") ---------------
             // ----------------------------------------
@@ -601,7 +577,7 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
 
             // --- Progress update for successful row ---------------------------
             $this->updateProgress();
-        } }catch (\Throwable $e) {
+        } catch (\Throwable $e) {
             // Do not stop the whole job if one row fails
             Log::error('Import row error', [
                 'row'   => $rowIndex,
