@@ -21,25 +21,30 @@ class PromotionController extends Controller
             return response()->json(['status' => false, 'message' => 'Store not selected or token invalid.'], 400);
         }
 
-        $kind   = $request->get('kind', 'automatic'); // automatic | coupon
-        $status = $request->get('status', 'all');     // all | active | inactive | archived
-        $search = trim((string) $request->get('search', ''));
+        $kind    = $request->get('kind', 'automatic');
+        $status  = $request->get('status', 'all');
+        $search  = trim((string) $request->get('search', ''));
+        $perPage = min(max((int) $request->get('perPage', 10), 1), 100);
 
         $q = Promotion::where('store_id', $storeId)
             ->where('kind', $kind)
             ->withCount('couponCodes');
 
-        if ($status === 'all') {
-            $q->where('status', '!=', 'archived');
-        } elseif (in_array($status, ['active', 'inactive', 'archived', 'draft'], true)) {
-            $q->where('status', $status);
+        if ($status === 'archived') {
+            $q->where('status', 'archived');
+        } elseif ($status === 'active') {
+            $q->where('status', 'active');
+        } elseif ($status === 'inactive') {
+            $q->where('status', 'inactive');
+        } else {
+            $q->whereNotIn('status', ['archived']);
         }
 
         if ($request->filled('currency')) {
             $q->where('currency', $request->get('currency'));
         }
         if ($request->filled('type')) {
-            $q->where('type', $request->get('type')); // custom | cart | shipping
+            $q->where('type', $request->get('type'));
         }
         if ($request->filled('channel')) {
             $q->where('channel', $request->get('channel'));
@@ -57,35 +62,35 @@ class PromotionController extends Controller
             });
         }
 
-        $rows = $q->orderByDesc('id')->get();
+        $page = $q->orderByDesc('id')->paginate($perPage);
 
-        $data = $rows->map(function ($p) {
+        $items = collect($page->items())->map(function ($p) {
             $max  = $p->max_redemptions;
             $used = (int) $p->redemptions;
 
             return [
-                'id'           => $p->id,
-                'kind'         => $p->kind,
-                'name'         => $p->name,
-                'displayName'  => $p->display_name,
-                'isFeatured'   => (bool) $p->is_featured,
-                'currency'     => $p->currency,
-                'type'         => $p->type,
-                'channel'      => $p->channel,
-                'status'       => $p->status,
-                'active'       => $p->status === 'active',
-                'usesUsed'     => $used,
-                'usesLimit'    => $max,
-                'usesLabel'    => is_null($max) ? $used . '/Unlimited' : $used . '/' . $max,
-                'codesCount'   => (int) $p->coupon_codes_count,
-                'codesLabel'   => $p->kind === 'coupon'
+                'id'          => $p->id,
+                'kind'        => $p->kind,
+                'name'        => $p->name,
+                'displayName' => $p->display_name,
+                'isFeatured'  => (bool) $p->is_featured,
+                'currency'    => $p->currency,
+                'type'        => $p->type,
+                'channel'     => $p->channel,
+                'status'      => $p->status,
+                'active'      => $p->status === 'active',
+                'usesUsed'    => $used,
+                'usesLimit'   => $max,
+                'usesLabel'   => is_null($max) ? $used . '/Unlimited' : $used . '/' . $max,
+                'codesCount'  => (int) $p->coupon_codes_count,
+                'codesLabel'  => $p->kind === 'coupon'
                     ? (($p->coupon_codes_count ?: 0) . ' codes')
                     : null,
-                'code'         => $p->code,
-                'startDate'     => optional($p->starts_at)->toDateTimeString(),
-                'endDate'       => optional($p->ends_at)->toDateTimeString(),
-                'startLabel'   => optional($p->starts_at)?->format('D, M j, Y g:i A'),
-                'endLabel'     => $p->ends_at ? $p->ends_at->format('D, M j, Y g:i A') : 'Not set',
+                'code'        => $p->code,
+                'startDate'   => optional($p->starts_at)->toDateTimeString(),
+                'endDate'     => optional($p->ends_at)->toDateTimeString(),
+                'startLabel'  => optional($p->starts_at)?->format('D, M j, Y g:i A'),
+                'endLabel'    => $p->ends_at ? $p->ends_at->format('D, M j, Y g:i A') : 'Not set',
             ];
         })->values();
 
@@ -93,9 +98,14 @@ class PromotionController extends Controller
             'status'  => true,
             'message' => 'Promotions fetched',
             'data'    => [
-                'kind'  => $kind,
-                'total' => $data->count(),
-                'items' => $data,
+                'kind'         => $kind,
+                'total'        => $page->total(),
+                'perPage'      => $page->perPage(),
+                'currentPage'  => $page->currentPage(),
+                'lastPage'     => $page->lastPage(),
+                'from'         => $page->firstItem(),
+                'to'           => $page->lastItem(),
+                'items'        => $items,
             ],
         ]);
     }
