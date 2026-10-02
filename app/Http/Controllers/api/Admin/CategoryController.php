@@ -833,13 +833,12 @@ class CategoryController extends Controller
                     'seo:product_id,product_url,page_title,meta_description'
                 ]);
 
-            // ✅ CATEGORY FILTER
             if ($request->filled('categoryIds')) {
                 $categoryIds = explode(',', $request->categoryIds);
                 $allCategoryIds = [];
 
                 foreach ($categoryIds as $catId) {
-                    $allCategoryIds[] = (int)$catId;
+                    $allCategoryIds[] = (int) $catId;
 
                     $category = Category::with('childrenRecursive')->find($catId);
                     if ($category) {
@@ -852,12 +851,10 @@ class CategoryController extends Controller
                 });
             }
 
-            // ✅ BRAND FILTER
             if ($request->filled('brandId')) {
                 $query->where('brand_id', $request->brandId);
             }
 
-            // ✅ PRICE FILTERS
             if ($request->filled('minPrice')) {
                 $query->where('price', '>=', $request->minPrice);
             }
@@ -865,33 +862,43 @@ class CategoryController extends Controller
                 $query->where('price', '<=', $request->maxPrice);
             }
 
-            // ✅ SORTING
-            if ($request->filled('sortBy')) {
-                switch ($request->sortBy) {
-                    case 'priceLowToHigh':
-                        $query->orderBy('price', 'asc');
-                        break;
-                    case 'priceHighToLow':
-                        $query->orderBy('price', 'desc');
-                        break;
-                    case 'latest':
-                        $query->orderBy('created_at', 'desc');
-                        break;
-                    case 'bestSelling':
-                        $query->where('sold_count', '>', 0)->orderBy('sold_count', 'desc');
-                        break;
-                    default:
-                        $query->orderBy('id', 'desc');
-                }
+            $sortMap = [
+                'default'          => ['id', 'desc'],
+                'sortby'           => ['id', 'desc'],
+                'bestselling'      => ['sold_count', 'desc'],
+                'best_selling'     => ['sold_count', 'desc'],
+                'atoz'             => ['name', 'asc'],
+                'a_to_z'           => ['name', 'asc'],
+                'ztoa'             => ['name', 'desc'],
+                'z_to_a'           => ['name', 'desc'],
+                'featureditems'    => ['is_featured', 'desc'],
+                'featured'         => ['is_featured', 'desc'],
+                'newestitems'      => ['created_at', 'desc'],
+                'newest'           => ['created_at', 'desc'],
+                'latest'           => ['created_at', 'desc'],
+                'priceascending'   => ['price', 'asc'],
+                'pricelowtohigh'   => ['price', 'asc'],
+                'pricedescending'  => ['price', 'desc'],
+                'pricehightolow'   => ['price', 'desc'],
+            ];
+
+            $sortByInput = strtolower(preg_replace('/[^a-z]/', '', (string) $request->input('sortBy', 'default')));
+            [$sortColumn, $sortOrder] = $sortMap[$sortByInput] ?? ['id', 'desc'];
+
+            if ($sortColumn === 'sold_count') {
+                $query->orderByRaw('COALESCE(sold_count, 0) DESC')
+                    ->orderBy('id', 'desc');
+            } elseif ($sortColumn === 'name') {
+                $query->orderByRaw("LOWER(name) {$sortOrder}")
+                    ->orderBy('id', 'desc');
             } else {
-                $query->orderBy('id', 'desc');
+                $query->orderBy($sortColumn, $sortOrder)
+                    ->orderBy('id', 'desc');
             }
 
-            // ✅ LIMIT TOTAL PRODUCTS
             $maxProducts = 10000;
-            $query->take($maxProducts); // ensures only first 10k products considered
+            $query->take($maxProducts);
 
-            // ✅ PAGINATION
             $page = (int) $request->input('page', 1);
             $pageSize = (int) $request->input('pageSize', 12);
 
