@@ -862,55 +862,77 @@ class CategoryController extends Controller
                 $query->where('price', '<=', $request->maxPrice);
             }
 
-            $sortBy = strtolower(preg_replace('/[^a-z]/', '', (string) $request->input('sortBy', '')));
-            $maxProducts = 10000;
-            $page = max(1, (int) $request->input('page', 1));
-            $pageSize = max(1, (int) $request->input('pageSize', 12));
+            if ($request->filled('sortBy')) {
+                $sortBy = strtolower(trim($request->sortBy));
+                $sortBy = str_replace(['_', '-', ':'], ' ', $sortBy);
+                $sortBy = preg_replace('/\s+/', ' ', $sortBy);
 
-            $items = $query->limit($maxProducts)->get()->all();
-
-            usort($items, function ($a, $b) use ($sortBy) {
                 switch ($sortBy) {
+                    case 'a to z':
                     case 'atoz':
-                    case 'nameasc':
-                        return strcasecmp((string) $a->name, (string) $b->name);
+                    case 'name asc':
+                        $query->orderBy('name', 'asc');
+                        break;
+
+                    case 'z to a':
                     case 'ztoa':
-                    case 'namedesc':
-                        return strcasecmp((string) $b->name, (string) $a->name);
-                    case 'bestselling':
-                        return ((int) ($b->sold_count ?? 0)) <=> ((int) ($a->sold_count ?? 0));
-                    case 'featureditems':
+                    case 'name desc':
+                        $query->orderBy('name', 'desc');
+                        break;
+
+                    case 'featured items':
                     case 'featured':
-                        return ((int) ($b->is_featured ?? 0)) <=> ((int) ($a->is_featured ?? 0));
-                    case 'newestitems':
+                    case 'is featured':
+                        $query->where('is_featured', 1)->orderBy('id', 'desc');
+                        break;
+
+                    case 'newest items':
                     case 'newest':
                     case 'latest':
-                        return (optional($b->created_at)->timestamp ?? 0) <=> (optional($a->created_at)->timestamp ?? 0);
-                    case 'priceascending':
-                    case 'pricelowtohigh':
-                        return ((float) $a->price) <=> ((float) $b->price);
-                    case 'pricedescending':
-                    case 'pricehightolow':
-                        return ((float) $b->price) <=> ((float) $a->price);
-                    default:
-                        return ((int) $b->id) <=> ((int) $a->id);
-                }
-            });
+                        $query->orderBy('created_at', 'desc');
+                        break;
 
-            $items = collect($items);
-            $total = $items->count();
-            $paged = $items->slice(($page - 1) * $pageSize, $pageSize)->values();
+                    case 'price ascending':
+                    case 'price low to high':
+                    case 'pricelowtohigh':
+                        $query->orderBy('price', 'asc');
+                        break;
+
+                    case 'price descending':
+                    case 'price high to low':
+                    case 'pricehightolow':
+                        $query->orderBy('price', 'desc');
+                        break;
+
+                    case 'best selling':
+                    case 'bestselling':
+                        $query->orderBy('sold_count', 'desc');
+                        break;
+
+                    default:
+                        $query->orderBy('id', 'desc');
+                }
+            } else {
+                $query->orderBy('id', 'desc');
+            }
+
+            $maxProducts = 10000;
+            $query->take($maxProducts);
+
+            $page = (int) $request->input('page', 1);
+            $pageSize = (int) $request->input('pageSize', 12);
+
+            $products = $query->paginate($pageSize, ['*'], 'page', $page);
 
             return response()->json([
                 'status' => true,
                 'message' => 'Filtered products retrieved successfully',
-                'appliedSort' => $sortBy,
-                'data' => PopularProductResource::collection($paged),
+                'data' => PopularProductResource::collection($products),
                 'pagination' => [
-                    'total' => min($total, $maxProducts),
-                    'page' => $page,
-                    'pageSize' => $pageSize,
-                    'lastPage' => (int) ceil(max(1, min($total, $maxProducts)) / $pageSize),
+                    'total' => min($products->total(), $maxProducts),
+                    'page' => $products->currentPage(),
+                    'pageSize' => $products->perPage(),
+                    'lastPage' => ceil(min($products->total(), $maxProducts) / $products->perPage())
                 ]
             ]);
         } catch (\Exception $e) {
@@ -921,6 +943,8 @@ class CategoryController extends Controller
             ], 500);
         }
     }
+
+
 
     // Recursive helper function
     private function getAllChildCategoryIds($category)
