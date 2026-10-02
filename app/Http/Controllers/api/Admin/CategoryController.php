@@ -867,64 +867,50 @@ class CategoryController extends Controller
             $page = max(1, (int) $request->input('page', 1));
             $pageSize = max(1, (int) $request->input('pageSize', 12));
 
-            $items = $query->limit($maxProducts)->get();
+            $items = $query->limit($maxProducts)->get()->all();
 
-            $items = $items->sortBy(function ($product) use ($sortBy) {
+            usort($items, function ($a, $b) use ($sortBy) {
                 switch ($sortBy) {
                     case 'atoz':
                     case 'nameasc':
+                        return strcasecmp((string) $a->name, (string) $b->name);
                     case 'ztoa':
                     case 'namedesc':
-                        return strtolower((string) $product->name);
+                        return strcasecmp((string) $b->name, (string) $a->name);
                     case 'bestselling':
-                        return (int) ($product->sold_count ?? 0);
+                        return ((int) ($b->sold_count ?? 0)) <=> ((int) ($a->sold_count ?? 0));
                     case 'featureditems':
                     case 'featured':
-                        return (int) ($product->is_featured ?? 0);
+                        return ((int) ($b->is_featured ?? 0)) <=> ((int) ($a->is_featured ?? 0));
                     case 'newestitems':
                     case 'newest':
                     case 'latest':
-                        return optional($product->created_at)->timestamp ?? 0;
+                        return (optional($b->created_at)->timestamp ?? 0) <=> (optional($a->created_at)->timestamp ?? 0);
                     case 'priceascending':
                     case 'pricelowtohigh':
+                        return ((float) $a->price) <=> ((float) $b->price);
                     case 'pricedescending':
                     case 'pricehightolow':
-                        return (float) $product->price;
+                        return ((float) $b->price) <=> ((float) $a->price);
                     default:
-                        return (int) $product->id;
+                        return ((int) $b->id) <=> ((int) $a->id);
                 }
-            })->values();
+            });
 
-            $descending = in_array($sortBy, [
-                '',
-                'ztoa',
-                'namedesc',
-                'bestselling',
-                'featureditems',
-                'featured',
-                'newestitems',
-                'newest',
-                'latest',
-                'pricedescending',
-                'pricehightolow',
-            ], true);
-
-            if ($descending) {
-                $items = $items->reverse()->values();
-            }
-
+            $items = collect($items);
             $total = $items->count();
             $paged = $items->slice(($page - 1) * $pageSize, $pageSize)->values();
 
             return response()->json([
                 'status' => true,
                 'message' => 'Filtered products retrieved successfully',
+                'appliedSort' => $sortBy,
                 'data' => PopularProductResource::collection($paged),
                 'pagination' => [
                     'total' => min($total, $maxProducts),
                     'page' => $page,
                     'pageSize' => $pageSize,
-                    'lastPage' => (int) ceil(min($total, $maxProducts) / $pageSize),
+                    'lastPage' => (int) ceil(max(1, min($total, $maxProducts)) / $pageSize),
                 ]
             ]);
         } catch (\Exception $e) {
