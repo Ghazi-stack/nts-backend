@@ -93,7 +93,7 @@ class NewsletterController extends Controller
             Mail::to($newsletter->email)
                 ->send(new NewsletterSubscribedMail($newsletter));
 
-            $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
+            $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
             Mail::to($adminEmail)
                 ->send(new NewsletterSubscribedMail($newsletter, true));
         } catch (\Exception $e) {
