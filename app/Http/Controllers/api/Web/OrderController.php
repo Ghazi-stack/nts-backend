@@ -4939,7 +4939,7 @@ class OrderController extends Controller
                 ->get();
 
             $data = collect(OrderResource::collection($orders)->resolve())
-                ->map(function (array $item) {
+                ->map(function (array $item) use ($channelName) {
                     $billingPm = $item['billingInformation']['paymentMethod']
                         ?? $item['billingInformation']['payment_method']
                         ?? null;
