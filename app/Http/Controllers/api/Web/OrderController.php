@@ -4907,6 +4907,10 @@ class OrderController extends Controller
                 ], 400);
             }
 
+            $store = Store::select('id', 'name')->find($storeId);
+
+            $channelName = $store?->name;
+
             $orders = Order::query()
                 ->with([
                     'items' => function ($q) {
@@ -4962,6 +4966,9 @@ class OrderController extends Controller
                         'method'   => $item['carrierCode'] ?? null,
                         'cost'     => (string) ($item['shippingCost'] ?? '0.00'),
                     ];
+
+                    // Add channel name
+                    $item['channelName'] = $channelName;
 
                     return $item;
                 })
