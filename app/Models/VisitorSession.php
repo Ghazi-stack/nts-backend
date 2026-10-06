@@ -9,5 +9,9 @@ class VisitorSession extends Model
     protected $fillable = [
         'store_id',
         'session_id',
+        'source',
+        'label',
+        'referrer',
+        'host',
     ];
 }

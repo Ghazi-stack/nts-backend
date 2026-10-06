@@ -694,7 +694,7 @@ Route::prefix('web')->group(function () {
         Route::get('/get-logo/{id}', 'showById');   // Get single logo by ID
     });
 
-     Route::prefix('email-marketings')->controller(EmailMarketingController::class)->group(function () {
+    Route::prefix('email-marketings')->controller(EmailMarketingController::class)->group(function () {
         Route::get('/get-email-marketing', 'show');
     });
 
@@ -739,6 +739,7 @@ Route::prefix('web')->group(function () {
 
     //VisitorSession
     Route::post('/visitor-session', [VisitorSessionController::class, 'store']);
+    Route::get('/visitor-session/stats', [VisitorSessionController::class, 'stats']);
 
     //globalSearch
     Route::get('/search', [SearchController::class, 'globalSearch']);
