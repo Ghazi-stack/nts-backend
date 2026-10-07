@@ -906,7 +906,10 @@ class CategoryController extends Controller
 
                     case 'best selling':
                     case 'bestselling':
-                        $query->orderBy('sold_count', 'desc');
+                        $query->orderByRaw(
+                            '(SELECT search_count FROM product_searches WHERE product_searches.product_id = products.id AND product_searches.store_id = ?) DESC',
+                            [$storeId]
+                        )->orderByDesc('id');
                         break;
 
                     default:
