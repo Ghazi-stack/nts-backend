@@ -425,20 +425,29 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                             continue;
                         }
 
-                        $originalName = pathinfo(
-                            parse_url($imageValue, PHP_URL_PATH),
-                            PATHINFO_FILENAME
-                        );
+                        // $originalName = pathinfo(
+                        //     parse_url($imageValue, PHP_URL_PATH),
+                        //     PATHINFO_FILENAME
+                        // );
+
+                        // $extension = pathinfo(
+                        //     parse_url($imageValue, PHP_URL_PATH),
+                        //     PATHINFO_EXTENSION
+                        // ) ?: 'jpg';
+
+                        // $fileName = Str::slug($originalName)
+                        //     . '-' . time() . '-' . uniqid() . '.' . $extension;
+
+                        // $savedPath = "product_images/{$product->id}/{$fileName}";
 
                         $extension = pathinfo(
                             parse_url($imageValue, PHP_URL_PATH),
                             PATHINFO_EXTENSION
                         ) ?: 'jpg';
 
-                        $fileName = Str::slug($originalName)
-                            . '-' . time() . '-' . uniqid() . '.' . $extension;
+                        $extension = strtolower($extension);
 
-                        $savedPath = "product_images/{$product->id}/{$fileName}";
+                        $savedPath = "product_images/{$product->id}/primary.{$extension}";
                         $uploaded  = false;
 
                         // Log::info("[$traceId] IMAGE SIZE", [
@@ -579,16 +588,6 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 ->where('is_primary', 1)
                 ->first();
                 if ($existingImage) {
-                    if ($existingImage->path) {
-                        try {
-                            Storage::disk('s3')->delete($existingImage->path);
-                        } catch (\Throwable $e) {
-                            Log::warning('Old product image deletion failed', [
-                                'path' => $existingImage->path,
-                                'error' => $e->getMessage(),
-                            ]);
-                        }
-                    }
 
                     $existingImage->update([
                         'path'      => $savedPath,
