@@ -116,6 +116,76 @@ class CustomerAddressController extends Controller
     /**
      * Store Address
      */
+    // public function store(Request $request)
+    // {
+    //     $storeId = current_store_id();
+
+    //     if (!$storeId) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Store not selected or token invalid.'
+    //         ], 400);
+    //     }
+
+    //     $user = auth('sanctum')->user() ?? auth()->user();
+
+    //     $validated = $request->validate([
+    //         'firstName'    => 'required|string|max:100',
+    //         'lastName'     => 'required|string|max:100',
+    //         'companyName'  => 'nullable|string|max:255',
+    //         'phoneNumber'  => 'nullable|string|max:30',
+    //         'addressLine1' => 'required|string|max:255',
+    //         'addressLine2' => 'nullable|string|max:255',
+    //         'city'         => 'required|string|max:100',
+    //         'state'        => 'required|string|max:100',
+    //         'zip'          => 'nullable|string|max:30',
+    //         'country'      => 'required|string|max:100',
+    //         'is_default'   => 'nullable|boolean',
+    //         'type'         => 'nullable|in:Residential,Commercial',
+    //         'customer_id'  => 'nullable|integer',
+    //     ]);
+
+    //     if ($user && (int) $user->userRole === 2) {
+    //         $customerId = $user->customer_id ?: $user->id;
+    //     } else {
+    //         $customerId = $validated['customer_id'] ?? null;
+    //     }
+
+    //     // Default address handle
+    //     if (!empty($validated['is_default'])) {
+    //         CustomerAddress::where('customer_id', $customerId)
+    //             ->where('store_id', $storeId)
+    //             ->update([
+    //                 'is_default' => false
+    //             ]);
+    //     }
+
+    //     $data = [
+    //         'store_id'       => $storeId,
+    //         'customer_id'    => $customerId,
+    //         'first_name'     => $validated['firstName'],
+    //         'last_name'      => $validated['lastName'],
+    //         'company_name'   => $validated['companyName'] ?? null,
+    //         'phone_number'   => $validated['phoneNumber'],
+    //         'address_line_1' => $validated['addressLine1'],
+    //         'address_line_2' => $validated['addressLine2'] ?? null,
+    //         'city'           => $validated['city'],
+    //         'state'          => $validated['state'],
+    //         'zip'            => $validated['zip'],
+    //         'country'        => $validated['country'],
+    //         'is_default'     => $validated['is_default'] ?? false,
+    //         'type'           => $validated['type'] ?? 'Residential',
+    //     ];
+
+    //     $address = CustomerAddress::create($data);
+
+    //     return response()->json([
+    //         'status'  => true,
+    //         'message' => 'Address created successfully.',
+    //         'data'    => $address
+    //     ]);
+    // }
+
     public function store(Request $request)
     {
         $storeId = current_store_id();
@@ -145,13 +215,155 @@ class CustomerAddressController extends Controller
             'customer_id'  => 'nullable|integer',
         ]);
 
+        /*
+        |--------------------------------------------------------------------------
+        | Determine customer
+        |--------------------------------------------------------------------------
+        */
         if ($user && (int) $user->userRole === 2) {
             $customerId = $user->customer_id ?: $user->id;
         } else {
             $customerId = $validated['customer_id'] ?? null;
         }
 
-        // Default address handle
+        /*
+        |--------------------------------------------------------------------------
+        | Normalize values for duplicate checking
+        |--------------------------------------------------------------------------
+        |
+        | We compare every address field except is_default.
+        |
+        | trim() handles extra spaces.
+        | strtolower() makes comparison case-insensitive.
+        | NULL and empty string are treated as the same value.
+        |
+        */
+        $firstName = strtolower(trim($validated['firstName']));
+        $lastName = strtolower(trim($validated['lastName']));
+        $companyName = strtolower(trim($validated['companyName'] ?? ''));
+        $phoneNumber = strtolower(trim($validated['phoneNumber'] ?? ''));
+        $addressLine1 = strtolower(trim($validated['addressLine1']));
+        $addressLine2 = strtolower(trim($validated['addressLine2'] ?? ''));
+        $city = strtolower(trim($validated['city']));
+        $state = strtolower(trim($validated['state']));
+        $zip = strtolower(trim($validated['zip'] ?? ''));
+        $country = strtolower(trim($validated['country']));
+        $type = strtolower(trim($validated['type'] ?? 'Residential'));
+
+        /*
+        |--------------------------------------------------------------------------
+        | Check for duplicate address
+        |--------------------------------------------------------------------------
+        |
+        | Every field must match.
+        |
+        | If even ONE field is different, this query will not find the
+        | existing record and a new address will be created.
+        |
+        | is_default is intentionally excluded because changing the default
+        | status should not create another address.
+        |
+        */
+        $duplicateAddress = CustomerAddress::query()
+            ->where('store_id', $storeId)
+            ->where('customer_id', $customerId)
+
+            ->whereRaw(
+                'LOWER(TRIM(COALESCE(first_name, ""))) = ?',
+                [$firstName]
+            )
+
+            ->whereRaw(
+                'LOWER(TRIM(COALESCE(last_name, ""))) = ?',
+                [$lastName]
+            )
+
+            ->whereRaw(
+                'LOWER(TRIM(COALESCE(company_name, ""))) = ?',
+                [$companyName]
+            )
+
+            ->whereRaw(
+                'LOWER(TRIM(COALESCE(phone_number, ""))) = ?',
+                [$phoneNumber]
+            )
+
+            ->whereRaw(
+                'LOWER(TRIM(COALESCE(address_line_1, ""))) = ?',
+                [$addressLine1]
+            )
+
+            ->whereRaw(
+                'LOWER(TRIM(COALESCE(address_line_2, ""))) = ?',
+                [$addressLine2]
+            )
+
+            ->whereRaw(
+                'LOWER(TRIM(COALESCE(city, ""))) = ?',
+                [$city]
+            )
+
+            ->whereRaw(
+                'LOWER(TRIM(COALESCE(state, ""))) = ?',
+                [$state]
+            )
+
+            ->whereRaw(
+                'LOWER(TRIM(COALESCE(zip, ""))) = ?',
+                [$zip]
+            )
+
+            ->whereRaw(
+                'LOWER(TRIM(COALESCE(country, ""))) = ?',
+                [$country]
+            )
+
+            ->whereRaw(
+                'LOWER(TRIM(COALESCE(type, ""))) = ?',
+                [$type]
+            )
+
+            ->first();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Duplicate found
+        |--------------------------------------------------------------------------
+        */
+        if ($duplicateAddress) {
+
+            /*
+            | If the user is trying to make this existing address default,
+            | update the default status instead of creating another record.
+            */
+            if (!empty($validated['is_default'])) {
+
+                CustomerAddress::where('customer_id', $customerId)
+                    ->where('store_id', $storeId)
+                    ->where('id', '!=', $duplicateAddress->id)
+                    ->update([
+                        'is_default' => false
+                    ]);
+
+                if (!$duplicateAddress->is_default) {
+                    $duplicateAddress->update([
+                        'is_default' => true
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'This address already exists.',
+                'data'    => $duplicateAddress->fresh()
+            ]);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Default address handle for NEW address
+        |--------------------------------------------------------------------------
+        */
         if (!empty($validated['is_default'])) {
             CustomerAddress::where('customer_id', $customerId)
                 ->where('store_id', $storeId)
@@ -160,18 +372,23 @@ class CustomerAddressController extends Controller
                 ]);
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Create new address
+        |--------------------------------------------------------------------------
+        */
         $data = [
             'store_id'       => $storeId,
             'customer_id'    => $customerId,
             'first_name'     => $validated['firstName'],
             'last_name'      => $validated['lastName'],
             'company_name'   => $validated['companyName'] ?? null,
-            'phone_number'   => $validated['phoneNumber'],
+            'phone_number'   => $validated['phoneNumber'] ?? null,
             'address_line_1' => $validated['addressLine1'],
             'address_line_2' => $validated['addressLine2'] ?? null,
             'city'           => $validated['city'],
             'state'          => $validated['state'],
-            'zip'            => $validated['zip'],
+            'zip'            => $validated['zip'] ?? null,
             'country'        => $validated['country'],
             'is_default'     => $validated['is_default'] ?? false,
             'type'           => $validated['type'] ?? 'Residential',
@@ -179,6 +396,11 @@ class CustomerAddressController extends Controller
 
         $address = CustomerAddress::create($data);
 
+        /*
+        |--------------------------------------------------------------------------
+        | Response
+        |--------------------------------------------------------------------------
+        */
         return response()->json([
             'status'  => true,
             'message' => 'Address created successfully.',
