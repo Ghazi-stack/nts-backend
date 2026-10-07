@@ -115,6 +115,8 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                 'distributor_sku',
             ]);
 
+            $sku = $this->normalizeSku($sku);
+
             $productName = $this->getField($data, [
                 'Product Name',
                 'product name',
@@ -744,6 +746,26 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
         }
 
         return $parent;
+    }
+
+    private function normalizeSku($sku): ?string
+    {
+        if ($sku === null) {
+            return null;
+        }
+
+        $sku = (string) $sku;
+
+        // Remove invisible / special whitespace characters
+        $sku = preg_replace('/[\x00-\x1F\x7F\xA0\x{200B}-\x{200D}\x{FEFF}]/u', '', $sku);
+
+        // Trim normal whitespace
+        $sku = trim($sku);
+
+        // Make SKU comparison case-insensitive
+        $sku = strtoupper($sku);
+
+        return $sku !== '' ? $sku : null;
     }
 
     private function toBool($val)
