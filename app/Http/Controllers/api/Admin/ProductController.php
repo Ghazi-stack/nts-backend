@@ -1902,7 +1902,7 @@ class ProductController extends Controller
                             $q->orWhereHas('categories', fn($q2) => $q2->whereIn('categories.id', $matchingCategoryIds));
                         }
                     })
-                    ->select('id', 'name', 'sku', 'price', 'slug', 'brand_id')
+                    ->select('id', 'name', 'sku', 'price', 'slug', 'brand_id','purchasability_status')
                     ->with([
                         'categories:id,name',
                         'images:id,product_id,path,is_primary',
