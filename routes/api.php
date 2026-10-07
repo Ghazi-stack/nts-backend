@@ -653,6 +653,7 @@ Route::prefix('web')->group(function () {
         Route::post('/return-order', 'submitReturnRequest');
         Route::post('/order-details', 'showByOrderId');
         Route::delete('/draft-orders/{id}', 'deleteDraftOrder');
+        Route::get('/customer/invoices/{ids}', 'downloadCustomerInvoice');
     });
 
 

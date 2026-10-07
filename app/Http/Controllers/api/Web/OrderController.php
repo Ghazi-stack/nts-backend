@@ -1197,7 +1197,6 @@ class OrderController extends Controller
                         $quotePayload = $this->draftQuote->decode(
                             $currentQuoteToken
                         );
-
                     } catch (\Exception $e) {
 
                         return response()->json([
@@ -3846,10 +3845,10 @@ class OrderController extends Controller
                     $couponEmail = strtolower(
                         trim(
                             $formAddress['email']
-                            ?? $billingInfo['email']
-                            ?? $shippingInfo['email']
-                            ?? $customer->email
-                            ?? ''
+                                ?? $billingInfo['email']
+                                ?? $shippingInfo['email']
+                                ?? $customer->email
+                                ?? ''
                         )
                     );
 
@@ -3960,9 +3959,9 @@ class OrderController extends Controller
                     'zip'          => $billingInput['zip'] ?? $shippingInfo['zip'] ?? null,
                     'country'      => $billingInput['country'] ?? $shippingInfo['country'] ?? null,
                     'shippingMethod' => $shippingMethod['method']
-                    ?? $shippingMethod['data']
-                    ?? $shippingMethod['provider']
-                    ?? '',
+                        ?? $shippingMethod['data']
+                        ?? $shippingMethod['provider']
+                        ?? '',
                 ];
 
                 CheckoutFormData::create([
@@ -6277,7 +6276,6 @@ class OrderController extends Controller
             }
 
             $validated['paymentMethod']['paymentMethodId'] = $paymentMethodId;
-
         } catch (\Illuminate\Validation\ValidationException $e) {
 
             return response()->json([
@@ -6330,14 +6328,13 @@ class OrderController extends Controller
                     'store_id'    => $storeId,
                     'name'        => trim(
                         $validated['firstName'] . ' ' .
-                        $validated['lastName']
+                            $validated['lastName']
                     ),
                     'email'       => $validated['email'],
                     'password'    => bcrypt($validated['password']),
                     'userRole'    => 2,
                     'customer_id' => $customer->id,
                 ]);
-
             } else {
 
                 $storeUser->customer_id = $customer->id;
@@ -6389,7 +6386,6 @@ class OrderController extends Controller
                         $storeId
                     )
                 );
-
             } catch (\Exception $mailEx) {
 
                 \Log::error(
@@ -6485,8 +6481,8 @@ class OrderController extends Controller
                                 'store_id',
                                 $storeId
                             )
-                            ->findOrFail($productId)
-                            ->price;
+                                ->findOrFail($productId)
+                                ->price;
 
                         return [
                             'product_id' => $productId,
@@ -6542,7 +6538,7 @@ class OrderController extends Controller
 
                 $products = $mapProducts(
                     $destination['products']
-                    ?? $validated['products']
+                        ?? $validated['products']
                 );
 
                 $cartTotal = 0;
@@ -6591,59 +6587,59 @@ class OrderController extends Controller
                     'user_id'         => $storeUser->id,
 
                     'first_name'      =>
-                        $shippingAddress['firstName']
+                    $shippingAddress['firstName']
                         ?? $validated['firstName']
                         ?? null,
 
                     'last_name'       =>
-                        $shippingAddress['lastName']
+                    $shippingAddress['lastName']
                         ?? $validated['lastName']
                         ?? null,
 
                     'company_name'    =>
-                        $shippingAddress['companyName']
+                    $shippingAddress['companyName']
                         ?? $validated['companyName']
                         ?? null,
 
                     'email'           =>
-                        $shippingAddress['email']
+                    $shippingAddress['email']
                         ?? $validated['email']
                         ?? $customer->email,
 
                     'phone'           =>
-                        $shippingAddress['phone']
+                    $shippingAddress['phone']
                         ?? $validated['phone']
                         ?? null,
 
                     'address_line_1'  =>
-                        $shippingAddress['addressLine1']
+                    $shippingAddress['addressLine1']
                         ?? null,
 
                     'address_line_2'  =>
-                        $shippingAddress['addressLine2']
+                    $shippingAddress['addressLine2']
                         ?? null,
 
                     'city'            =>
-                        $shippingAddress['city']
+                    $shippingAddress['city']
                         ?? null,
 
                     'state'           =>
-                        $shippingAddress['state']
+                    $shippingAddress['state']
                         ?? null,
 
                     'zip'             =>
-                        $shippingAddress['zip']
+                    $shippingAddress['zip']
                         ?? null,
 
                     'country'         =>
-                        $shippingAddress['country']
+                    $shippingAddress['country']
                         ?? null,
 
                     'payment_method'  =>
-                        $displayPaymentMethod,
+                    $displayPaymentMethod,
 
                     'shipping_method' =>
-                        $shippingProvider
+                    $shippingProvider
                         ?? $shippingAddress['shippingMethod']
                         ?? null,
 
@@ -6651,7 +6647,7 @@ class OrderController extends Controller
                         'display_name' => $shippingLabel,
                         'label'        => $shippingLabel,
                         'data'         =>
-                            $shippingMethod['data']
+                        $shippingMethod['data']
                             ?? $shippingLabel,
                     ],
                 ]);
@@ -6673,58 +6669,58 @@ class OrderController extends Controller
 
                 $billingAddressJson = [
                     'name' =>
-                        $formAddress['name']
+                    $formAddress['name']
                         ?? (
                             trim(
                                 ($billFirst ?? '') .
-                                ' ' .
-                                ($billLast ?? '')
+                                    ' ' .
+                                    ($billLast ?? '')
                             ) ?: null
                         ),
 
                     'firstName' =>
-                        $billFirst,
+                    $billFirst,
 
                     'lastName' =>
-                        $billLast,
+                    $billLast,
 
                     'companyName' =>
-                        $formAddress['companyName']
+                    $formAddress['companyName']
                         ?? $validated['companyName']
                         ?? $customer->company_name,
 
                     'email' =>
-                        $formAddress['email']
+                    $formAddress['email']
                         ?? $validated['email']
                         ?? $customer->email,
 
                     'phone' =>
-                        $formAddress['phone']
+                    $formAddress['phone']
                         ?? $validated['phone']
                         ?? $customer->phone,
 
                     'addressLine1' =>
-                        $formAddress['addressLine1']
+                    $formAddress['addressLine1']
                         ?? null,
 
                     'addressLine2' =>
-                        $formAddress['addressLine2']
+                    $formAddress['addressLine2']
                         ?? null,
 
                     'city' =>
-                        $formAddress['city']
+                    $formAddress['city']
                         ?? null,
 
                     'state' =>
-                        $formAddress['state']
+                    $formAddress['state']
                         ?? null,
 
                     'zip' =>
-                        $formAddress['zip']
+                    $formAddress['zip']
                         ?? null,
 
                     'country' =>
-                        $formAddress['country']
+                    $formAddress['country']
                         ?? null,
                 ];
 
@@ -6748,17 +6744,17 @@ class OrderController extends Controller
 
                     $intent = \Stripe\PaymentIntent::create([
                         'amount' =>
-                            (int) round(
-                                $totalAmount * 100
-                            ),
+                        (int) round(
+                            $totalAmount * 100
+                        ),
 
                         'currency' => 'usd',
 
                         'payment_method' =>
-                            $paymentMethodId,
+                        $paymentMethodId,
 
                         'confirmation_method' =>
-                            'manual',
+                        'manual',
 
                         'payment_method_types' => [
                             'card'
@@ -6767,30 +6763,30 @@ class OrderController extends Controller
                         'confirm' => true,
 
                         'capture_method' =>
-                            'manual',
+                        'manual',
 
                         'metadata' => [
                             'user_id' =>
-                                $storeUser->id,
+                            $storeUser->id,
 
                             'customer_id' =>
-                                $customer->id,
+                            $customer->id,
 
                             'channel' =>
-                                'admin-panel',
+                            'admin-panel',
 
                             'store_id' =>
-                                $storeId,
+                            $storeId,
 
                             'products' =>
-                                json_encode($products),
+                            json_encode($products),
                         ],
                     ], [
                         'idempotency_key' =>
-                            uniqid(
-                                'dashboard_new_customer_payment_',
-                                true
-                            ),
+                        uniqid(
+                            'dashboard_new_customer_payment_',
+                            true
+                        ),
                     ]);
 
                     if (in_array(
@@ -6803,7 +6799,6 @@ class OrderController extends Controller
 
                         $requiresAction =
                             $intent->client_secret;
-
                     } elseif (
                         $intent->status !==
                         'requires_capture'
@@ -6814,10 +6809,9 @@ class OrderController extends Controller
                         return response()->json([
                             'status'  => false,
                             'message' =>
-                                'Payment authorization failed. Status: ' .
+                            'Payment authorization failed. Status: ' .
                                 $intent->status,
                         ], 400);
-
                     } else {
 
                         $existingPayment =
@@ -6832,7 +6826,7 @@ class OrderController extends Controller
 
                             if (
                                 $existingPayment
-                                    ->payment_status === 'completed'
+                                ->payment_status === 'completed'
                             ) {
 
                                 $existingOrder =
@@ -6848,18 +6842,18 @@ class OrderController extends Controller
                                 return response()->json([
                                     'status'  => true,
                                     'message' =>
-                                        'Payment already processed.',
+                                    'Payment already processed.',
                                     'data' =>
-                                        new OrderResource(
-                                            $existingOrder
-                                        ),
+                                    new OrderResource(
+                                        $existingOrder
+                                    ),
                                 ]);
                             }
 
                             return response()->json([
                                 'status'  => false,
                                 'message' =>
-                                    'Payment has already been processed.',
+                                'Payment has already been processed.',
                             ], 409);
                         }
                     }
@@ -6872,100 +6866,100 @@ class OrderController extends Controller
                 */
                 $orderPayload = [
                     'store_id' =>
-                        $storeId,
+                    $storeId,
 
                     'customer_id' =>
-                        $customer->id,
+                    $customer->id,
 
                     'user_id' =>
-                        $storeUser->id,
+                    $storeUser->id,
 
                     'billing_information_id' =>
-                        $billing->id,
+                    $billing->id,
 
                     'status' =>
-                        $isDraft
-                            ? 'Incomplete'
-                            : 'Awaiting Payment',
+                    $isDraft
+                        ? 'Incomplete'
+                        : 'Awaiting Payment',
 
                     'is_draft' =>
-                        $isDraft,
+                    $isDraft,
 
                     'isdrafturl' =>
-                        null,
+                    null,
 
                     'device_type' =>
-                        $validated['deviceType'] ?? null,
+                    $validated['deviceType'] ?? null,
 
                     'channel' =>
-                        'admin-panel',
+                    'admin-panel',
 
                     'ip_address' =>
-                        $validated['ipAddress'] ?? null,
+                    $validated['ipAddress'] ?? null,
 
                     'order_place_country' =>
-                        $validated['orderPlaceCountry'] ?? null,
+                    $validated['orderPlaceCountry'] ?? null,
 
                     'email_invoice' =>
-                        $validated['emailInvoice'] ?? true,
+                    $validated['emailInvoice'] ?? true,
 
                     'billing_same' =>
-                        $validated['billingSame']
+                    $validated['billingSame']
                         ?? empty($validated['shippingDestinations']),
 
                     'is_save_address_for_billing' =>
-                        (bool) (
-                            $formAddress['saveToAddressBook']
-                            ?? $validated['isSaveAddressForBilling']
-                            ?? false
-                        ),
+                    (bool) (
+                        $formAddress['saveToAddressBook']
+                        ?? $validated['isSaveAddressForBilling']
+                        ?? false
+                    ),
 
                     'is_save_address_for_shipping' =>
-                        (bool) (
-                            $billingInput['saveToAddressBook']
-                            ?? $validated['isSaveAddressForShipping']
-                            ?? false
-                        ),
+                    (bool) (
+                        $billingInput['saveToAddressBook']
+                        ?? $validated['isSaveAddressForShipping']
+                        ?? false
+                    ),
 
                     'newsletter' =>
-                        $validated['newsletter']
+                    $validated['newsletter']
                         ?? $validated['receiveOffers']
                         ?? false,
 
                     'shipping_cost' =>
-                        $shippingCost,
+                    $shippingCost,
 
                     'shipping_provider' =>
-                        $shippingProvider,
+                    $shippingProvider,
 
                     'shipping_method' =>
-                        $shippingMethodId,
+                    $shippingMethodId,
 
                     'comments' =>
-                        $validated['comments'] ?? null,
+                    $validated['comments'] ?? null,
 
                     'staff_notes' =>
-                        $validated['staffNotes']
+                    $validated['staffNotes']
                         ?? $destination['staffNotes']
                         ?? null,
 
                     'total_amount' =>
-                        $totalAmount,
+                    $totalAmount,
 
                     'discountAmount' =>
-                        $discount,
+                    $discount,
 
                     'manual_discount' =>
-                        $manualDiscount,
+                    $manualDiscount,
 
                     'coupon_code' =>
-                        $validated['couponCode'] ?? null,
+                    $validated['couponCode'] ?? null,
 
                     'user_type' =>
-                        $validated['userType'] ?? null,
+                    $validated['userType'] ?? null,
 
                     'billing_address' =>
-                        $billingAddressJson,
+                    $billingAddressJson,
                 ];
 
                 /*
@@ -7015,52 +7009,52 @@ class OrderController extends Controller
 
                 $shippingAddressForBook = [
                     'firstName' =>
-                        $shippingAddress['firstName']
+                    $shippingAddress['firstName']
                         ?? $validated['firstName']
                         ?? $customer->first_name,
 
                     'lastName' =>
-                        $shippingAddress['lastName']
+                    $shippingAddress['lastName']
                         ?? $validated['lastName']
                         ?? $customer->last_name,
 
                     'companyName' =>
-                        $shippingAddress['companyName']
+                    $shippingAddress['companyName']
                         ?? $validated['companyName']
                         ?? $customer->company_name,
 
                     'email' =>
-                        $shippingAddress['email']
+                    $shippingAddress['email']
                         ?? $validated['email']
                         ?? $customer->email,
 
                     'phone' =>
-                        $shippingAddress['phone']
+                    $shippingAddress['phone']
                         ?? $validated['phone']
                         ?? $customer->phone,
 
                     'addressLine1' =>
-                        $shippingAddress['addressLine1']
+                    $shippingAddress['addressLine1']
                         ?? null,
 
                     'addressLine2' =>
-                        $shippingAddress['addressLine2']
+                    $shippingAddress['addressLine2']
                         ?? null,
 
                     'city' =>
-                        $shippingAddress['city']
+                    $shippingAddress['city']
                         ?? null,
 
                     'state' =>
-                        $shippingAddress['state']
+                    $shippingAddress['state']
                         ?? null,
 
                     'zip' =>
-                        $shippingAddress['zip']
+                    $shippingAddress['zip']
                         ?? null,
 
                     'country' =>
-                        $shippingAddress['country']
+                    $shippingAddress['country']
                         ?? null,
                 ];
 
@@ -7073,140 +7067,140 @@ class OrderController extends Controller
 
                     return [
                         'firstName' =>
-                            strtolower(
-                                trim(
-                                    (string) (
-                                        $address['firstName'] ?? ''
-                                    )
+                        strtolower(
+                            trim(
+                                (string) (
+                                    $address['firstName'] ?? ''
                                 )
-                            ),
+                            )
+                        ),
 
                         'lastName' =>
-                            strtolower(
-                                trim(
-                                    (string) (
-                                        $address['lastName'] ?? ''
-                                    )
+                        strtolower(
+                            trim(
+                                (string) (
+                                    $address['lastName'] ?? ''
                                 )
-                            ),
+                            )
+                        ),
 
                         'companyName' =>
-                            strtolower(
-                                trim(
-                                    (string) (
-                                        $address['companyName'] ?? ''
-                                    )
+                        strtolower(
+                            trim(
+                                (string) (
+                                    $address['companyName'] ?? ''
                                 )
-                            ),
+                            )
+                        ),
 
                         'phone' =>
-                            preg_replace(
-                                '/\D+/',
-                                '',
-                                (string) (
-                                    $address['phone'] ?? ''
-                                )
-                            ),
+                        preg_replace(
+                            '/\D+/',
+                            '',
+                            (string) (
+                                $address['phone'] ?? ''
+                            )
+                        ),
 
                         'addressLine1' =>
-                            strtolower(
-                                trim(
-                                    (string) (
-                                        $address['addressLine1'] ?? ''
-                                    )
+                        strtolower(
+                            trim(
+                                (string) (
+                                    $address['addressLine1'] ?? ''
                                 )
-                            ),
+                            )
+                        ),
 
                         'addressLine2' =>
-                            strtolower(
-                                trim(
-                                    (string) (
-                                        $address['addressLine2'] ?? ''
-                                    )
+                        strtolower(
+                            trim(
+                                (string) (
+                                    $address['addressLine2'] ?? ''
                                 )
-                            ),
+                            )
+                        ),
 
                         'city' =>
-                            strtolower(
-                                trim(
-                                    (string) (
-                                        $address['city'] ?? ''
-                                    )
+                        strtolower(
+                            trim(
+                                (string) (
+                                    $address['city'] ?? ''
                                 )
-                            ),
+                            )
+                        ),
 
                         'state' =>
-                            strtolower(
-                                trim(
-                                    (string) (
-                                        $address['state'] ?? ''
-                                    )
+                        strtolower(
+                            trim(
+                                (string) (
+                                    $address['state'] ?? ''
                                 )
-                            ),
+                            )
+                        ),
 
                         'zip' =>
-                            strtolower(
-                                trim(
-                                    (string) (
-                                        $address['zip'] ?? ''
-                                    )
+                        strtolower(
+                            trim(
+                                (string) (
+                                    $address['zip'] ?? ''
                                 )
-                            ),
+                            )
+                        ),
 
                         'country' =>
-                            strtolower(
-                                trim(
-                                    (string) (
-                                        $address['country'] ?? ''
-                                    )
+                        strtolower(
+                            trim(
+                                (string) (
+                                    $address['country'] ?? ''
                                 )
-                            ),
+                            )
+                        ),
                     ];
                 };
 
                 $billingBookAddress = [
                     'firstName' =>
-                        $formAddress['firstName']
+                    $formAddress['firstName']
                         ?? $validated['firstName']
                         ?? $customer->first_name,
 
                     'lastName' =>
-                        $formAddress['lastName']
+                    $formAddress['lastName']
                         ?? $validated['lastName']
                         ?? $customer->last_name,
 
                     'companyName' =>
-                        $formAddress['companyName']
+                    $formAddress['companyName']
                         ?? $validated['companyName']
                         ?? $customer->company_name,
 
                     'phone' =>
-                        $formAddress['phone']
+                    $formAddress['phone']
                         ?? $validated['phone']
                         ?? $customer->phone,
 
                     'addressLine1' =>
-                        $formAddress['addressLine1']
+                    $formAddress['addressLine1']
                         ?? null,
 
                     'addressLine2' =>
-                        $formAddress['addressLine2']
+                    $formAddress['addressLine2']
                         ?? null,
 
                     'city' =>
-                        $formAddress['city']
+                    $formAddress['city']
                         ?? null,
 
                     'state' =>
-                        $formAddress['state']
+                    $formAddress['state']
                         ?? null,
 
                     'zip' =>
-                        $formAddress['zip']
+                    $formAddress['zip']
                         ?? null,
 
                     'country' =>
-                        $formAddress['country']
+                    $formAddress['country']
                         ?? null,
                 ];
 
@@ -7244,49 +7238,49 @@ class OrderController extends Controller
 
                         CustomerAddress::create([
                             'store_id' =>
-                                $storeId,
+                            $storeId,
 
                             'customer_id' =>
-                                $customer->id,
+                            $customer->id,
 
                             'first_name' =>
-                                $billingBookAddress['firstName'],
+                            $billingBookAddress['firstName'],
 
                             'last_name' =>
-                                $billingBookAddress['lastName'],
+                            $billingBookAddress['lastName'],
 
                             'company_name' =>
-                                $billingBookAddress['companyName'],
+                            $billingBookAddress['companyName'],
 
                             'phone_number' =>
-                                $billingBookAddress['phone'],
+                            $billingBookAddress['phone'],
 
                             'address_line_1' =>
-                                $billingBookAddress['addressLine1'],
+                            $billingBookAddress['addressLine1'],
 
                             'address_line_2' =>
-                                $billingBookAddress['addressLine2'],
+                            $billingBookAddress['addressLine2'],
 
                             'city' =>
-                                $billingBookAddress['city'],
+                            $billingBookAddress['city'],
 
                             'state' =>
-                                $billingBookAddress['state'],
+                            $billingBookAddress['state'],
 
                             'zip' =>
-                                $billingBookAddress['zip'],
+                            $billingBookAddress['zip'],
 
                             'country' =>
-                                $billingBookAddress['country'],
+                            $billingBookAddress['country'],
 
                             'is_default' =>
-                                true,
+                            true,
 
                             'type' =>
-                                'billing',
+                            'billing',
                         ]);
 
-                    /*
+                        /*
                     |--------------------------------------------------------------------------
                     | Billing and shipping are different
                     |--------------------------------------------------------------------------
@@ -7297,46 +7291,46 @@ class OrderController extends Controller
 
                             CustomerAddress::create([
                                 'store_id' =>
-                                    $storeId,
+                                $storeId,
 
                                 'customer_id' =>
-                                    $customer->id,
+                                $customer->id,
 
                                 'first_name' =>
-                                    $billingBookAddress['firstName'],
+                                $billingBookAddress['firstName'],
 
                                 'last_name' =>
-                                    $billingBookAddress['lastName'],
+                                $billingBookAddress['lastName'],
 
                                 'company_name' =>
-                                    $billingBookAddress['companyName'],
+                                $billingBookAddress['companyName'],
 
                                 'phone_number' =>
-                                    $billingBookAddress['phone'],
+                                $billingBookAddress['phone'],
 
                                 'address_line_1' =>
-                                    $billingBookAddress['addressLine1'],
+                                $billingBookAddress['addressLine1'],
 
                                 'address_line_2' =>
-                                    $billingBookAddress['addressLine2'],
+                                $billingBookAddress['addressLine2'],
 
                                 'city' =>
-                                    $billingBookAddress['city'],
+                                $billingBookAddress['city'],
 
                                 'state' =>
-                                    $billingBookAddress['state'],
+                                $billingBookAddress['state'],
 
                                 'zip' =>
-                                    $billingBookAddress['zip'],
+                                $billingBookAddress['zip'],
 
                                 'country' =>
-                                    $billingBookAddress['country'],
+                                $billingBookAddress['country'],
 
                                 'is_default' =>
-                                    true,
+                                true,
 
                                 'type' =>
-                                    'billing',
+                                'billing',
                             ]);
                         }
 
@@ -7344,46 +7338,46 @@ class OrderController extends Controller
 
                             CustomerAddress::create([
                                 'store_id' =>
-                                    $storeId,
+                                $storeId,
 
                                 'customer_id' =>
-                                    $customer->id,
+                                $customer->id,
 
                                 'first_name' =>
-                                    $shippingAddressForBook['firstName'],
+                                $shippingAddressForBook['firstName'],
 
                                 'last_name' =>
-                                    $shippingAddressForBook['lastName'],
+                                $shippingAddressForBook['lastName'],
 
                                 'company_name' =>
-                                    $shippingAddressForBook['companyName'],
+                                $shippingAddressForBook['companyName'],
 
                                 'phone_number' =>
-                                    $shippingAddressForBook['phone'],
+                                $shippingAddressForBook['phone'],
 
                                 'address_line_1' =>
-                                    $shippingAddressForBook['addressLine1'],
+                                $shippingAddressForBook['addressLine1'],
 
                                 'address_line_2' =>
-                                    $shippingAddressForBook['addressLine2'],
+                                $shippingAddressForBook['addressLine2'],
 
                                 'city' =>
-                                    $shippingAddressForBook['city'],
+                                $shippingAddressForBook['city'],
 
                                 'state' =>
-                                    $shippingAddressForBook['state'],
+                                $shippingAddressForBook['state'],
 
                                 'zip' =>
-                                    $shippingAddressForBook['zip'],
+                                $shippingAddressForBook['zip'],
 
                                 'country' =>
-                                    $shippingAddressForBook['country'],
+                                $shippingAddressForBook['country'],
 
                                 'is_default' =>
-                                    true,
+                                true,
 
                                 'type' =>
-                                    'shipping',
+                                'shipping',
                             ]);
                         }
                     }
@@ -7398,81 +7392,81 @@ class OrderController extends Controller
 
                     $shippingAddressJson = [
                         'name' =>
-                            trim(
-                                ($shippingAddress['firstName'] ?? '') .
+                        trim(
+                            ($shippingAddress['firstName'] ?? '') .
                                 ' ' .
                                 ($shippingAddress['lastName'] ?? '')
-                            ) ?: null,
+                        ) ?: null,
 
                         'firstName' =>
-                            $shippingAddress['firstName']
+                        $shippingAddress['firstName']
                             ?? $validated['firstName']
                             ?? null,
 
                         'lastName' =>
-                            $shippingAddress['lastName']
+                        $shippingAddress['lastName']
                             ?? $validated['lastName']
                             ?? null,
 
                         'companyName' =>
-                            $shippingAddress['companyName']
+                        $shippingAddress['companyName']
                             ?? $validated['companyName']
                             ?? null,
 
                         'email' =>
-                            $shippingAddress['email']
+                        $shippingAddress['email']
                             ?? $validated['email']
                             ?? $customer->email,
 
                         'phone' =>
-                            $shippingAddress['phone']
+                        $shippingAddress['phone']
                             ?? $validated['phone']
                             ?? null,
 
                         'addressLine1' =>
-                            $shippingAddress['addressLine1']
+                        $shippingAddress['addressLine1']
                             ?? null,
 
                         'addressLine2' =>
-                            $shippingAddress['addressLine2']
+                        $shippingAddress['addressLine2']
                             ?? null,
 
                         'city' =>
-                            $shippingAddress['city']
+                        $shippingAddress['city']
                             ?? null,
 
                         'state' =>
-                            $shippingAddress['state']
+                        $shippingAddress['state']
                             ?? null,
 
                         'zip' =>
-                            $shippingAddress['zip']
+                        $shippingAddress['zip']
                             ?? null,
 
                         'country' =>
-                            $shippingAddress['country']
+                        $shippingAddress['country']
                             ?? null,
                     ];
 
                     SavedAddress::create([
                         'store_id' =>
-                            $storeId,
+                        $storeId,
 
                         'user_id' =>
-                            $storeUser->id,
+                        $storeUser->id,
 
                         'order_id' =>
-                            $order->id,
+                        $order->id,
 
                         'billing_address' =>
-                            $saveBilling
-                                ? $billingAddressJson
-                                : null,
+                        $saveBilling
+                            ? $billingAddressJson
+                            : null,
 
                         'shipping_address' =>
-                            $saveShipping
-                                ? $shippingAddressJson
-                                : null,
+                        $saveShipping
+                            ? $shippingAddressJson
+                            : null,
                     ]);
                 }
 
@@ -7492,23 +7486,23 @@ class OrderController extends Controller
 
                     OrderItem::create([
                         'order_id' =>
-                            $order->id,
+                        $order->id,
 
                         'product_id' =>
-                            $product->id,
+                        $product->id,
 
                         'quantity' =>
-                            $item['quantity'],
+                        $item['quantity'],
 
                         'price' =>
-                            $item['price'],
+                        $item['price'],
 
                         'total' =>
-                            $item['price'] *
+                        $item['price'] *
                             $item['quantity'],
 
                         'store_id' =>
-                            $storeId,
+                        $storeId,
                     ]);
 
                     if (!$isDraft) {
@@ -7550,7 +7544,7 @@ class OrderController extends Controller
 
                     $order->update([
                         'isdrafturl' =>
-                            $quoteUrl,
+                        $quoteUrl,
                     ]);
 
                     $quoteToken = null;
@@ -7581,10 +7575,10 @@ class OrderController extends Controller
                         $couponEmail = strtolower(
                             trim(
                                 $formAddress['email']
-                                ?? $billingInput['email']
-                                ?? $validated['email']
-                                ?? $customer->email
-                                ?? ''
+                                    ?? $billingInput['email']
+                                    ?? $validated['email']
+                                    ?? $customer->email
+                                    ?? ''
                             )
                         );
 
@@ -7618,9 +7612,7 @@ class OrderController extends Controller
                         }
 
                         if (
-                            !empty(
-                                $validated['couponCode']
-                            )
+                            !empty($validated['couponCode'])
                         ) {
 
                             $couponQuery->where(
@@ -7637,10 +7629,10 @@ class OrderController extends Controller
 
                             $couponUsage->update([
                                 'user_id' =>
-                                    $formUserId,
+                                $formUserId,
 
                                 'draft_token' =>
-                                    $quoteToken,
+                                $quoteToken,
                             ]);
                         }
                     }
@@ -7674,44 +7666,44 @@ class OrderController extends Controller
 
                             $cartRow = Cart::create([
                                 'store_id' =>
-                                    $storeId,
+                                $storeId,
 
                                 'user_id' =>
-                                    $storeUser->id,
+                                $storeUser->id,
 
                                 'product_id' =>
-                                    $productId,
+                                $productId,
 
                                 'quantity' =>
-                                    $qty,
+                                $qty,
 
                                 'isdraftcart' =>
-                                    1,
+                                1,
 
                                 'quote_token' =>
-                                    $quoteToken,
+                                $quoteToken,
                             ]);
 
                             if ($hasPrice) {
 
                                 OrderCartItemProduct::create([
                                     'order_id' =>
-                                        $order->id,
+                                    $order->id,
 
                                     'user_id' =>
-                                        $formUserId,
+                                    $formUserId,
 
                                     'product_id' =>
-                                        $productId,
+                                    $productId,
 
                                     'cart_id' =>
-                                        $cartRow->id,
+                                    $cartRow->id,
 
                                     'price' =>
-                                        (float) $raw['price'],
+                                    (float) $raw['price'],
 
                                     'qty' =>
-                                        $qty,
+                                    $qty,
                                 ]);
                             }
                         }
@@ -7731,154 +7723,154 @@ class OrderController extends Controller
                     CheckoutFormData::updateOrCreate(
                         [
                             'store_id' =>
-                                $storeId,
+                            $storeId,
 
                             'user_id' =>
-                                $formUserId,
+                            $formUserId,
 
                             'quote_token' =>
-                                $quoteToken ?? null,
+                            $quoteToken ?? null,
                         ],
                         [
                             'session_id' =>
-                                $sessionId,
+                            $sessionId,
 
                             'shipping_form_data' => [
                                 'email' =>
-                                    $billingInput['email']
+                                $billingInput['email']
                                     ?? $validated['email']
                                     ?? '',
 
                                 'firstName' =>
-                                    $billingInput['firstName']
+                                $billingInput['firstName']
                                     ?? $validated['firstName']
                                     ?? '',
 
                                 'lastName' =>
-                                    $billingInput['lastName']
+                                $billingInput['lastName']
                                     ?? $validated['lastName']
                                     ?? '',
 
                                 'company' =>
-                                    $billingInput['company']
+                                $billingInput['company']
                                     ?? $billingInput['companyName']
                                     ?? $validated['company']
                                     ?? $validated['companyName']
                                     ?? '',
 
                                 'phone' =>
-                                    $billingInput['phone']
+                                $billingInput['phone']
                                     ?? $validated['phone']
                                     ?? '',
 
                                 'address1' =>
-                                    $billingInput['address1']
+                                $billingInput['address1']
                                     ?? $billingInput['addressLine1']
                                     ?? $validated['address1']
                                     ?? $validated['addressLine1']
                                     ?? '',
 
                                 'address2' =>
-                                    $billingInput['address2']
+                                $billingInput['address2']
                                     ?? $billingInput['addressLine2']
                                     ?? $validated['address2']
                                     ?? $validated['addressLine2']
                                     ?? '',
 
                                 'city' =>
-                                    $billingInput['city']
+                                $billingInput['city']
                                     ?? $validated['city']
                                     ?? '',
 
                                 'country' =>
-                                    $billingInput['country']
+                                $billingInput['country']
                                     ?? $validated['country']
                                     ?? '',
 
                                 'state' =>
-                                    $billingInput['state']
+                                $billingInput['state']
                                     ?? $validated['state']
                                     ?? '',
 
                                 'zip' =>
-                                    $billingInput['zip']
+                                $billingInput['zip']
                                     ?? $validated['zip']
                                     ?? '',
 
                                 'newsletter' =>
-                                    $validated['newsletter']
+                                $validated['newsletter']
                                     ?? $validated['receiveOffers']
                                     ?? false,
 
                                 'shippingMethod' =>
-                                    $shippingMethod['method']
+                                $shippingMethod['method']
                                     ?? $shippingMethod['data']
                                     ?? $shippingMethod['provider']
                                     ?? '',
                                 'billingSame' =>
-                                    $validated['billingSame']
+                                $validated['billingSame']
                                     ?? true,
 
                                 'orderComment' =>
-                                    $validated['orderComment']
+                                $validated['orderComment']
                                     ?? $validated['comments']
                                     ?? '',
                             ],
 
                             'billing_form_data' => [
                                 'billingFirstName' =>
-                                    $formAddress['firstName']
+                                $formAddress['firstName']
                                     ?? $validated['firstName']
                                     ?? '',
 
                                 'billingLastName' =>
-                                    $formAddress['lastName']
+                                $formAddress['lastName']
                                     ?? $validated['lastName']
                                     ?? '',
 
                                 'billingCompany' =>
-                                    $formAddress['company']
+                                $formAddress['company']
                                     ?? $formAddress['companyName']
                                     ?? $validated['company']
                                     ?? $validated['companyName']
                                     ?? '',
 
                                 'billingPhone' =>
-                                    $formAddress['phone']
+                                $formAddress['phone']
                                     ?? $validated['phone']
                                     ?? '',
 
                                 'billingAddress1' =>
-                                    $formAddress['address1']
+                                $formAddress['address1']
                                     ?? $formAddress['addressLine1']
                                     ?? $validated['address1']
                                     ?? $validated['addressLine1']
                                     ?? '',
 
                                 'billingAddress2' =>
-                                    $formAddress['address2']
+                                $formAddress['address2']
                                     ?? $formAddress['addressLine2']
                                     ?? $validated['address2']
                                     ?? $validated['addressLine2']
                                     ?? '',
 
                                 'billingCity' =>
-                                    $formAddress['city']
+                                $formAddress['city']
                                     ?? $validated['city']
                                     ?? '',
 
                                 'billingCountry' =>
-                                    $formAddress['country']
+                                $formAddress['country']
                                     ?? $validated['country']
                                     ?? '',
 
                                 'billingState' =>
-                                    $formAddress['state']
+                                $formAddress['state']
                                     ?? $validated['state']
                                     ?? '',
 
                                 'billingZip' =>
-                                    $formAddress['zip']
+                                $formAddress['zip']
                                     ?? $validated['zip']
                                     ?? '',
                             ],
@@ -7898,73 +7890,73 @@ class OrderController extends Controller
                             'store_id',
                             $storeId
                         )
-                        ->where(
-                            'user_id',
-                            $storeUser->id
-                        )
-                        ->where(
-                            'quote_token',
-                            $quoteToken
-                        )
-                        ->pluck('id')
-                        ->values()
-                        ->all();
+                            ->where(
+                                'user_id',
+                                $storeUser->id
+                            )
+                            ->where(
+                                'quote_token',
+                                $quoteToken
+                            )
+                            ->pluck('id')
+                            ->values()
+                            ->all();
                     }
 
                     CartShippingRate::create([
                         'store_id' =>
-                            $storeId,
+                        $storeId,
 
                         'user_id' =>
-                            $formUserId,
+                        $formUserId,
 
                         'session_id' =>
-                            $sessionId,
+                        $sessionId,
 
                         'quote_token' =>
-                            $quoteToken,
+                        $quoteToken,
 
                         'cart_ids' =>
-                            $cartIds,
+                        $cartIds,
 
                         'country' =>
-                            $shippingAddress['country']
+                        $shippingAddress['country']
                             ?? $billingInput['country']
                             ?? null,
 
                         'state' =>
-                            $shippingAddress['state']
+                        $shippingAddress['state']
                             ?? $billingInput['state']
                             ?? null,
 
                         'city' =>
-                            $shippingAddress['city']
+                        $shippingAddress['city']
                             ?? $billingInput['city']
                             ?? null,
 
                         'zip' =>
-                            $shippingAddress['zip']
+                        $shippingAddress['zip']
                             ?? $billingInput['zip']
                             ?? null,
 
                         'service_type' =>
-                            $shippingMethod['service_type']
+                        $shippingMethod['service_type']
                             ?? $shippingMethod['method']
                             ?? 'custom',
 
                         'method_type' =>
-                            $shippingMethod['method_type']
+                        $shippingMethod['method_type']
                             ?? $shippingMethod['method']
                             ?? $shippingProvider
                             ?? 'custom',
 
                         'total_charge' =>
-                            (float) (
-                                $shippingMethod['total_charge']
-                                ?? $shippingMethod['cost']
-                                ?? $shippingCost
-                                ?? 0
-                            ),
+                        (float) (
+                            $shippingMethod['total_charge']
+                            ?? $shippingMethod['cost']
+                            ?? $shippingCost
+                            ?? 0
+                        ),
                     ]);
                 }
 
@@ -7981,28 +7973,28 @@ class OrderController extends Controller
 
                     Payment::create([
                         'order_id' =>
-                            $order->id,
+                        $order->id,
 
                         'store_id' =>
-                            $storeId,
+                        $storeId,
 
                         'stripe_session_id' =>
-                            $intent->id,
+                        $intent->id,
 
                         'amount' =>
-                            $totalAmount,
+                        $totalAmount,
 
                         'discountAmount' =>
-                            $discount,
+                        $discount,
 
                         'payment_status' =>
-                            'authorized',
+                        'authorized',
 
                         'risk_score' =>
-                            $riskData['risk_score'],
+                        $riskData['risk_score'],
 
                         'risk_level' =>
-                            $riskData['risk_level'],
+                        $riskData['risk_level'],
                     ]);
                 }
 
@@ -8015,25 +8007,25 @@ class OrderController extends Controller
 
                     ManualDiscount::create([
                         'store_id' =>
-                            $storeId ?: null,
+                        $storeId ?: null,
 
                         'user_id' =>
-                            $storeUser->id,
+                        $storeUser->id,
 
                         'customer_id' =>
-                            $customer->id,
+                        $customer->id,
 
                         'order_id' =>
-                            $order->id,
+                        $order->id,
 
                         'product_id' =>
-                            $item['product_id'] ?? null,
+                        $item['product_id'] ?? null,
 
                         'discount_amount' =>
-                            $manualDiscount,
+                        $manualDiscount,
 
                         'total_amount' =>
-                            $totalAmount,
+                        $totalAmount,
                     ]);
                 }
 
@@ -8051,7 +8043,7 @@ class OrderController extends Controller
                     'Order created',
                     [
                         'status' =>
-                            $order->status,
+                        $order->status,
                     ],
                     'dot'
                 );
@@ -8063,10 +8055,10 @@ class OrderController extends Controller
                     'Order status changed',
                     [
                         'previous_status' =>
-                            'Incomplete',
+                        'Incomplete',
 
                         'new_status' =>
-                            $order->status,
+                        $order->status,
                     ],
                     'dot'
                 );
@@ -8078,17 +8070,17 @@ class OrderController extends Controller
                     'Shipping quote persisted',
                     [
                         'shipping_cost' =>
-                            '$' .
+                        '$' .
                             number_format(
                                 (float) $order->shipping_cost,
                                 2
                             ),
 
                         'shipping_method' =>
-                            $order
-                                ->billingInformation
-                                ->shipping_method
-                                ?? $shippingProvider,
+                        $order
+                            ->billingInformation
+                            ->shipping_method
+                            ?? $shippingProvider,
                     ],
                     'dot'
                 );
@@ -8111,17 +8103,17 @@ class OrderController extends Controller
                         'Payment authorized',
                         [
                             'source' =>
-                                $displayPaymentMethod,
+                            $displayPaymentMethod,
 
                             'amount' =>
-                                '$' .
+                            '$' .
                                 number_format(
                                     (float) $order->total_amount,
                                     2
                                 ),
 
                             'payment_intent' =>
-                                $intent->id,
+                            $intent->id,
                         ],
                         'payment'
                     );
@@ -8182,14 +8174,13 @@ class OrderController extends Controller
                                 $storeId
                             )
                         );
-
                     } catch (\Exception $mailError) {
 
                         \Log::error(
                             'NEW CUSTOMER ORDER EMAIL FAILED',
                             [
                                 'error' =>
-                                    $mailError->getMessage(),
+                                $mailError->getMessage(),
                             ]
                         );
                     }
@@ -8218,15 +8209,15 @@ class OrderController extends Controller
 
                 return response()->json([
                     'status' =>
-                        'requires_action',
+                    'requires_action',
 
                     'payment_intent_client_secret' =>
-                        $requiresAction,
+                    $requiresAction,
 
                     'data' =>
-                        OrderResource::collection(
-                            $orders
-                        ),
+                    OrderResource::collection(
+                        $orders
+                    ),
                 ]);
             }
 
@@ -8238,13 +8229,12 @@ class OrderController extends Controller
             return response()->json([
                 'status'  => true,
                 'message' =>
-                    'New customer created and orders placed successfully.',
+                'New customer created and orders placed successfully.',
                 'data' =>
-                    OrderResource::collection(
-                        $orders
-                    ),
+                OrderResource::collection(
+                    $orders
+                ),
             ]);
-
         } catch (\Stripe\Exception\CardException $e) {
 
             DB::rollBack();
@@ -8252,9 +8242,8 @@ class OrderController extends Controller
             return response()->json([
                 'status'  => false,
                 'message' =>
-                    $e->getError()->message,
+                $e->getError()->message,
             ], 402);
-
         } catch (\Exception $e) {
 
             DB::rollBack();
@@ -8262,13 +8251,13 @@ class OrderController extends Controller
             return response()->json([
                 'status'  => false,
                 'message' =>
-                    'Order creation failed.',
+                'Order creation failed.',
                 'error' =>
-                    $e->getMessage(),
+                $e->getMessage(),
                 'line' =>
-                    $e->getLine(),
+                $e->getLine(),
                 'file' =>
-                    $e->getFile(),
+                $e->getFile(),
             ], 500);
         }
     }
@@ -8865,6 +8854,80 @@ class OrderController extends Controller
 
         if ($orders->isEmpty()) {
             abort(404);
+        }
+
+        $pdf = Pdf::loadView('pdf.invoice', [
+            'orders'     => $orders,
+            'order'      => $orders->first(),
+            'logoBase64' => $logoBase64,
+            'store'      => $store,
+        ]);
+
+        if ($orders->count() === 1) {
+            return $pdf->download('invoice-' . $orders->first()->order_number . '.pdf');
+        }
+
+        return $pdf->download('invoices-' . now()->format('Ymd-His') . '.pdf');
+    }
+
+    public function downloadCustomerInvoice(Request $request, $ids)
+    {
+        $user = $request->user();
+
+        if (!$user || (int) $user->userRole !== 2) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unauthorized. Customer access only.',
+            ], 403);
+        }
+
+        $storeId = current_store_id();
+
+        $idList = array_values(array_unique(array_filter(array_map('intval', explode(',', (string) $ids)))));
+
+        if (empty($idList)) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Please provide at least one order id.',
+            ], 422);
+        }
+
+        $store = Store::find($storeId);
+
+        $logo = Logo::where('store_id', $storeId)->first();
+        $logoBase64 = null;
+
+        if ($logo && $logo->logo_url) {
+            try {
+                $logoContent = file_get_contents($logo->logo_url);
+                if ($logoContent) {
+                    $extension = pathinfo(parse_url($logo->logo_url, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'png';
+                    $mimeTypes = [
+                        'png'  => 'image/png',
+                        'jpg'  => 'image/jpeg',
+                        'jpeg' => 'image/jpeg',
+                        'webp' => 'image/webp',
+                        'svg'  => 'image/svg+xml',
+                    ];
+                    $mime = $mimeTypes[$extension] ?? 'image/png';
+                    $logoBase64 = 'data:' . $mime . ';base64,' . base64_encode($logoContent);
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Invoice logo fetch failed: ' . $e->getMessage());
+            }
+        }
+
+        $orders = Order::with(['items.product.images', 'billingInformation', 'customer', 'payment'])
+            ->where('store_id', $storeId)
+            ->whereIn('id', $idList)
+            ->where('user_id', $user->id)
+            ->get();
+
+        if ($orders->isEmpty()) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Invoice not found.',
+            ], 404);
         }
 
         $pdf = Pdf::loadView('pdf.invoice', [
