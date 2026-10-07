@@ -561,18 +561,52 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
     ===================================================== */
                 if ($uploaded === true) {
 
-                    ProductImage::updateOrCreate(
-                        [
-                            'product_id' => $product->id,
-                            'path'       => $savedPath,
-                            'url'       => $savedPath,
-                        ],
-                        [
-                            'store_id'   => $this->storeId,
-                            'alt_text'   => $productName,
-                            'is_primary' => 1,
-                        ]
-                    );
+                    // ProductImage::updateOrCreate(
+                    //     [
+                    //         'product_id' => $product->id,
+                    //         'path'       => $savedPath,
+                    //         'url'       => $savedPath,
+                    //     ],
+                    //     [
+                    //         'store_id'   => $this->storeId,
+                    //         'alt_text'   => $productName,
+                    //         'is_primary' => 1,
+                    //     ]
+                    // );
+
+                $existingImage = ProductImage::where('product_id', $product->id)
+                ->where('store_id', $this->storeId)
+                ->where('is_primary', 1)
+                ->first();
+                if ($existingImage) {
+                    if ($existingImage->path) {
+                        try {
+                            Storage::disk('s3')->delete($existingImage->path);
+                        } catch (\Throwable $e) {
+                            Log::warning('Old product image deletion failed', [
+                                'path' => $existingImage->path,
+                                'error' => $e->getMessage(),
+                            ]);
+                        }
+                    }
+
+                    $existingImage->update([
+                        'path'      => $savedPath,
+                        'url'       => $savedPath,
+                        'alt_text'  => $productName,
+                    ]);
+
+                } else {
+
+                    ProductImage::create([
+                        'product_id' => $product->id,
+                        'store_id'   => $this->storeId,
+                        'path'       => $savedPath,
+                        'url'        => $savedPath,
+                        'alt_text'   => $productName,
+                        'is_primary' => 1,
+                    ]);
+                }    
                 }
             }
 
