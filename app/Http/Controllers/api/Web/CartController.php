@@ -54,7 +54,7 @@ class CartController extends Controller
             ->when(!$user, fn($q) => $q->where('session_id', $sessionId)->whereNull('user_id'));
     }
 
-        /**
+    /**
      * Get the current draft quote token for authenticated users.
      *
      * Guests always use the normal session cart.
@@ -226,7 +226,7 @@ class CartController extends Controller
         */
         $cartProductIds = $cartItems
             ->pluck('product_id')
-            ->map(fn ($id) => (int) $id)
+            ->map(fn($id) => (int) $id)
             ->values();
 
         /*
@@ -305,7 +305,6 @@ class CartController extends Controller
                     'quantity' => $quantity,
                     'price'    => $price,
                 ]);
-
             } else {
 
                 $order->items()->create([
@@ -721,7 +720,6 @@ class CartController extends Controller
                     'totalPages'  => $cartItems->lastPage(),
                 ],
             ], 200);
-
         } catch (Exception $e) {
 
             return response()->json([
@@ -947,7 +945,6 @@ class CartController extends Controller
                 );
 
                 $cartItem = $existingCartItem->fresh();
-
             } else {
 
                 $cartItem = Cart::create([
@@ -973,18 +970,18 @@ class CartController extends Controller
                     ->where('quote_token', $quoteToken)
                     ->delete();
 
-                     /*
+                /*
                     |--------------------------------------------------------------------------
                     | Synchronize draft order
                     |--------------------------------------------------------------------------
                     */
-                    if ($user) {
-                        $this->syncDraftOrderFromCart(
-                            $storeId,
-                            $user,
-                            $quoteToken
-                        );
-                    }
+                if ($user) {
+                    $this->syncDraftOrderFromCart(
+                        $storeId,
+                        $user,
+                        $quoteToken
+                    );
+                }
             } else {
 
                 CartShippingRate::query()
@@ -1005,7 +1002,6 @@ class CartController extends Controller
                     $cartItem->load($this->productRelations())
                 ),
             ], 201);
-
         } catch (ValidationException $e) {
 
             return response()->json([
@@ -1013,7 +1009,6 @@ class CartController extends Controller
                 'message' => 'Validation failed',
                 'errors'  => $e->errors(),
             ], 422);
-
         } catch (Exception $e) {
 
             return response()->json([
@@ -1184,7 +1179,6 @@ class CartController extends Controller
                         'user_id',
                         $user->id
                     );
-
                 } else {
 
                     $shippingQuery
@@ -1206,7 +1200,6 @@ class CartController extends Controller
                         'quote_token',
                         $quoteToken
                     );
-
                 } else {
 
                     /*
@@ -1230,7 +1223,6 @@ class CartController extends Controller
                                         'cart_ids',
                                         $cartId
                                     );
-
                                 } else {
 
                                     $query->orWhereJsonContains(
@@ -1280,7 +1272,6 @@ class CartController extends Controller
                     'deleted_items' => $deletedCount,
                 ],
             ], 200);
-
         } catch (Exception $e) {
 
             return response()->json([
@@ -1445,6 +1436,23 @@ class CartController extends Controller
                 ], 404);
             }
 
+            $status = strtolower((string) $product->purchasability_status);
+            $price  = (float) $product->price;
+
+            if ($status !== 'available') {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'This product is not available for purchase.',
+                ], 422);
+            }
+
+            if ($price <= 0) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'This product is call for price.',
+                ], 422);
+            }
+
             $quantity     = (int) $validated['quantity'];
             $minQty       = (int) $product->min_purchase_quantity;
             $maxQty       = (int) $product->max_purchase_quantity;
@@ -1465,10 +1473,10 @@ class CartController extends Controller
             }
 
             /*
-            |--------------------------------------------------------------------------
-            | Find product ONLY in current cart context
-            |--------------------------------------------------------------------------
-            */
+        |--------------------------------------------------------------------------
+        | Find product ONLY in current cart context
+        |--------------------------------------------------------------------------
+        */
             $existingCartItem = $this->applyCurrentCartContext(
                 $this->cartQuery(
                     $user,
@@ -1481,10 +1489,10 @@ class CartController extends Controller
                 ->first();
 
             /*
-            |--------------------------------------------------------------------------
-            | Stock check
-            |--------------------------------------------------------------------------
-            */
+        |--------------------------------------------------------------------------
+        | Stock check
+        |--------------------------------------------------------------------------
+        */
             if ($minQty == 0 && $maxQty == 0) {
                 $totalQty = $quantity + ($existingCartItem?->quantity ?? 0);
 
@@ -1497,10 +1505,10 @@ class CartController extends Controller
             }
 
             /*
-            |--------------------------------------------------------------------------
-            | Add / update current cart
-            |--------------------------------------------------------------------------
-            */
+        |--------------------------------------------------------------------------
+        | Add / update current cart
+        |--------------------------------------------------------------------------
+        */
             if ($existingCartItem) {
                 $existingCartItem->increment(
                     'quantity',
@@ -1521,10 +1529,10 @@ class CartController extends Controller
             }
 
             /*
-            |--------------------------------------------------------------------------
-            | Cart changed → invalidate shipping rate for CURRENT context only
-            |--------------------------------------------------------------------------
-            */
+        |--------------------------------------------------------------------------
+        | Cart changed → invalidate shipping rate for CURRENT context only
+        |--------------------------------------------------------------------------
+        */
             $shippingQuery = CartShippingRate::query()
                 ->where('store_id', $storeId);
 
@@ -1541,7 +1549,7 @@ class CartController extends Controller
             } else {
                 $shippingQuery->where(function ($q) {
                     $q->whereNull('quote_token')
-                    ->orWhere('quote_token', '');
+                        ->orWhere('quote_token', '');
                 });
             }
 
@@ -1554,14 +1562,12 @@ class CartController extends Controller
                     $cartItem->load($this->productRelations())
                 ),
             ], 201);
-
         } catch (ValidationException $e) {
             return response()->json([
                 'status'  => false,
                 'message' => 'Validation failed.',
                 'errors'  => $e->errors(),
             ], 422);
-
         } catch (Exception $e) {
             return response()->json([
                 'status'  => false,
@@ -1871,7 +1877,7 @@ class CartController extends Controller
                 } else {
                     $shippingQuery->where(function ($q) {
                         $q->whereNull('quote_token')
-                        ->orWhere('quote_token', '');
+                            ->orWhere('quote_token', '');
                     });
                 }
 
@@ -1898,14 +1904,12 @@ class CartController extends Controller
                     $cartItem->fresh()->load($this->productRelations())
                 ),
             ], 200);
-
         } catch (ModelNotFoundException $e) {
 
             return response()->json([
                 'status'  => false,
                 'message' => 'Cart item not found',
             ], 404);
-
         } catch (Exception $e) {
 
             return response()->json([
@@ -2066,7 +2070,6 @@ class CartController extends Controller
 
                     $shippingQuery
                         ->where('quote_token', $quoteToken);
-
                 } else {
 
                     $shippingQuery
@@ -2110,14 +2113,12 @@ class CartController extends Controller
                 'status'  => true,
                 'message' => 'Cart item removed successfully',
             ], 200);
-
         } catch (ModelNotFoundException $e) {
 
             return response()->json([
                 'status'  => false,
                 'message' => 'Cart item not found',
             ], 404);
-
         } catch (Exception $e) {
 
             return response()->json([
@@ -2318,7 +2319,6 @@ class CartController extends Controller
                             'quantity',
                             $guestItem->quantity
                         );
-
                     } else {
 
                         /*
@@ -2371,7 +2371,6 @@ class CartController extends Controller
                 'message' => 'Guest cart transferred successfully',
                 'data'    => CartResource::collection($updatedCart),
             ], 200);
-
         } catch (Exception $e) {
 
             return response()->json([
@@ -2603,7 +2602,7 @@ class CartController extends Controller
             } else {
                 $shippingRateQuery->where(function ($q) {
                     $q->whereNull('quote_token')
-                    ->orWhere('quote_token', '');
+                        ->orWhere('quote_token', '');
                 });
             }
 
@@ -2671,7 +2670,6 @@ class CartController extends Controller
                     ],
                 ],
             ], 201);
-
         } catch (ValidationException $e) {
 
             return response()->json([
@@ -2679,7 +2677,6 @@ class CartController extends Controller
                 'message' => 'Validation failed',
                 'errors'  => $e->errors(),
             ], 422);
-
         } catch (\Exception $e) {
 
             return response()->json([
@@ -2828,7 +2825,7 @@ class CartController extends Controller
             } else {
                 $query->where(function ($q) {
                     $q->whereNull('quote_token')
-                    ->orWhere('quote_token', '');
+                        ->orWhere('quote_token', '');
                 });
             }
 
@@ -2867,7 +2864,6 @@ class CartController extends Controller
                     ],
                 ],
             ], 200);
-
         } catch (\Exception $e) {
 
             return response()->json([
@@ -3144,7 +3140,6 @@ class CartController extends Controller
                 'message'       => 'Cart items deleted successfully.',
                 'deleted_count' => $deletedCount,
             ], 200);
-
         } catch (Exception $e) {
             return response()->json([
                 'status'  => false,
@@ -3261,7 +3256,7 @@ class CartController extends Controller
             } else {
                 $query->where(function ($q) {
                     $q->whereNull('quote_token')
-                    ->orWhere('quote_token', '');
+                        ->orWhere('quote_token', '');
                 });
             }
 
@@ -3271,7 +3266,6 @@ class CartController extends Controller
                 'status'  => true,
                 'message' => 'Shipping rate removed successfully.',
             ], 200);
-
         } catch (\Exception $e) {
 
             return response()->json([
