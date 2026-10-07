@@ -425,20 +425,29 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                             continue;
                         }
 
-                        $originalName = pathinfo(
-                            parse_url($imageValue, PHP_URL_PATH),
-                            PATHINFO_FILENAME
-                        );
+                        // $originalName = pathinfo(
+                        //     parse_url($imageValue, PHP_URL_PATH),
+                        //     PATHINFO_FILENAME
+                        // );
+
+                        // $extension = pathinfo(
+                        //     parse_url($imageValue, PHP_URL_PATH),
+                        //     PATHINFO_EXTENSION
+                        // ) ?: 'jpg';
+
+                        // $fileName = Str::slug($originalName)
+                        //     . '-' . time() . '-' . uniqid() . '.' . $extension;
+
+                        // $savedPath = "product_images/{$product->id}/{$fileName}";
 
                         $extension = pathinfo(
                             parse_url($imageValue, PHP_URL_PATH),
                             PATHINFO_EXTENSION
                         ) ?: 'jpg';
 
-                        $fileName = Str::slug($originalName)
-                            . '-' . time() . '-' . uniqid() . '.' . $extension;
+                        $extension = strtolower($extension);
 
-                        $savedPath = "product_images/{$product->id}/{$fileName}";
+                        $savedPath = "product_images/{$product->id}/primary.{$extension}";
                         $uploaded  = false;
 
                         // Log::info("[$traceId] IMAGE SIZE", [
@@ -496,83 +505,168 @@ class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, Shou
                     }
                 }
 
+    //             /* =====================================================
+    //    (B) LOCAL FILENAME (LEGACY) → MOVE TO S3
+    // ===================================================== */ else {
+
+    //                 // existing local image (old imports)
+    //                 $localPath = public_path('product_images/' . $imageValue);
+
+    //                 if (file_exists($localPath)) {
+
+    //                     $extension = pathinfo($imageValue, PATHINFO_EXTENSION) ?: 'jpg';
+
+    //                     $fileName = Str::slug(
+    //                         pathinfo($imageValue, PATHINFO_FILENAME)
+    //                     ) . '-' . time() . '-' . uniqid() . '.' . $extension;
+
+    //                     $savedPath = "product_images/{$product->id}/{$fileName}";
+
+    //                     // Log::info("[$traceId] IMAGE SIZE", [
+    //                     //     'bytes' => strlen($response->body()),
+    //                     // ]);
+
+    //                     // Storage::disk('s3')->put(
+    //                     //     $savedPath,
+    //                     //     file_get_contents($localPath),
+    //                     //     [
+    //                     //         'visibility' => 'public',
+    //                     //         'ContentType' => mime_content_type($localPath) ?: 'image/jpeg',
+    //                     //     ]
+    //                     // );
+
+    //                     $tmpDir = storage_path('app/tmp');
+
+    //                     if (!is_dir($tmpDir)) {
+    //                         mkdir($tmpDir, 0755, true);
+    //                     }
+
+    //                     $tmpPath = $tmpDir . '/' . uniqid('img_');
+
+    //                     file_put_contents($tmpPath, $response->body());
+
+    //                     $uploaded = Storage::disk('s3')->put(
+    //                         $savedPath,
+    //                         fopen($tmpPath, 'r'),
+    //                         [
+    //                             'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
+    //                         ]
+    //                     );
+
+    //                     // Log::info("[$traceId] S3 PUT RESULT", [
+    //                     //     'path' => $savedPath,
+    //                     //     'result' => $uploaded,
+    //                     //     'bucket' => config('filesystems.disks.s3.bucket'),
+    //                     //     'region' => config('filesystems.disks.s3.region'),
+    //                     // ]);
+
+
+    //                     @unlink($tmpPath);
+    //                 }
+    //             }
+
                 /* =====================================================
-       (B) LOCAL FILENAME (LEGACY) → MOVE TO S3
-    ===================================================== */ else {
+                    (B) LOCAL FILENAME (LEGACY) → MOVE TO S3
+                    ===================================================== */
+                    else {
 
-                    // existing local image (old imports)
-                    $localPath = public_path('product_images/' . $imageValue);
+                        $localPath = public_path('product_images/' . $imageValue);
 
-                    if (file_exists($localPath)) {
+                        if (file_exists($localPath)) {
 
-                        $extension = pathinfo($imageValue, PATHINFO_EXTENSION) ?: 'jpg';
+                            $extension = pathinfo($imageValue, PATHINFO_EXTENSION) ?: 'jpg';
+                            $extension = strtolower($extension);
 
-                        $fileName = Str::slug(
-                            pathinfo($imageValue, PATHINFO_FILENAME)
-                        ) . '-' . time() . '-' . uniqid() . '.' . $extension;
+                            /*
+                            * IMPORTANT:
+                            * Use a stable filename.
+                            * Do NOT use time() or uniqid().
+                            */
+                            $savedPath = "product_images/{$product->id}/primary.{$extension}";
 
-                        $savedPath = "product_images/{$product->id}/{$fileName}";
+                            $tmpPath = $this->tmpDir . '/' . uniqid('img_');
 
-                        // Log::info("[$traceId] IMAGE SIZE", [
-                        //     'bytes' => strlen($response->body()),
-                        // ]);
+                            try {
 
-                        // Storage::disk('s3')->put(
-                        //     $savedPath,
-                        //     file_get_contents($localPath),
-                        //     [
-                        //         'visibility' => 'public',
-                        //         'ContentType' => mime_content_type($localPath) ?: 'image/jpeg',
-                        //     ]
-                        // );
+                                file_put_contents(
+                                    $tmpPath,
+                                    file_get_contents($localPath)
+                                );
 
-                        $tmpDir = storage_path('app/tmp');
+                                $stream = fopen($tmpPath, 'r');
 
-                        if (!is_dir($tmpDir)) {
-                            mkdir($tmpDir, 0755, true);
+                                $uploaded = Storage::disk('s3')->put(
+                                    $savedPath,
+                                    $stream,
+                                    [
+                                        'ContentType' => mime_content_type($localPath) ?: 'image/jpeg',
+                                    ]
+                                );
+
+                                fclose($stream);
+
+                                @unlink($tmpPath);
+
+                            } catch (\Throwable $e) {
+
+                                if (isset($stream) && is_resource($stream)) {
+                                    fclose($stream);
+                                }
+
+                                @unlink($tmpPath);
+
+                                Log::error('LOCAL IMAGE UPLOAD FAILED', [
+                                    'product_id' => $product->id,
+                                    'local_path' => $localPath,
+                                    'error'      => $e->getMessage(),
+                                ]);
+
+                                continue;
+                            }
                         }
-
-                        $tmpPath = $tmpDir . '/' . uniqid('img_');
-
-                        file_put_contents($tmpPath, $response->body());
-
-                        $uploaded = Storage::disk('s3')->put(
-                            $savedPath,
-                            fopen($tmpPath, 'r'),
-                            [
-                                'ContentType' => $response->header('Content-Type') ?? 'image/jpeg',
-                            ]
-                        );
-
-                        // Log::info("[$traceId] S3 PUT RESULT", [
-                        //     'path' => $savedPath,
-                        //     'result' => $uploaded,
-                        //     'bucket' => config('filesystems.disks.s3.bucket'),
-                        //     'region' => config('filesystems.disks.s3.region'),
-                        // ]);
-
-
-                        @unlink($tmpPath);
                     }
-                }
 
                 /* =====================================================
        (C) SAVE IMAGE RECORD (UNCHANGED LOGIC)
     ===================================================== */
                 if ($uploaded === true) {
 
-                    ProductImage::updateOrCreate(
-                        [
-                            'product_id' => $product->id,
-                            'path'       => $savedPath,
-                            'url'       => $savedPath,
-                        ],
-                        [
-                            'store_id'   => $this->storeId,
-                            'alt_text'   => $productName,
-                            'is_primary' => 1,
-                        ]
-                    );
+                    // ProductImage::updateOrCreate(
+                    //     [
+                    //         'product_id' => $product->id,
+                    //         'path'       => $savedPath,
+                    //         'url'       => $savedPath,
+                    //     ],
+                    //     [
+                    //         'store_id'   => $this->storeId,
+                    //         'alt_text'   => $productName,
+                    //         'is_primary' => 1,
+                    //     ]
+                    // );
+
+                $existingImage = ProductImage::where('product_id', $product->id)
+                ->where('store_id', $this->storeId)
+                ->where('is_primary', 1)
+                ->first();
+                if ($existingImage) {
+
+                    $existingImage->update([
+                        'path'      => $savedPath,
+                        'url'       => $savedPath,
+                        'alt_text'  => $productName,
+                    ]);
+
+                } else {
+
+                    ProductImage::create([
+                        'product_id' => $product->id,
+                        'store_id'   => $this->storeId,
+                        'path'       => $savedPath,
+                        'url'        => $savedPath,
+                        'alt_text'   => $productName,
+                        'is_primary' => 1,
+                    ]);
+                }    
                 }
             }
 
