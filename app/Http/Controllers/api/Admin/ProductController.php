@@ -1902,7 +1902,7 @@ class ProductController extends Controller
                             $q->orWhereHas('categories', fn($q2) => $q2->whereIn('categories.id', $matchingCategoryIds));
                         }
                     })
-                    ->select('id', 'name', 'sku', 'price', 'slug', 'brand_id','purchasability_status')
+                    ->select('id', 'name', 'sku', 'price', 'slug', 'brand_id', 'purchasability_status')
                     ->with([
                         'categories:id,name',
                         'images:id,product_id,path,is_primary',
@@ -2567,18 +2567,17 @@ class ProductController extends Controller
 
             $cacheKey = "last_week_products_store_{$storeId}_page_{$page}_per_{$perPage}";
 
-            $products = Cache::remember($cacheKey, 300, function () use ($storeId, $perPage) {
+            $products = Cache::remember($cacheKey, 10, function () use ($storeId, $perPage) {
                 return Product::where('store_id', $storeId)
-                    ->where('created_at', '>=', Carbon::now()->subWeek())
+                    ->where(function ($q) {
+                        $q->where('created_at', '>=', Carbon::now()->subWeek())
+                            ->orWhere('updated_at', '>=', Carbon::now()->subWeek());
+                    })
                     ->with([
-                        // categories (LIMIT recursion)
                         'categories:id,name,parent_id',
                         'categories.parent:id,name,parent_id',
-                        // brand
                         'brand:id,name,logo',
-                        // images
                         'images:id,product_id,path,is_primary',
-                        // reviews (LIMITED)
                         'reviews' => function ($q) {
                             $q->select(
                                 'id',
@@ -2592,14 +2591,11 @@ class ProductController extends Controller
                                 ->limit(10);
                         },
                         'reviews.user:id,name',
-                        // content
                         'content:product_id,description,warranty',
-                        // identifiers
                         'identifiers:product_id,mpn,upc,gtin',
-                        // seo
                         'seo:product_id,product_url,page_title,meta_description'
                     ])
-                    ->orderByDesc('id')
+                    ->orderByDesc('updated_at')
                     ->paginate($perPage);
             });
 
