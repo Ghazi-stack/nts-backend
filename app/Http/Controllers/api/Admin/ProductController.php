@@ -128,6 +128,7 @@ class ProductController extends Controller
                     'visible_on_storefront',
                     'min_purchase_quantity',
                     'max_purchase_quantity',
+                    'purchasability_status',
                     'is_redirect',
                     'is_duplicate',
                     'parent_id',
