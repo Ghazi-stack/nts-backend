@@ -402,7 +402,8 @@ class ProductController extends Controller
                     'store_id',
                 ])
                 ->where('store_id', $storeId)
-                ->where('allow_purchase', 1);
+                ->where('allow_purchase', 1)
+                ->where('current_stock', '>', 0);
 
             if ($hasCategory) {
                 $categoryIds = array_filter(array_map('intval', explode(',', $request->isCategory)));
