@@ -25,6 +25,7 @@ use App\Http\Controllers\api\Admin\{
     LogoController,
     ScriptController,
     CouponCodeController,
+    RealtimeController,
     StaffLogController,
     StoreSettingController,
     UrlSettingController
@@ -453,6 +454,10 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/get-email-marketing', 'show');
         Route::put('/email-marketing', 'update');
     });
+    // Analytics — Visitor Sessions
+    Route::prefix('analytics')->controller(RealtimeController::class)->group(function () {
+       Route::get('/realtime', 'index');
+    });
 
     Route::middleware('permission:settings')->group(function () {
         // Store Setting
@@ -594,6 +599,7 @@ Route::prefix('web')->group(function () {
         Route::get('/get-product-by-url/{slug}', 'showProductByUrl')->where('slug', '.*');
         Route::get('/search-product', 'searchProduct');
         Route::get('/featured-products', 'featuredProducts');
+        Route::get('/related-products', 'relatedProducts');
         Route::get('/products/by-brand', 'productsByBrand');
         Route::get('/popular-products', 'popularProducts');
         Route::get('/last-week-orders', 'lastWeekOrderedProducts');

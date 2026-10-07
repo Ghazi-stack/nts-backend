@@ -2016,6 +2016,83 @@ class ProductController extends Controller
         }
     }
 
+    public function relatedProducts(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected.',
+                ], 400);
+            }
+
+            $validated = $request->validate([
+                'brandId'    => 'nullable|integer|exists:brands,id',
+                'categoryId' => 'nullable|integer|exists:categories,id',
+            ]);
+
+            $brandId    = $validated['brandId'] ?? null;
+            $categoryId = $validated['categoryId'] ?? null;
+
+            if (!$brandId && !$categoryId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'brandId or categoryId is required.',
+                ], 422);
+            }
+
+            $baseQuery = Product::where('store_id', $storeId)
+                ->where('visible_on_storefront', 1)
+                ->with([
+                    'categories',
+                    'brand',
+                    'images',
+                    'reviews.user',
+                    'content',
+                    'identifiers',
+                    'seo',
+                ])
+                ->latest();
+
+            $products = collect();
+
+            if ($brandId) {
+                $products = (clone $baseQuery)
+                    ->where('brand_id', $brandId)
+                    ->take(6)
+                    ->get();
+            }
+
+            if ($products->isEmpty() && $categoryId) {
+                $products = (clone $baseQuery)
+                    ->whereHas('categories', function ($q) use ($categoryId) {
+                        $q->where('categories.id', $categoryId);
+                    })
+                    ->take(6)
+                    ->get();
+            }
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Related products retrieved successfully.',
+                'data'    => ProductResource::collection($products),
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load related products.',
+            ], 500);
+        }
+    }
+
     public function productsByBrand(Request $request)
     {
         try {
