@@ -57,6 +57,7 @@ class ProductListResource extends JsonResource
             'lowStock' => $this->low_stock,
             'minPurchaseQuantity' => $this->min_purchase_quantity,
             'maxPurchaseQuantity' => $this->max_purchase_quantity,
+            'purchasabilityStatus' => $this->purchasability_status,
             'currentStock' => $this->current_stock,
             'Price' => $this->price,
             'allowPurchase' => $this->allow_purchase,
