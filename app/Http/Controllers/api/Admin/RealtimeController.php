@@ -38,13 +38,13 @@ class RealtimeController extends Controller
                 'items:id,order_id,product_id,quantity,price,created_at',
                 'items.product:id,name,sku',
                 'items.product.images',
-                'payment:id,order_id,amount,discountAmount,payment_status',
+                'payment:id,order_id,amount,discountAmount,payment_status,updated_at',
             ])
             ->where('store_id', $storeId)
             ->where('is_draft', 0)
-            ->where('created_at', '>=', $from)
-            ->whereHas('payment', function ($q) {
-                $q->where('payment_status', 'completed');
+            ->whereHas('payment', function ($q) use ($from) {
+                $q->where('payment_status', 'completed')
+                    ->where('updated_at', '>=', $from);
             })
             ->orderByDesc('id')
             ->get();
@@ -55,57 +55,19 @@ class RealtimeController extends Controller
             ->orderByDesc('id')
             ->get(['id', 'source', 'label', 'host', 'created_at']);
 
-        $buckets = [];
-        for ($i = 23; $i >= 0; $i--) {
-            $start = now()->subHours($i)->startOfHour();
-            $buckets[$start->format('Y-m-d H:00')] = [
-                'hour'      => $start->format('Y-m-d H:00'),
-                'label'     => $start->format('g A'),
-                'revenue'   => 0,
-                'itemsSold' => 0,
-                'orders'    => 0,
-                'visits'    => 0,
-            ];
-        }
-
-        foreach ($orders as $order) {
-            $key = Carbon::parse($order->created_at)->startOfHour()->format('Y-m-d H:00');
-            if (!isset($buckets[$key])) {
-                continue;
-            }
-            $buckets[$key]['revenue']   += (float) optional($order->payment)->amount;
-            $buckets[$key]['orders']    += 1;
-            $buckets[$key]['itemsSold'] += (int) $order->items->sum('quantity');
-        }
-
-        foreach ($visits as $visit) {
-            $key = Carbon::parse($visit->created_at)->startOfHour()->format('Y-m-d H:00');
-            if (!isset($buckets[$key])) {
-                continue;
-            }
-            $buckets[$key]['visits'] += 1;
-        }
-
-        $hourly = array_values(array_map(function ($row) {
-            $row['revenue'] = round($row['revenue'], 2);
-            return $row;
-        }, $buckets));
-
         $latestProducts = $orders
             ->flatMap(function ($order) {
-                return $order->items->map(function ($item) use ($order) {
+                $capturedAt = optional(optional($order->payment)->updated_at)->toDateTimeString();
+
+                return $order->items->map(function ($item) use ($order, $capturedAt) {
                     $image = $item->product?->images?->first();
 
                     return [
                         'orderId'   => $order->id,
                         'productId' => $item->product_id,
                         'name'      => $item->product->name ?? null,
-                        'sku'       => $item->product->sku ?? null,
-                        'quantity'  => (int) $item->quantity,
-                        'price'     => (float) $item->price,
                         'image'     => $image->url ?? $image->image ?? $image->path ?? null,
-                        'soldAt'    => optional($item->created_at)->toDateTimeString()
-                            ?? optional($order->created_at)->toDateTimeString(),
+                        'soldAt'    => $capturedAt,
                     ];
                 });
             })
@@ -115,24 +77,16 @@ class RealtimeController extends Controller
             ->values();
 
         return [
-            'window' => [
-                'from' => $from->toDateTimeString(),
-                'to'   => now()->toDateTimeString(),
-            ],
             'statistics' => [
-                'revenue'   => round((float) $orders->sum(fn($o) => (float) optional($o->payment)->amount), 2),
+                'revenue'   => round((float) $orders->sum('total_amount'), 2),
                 'itemsSold' => (int) $orders->sum(fn($o) => $o->items->sum('quantity')),
                 'orders'    => $orders->count(),
                 'visits'    => $visits->count(),
             ],
-            'hourly' => $hourly,
             'latestProducts' => $latestProducts,
             'latestActivity' => $visits->take(20)->map(fn($row) => [
                 'id'        => $row->id,
-                'type'      => 'visit',
-                'source'    => $row->source ?: 'direct',
                 'label'     => $row->label ?: 'Visit from direct',
-                'host'      => $row->host,
                 'createdAt' => optional($row->created_at)->toDateTimeString(),
             ])->values(),
         ];
