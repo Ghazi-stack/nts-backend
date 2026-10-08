@@ -712,7 +712,6 @@ class OrderController extends Controller
                 "carrierCode" => $order->shipping_provider,
                 "carrierName" => $order->shipping_provider,
                 "shippedAt" => $order->shipped_at,
-                'shippingCost'       => $order->shipping_cost,
                 'discountAmount'     => $order->discountAmount,
                 'couponCode'         => $order->coupon_code,
                 'manualDiscount' => $order->manual_discount !== null
