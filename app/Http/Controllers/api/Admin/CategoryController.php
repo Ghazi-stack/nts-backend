@@ -864,7 +864,7 @@ class CategoryController extends Controller
 
             if ($request->filled('sortBy')) {
                 $sortBy = strtolower(trim($request->sortBy));
-                $sortBy = str_replace(['_', '-', ':'], ' ', $sortBy);
+                $sortBy = str_replace(['_', '-', ':', '+'], ' ', $sortBy);
                 $sortBy = preg_replace('/\s+/', ' ', $sortBy);
 
                 switch ($sortBy) {
@@ -881,12 +881,14 @@ class CategoryController extends Controller
                         break;
 
                     case 'featured items':
+                    case 'featured item':
                     case 'featured':
                     case 'is featured':
                         $query->where('is_featured', 1)->orderBy('id', 'desc');
                         break;
 
                     case 'newest items':
+                    case 'newest item':
                     case 'newest':
                     case 'latest':
                         $query->orderBy('created_at', 'desc');
