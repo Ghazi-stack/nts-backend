@@ -56,6 +56,8 @@ class VisitorSessionController extends Controller
                 'host'       => $meta['host'],
             ]);
 
+            event(new \App\Events\RealtimeStatsUpdated((int) $storeId));
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Session stored successfully.',

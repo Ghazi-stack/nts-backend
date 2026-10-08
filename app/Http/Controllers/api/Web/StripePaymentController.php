@@ -239,8 +239,10 @@ class StripePaymentController extends Controller
                     'payment_status' => 'completed',
                 ]);
 
+                
                 $storeId = current_store_id();
-
+                event(new \App\Events\RealtimeStatsUpdated((int) $storeId));
+                
                 OrderTimeline::addEvent($payment->order_id, $storeId, 'payment_captured', 'Capture request successfully processed for the order #' . ($payment->order->order_number ?? $payment->order_id), [
                     'source'         => 'Credit Card (via Stripe)',
                     'payment_intent' => $intentId,
