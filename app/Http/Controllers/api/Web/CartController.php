@@ -839,11 +839,6 @@ class CartController extends Controller
                 ], 422);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | Find product inside current store
-        |--------------------------------------------------------------------------
-        */
             $product = Product::query()
                 ->where('store_id', $storeId)
                 ->where('sku', $validated['sku'])
@@ -856,49 +851,30 @@ class CartController extends Controller
                 ], 404);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | Purchase eligibility
-        | Insert only when allow_purchase is true, status is available, and price > 0
-        |--------------------------------------------------------------------------
-        */
             $status = strtolower((string) $product->purchasability_status);
             $price  = (float) $product->price;
-            $allowPurchase = filter_var(
-                $product->allow_purchase ?? $product->allowPurchase ?? false,
-                FILTER_VALIDATE_BOOLEAN
-            );
+            $allowPurchase = filter_var($product->allowPurchase, FILTER_VALIDATE_BOOLEAN);
 
-            if (!$allowPurchase || $status !== 'available' || $price <= 0) {
+            if ($status !== 'available' || $price <= 0) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'This product is call for price.',
                 ], 422);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | Resolve current cart context
-        |--------------------------------------------------------------------------
-        |
-        | Authenticated user:
-        |   current draft quote_token if one is active
-        |
-        | Guest:
-        |   normal session cart
-        |--------------------------------------------------------------------------
-        */
+            if (!$allowPurchase) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'This product is not available for purchase.',
+                ], 422);
+            }
+
             $quoteToken = $this->getCurrentQuoteToken(
                 $request,
                 $user,
                 $storeId
             );
 
-            /*
-        |--------------------------------------------------------------------------
-        | Search ONLY inside current cart context
-        |--------------------------------------------------------------------------
-        */
             $existingCartItem = $this->applyCurrentCartContext(
                 $this->cartQuery($user, $sessionId, $storeId),
                 $quoteToken
@@ -906,11 +882,6 @@ class CartController extends Controller
                 ->where('product_id', $product->id)
                 ->first();
 
-            /*
-        |--------------------------------------------------------------------------
-        | Quantity / stock
-        |--------------------------------------------------------------------------
-        */
             $quantity = (int) $validated['quantity'];
 
             $minQty = (int) $product->min_purchase_quantity;
@@ -930,11 +901,6 @@ class CartController extends Controller
                 ], 422);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | Check stock only when product has no custom min/max restriction
-        |--------------------------------------------------------------------------
-        */
             if ($minQty == 0 && $maxQty == 0) {
 
                 $currentQuantity = $existingCartItem
@@ -952,11 +918,6 @@ class CartController extends Controller
                 }
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | Add / increment current cart item
-        |--------------------------------------------------------------------------
-        */
             if ($existingCartItem) {
 
                 $existingCartItem->increment(
@@ -978,11 +939,6 @@ class CartController extends Controller
                 ]);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | Shipping rate becomes invalid after cart contents change
-        |--------------------------------------------------------------------------
-        */
             if ($quoteToken) {
 
                 CartShippingRate::query()
@@ -990,11 +946,6 @@ class CartController extends Controller
                     ->where('quote_token', $quoteToken)
                     ->delete();
 
-                /*
-            |--------------------------------------------------------------------------
-            | Synchronize draft order
-            |--------------------------------------------------------------------------
-            */
                 if ($user) {
                     $this->syncDraftOrderFromCart(
                         $storeId,
