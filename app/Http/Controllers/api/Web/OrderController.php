@@ -1800,7 +1800,7 @@ class OrderController extends Controller
 
                     Mail::to($validated['email'])->send(new OrderPlacedMail($ord, $customer, $storeId));
 
-                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
+                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
                     Mail::to($adminEmail)->send(new OrderPlacedMail($ord, $customer, $storeId));
                 }
             } catch (\Exception $mailError) {
@@ -2608,7 +2608,7 @@ class OrderController extends Controller
                     try {
                         Mail::to($customerEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId, $shipment));
 
-                        $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
+                        $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
                         Mail::to($adminEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId, $shipment));
 
                         OrderTimeline::addEvent($order->id, $storeId, 'email_sent', 'Status update email sent', [
@@ -4066,7 +4066,7 @@ class OrderController extends Controller
                     if ($email) {
                         Mail::to($email)->send(new OrderPlacedMail($order, $customer, $storeId));
                     }
-                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
+                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
                     Mail::to($adminEmail)->send(new OrderPlacedMail($order, $customer, $storeId));
                 } catch (\Exception $mailError) {
                     \Log::error('DASHBOARD ORDER EMAIL FAILED', [
@@ -8164,7 +8164,7 @@ class OrderController extends Controller
                         $adminEmail =
                             env(
                                 'MAIL_FROM_SB_ADMIN',
-                                'info@serverblink.uk'
+                                'hkinza575@gmail.com'
                             );
 
                         Mail::to($adminEmail)->send(

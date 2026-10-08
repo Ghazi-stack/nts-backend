@@ -62,7 +62,7 @@ class CustomerMessageController extends Controller
             ]);
 
             try {
-                $adminEmail = env('MAIL_FROM_SB_ADMIN', 'info@serverblink.uk');
+                $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
                 $storeName = Store::find($storeId)?->name ?? 'Store';
                 Mail::raw(
                     "New Customer Message\n\nCustomer: " . ($customer ? $customer->first_name . ' ' . $customer->last_name : $user->name) .

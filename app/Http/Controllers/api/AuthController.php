@@ -162,7 +162,7 @@ class AuthController extends Controller
 
                         try {
                             Mail::to($existingUser->email)->send(new UserRegistrationMail($existingUser, $store->id));
-                            $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
+                            $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
                             Mail::to($adminEmail)->send(new UserRegistrationMail($existingUser, $store->id));
                         } catch (\Exception $mailError) {
                             Log::error('REGISTRATION EMAIL FAILED', [
@@ -246,7 +246,7 @@ class AuthController extends Controller
 
                     try {
                         Mail::to($user->email)->send(new UserRegistrationMail($user, $store->id));
-                        $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
+                        $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
                         Mail::to($adminEmail)->send(new UserRegistrationMail($user, $store->id));
                     } catch (\Exception $mailError) {
                         Log::error('REGISTRATION EMAIL FAILED', [
@@ -536,7 +536,7 @@ class AuthController extends Controller
             try {
                 Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
 
-                $adminEmail = env('MAIL_FROM_SB_ADMIN', 'aroz.ali@shiwantek.com');
+                $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
                 Mail::to($adminEmail)->send(new UserRegistrationMail($user, $storeId));
             } catch (\Exception $mailError) {
                 Log::error('REGISTRATION EMAIL FAILED', [

@@ -108,7 +108,7 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'info@serverblink.uk'),
+        'address' => env('MAIL_FROM_ADDRESS', 'hkinza575@gmail.com'),
         'name' => env('MAIL_FROM_NAME', 'serverblink'),
     ],
 
