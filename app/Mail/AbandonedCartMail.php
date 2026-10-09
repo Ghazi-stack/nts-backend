@@ -12,6 +12,7 @@ class AbandonedCartMail extends StoreMailable
     public $cartItems;
     public $userName;
     public Store $store;
+    public string $storePath;
     public int $storeId;
     public string $emailType;
 
@@ -27,12 +28,17 @@ class AbandonedCartMail extends StoreMailable
         $this->emailType = $emailType;
 
         $this->store = Store::findOrFail($storeId);
+
+        $this->storePath = rtrim(
+            $this->store->base_url ?? config('app.frontend_url', ''),
+            '/'
+        );
     }
 
     public function build()
     {
         $subjects = [
-            '1hr' => 'You left something in your cart!',
+            '1hr'  => 'You left something in your cart!',
             '24hr' => 'Your cart is waiting for you!',
             '48hr' => 'Last chance! Complete your order!',
         ];
@@ -45,8 +51,9 @@ class AbandonedCartMail extends StoreMailable
             ->view('emails.abandoned-cart')
             ->with([
                 'cartItems' => $this->cartItems,
-                'userName' => $this->userName,
-                'store' => $this->store,
+                'userName'  => $this->userName,
+                'store'     => $this->store,
+                'storePath' => $this->storePath,
                 'emailType' => $this->emailType,
             ]);
     }
