@@ -1,6 +1,7 @@
 <?php
 namespace App\Mail;
 
+use App\Models\Logo;
 use App\Models\Store;
 use Illuminate\Bus\Queueable;
 use Illuminate\Queue\SerializesModels;
@@ -12,6 +13,7 @@ class AbandonedCartMail extends StoreMailable
     public $cartItems;
     public $userName;
     public Store $store;
+    public ?string $logoUrl;
     public string $storePath;
     public int $storeId;
     public string $emailType;
@@ -28,6 +30,9 @@ class AbandonedCartMail extends StoreMailable
         $this->emailType = $emailType;
 
         $this->store = Store::findOrFail($storeId);
+
+        $logo = Logo::where('store_id', $storeId)->first();
+        $this->logoUrl = $logo?->logo_url;
 
         $this->storePath = rtrim(
             $this->store->base_url ?? config('app.frontend_url', ''),
@@ -54,6 +59,7 @@ class AbandonedCartMail extends StoreMailable
                 'userName'  => $this->userName,
                 'store'     => $this->store,
                 'storePath' => $this->storePath,
+                'logoUrl'   => $this->logoUrl,
                 'emailType' => $this->emailType,
             ]);
     }
