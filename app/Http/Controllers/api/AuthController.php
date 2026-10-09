@@ -752,6 +752,7 @@ class AuthController extends Controller
 
             $customer = User::where('email', $email)
                 ->where('userRole', 2)
+                ->where('store_id', '=', $storeId)
                 ->first();
 
             if (!$customer) {
