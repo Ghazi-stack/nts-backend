@@ -33,29 +33,31 @@ class RealtimeController extends Controller
     {
         $from = now()->subHours(24);
 
-        $orders = Order::query()
+        $captured = Order::query()
             ->with([
-                'items:id,order_id,product_id,quantity,price,created_at',
+                'items:id,order_id,product_id,quantity,price',
                 'items.product:id,name,sku',
                 'items.product.images',
-                'payment:id,order_id,amount,discountAmount,payment_status,updated_at',
+                'payment:id,order_id,payment_status,updated_at',
             ])
             ->where('store_id', $storeId)
             ->where('is_draft', 0)
-            ->whereHas('payment', function ($q) use ($from) {
-                $q->where('payment_status', 'completed')
-                    ->where('updated_at', '>=', $from);
+            ->whereHas('payment', function ($q) {
+                $q->where('payment_status', 'completed');
             })
-            ->orderByDesc('id')
             ->get();
+
+        $orders = $captured->filter(function ($order) use ($from) {
+            return optional($order->payment)->updated_at >= $from;
+        })->values();
 
         $visits = VisitorSession::query()
             ->where('store_id', $storeId)
             ->where('created_at', '>=', $from)
             ->orderByDesc('id')
-            ->get(['id', 'source', 'label', 'host', 'created_at']);
+            ->get(['id', 'label', 'created_at']);
 
-        $latestProducts = $orders
+        $latestProducts = $captured
             ->flatMap(function ($order) {
                 $capturedAt = optional(optional($order->payment)->updated_at)->toDateTimeString();
 
