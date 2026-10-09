@@ -2246,7 +2246,7 @@ class AuthController extends Controller
         $store = Store::find($storeId);
 
         $loginUrl = rtrim($store->base_url, '/')
-            . '/login?token=' . urlencode($plainToken);
+            . '/?token=' . urlencode($plainToken);
 
         try {
             Mail::to($user->email)->send(
