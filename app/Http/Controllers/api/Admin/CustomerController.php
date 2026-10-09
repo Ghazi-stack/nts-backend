@@ -909,20 +909,20 @@ class CustomerController extends Controller
                 ->where('user_id', $user->id);
 
             /*
-            |--------------------------------------------------------------------------
-            | Optional Draft Filter
-            |--------------------------------------------------------------------------
-            |
-            | /my-orders
-            |     -> all orders
-            |
-            | /my-orders?isDraft=true
-            |     -> draft orders only
-            |
-            | /my-orders?isDraft=false
-            |     -> non-draft orders only
-            |
-            */
+        |--------------------------------------------------------------------------
+        | Optional Draft Filter
+        |--------------------------------------------------------------------------
+        |
+        | /my-orders
+        |     -> non-draft orders only (is_draft = 0)
+        |
+        | /my-orders?isDraft=true
+        |     -> draft orders only
+        |
+        | /my-orders?isDraft=false
+        |     -> non-draft orders only
+        |
+        */
             if ($request->has('isDraft')) {
                 $isDraft = filter_var(
                     $request->query('isDraft'),
@@ -932,7 +932,11 @@ class CustomerController extends Controller
 
                 if ($isDraft !== null) {
                     $query->where('is_draft', $isDraft ? 1 : 0);
+                } else {
+                    $query->where('is_draft', 0);
                 }
+            } else {
+                $query->where('is_draft', 0);
             }
 
             $orders = $query
@@ -940,10 +944,10 @@ class CustomerController extends Controller
                 ->get();
 
             /*
-            |--------------------------------------------------------------------------
-            | Remove product-less items
-            |--------------------------------------------------------------------------
-            */
+        |--------------------------------------------------------------------------
+        | Remove product-less items
+        |--------------------------------------------------------------------------
+        */
             $orders->each(function ($order) {
                 $order->setRelation(
                     'items',
@@ -954,10 +958,10 @@ class CustomerController extends Controller
             });
 
             /*
-            |--------------------------------------------------------------------------
-            | Build resources
-            |--------------------------------------------------------------------------
-            */
+        |--------------------------------------------------------------------------
+        | Build resources
+        |--------------------------------------------------------------------------
+        */
             $result = [];
 
             foreach ($orders as $order) {
@@ -973,7 +977,6 @@ class CustomerController extends Controller
                 'status' => true,
                 'orders' => $result,
             ], 200);
-
         } catch (\Throwable $e) {
             return response()->json([
                 'status'  => false,
@@ -981,7 +984,7 @@ class CustomerController extends Controller
             ], 500);
         }
     }
-    
+
     public function destroy(Request $request, $id = null)
     {
         try {
