@@ -3,6 +3,8 @@ namespace App\Jobs;
 
 use App\Mail\AbandonedCartMail;
 use App\Models\Cart;
+use App\Models\Store;
+use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -27,29 +29,72 @@ class SendAbandonedCartEmailJob implements ShouldQueue
         public int $storeId,
         public string $emailType,
         public string $timestampColumn
-    ) {}
+    ) {
+        // Only allow the known reminder timestamp columns.
+        if (!in_array($this->timestampColumn, [
+            'email_1hr_sent_at',
+            'email_24hr_sent_at',
+            'email_48hr_sent_at',
+        ], true)) {
+            throw new \InvalidArgumentException(
+                'Invalid abandoned-cart reminder timestamp column.'
+            );
+        }
+    }
 
     public function handle(): void
     {
+        $cartIds = $this->cartItems->pluck('id')->all();
+
         try {
+            $store = Store::findOrFail($this->storeId);
+
+            // Find the user using the cart's user ID when possible.
+            $userId = $this->cartItems->first()?->user_id;
+
+            $userQuery = User::query()
+                ->where('email', $this->userEmail);
+
+            if ($userId !== null) {
+                $userQuery->where('id', $userId);
+            }
+
+            $user = $userQuery->firstOrFail();
+
+            $storePath = rtrim(
+                $store->base_url ?: config('app.frontend_url', ''),
+                '/'
+            );
+
+            if ($storePath === '') {
+                throw new \RuntimeException(
+                    'No frontend URL is configured for this store.'
+                );
+            }
+
+            $checkoutLink = $storePath . '/checkout';
+
             Mail::to($this->userEmail)->send(
                 new AbandonedCartMail(
                     $this->cartItems,
-                    $this->userName,
+                    $user,
                     $this->storeId,
-                    $this->emailType
+                    $this->emailType,
+                    $checkoutLink
                 )
             );
 
-            // Confirm the reminder timestamp after the send call succeeds.
-            Cart::whereIn('id', $this->cartItems->pluck('id'))
+            // Keep the reminder timestamp after the send call succeeds.
+            Cart::whereIn('id', $cartIds)
+                ->where('store_id', $this->storeId)
                 ->update([
                     $this->timestampColumn => now(),
                 ]);
         } catch (Throwable $e) {
-            // Allow the reminder to be retried if sending fails.
-            Cart::whereIn('id', $this->cartItems->pluck('id'))
-                ->where($this->timestampColumn, '>=', now()->subMinutes(10))
+            // Release this reminder's reservation so it can be retried.
+            Cart::whereIn('id', $cartIds)
+                ->where('store_id', $this->storeId)
+                ->where($this->timestampColumn, '>=', now()->subHours(24))
                 ->update([
                     $this->timestampColumn => null,
                 ]);
@@ -60,8 +105,9 @@ class SendAbandonedCartEmailJob implements ShouldQueue
 
     public function failed(?Throwable $exception): void
     {
-        Cart::whereIn('id', $this->cartItems->pluck('id'))
-            ->where($this->timestampColumn, '>=', now()->subMinutes(10))
+        Cart::whereIn('id', $this->cartItems->pluck('id')->all())
+            ->where('store_id', $this->storeId)
+            ->where($this->timestampColumn, '>=', now()->subHours(24))
             ->update([
                 $this->timestampColumn => null,
             ]);
