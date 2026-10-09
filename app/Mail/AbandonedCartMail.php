@@ -42,7 +42,7 @@ class AbandonedCartMail extends StoreMailable
                 $subjects[$this->emailType]
                     ?? 'You left something in your cart!'
             )
-            ->view('emails.abandoned_cart')
+            ->view('emails.abandoned-cart')
             ->with([
                 'cartItems' => $this->cartItems,
                 'userName' => $this->userName,
