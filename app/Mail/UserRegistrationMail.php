@@ -7,9 +7,10 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Store;
+use App\Mail\StoreMailable;
 use App\Models\Logo;
 
-class UserRegistrationMail extends Mailable
+class UserRegistrationMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -38,7 +39,7 @@ class UserRegistrationMail extends Mailable
 
     public function build()
     {
-        return $this->subject('Thanks for registering at ' . ($this->store?->name ?? 'Our Store'))
+        return $this->setStoreSender($this->store)->subject('Thanks for registering at ' . ($this->store?->name ?? 'Our Store'))
             ->view('emails.user_registration')
             ->with([
                 'user'      => $this->user,
