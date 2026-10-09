@@ -22,8 +22,9 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Aws\S3\Exception\S3Exception;
 use App\Jobs\ProcessProductImage;
+use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
 
-class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, ShouldQueue
+class ProductImport implements OnEachRow, WithChunkReading, WithHeadingRow, ShouldQueue, SkipsEmptyRows
 {
     protected $storeId;
     protected $progressKey;

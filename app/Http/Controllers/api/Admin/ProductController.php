@@ -34,6 +34,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Models\OrderItem;
 use App\Models\StaffLog;
 use Carbon\Carbon;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class ProductController extends Controller
 {
@@ -2948,34 +2949,88 @@ class ProductController extends Controller
         Cache::put($progressKey . "_count", 0, 7200);
 
         // --- Calculate total rows once (before queuing) ---
-        $totalRows = 0;
-        $extension = strtolower($file->getClientOriginalExtension());
+        // $totalRows = 0;
+        // $extension = strtolower($file->getClientOriginalExtension());
 
-        if ($extension === 'xlsx') {
-            if (class_exists(\ZipArchive::class)) {
-                $zip = new \ZipArchive;
-                if ($zip->open($fullPath) === true) {
-                    $xml = $zip->getFromName('xl/worksheets/sheet1.xml');
-                    if ($xml !== false) {
-                        preg_match_all('/<row r="(\d+)"/', $xml, $matches);
-                        $totalRows = count($matches[1]) - 1; // subtract header row
+        // if ($extension === 'xlsx') {
+        //     if (class_exists(\ZipArchive::class)) {
+        //         $zip = new \ZipArchive;
+        //         if ($zip->open($fullPath) === true) {
+        //             $xml = $zip->getFromName('xl/worksheets/sheet1.xml');
+        //             if ($xml !== false) {
+        //                 preg_match_all('/<row r="(\d+)"/', $xml, $matches);
+        //                 $totalRows = count($matches[1]) - 1; // subtract header row
+        //             }
+        //         }
+        //     }
+        // } elseif ($extension === 'csv' || $extension === 'xls') {
+        //     // For CSV/XLS, use a lightweight approach
+        //     $fileHandle = fopen($fullPath, 'r');
+        //     if ($fileHandle) {
+        //         $totalRows = 0;
+        //         while (($line = fgetcsv($fileHandle)) !== false) {
+        //             $totalRows++;
+        //         }
+        //         $totalRows = max(0, $totalRows - 1); // subtract header
+        //         fclose($fileHandle);
+        //     }
+        // }
+
+        // Cache::put($progressKey . "_total", $totalRows, 7200);
+
+        // --- Calculate total non-empty rows before queuing ---
+        $totalRows = 0;
+
+        try {
+            $spreadsheet = IOFactory::load($fullPath);
+            $worksheet = $spreadsheet->getActiveSheet();
+
+            $highestRow = $worksheet->getHighestDataRow();
+            $highestColumn = $worksheet->getHighestDataColumn();
+
+            // Row 1 contains the headings, so start at row 2.
+            for ($rowNumber = 2; $rowNumber <= $highestRow; $rowNumber++) {
+                $hasData = false;
+
+                foreach (
+                    $worksheet->getRowIterator($rowNumber, $rowNumber) as $row
+                ) {
+                    $cellIterator = $row->getCellIterator('A', $highestColumn);
+                    $cellIterator->setIterateOnlyExistingCells(false);
+
+                    foreach ($cellIterator as $cell) {
+                        $value = $cell->getValue();
+
+                        if (
+                            $value !== null &&
+                            trim((string) $value) !== ''
+                        ) {
+                            $hasData = true;
+                            break;
+                        }
                     }
                 }
-            }
-        } elseif ($extension === 'csv' || $extension === 'xls') {
-            // For CSV/XLS, use a lightweight approach
-            $fileHandle = fopen($fullPath, 'r');
-            if ($fileHandle) {
-                $totalRows = 0;
-                while (($line = fgetcsv($fileHandle)) !== false) {
+
+                if ($hasData) {
                     $totalRows++;
                 }
-                $totalRows = max(0, $totalRows - 1); // subtract header
-                fclose($fileHandle);
             }
+
+            $spreadsheet->disconnectWorksheets();
+            unset($spreadsheet);
+
+        } catch (\Throwable $e) {
+            Log::error('Failed to count import rows', [
+                'file' => $fullPath,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Unable to read the uploaded spreadsheet.',
+            ], 422);
         }
 
-        Cache::put($progressKey . "_total", $totalRows, 7200);
+        Cache::put($progressKey . '_total', $totalRows, 7200);
 
         // Queue the import and pass ignored fields
         Excel::queueImport(
