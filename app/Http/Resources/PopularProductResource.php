@@ -19,6 +19,7 @@ class PopularProductResource extends JsonResource
             // Only primary image
             'image' => ProductImageResource::collection($this->whenLoaded('images')),
             'purchasabilityStatus' => $this->purchasability_status,
+            'allowPurchase' => $this->allow_purchase,
             'minPurchaseQuantity' => $this->min_purchase_quantity,
             'maxPurchaseQuantity' => $this->max_purchase_quantity,
             'pageTitle' => $this->seo->page_title ?? null,
