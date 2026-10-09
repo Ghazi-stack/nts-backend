@@ -32,6 +32,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\URL;
+use App\Mail\MagicLinkMail;
 
 class AuthController extends Controller
 {
@@ -1972,4 +1975,418 @@ class AuthController extends Controller
             ], 500);
         }
     }
+
+    // public function sendMagicLink(Request $request)
+    // {
+    //     $request->validate([
+    //         'email' => 'required|email',
+    //     ]);
+
+    //     $storeId = current_store_id();
+
+    //     if (!$storeId || !Store::where('id', $storeId)->exists()) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Invalid or missing store.',
+    //         ], 422);
+    //     }
+
+    //     $storeId = (int) $storeId;
+    //     $email = strtolower(trim($request->email));
+
+    //     $user = User::whereRaw('LOWER(email) = ?', [$email])
+    //         ->where('userRole', 2)
+    //         ->where('store_id', $storeId)
+    //         ->first();
+
+    //     Log::info('Magic login lookup', [
+    //         'email' => $email,
+    //         'store_id' => $storeId,
+    //         'user_found' => (bool) $user,
+    //     ]);    
+    //     // Do not reveal whether an account exists.
+    //     if (!$user) {
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' =>
+    //                 'If an account exists, a sign-in link will be sent.',
+    //         ]);
+    //     }
+
+    //     // Do not silently bypass your existing 2FA requirement.
+    //     if ($user->two_factor_enabled) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' =>
+    //                 'This account requires additional verification. Please use the existing verification flow.',
+    //         ], 403);
+    //     }
+
+    //     // Generate a cryptographically secure, one-time token.
+    //     $plainToken = Str::random(64);
+
+    //     Cache::put(
+    //         'magic_login:' . hash('sha256', $plainToken),
+    //         [
+    //             'user_id' => $user->id,
+    //             'store_id' => $storeId,
+    //         ],
+    //         now()->addMinutes(15)
+    //     );
+
+    //     $loginUrl = rtrim(config('app.frontend_url'), '/')
+    //     . '/auth/magic-login?token=' . urlencode($plainToken);
+
+    //     try {
+    //         Mail::to($user->email)->send(
+    //             new MagicLinkMail($user, $storeId, $loginUrl)
+    //         );
+    //     } catch (\Throwable $e) {
+    //         Cache::forget(
+    //             'magic_login:' . hash('sha256', $plainToken)
+    //         );
+
+    //         Log::error('Magic login email failed', [
+    //             'user_id' => $user->id,
+    //             'error' => $e->getMessage(),
+    //         ]);
+
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Unable to send the sign-in email. Please try again.',
+    //         ], 500);
+    //     }
+
+    //     return response()->json([
+    //         'status' => true,
+    //         'message' =>
+    //             'If an account exists, a sign-in link will be sent.',
+    //     ]);
+    // }
+
+    
+    // public function verifyMagicLink(Request $request)
+    // {
+    //     $request->validate([
+    //         'token' => 'required|string',
+    //     ]);
+
+    //     $storeId = current_store_id();
+
+    //     if (!$storeId) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Store not selected.',
+    //         ], 400);
+    //     }
+
+    //     $storeId = (int) $storeId;
+
+    //     if (!Store::where('id', $storeId)->exists()) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Invalid store.',
+    //         ], 422);
+    //     }
+
+    //     // Retrieve and consume the one-time magic token.
+    //     $cacheKey = 'magic_login:' . hash(
+    //         'sha256',
+    //         $request->input('token')
+    //     );
+
+    //     $loginData = Cache::pull($cacheKey);
+
+    //     if (!$loginData) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'This sign-in link is invalid, expired, or already used.',
+    //         ], 401);
+    //     }
+
+    //     // Ensure the token belongs to the current store.
+    //     if ((int) $loginData['store_id'] !== $storeId) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Invalid sign-in request.',
+    //         ], 401);
+    //     }
+
+    //     // Find the customer using the server-side token data.
+    //     $user = User::whereKey($loginData['user_id'])
+    //         ->where('userRole', 2)
+    //         ->where('store_id', $storeId)
+    //         ->first();
+
+    //     if (!$user) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Invalid sign-in request.',
+    //         ], 401);
+    //     }
+
+    //     // Do not bypass two-factor authentication.
+    //     if ($user->two_factor_enabled) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Additional verification is required. Please use the existing verification flow.',
+    //         ], 403);
+    //     }
+
+    //     $store = Store::find($storeId);
+
+    //     if (!$store) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Store not found.',
+    //         ], 404);
+    //     }
+
+    //     // Preserve the existing password-reset policy.
+    //     if ($user->customer && $user->customer->force_password_reset) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'force_password_reset' => true,
+    //             'message' => 'Password reset is required before you can continue.',
+    //         ], 403);
+    //     }
+
+    //     // Match the existing loginAsCustomer() session behavior.
+    //     $user->tokens()
+    //         ->whereIn('name', ['customerToken', 'customer_login'])
+    //         ->delete();
+
+    //     $tokenResult = $user->createToken('customer_login');
+    //     $plainTextToken = $tokenResult->plainTextToken;
+
+    //     $expireAt = now()->addMinutes(15);
+
+    //     $accessToken = PersonalAccessToken::findToken(
+    //         $plainTextToken
+    //     );
+
+    //     if ($accessToken) {
+    //         $accessToken->expires_at = $expireAt;
+    //         $accessToken->save();
+    //     }
+
+    //     return response()->json([
+    //         'status' => true,
+    //         'message' => 'Customer logged in successfully.',
+    //         'token' => $plainTextToken,
+    //         'expireAt' => $expireAt->toDateTimeString(),
+    //         'store' => new StoreResource($store),
+    //         'customer' => new CustomerResource($user->customer),
+    //         'permissions' => null,
+    //     ]);
+    // }
+
+
+    
+    public function sendMagicLink(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+        ]);
+
+        $storeId = current_store_id();
+
+        if (!$storeId || !Store::where('id', $storeId)->exists()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Invalid or missing store.',
+            ], 422);
+        }
+
+        $storeId = (int) $storeId;
+        $email = strtolower(trim($request->email));
+
+        $user = User::whereRaw('LOWER(email) = ?', [$email])
+            ->where('userRole', 2)
+            ->where('store_id', $storeId)
+            ->first();
+
+        Log::info('Magic login lookup', [
+            'store_id' => $storeId,
+            'user_found' => (bool) $user,
+        ]);
+
+        // Do not reveal whether an account exists.
+        if (!$user) {
+            return response()->json([
+                'status' => true,
+                'message' => 'If an account exists, a sign-in link will be sent.',
+            ]);
+        }
+
+        // Preserve the existing 2FA requirement.
+        if ($user->two_factor_enabled) {
+            return response()->json([
+                'status' => false,
+                'message' => 'This account requires additional verification. Please use the existing verification flow.',
+            ], 403);
+        }
+
+        // Generate a secure, one-time token.
+        $plainToken = Str::random(64);
+
+        $cacheKey = 'magic_login:' . hash('sha256', $plainToken);
+
+        // Magic link expires after 15 minutes.
+        Cache::put(
+            $cacheKey,
+            [
+                'user_id' => $user->id,
+                'store_id' => $storeId,
+            ],
+            now()->addMinutes(15)
+        );
+
+        // Keep the email URL token-only.
+        $loginUrl = rtrim(config('app.frontend_url'), '/')
+            . '/auth/magic-login?token=' . urlencode($plainToken);
+
+        try {
+            Mail::to($user->email)->send(
+                new MagicLinkMail($user, $storeId, $loginUrl)
+            );
+        } catch (\Throwable $e) {
+            Cache::forget($cacheKey);
+
+            Log::error('Magic login email failed', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Unable to send the sign-in email. Please try again.',
+            ], 500);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'If an account exists, a sign-in link will be sent.',
+        ]);
+    }
+
+    
+    
+    public function verifyMagicLink(Request $request)
+    {
+        $request->validate([
+            'token' => 'required|string',
+        ]);
+
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected.',
+            ], 400);
+        }
+
+        $storeId = (int) $storeId;
+
+        if (!Store::where('id', $storeId)->exists()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Invalid store.',
+            ], 422);
+        }
+
+        // Retrieve and consume the one-time magic token.
+        $cacheKey = 'magic_login:' . hash(
+            'sha256',
+            $request->input('token')
+        );
+
+        $loginData = Cache::pull($cacheKey);
+
+        if (!$loginData) {
+            return response()->json([
+                'status' => false,
+                'message' => 'This sign-in link is invalid, expired, or already used.',
+            ], 401);
+        }
+
+        // Ensure the token belongs to the current store.
+        if ((int) $loginData['store_id'] !== $storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Invalid sign-in request.',
+            ], 401);
+        }
+
+        // Find the customer using the server-side token data.
+        $user = User::whereKey($loginData['user_id'])
+            ->where('userRole', 2)
+            ->where('store_id', $storeId)
+            ->first();
+
+        if (!$user) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Invalid sign-in request.',
+            ], 401);
+        }
+
+        // Do not bypass two-factor authentication.
+        if ($user->two_factor_enabled) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Additional verification is required. Please use the existing verification flow.',
+            ], 403);
+        }
+
+        $store = Store::find($storeId);
+
+        if (!$store) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not found.',
+            ], 404);
+        }
+
+        // Preserve the existing password-reset policy.
+        if ($user->customer && $user->customer->force_password_reset) {
+            return response()->json([
+                'status' => false,
+                'force_password_reset' => true,
+                'message' => 'Password reset is required before you can continue.',
+            ], 403);
+        }
+
+        // Match the existing loginAsCustomer() session behavior.
+        $user->tokens()
+            ->whereIn('name', ['customerToken', 'customer_login'])
+            ->delete();
+
+        $tokenResult = $user->createToken('customer_login');
+        $plainTextToken = $tokenResult->plainTextToken;
+
+        $expireAt = now()->addHours(24);
+
+        $accessToken = PersonalAccessToken::findToken(
+            $plainTextToken
+        );
+
+        if ($accessToken) {
+            $accessToken->expires_at = $expireAt;
+            $accessToken->save();
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Customer logged in successfully.',
+            'token' => $plainTextToken,
+            'expireAt' => $expireAt->toDateTimeString(),
+            'store' => new StoreResource($store),
+            'customer' => new CustomerResource($user->customer),
+            'permissions' => null,
+        ]);
+    }
+
+
 }
