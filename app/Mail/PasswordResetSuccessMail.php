@@ -8,8 +8,9 @@ use Illuminate\Queue\SerializesModels;
 use App\Models\User;
 use App\Models\Store;
 use App\Models\Logo;
+use App\Mail\StoreMailable;
 
-class PasswordResetSuccessMail extends Mailable
+class PasswordResetSuccessMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -38,7 +39,7 @@ class PasswordResetSuccessMail extends Mailable
 
     public function build()
     {
-        return $this->subject('Your Password Was Successfully Reset')
+        return $this->setStoreSender($this->store)->subject('Your Password Was Successfully Reset')
             ->view('emails.reset_password_successful')
             ->with([
                 'name'      => $this->user->name,

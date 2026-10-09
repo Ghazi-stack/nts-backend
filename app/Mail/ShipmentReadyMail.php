@@ -8,8 +8,9 @@ use App\Models\Logo;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
+use App\Mail\StoreMailable;
 
-class ShipmentReadyMail extends Mailable
+class ShipmentReadyMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -40,7 +41,7 @@ class ShipmentReadyMail extends Mailable
     {
         $storeName = $this->store?->name ?? 'Store';
 
-        return $this->subject('Your ' . $storeName . ' Order is Ready to Ship')
+        return $this->setStoreSender($this->store)->subject('Your ' . $storeName . ' Order is Ready to Ship')
             ->view('emails.shipment-ready')
             ->with([
                 'shipment'  => $this->shipment,

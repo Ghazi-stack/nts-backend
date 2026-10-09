@@ -7,8 +7,9 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Store;
 use App\Models\Logo;
+use App\Mail\StoreMailable;
 
-class AdminForgotPasswordMail extends Mailable
+class AdminForgotPasswordMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -37,7 +38,7 @@ class AdminForgotPasswordMail extends Mailable
 
     public function build()
     {
-        return $this->subject('Reset Your Password - ' . $this->storeName)
+        return $this->setStoreSender($this->store)->subject('Reset Your Password - ' . $this->storeName)
             ->view('emails.admin-forgot-password')
             ->with([
                 'userName'  => $this->userName,

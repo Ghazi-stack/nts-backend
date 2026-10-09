@@ -7,8 +7,9 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Store;
 use App\Models\Logo;
+use App\Mail\StoreMailable;
 
-class OrderStatusUpdatedMail extends Mailable
+class OrderStatusUpdatedMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -43,7 +44,7 @@ class OrderStatusUpdatedMail extends Mailable
     {
         $orderNumber = $this->order->order_number ?? '';
 
-        return $this->subject(
+        return $this->setStoreSender($this->store)->subject(
             'Order #' . $orderNumber . ' Status Updated to ' . $this->newStatus . ' - ' . ($this->store?->name ?? 'Store')
         )
             ->view('emails.order-status-updated')

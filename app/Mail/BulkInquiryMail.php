@@ -10,8 +10,9 @@ use App\Models\Store;
 use App\Models\Logo;
 use App\Models\Product;
 use App\Models\ProductSeo;
+use App\Mail\StoreMailable;
 
-class BulkInquiryMail extends Mailable
+class BulkInquiryMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -63,7 +64,7 @@ class BulkInquiryMail extends Mailable
 
     public function build()
     {
-        return $this->from(config('mail.from.address'), config('mail.from.name'))
+        return $this->setStoreSender($this->store)
             ->subject('New Bulk Inquiry from ' . ($this->bulkInquiry->full_name ?? 'Customer'))
             ->view('emails.bulk-inquiry')
             ->with([

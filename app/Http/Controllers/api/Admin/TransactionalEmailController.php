@@ -119,6 +119,15 @@ class TransactionalEmailController extends Controller
 
     public function sendTest(Request $r, string $key)
     {
+
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'error' => 'Store not selected.',
+            ], 400);
+        }
+
         $tpl = $this->svc->get(current_store_id(), $key);
         if (!$tpl->enabled) return response()->json(['error'=>'Template is disabled.'], 400);
 
@@ -128,7 +137,7 @@ class TransactionalEmailController extends Controller
         $headers = $this->svc->headers($tpl);
 
         Mail::to($r->to)->send(
-            new TransactionalTemplatedMail($render['subject'], $render['html'], $render['text'], $headers)
+            new TransactionalTemplatedMail($render['subject'], $render['html'], $render['text'], $headers, storeId: (int) $storeId)
         );
 
         return response()->json(['status'=>true,'message'=>'Test email sent.']);

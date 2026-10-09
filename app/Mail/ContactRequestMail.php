@@ -8,8 +8,9 @@ use Illuminate\Queue\SerializesModels;
 use App\Models\ContactRequest;
 use App\Models\Store;
 use App\Models\Logo;
+use App\Mail\StoreMailable;
 
-class ContactRequestMail extends Mailable
+class ContactRequestMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -38,7 +39,7 @@ class ContactRequestMail extends Mailable
 
     public function build()
     {
-        return $this->subject('New Contact Request from ' . ($this->contactRequest->full_name ?? 'Customer'))
+        return $this->setStoreSender($this->store)->subject('New Contact Request from ' . ($this->contactRequest->full_name ?? 'Customer'))
             ->view('emails.contact-request')
             ->with([
                 'contact'   => $this->contactRequest,

@@ -8,8 +8,9 @@ use Illuminate\Queue\SerializesModels;
 use App\Models\Order;
 use App\Models\Store;
 use App\Models\Logo;
+use App\Mail\StoreMailable;
 
-class ShipmentTrackingMail extends Mailable
+class ShipmentTrackingMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -40,7 +41,7 @@ class ShipmentTrackingMail extends Mailable
 
     public function build()
     {
-        return $this->subject(
+        return $this->setStoreSender($this->store)->subject(
             'Tracking Number Updated - Order #' . $this->order->order_number
         )
             ->view('emails.tracking-updated')

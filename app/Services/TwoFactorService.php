@@ -32,7 +32,15 @@ class TwoFactorService
             'two_factor_otp_expires_at' => $expiresAt,
         ]);
 
-        Mail::to($user->email)->send(new TwoFactorOtpMail($otp, $user->name));
+        $storeId = $user->store_id;
+
+        if (!$storeId) {
+            throw new \RuntimeException(
+                'Cannot send OTP: no store is associated with this user.'
+            );
+        }
+
+        Mail::to($user->email)->send(new TwoFactorOtpMail($otp, $user->name, (int) $storeId));
 
         return true;
     }

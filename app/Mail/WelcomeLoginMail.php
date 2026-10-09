@@ -7,8 +7,9 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Store;
 use App\Models\Logo;
+use App\Mail\StoreMailable;
 
-class WelcomeLoginMail extends Mailable
+class WelcomeLoginMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -36,7 +37,7 @@ class WelcomeLoginMail extends Mailable
 
     public function build()
     {
-        return $this->subject('Your Login Details - Set Your Password')
+        return $this->setStoreSender($this->store)->subject('Your Login Details - Set Your Password')
             ->view('emails.welcome_login')
             ->with([
                 'userName'  => $this->userName,

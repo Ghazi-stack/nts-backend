@@ -1,30 +1,53 @@
 <?php
 namespace App\Mail;
 
+use App\Models\Store;
 use Illuminate\Bus\Queueable;
-use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 
-class AbandonedCartMail extends Mailable
+class AbandonedCartMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
     public $cartItems;
     public $userName;
+    public Store $store;
+    public int $storeId;
+    public string $emailType;
 
-    public function __construct($cartItems, $userName)
-    {
+    public function __construct(
+        $cartItems,
+        string $userName,
+        int $storeId,
+        string $emailType = '1hr'
+    ) {
         $this->cartItems = $cartItems;
         $this->userName = $userName;
+        $this->storeId = $storeId;
+        $this->emailType = $emailType;
+
+        $this->store = Store::findOrFail($storeId);
     }
 
     public function build()
     {
-        return $this->subject('You left something in your cart!')
-                    ->view('emails.abandoned_cart')
-                    ->with([
-                        'cartItems' => $this->cartItems,
-                        'userName' => $this->userName,
-                    ]);
+        $subjects = [
+            '1hr' => 'You left something in your cart!',
+            '24hr' => 'Your cart is waiting for you!',
+            '48hr' => 'Last chance! Complete your order!',
+        ];
+
+        return $this->setStoreSender($this->store)
+            ->subject(
+                $subjects[$this->emailType]
+                    ?? 'You left something in your cart!'
+            )
+            ->view('emails.abandoned_cart')
+            ->with([
+                'cartItems' => $this->cartItems,
+                'userName' => $this->userName,
+                'store' => $this->store,
+                'emailType' => $this->emailType,
+            ]);
     }
 }

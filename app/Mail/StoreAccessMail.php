@@ -7,8 +7,9 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Store;
 use App\Models\Logo;
+use App\Mail\StoreMailable;
 
-class StoreAccessMail extends Mailable
+class StoreAccessMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -39,7 +40,7 @@ class StoreAccessMail extends Mailable
 
     public function build()
     {
-        return $this->subject('Store Access - ' . $this->storeName)
+        return $this->setStoreSender($this->store)->subject('Store Access - ' . $this->storeName)
             ->view('emails.store-access')
             ->with([
                 'userName'   => $this->userName,

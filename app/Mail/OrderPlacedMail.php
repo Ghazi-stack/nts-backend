@@ -7,8 +7,9 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Store;
 use App\Models\Logo;
+use App\Mail\StoreMailable;
 
-class OrderPlacedMail extends Mailable
+class OrderPlacedMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -41,7 +42,7 @@ class OrderPlacedMail extends Mailable
     {
         $orderNumber = is_array($this->order) ? ($this->order['orderNumber'] ?? $this->order['order_number'] ?? '') : ($this->order->order_number ?? '');
 
-        return $this->subject('Your ' . ($this->store?->name ?? 'Store') . ' Order Confirmation (' . $orderNumber . ')')
+        return $this->setStoreSender($this->store)->subject('Your ' . ($this->store?->name ?? 'Store') . ' Order Confirmation (' . $orderNumber . ')')
             ->view('emails.order_placed')
             ->with([
                 'order'     => $this->order,

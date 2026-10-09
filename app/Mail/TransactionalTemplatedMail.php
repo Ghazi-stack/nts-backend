@@ -1,33 +1,37 @@
 <?php
+
 namespace App\Mail;
 
+use App\Models\Store;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 
-class TransactionalTemplatedMail extends Mailable
+class TransactionalTemplatedMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
-    // rename to avoid colliding with Mailable::$html and others
     public string $subjectLine;
     public string $htmlBody;
     public ?string $textBody;
     public array $headerBag;
     public array $attachmentBag;
+    public ?int $storeId;
 
     public function __construct(
         string $subjectLine,
         string $html,
         ?string $text = null,
-        array $headers = [],      // from_name, from_email, reply_to, cc, bcc, mailer?
-        array $attachments = []   // [['path'=>'...','as'=>..., 'mime'=>...]] or raw attachData
+        array $headers = [],
+        array $attachments = [],
+        ?int $storeId = null
     ) {
-        $this->subjectLine   = $subjectLine;
-        $this->htmlBody      = $html;
-        $this->textBody      = $text;
-        $this->headerBag     = $headers;
+        $this->subjectLine = $subjectLine;
+        $this->htmlBody = $html;
+        $this->textBody = $text;
+        $this->headerBag = $headers;
         $this->attachmentBag = $attachments;
+        $this->storeId = $storeId;
     }
 
     public function build()
@@ -36,56 +40,109 @@ class TransactionalTemplatedMail extends Mailable
             $this->mailer($this->headerBag['mailer']);
         }
 
-        $mail = $this->subject($this->subjectLine)
-            ->html($this->htmlBody)
-            ->text('emails.text-raw', [
-                'text' => $this->textBody ?? $this->fallbackText($this->htmlBody)
-            ]);
+        $store = $this->storeId
+            ? Store::find($this->storeId)
+            : null;
 
-        $fromEmail = $this->headerBag['from_email'] ?? config('mail.from.address');
-        $fromName  = $this->headerBag['from_name']  ?? config('mail.from.name');
+        $fromEmail = $this->headerBag['from_email']
+            ?? config('mail.from.address');
+
+        $providedFromName = trim(
+            (string) ($this->headerBag['from_name'] ?? '')
+        );
+
+        $fromName = $providedFromName !== ''
+            ? $providedFromName
+            : ($store?->name ?: config('mail.from.name'));
+
+        $mail = $this->subject($this->subjectLine)
+            ->html($this->htmlBody);
+
+        if ($this->textBody !== null && $this->textBody !== '') {
+            $mail->text('emails.text-raw', [
+                'text' => $this->textBody,
+            ]);
+        }
+
         if ($fromEmail) {
             $mail->from($fromEmail, $fromName);
         }
 
-        $this->applyList('replyTo', $this->headerBag['reply_to'] ?? null, $mail);
-        $this->applyList('cc',      $this->headerBag['cc']      ?? null, $mail);
-        $this->applyList('bcc',     $this->headerBag['bcc']     ?? null, $mail);
+        $this->applyList(
+            'replyTo',
+            $this->headerBag['reply_to'] ?? null,
+            $mail
+        );
+
+        $this->applyList(
+            'cc',
+            $this->headerBag['cc'] ?? null,
+            $mail
+        );
+
+        $this->applyList(
+            'bcc',
+            $this->headerBag['bcc'] ?? null,
+            $mail
+        );
 
         foreach ($this->attachmentBag as $att) {
             if (isset($att['path'])) {
-                $mail->attach($att['path'], [
-                    'as'   => $att['as']   ?? null,
-                    'mime' => $att['mime'] ?? null,
-                ]);
+                $options = [];
+
+                if (!empty($att['as'])) {
+                    $options['as'] = $att['as'];
+                }
+
+                if (!empty($att['mime'])) {
+                    $options['mime'] = $att['mime'];
+                }
+
+                $mail->attach($att['path'], $options);
             } elseif (isset($att['data'], $att['name'])) {
-                $mail->attachData($att['data'], $att['name'], [
-                    'mime' => $att['mime'] ?? null,
-                ]);
+                $options = [];
+
+                if (!empty($att['mime'])) {
+                    $options['mime'] = $att['mime'];
+                }
+
+                $mail->attachData(
+                    $att['data'],
+                    $att['name'],
+                    $options
+                );
             }
         }
 
         return $mail;
     }
 
-    private function applyList(string $method, ?string $value, Mailable $mail): void
-    {
-        if (!$value) return;
-        $list = $this->splitList($value);
-        foreach ($list as $addr) {
-            $mail->{$method}($addr);
+    private function applyList(
+        string $method,
+        ?string $value,
+        Mailable $mail
+    ): void {
+        if (!$value) {
+            return;
+        }
+
+        foreach ($this->splitList($value) as $address) {
+            $mail->{$method}($address);
         }
     }
 
     private function splitList(string $value): array
     {
-        $value = str_replace([';', "\n", "\r", "\t"], ',', $value);
-        $parts = array_map('trim', explode(',', $value));
-        return array_values(array_filter($parts, fn($v)=>$v!==''));
-    }
+        $value = str_replace(
+            [';', "\n", "\r", "\t"],
+            ',',
+            $value
+        );
 
-    private function fallbackText(string $html): string
-    {
-        return trim(preg_replace('/\s+/', ' ', strip_tags($html))) ?: '';
+        $parts = array_map('trim', explode(',', $value));
+
+        return array_values(
+            array_filter($parts, fn ($value) => $value !== '')
+        );
     }
 }

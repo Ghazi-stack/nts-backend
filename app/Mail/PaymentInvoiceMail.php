@@ -7,8 +7,9 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Store;
 use App\Models\Logo;
+use App\Mail\StoreMailable;
 
-class PaymentInvoiceMail extends Mailable
+class PaymentInvoiceMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -43,7 +44,7 @@ class PaymentInvoiceMail extends Mailable
     {
         $storeName = $this->store?->name ?? 'Store';
 
-        return $this->subject('Your Payment Invoice from ' . $storeName)
+        return $this->setStoreSender($this->store)->subject('Your Payment Invoice from ' . $storeName)
             ->view('emails.payment_invoice')
             ->with([
                 'order'      => $this->order,

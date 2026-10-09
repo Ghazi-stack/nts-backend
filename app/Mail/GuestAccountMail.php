@@ -7,8 +7,9 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Store;
 use App\Models\Logo;
+use App\Mail\StoreMailable;
 
-class GuestAccountMail extends Mailable
+class GuestAccountMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -37,7 +38,7 @@ class GuestAccountMail extends Mailable
     {
         $storeName = $this->store?->name ?? 'Store';
 
-        return $this->subject('Create Your Account - ' . $storeName)
+        return $this->setStoreSender($this->store)->subject('Create Your Account - ' . $storeName)
             ->view('emails.guest-account')
             ->with([
                 'userName'     => $this->userName,

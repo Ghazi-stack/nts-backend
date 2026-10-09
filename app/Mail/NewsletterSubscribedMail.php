@@ -8,8 +8,9 @@ use Illuminate\Queue\SerializesModels;
 use App\Models\Newsletter;
 use App\Models\Store;
 use App\Models\Logo;
+use App\Mail\StoreMailable;
 
-class NewsletterSubscribedMail extends Mailable
+class NewsletterSubscribedMail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -44,7 +45,7 @@ class NewsletterSubscribedMail extends Mailable
             ? 'New Newsletter Subscription - ' . ($this->store?->name ?? 'Store')
             : 'Thank You For Subscribing to ' . ($this->store?->name ?? 'Our Store');
 
-        return $this->subject($subject)
+        return $this->setStoreSender($this->store)->subject($subject)
             ->view('emails.newsletter-subscribed')
             ->with([
                 'newsletter' => $this->newsletter,

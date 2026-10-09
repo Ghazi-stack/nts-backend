@@ -9,8 +9,9 @@ use App\Models\Logo;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
+use App\Mail\StoreMailable;
 
-class AbandonedCartEmail extends Mailable
+class AbandonedCartEmail extends StoreMailable
 {
     use Queueable, SerializesModels;
 
@@ -44,7 +45,7 @@ class AbandonedCartEmail extends Mailable
             '48hr' => 'Last chance! Complete your order!',
         ];
 
-        return $this->from(config('mail.from.address'), config('mail.from.name'))
+        return $this->setStoreSender($this->store)
             ->subject($subjects[$this->emailType] ?? 'Your cart is waiting!')
             ->view('emails.abandoned-cart')
             ->with([
