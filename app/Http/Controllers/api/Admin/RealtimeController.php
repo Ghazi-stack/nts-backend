@@ -370,6 +370,90 @@ class RealtimeController extends Controller
         ]);
     }
 
+    public function showSearchOrderDetails($id)
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Store not found or unauthorized.',
+            ], 403);
+        }
+
+        $order = Order::query()
+            ->with([
+                'items:id,order_id,product_id,quantity,price',
+                'items.product:id,name,sku,price',
+                'items.product.images',
+                'customer:id,first_name,last_name,name,email',
+            ])
+            ->where('store_id', $storeId)
+            ->where('is_draft', 0)
+            ->find($id);
+
+        if (!$order) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Order not found.',
+            ], 404);
+        }
+
+        $items = $order->items->map(function ($item) {
+            $image = $item->product?->images?->first();
+            $productPrice = (float) optional($item->product)->price;
+            $sold = (float) $item->price;
+            $discount = $productPrice > $sold ? round(($productPrice - $sold) * (int) $item->quantity, 2) : 0;
+
+            return [
+                'productId' => $item->product_id,
+                'name'      => $item->product->name ?? null,
+                'sku'       => $item->product->sku ?? null,
+                'image'     => $image->url ?? $image->image ?? $image->path ?? null,
+                'qty'       => (int) $item->quantity,
+                'price'     => round($sold, 2),
+                'total'     => round($sold * (int) $item->quantity, 2),
+                'discount'  => $discount,
+            ];
+        })->values();
+
+        $subtotalBefore = round((float) $items->sum(fn($item) => ($item['price'] * $item['qty']) + $item['discount']), 2);
+        $lineDiscounts  = round((float) $items->sum('discount'), 2);
+        $itemSubtotal   = round($subtotalBefore - $lineDiscounts, 2);
+        $orderDiscount  = round((float) $order->discountAmount + (float) $order->manual_discount, 2);
+        $shipping       = round((float) $order->shipping_cost, 2);
+        $tax            = round((float) ($order->tax ?? 0), 2);
+
+        $placedBy = trim(optional($order->customer)->name
+            ?: ((optional($order->customer)->first_name . ' ' . optional($order->customer)->last_name))
+            ?: $order->name);
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Order details retrieved successfully',
+            'data'    => [
+                'info' => [
+                    'id'           => $order->id,
+                    'orderNumber'  => $order->order_number ?: (string) $order->id,
+                    'placedBy'     => $placedBy !== '' ? $placedBy : 'Anonymous',
+                    'email'        => optional($order->customer)->email ?: $order->email,
+                    'placedOn'     => optional($order->created_at)->format('F d, Y \a\t h:i A'),
+                    'itemsOrdered' => (int) $items->sum('qty'),
+                ],
+                'items' => $items,
+                'summary' => [
+                    'subtotalBeforeDiscounts' => $subtotalBefore,
+                    'lineItemDiscounts'       => $lineDiscounts,
+                    'itemSubtotal'            => $itemSubtotal,
+                    'promotionsDiscounts'     => $orderDiscount,
+                    'shipping'                => $shipping,
+                    'tax'                     => $tax,
+                    'orderTotal'              => round((float) $order->total_amount, 2),
+                ],
+            ],
+        ]);
+    }
+
     public function analyticsCustomers(Request $request)
     {
         $storeId = current_store_id();
