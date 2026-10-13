@@ -2646,7 +2646,7 @@ class OrderController extends Controller
         }
     }
 
-    public function exportToExcel()
+    public function exportToExcel(Request $request)
     {
         try {
             $storeId = current_store_id();
@@ -2658,18 +2658,29 @@ class OrderController extends Controller
                 ], 400);
             }
 
-            $total = Order::where('store_id', $storeId)
-                ->where('is_draft', 0)
-                ->count();
+            // Optional: order_ids array se specific orders export karo
+            $orderIds = $request->input('order_ids', []);
+
+            $query = Order::where('store_id', $storeId)
+                ->where('is_draft', 0);
+
+            if (!empty($orderIds) && is_array($orderIds)) {
+                $orderIds = array_filter(array_map('intval', $orderIds));
+                $query->whereIn('id', $orderIds);
+            }
+
+            $total = $query->count();
 
             if ($total === 0) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'No orders found for this store to export.'
+                    'message' => empty($orderIds)
+                        ? 'No orders found for this store to export.'
+                        : 'No orders found for the given IDs.'
                 ], 404);
             }
 
-            return response()->streamDownload(function () use ($storeId) {
+            return response()->streamDownload(function () use ($storeId, $orderIds) {
                 set_time_limit(0);
                 ini_set('memory_limit', '512M');
                 \DB::disableQueryLog();
@@ -2679,7 +2690,7 @@ class OrderController extends Controller
 
                 fputcsv($handle, $exporter->headings());
 
-                Order::query()
+                $exportQuery = Order::query()
                     ->with([
                         'items.product',
                         'customer',
@@ -2692,19 +2703,25 @@ class OrderController extends Controller
                     ])
                     ->where('store_id', $storeId)
                     ->where('is_draft', 0)
-                    ->orderBy('id')
-                    ->chunkById(500, function ($orders) use ($handle, $exporter) {
-                        foreach ($orders as $order) {
-                            fputcsv($handle, $exporter->map($order));
-                        }
+                    ->orderBy('id');
 
-                        unset($orders);
+                // Sirf selected IDs pe filter
+                if (!empty($orderIds) && is_array($orderIds)) {
+                    $exportQuery->whereIn('id', $orderIds);
+                }
 
-                        if (ob_get_level() > 0) {
-                            ob_flush();
-                        }
-                        flush();
-                    });
+                $exportQuery->chunkById(500, function ($orders) use ($handle, $exporter) {
+                    foreach ($orders as $order) {
+                        fputcsv($handle, $exporter->map($order));
+                    }
+
+                    unset($orders);
+
+                    if (ob_get_level() > 0) {
+                        ob_flush();
+                    }
+                    flush();
+                });
 
                 fclose($handle);
             }, 'orders.csv', [
