@@ -28,7 +28,7 @@ class FedExRateService
      * STANDARD_OVERNIGHT
      * etc.
      */
-    public function getRates(FedexConfiguration $config, array $shipmentData): array
+    public function getRates(FedexConfiguration $config, array $shipmentData, ?string $preferredCurrency = null): array
     {
         $token = $this->authService->getAccessToken($config);
 
@@ -95,7 +95,8 @@ class FedExRateService
                 $payload = $this->buildRateRequestPayload(
                     $config,
                     $shipmentData,
-                    $serviceType
+                    $serviceType,
+                    $preferredCurrency
                 );
 
                 $logPayload = $payload;
@@ -176,7 +177,8 @@ class FedExRateService
 
                 $rates = $this->parseRateResponse(
                     $responseData,
-                    $config
+                    $config,
+                    $preferredCurrency
                 );
 
                 foreach ($rates as $rate) {
@@ -273,7 +275,8 @@ class FedExRateService
     protected function buildRateRequestPayload(
         FedexConfiguration $config,
         array $data,
-        string $serviceType
+        string $serviceType,
+        ?string $preferredCurrency = null
     ): array {
         $pickupType = $this->mapPickupType(
             $config->dropoff_type
@@ -334,7 +337,7 @@ class FedExRateService
                             (string) (
                                 $data['origin_country_code'] ?? 'US'
                             )
-                        ),
+                        )
                     ],
                 ],
 
@@ -358,9 +361,17 @@ class FedExRateService
 
                 'pickupType' => $pickupType,
 
-                'rateRequestType' => [
-                    $rateType,
-                ],
+                // 'rateRequestType' => [
+                //     $rateType,
+                // ],
+
+                'rateRequestType' => $preferredCurrency
+                    ? array_values(array_unique([$rateType, 'PREFERRED']))
+                    : [$rateType],
+
+                'preferredCurrency' => $preferredCurrency
+                    ? strtoupper($preferredCurrency)
+                    : null,
 
                 /*
                 * packagingType belongs to requestedShipment.
@@ -379,6 +390,10 @@ class FedExRateService
                 ],
             ],
         ];
+
+        if (empty($preferredCurrency)) {
+            unset($payload['requestedShipment']['preferredCurrency']);
+        }
 
         return $payload;
     }
@@ -450,7 +465,8 @@ class FedExRateService
      */
     protected function parseRateResponse(
         array $responseData,
-        FedexConfiguration $config
+        FedexConfiguration $config,
+        ?string $preferredCurrency = null
     ): array {
         $rates = [];
 
@@ -509,20 +525,74 @@ class FedExRateService
 
             $bestRate = null;
 
+            // foreach ($ratedDetails as $rated) {
+            //     $responseRateType = strtoupper(
+            //         (string) ($rated['rateType'] ?? '')
+            //     );
+
+            //     if (
+            //         $configuredRateType === 'ACCOUNT' &&
+            //         in_array(
+            //             $responseRateType,
+            //             [
+            //                 'ACCOUNT',
+            //                 'PAYOR_ACCOUNT_SHIPMENT',
+            //                 'PAYOR_ACCOUNT_PACKAGE',
+            //             ],
+            //             true
+            //         )
+            //     ) {
+            //         $bestRate = $rated;
+            //         break;
+            //     }
+
+            //     if (
+            //         $configuredRateType === 'LIST' &&
+            //         in_array(
+            //             $responseRateType,
+            //             [
+            //                 'LIST',
+            //                 'PAYOR_LIST_SHIPMENT',
+            //                 'PAYOR_LIST_PACKAGE',
+            //             ],
+            //             true
+            //         )
+            //     ) {
+            //         $bestRate = $rated;
+            //         break;
+            //     }
+            // }
+
             foreach ($ratedDetails as $rated) {
                 $responseRateType = strtoupper(
                     (string) ($rated['rateType'] ?? '')
                 );
 
+                $responseCurrency = strtoupper(
+                    (string) (
+                        $rated['currency']
+                        ?? $rated['shipmentRateDetail']['currency']
+                        ?? ''
+                    )
+                );
+
+                // If a preferred currency was requested, select a rate
+                // only when FedEx actually returned that currency.
                 if (
+                    $preferredCurrency &&
+                    $responseCurrency === strtoupper($preferredCurrency)
+                ) {
+                    $bestRate = $rated;
+                    break;
+                }
+
+                // Otherwise preserve the existing ACCOUNT/LIST selection.
+                if (
+                    !$preferredCurrency &&
                     $configuredRateType === 'ACCOUNT' &&
                     in_array(
                         $responseRateType,
-                        [
-                            'ACCOUNT',
-                            'PAYOR_ACCOUNT_SHIPMENT',
-                            'PAYOR_ACCOUNT_PACKAGE',
-                        ],
+                        ['ACCOUNT', 'PAYOR_ACCOUNT_SHIPMENT', 'PAYOR_ACCOUNT_PACKAGE'],
                         true
                     )
                 ) {
@@ -531,14 +601,11 @@ class FedExRateService
                 }
 
                 if (
+                    !$preferredCurrency &&
                     $configuredRateType === 'LIST' &&
                     in_array(
                         $responseRateType,
-                        [
-                            'LIST',
-                            'PAYOR_LIST_SHIPMENT',
-                            'PAYOR_LIST_PACKAGE',
-                        ],
+                        ['LIST', 'PAYOR_LIST_SHIPMENT', 'PAYOR_LIST_PACKAGE'],
                         true
                     )
                 ) {

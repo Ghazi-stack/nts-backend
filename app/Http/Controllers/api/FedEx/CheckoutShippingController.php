@@ -775,6 +775,7 @@ class CheckoutShippingController extends Controller
                 'destination.state'        => 'nullable|string|max:255',
                 'destination.city'         => 'nullable|string|max:255',
                 'destination.postal_code'  => 'nullable|string|max:50',
+                'currency' => 'nullable|string|size:3',
 
                 /*
                 * Dashboard can provide the already-prepared package.
@@ -790,6 +791,7 @@ class CheckoutShippingController extends Controller
             ]);
 
             $destination = $validated['destination'];
+            $currency = strtoupper($validated['currency'] ?? 'USD');
 
             /*
             |--------------------------------------------------------------------------
@@ -1239,7 +1241,9 @@ class CheckoutShippingController extends Controller
             $rates = $this->shippingRateService->getCheckoutShippingRates(
                 $destination,
                 $packageInfo,
-                $storeId
+                $storeId,
+                null,
+                $currency
             );
 
             /*
