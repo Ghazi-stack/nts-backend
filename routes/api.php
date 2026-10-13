@@ -467,6 +467,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     // Analytics — Visitor Sessions
     Route::prefix('analytics')->controller(RealtimeController::class)->group(function () {
        Route::get('/realtime', 'index');
+       Route::get('/dashboard/search', 'searchIndex');
     });
 
     Route::middleware('permission:settings')->group(function () {
