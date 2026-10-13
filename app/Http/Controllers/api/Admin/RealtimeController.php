@@ -569,4 +569,227 @@ class RealtimeController extends Controller
             'Content-Disposition' => 'attachment; filename="customers.csv"',
         ]);
     }
+
+    public function orderIndex(Request $request)
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Store not found or unauthorized.',
+            ], 403);
+        }
+
+        [$from, $to, $compareFrom, $compareTo] = $this->orderRange($request);
+
+        $allowed = [
+            'orderId',
+            'date',
+            'source',
+            'subtotal',
+            'lineItemDiscounts',
+            'orderDiscounts',
+            'shipping',
+            'tax',
+            'total',
+        ];
+
+        $columns = collect(explode(',', (string) $request->query('columns', implode(',', $allowed))))
+            ->map(fn($col) => trim($col))
+            ->filter(fn($col) => in_array($col, $allowed, true))
+            ->values()
+            ->all();
+
+        if (!$columns) {
+            $columns = $allowed;
+        }
+
+        $current  = $this->orderRows($storeId, $from, $to);
+        $previous = $this->orderRows($storeId, $compareFrom, $compareTo);
+
+        $rows = $current->map(function ($row) use ($columns) {
+            $out = ['id' => $row['id']];
+            foreach ($columns as $col) {
+                $out[$col] = $row[$col] ?? null;
+            }
+            return $out;
+        })->values();
+
+        if ($request->query('export') === 'csv') {
+            return $this->orderCsv($rows, array_merge(['id'], $columns));
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Order analytics retrieved successfully',
+            'data'    => [
+                'range'   => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+                'compare' => ['from' => $compareFrom->toDateString(), 'to' => $compareTo->toDateString()],
+                'columns' => $columns,
+                'summary' => $this->orderSummary($current, $previous),
+                'chart'   => $this->orderChart($current, $previous, $from, $to, $compareFrom),
+                'orders'  => $rows,
+            ],
+        ]);
+    }
+
+    private function orderRange(Request $request): array
+    {
+        $preset  = $request->query('preset', 'today');
+        $compare = $request->query('compare', 'previous_period');
+
+        if ($request->filled('dateFrom') && $request->filled('dateTo')) {
+            $from = Carbon::parse($request->query('dateFrom'))->startOfDay();
+            $to   = Carbon::parse($request->query('dateTo'))->endOfDay();
+        } else {
+            [$from, $to] = $this->orderPresetRange($preset);
+        }
+
+        if ($request->filled('compareFrom') && $request->filled('compareTo')) {
+            $compareFrom = Carbon::parse($request->query('compareFrom'))->startOfDay();
+            $compareTo   = Carbon::parse($request->query('compareTo'))->endOfDay();
+        } elseif ($compare === 'previous_year') {
+            $compareFrom = $from->copy()->subYear();
+            $compareTo   = $to->copy()->subYear();
+        } else {
+            $days = $from->diffInDays($to) + 1;
+            $compareFrom = $from->copy()->subDays($days);
+            $compareTo   = $from->copy()->subDay()->endOfDay();
+        }
+
+        return [$from, $to, $compareFrom, $compareTo];
+    }
+
+    private function orderPresetRange(string $preset): array
+    {
+        $now = now();
+
+        return match ($preset) {
+            'yesterday'       => [$now->copy()->subDay()->startOfDay(), $now->copy()->subDay()->endOfDay()],
+            'last_week'       => [$now->copy()->subWeek()->startOfWeek(), $now->copy()->subWeek()->endOfWeek()],
+            'last_month'      => [$now->copy()->subMonth()->startOfMonth(), $now->copy()->subMonth()->endOfMonth()],
+            'week_to_date'    => [$now->copy()->startOfWeek(), $now->copy()->endOfDay()],
+            'month_to_date'   => [$now->copy()->startOfMonth(), $now->copy()->endOfDay()],
+            'quarter_to_date' => [$now->copy()->startOfQuarter(), $now->copy()->endOfDay()],
+            'year_to_date'    => [$now->copy()->startOfYear(), $now->copy()->endOfDay()],
+            default           => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
+        };
+    }
+
+    private function orderRows(int $storeId, Carbon $from, Carbon $to)
+    {
+        return Order::query()
+            ->with([
+                'items:id,order_id,product_id,quantity,price',
+                'items.product:id,price',
+            ])
+            ->where('store_id', $storeId)
+            ->where('is_draft', 0)
+            ->whereBetween('created_at', [$from, $to])
+            ->orderByDesc('id')
+            ->get()
+            ->map(function ($order) {
+                $subtotal = round((float) $order->items->sum(fn($item) => $item->price * $item->quantity), 2);
+                $lineDiscount = round((float) $order->items->sum(function ($item) {
+                    $productPrice = (float) optional($item->product)->price;
+                    $sold = (float) $item->price;
+                    return $productPrice > $sold ? ($productPrice - $sold) * (int) $item->quantity : 0;
+                }), 2);
+
+                return [
+                    'id'                => $order->id,
+                    'orderId'           => $order->order_number ?: (string) $order->id,
+                    'date'              => optional($order->created_at)->toDateString(),
+                    'source'            => $order->channel ?: 'Direct',
+                    'subtotal'          => $subtotal,
+                    'lineItemDiscounts' => $lineDiscount,
+                    'orderDiscounts'    => round((float) $order->discountAmount + (float) $order->manual_discount, 2),
+                    'shipping'          => round((float) $order->shipping_cost, 2),
+                    'tax'               => round((float) ($order->tax ?? 0), 2),
+                    'total'             => round((float) $order->total_amount, 2),
+                    'units'             => (int) $order->items->sum('quantity'),
+                    'discounted'        => (float) $order->discountAmount > 0
+                        || (float) $order->manual_discount > 0
+                        || !empty($order->coupon_code)
+                        || $lineDiscount > 0,
+                ];
+            })
+            ->values();
+    }
+
+    private function orderSummary($current, $previous): array
+    {
+        $count = $current->count();
+        $units = (int) $current->sum('units');
+        $revenue = round((float) $current->sum('total'), 2);
+        $discounted = $current->where('discounted', true)->count();
+        $discountRate = $count ? round(($discounted / $count) * 100, 2) : 0;
+        $aov = $count ? round($revenue / $count, 2) : 0;
+
+        $prevCount = $previous->count();
+        $prevUnits = (int) $previous->sum('units');
+        $prevRevenue = round((float) $previous->sum('total'), 2);
+        $prevDiscounted = $previous->where('discounted', true)->count();
+        $prevDiscountRate = $prevCount ? round(($prevDiscounted / $prevCount) * 100, 2) : 0;
+        $prevAov = $prevCount ? round($prevRevenue / $prevCount, 2) : 0;
+
+        return [
+            'orderCount' => ['value' => $count, 'change' => $this->orderChange($count, $prevCount), 'from' => $prevCount],
+            'unitsSold'  => ['value' => $units, 'change' => $this->orderChange($units, $prevUnits), 'from' => $prevUnits],
+            'revenue'    => ['value' => $revenue, 'change' => $this->orderChange($revenue, $prevRevenue), 'from' => $prevRevenue],
+            'percentDiscounted' => ['value' => $discountRate, 'change' => round($discountRate - $prevDiscountRate, 2), 'from' => $prevDiscountRate],
+            'aov'        => ['value' => $aov, 'change' => $this->orderChange($aov, $prevAov), 'from' => $prevAov],
+        ];
+    }
+
+    private function orderChart($current, $previous, Carbon $from, Carbon $to, Carbon $compareFrom): array
+    {
+        $currentByDate  = $current->groupBy('date');
+        $previousByDate = $previous->groupBy('date');
+        $points = [];
+        $day = 0;
+        $cursor = $from->copy()->startOfDay();
+
+        while ($cursor <= $to) {
+            $currentKey = $cursor->toDateString();
+            $compareKey = $compareFrom->copy()->addDays($day)->toDateString();
+
+            $points[] = [
+                'date'    => $currentKey,
+                'label'   => $cursor->format('n/j'),
+                'current' => isset($currentByDate[$currentKey]) ? $currentByDate[$currentKey]->count() : 0,
+                'compare' => isset($previousByDate[$compareKey]) ? $previousByDate[$compareKey]->count() : 0,
+            ];
+
+            $cursor->addDay();
+            $day++;
+        }
+
+        return $points;
+    }
+
+    private function orderChange($current, $previous): float
+    {
+        if (!$previous) {
+            return $current ? 100 : 0;
+        }
+        return round((($current - $previous) / $previous) * 100, 2);
+    }
+
+    private function orderCsv($rows, array $headers)
+    {
+        $lines = [implode(',', $headers)];
+
+        foreach ($rows as $row) {
+            $lines[] = implode(',', array_map(function ($key) use ($row) {
+                return '"' . str_replace('"', '""', (string) ($row[$key] ?? '')) . '"';
+            }, $headers));
+        }
+
+        return response(implode("\n", $lines), 200, [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="orders.csv"',
+        ]);
+    }
 }
