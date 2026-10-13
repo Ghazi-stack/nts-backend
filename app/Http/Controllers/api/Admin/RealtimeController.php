@@ -202,11 +202,7 @@ class RealtimeController extends Controller
             ->where('is_draft', 0)
             ->where(function ($q) use ($keyword) {
                 $q->where('id', 'like', "%{$keyword}%")
-                    ->orWhere('order_number', 'like', "%{$keyword}%")
-                    ->orWhere('email', 'like', "%{$keyword}%")
-                    ->orWhere('name', 'like', "%{$keyword}%")
-                    ->orWhere('phone', 'like', "%{$keyword}%")
-                    ->orWhere('total_amount', 'like', "%{$keyword}%");
+                    ->orWhere('order_number', 'like', "%{$keyword}%");
 
                 if (is_numeric($keyword)) {
                     $q->orWhere('id', (int) $keyword);
