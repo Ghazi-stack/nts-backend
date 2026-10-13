@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\VisitorSession;
 use Carbon\Carbon;
@@ -450,6 +451,81 @@ class RealtimeController extends Controller
                     'tax'                     => $tax,
                     'orderTotal'              => round((float) $order->total_amount, 2),
                 ],
+            ],
+        ]);
+    }
+
+    public function showSearchProductDetails($id)
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Store not found or unauthorized.',
+            ], 403);
+        }
+
+        $product = Product::query()
+            ->with(['brand:id,name', 'images'])
+            ->where('store_id', $storeId)
+            ->find($id);
+
+        if (!$product) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Product not found.',
+            ], 404);
+        }
+
+        $sales = OrderItem::query()
+            ->select('order_items.order_id', 'order_items.quantity', 'order_items.price', 'orders.created_at')
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->where('orders.store_id', $storeId)
+            ->where('orders.is_draft', 0)
+            ->whereNull('orders.deleted_at')
+            ->where('order_items.product_id', $product->id)
+            ->get()
+            ->map(fn ($row) => [
+                'order_id' => $row->order_id,
+                'date'     => Carbon::parse($row->created_at)->toDateString(),
+                'qty'      => (int) $row->quantity,
+                'revenue'  => round((float) $row->price * (int) $row->quantity, 2),
+            ]);
+
+        $revenue = round((float) $sales->sum('revenue'), 2);
+        $qty     = (int) $sales->sum('qty');
+        $orders  = $sales->pluck('order_id')->unique()->count();
+        $image   = $product->images->first();
+
+        $byDate = $sales->groupBy('date');
+        $chart = $byDate->map(fn ($rows, $date) => [
+            'date'    => $date,
+            'label'   => Carbon::parse($date)->format('n/j'),
+            'revenue' => round((float) $rows->sum('revenue'), 2),
+        ])->sortBy('date')->values();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Product details retrieved successfully',
+            'data'    => [
+                'product' => [
+                    'id'      => $product->id,
+                    'name'    => $product->name,
+                    'sku'     => $product->sku,
+                    'image'   => $image->url ?? $image->image ?? $image->path ?? null,
+                    'brand'   => $product->brand->name ?? null,
+                    'addedAt' => optional($product->created_at)->toDateString(),
+                ],
+                'stats' => [
+                    'revenue'      => $revenue,
+                    'averagePrice' => $qty ? round($revenue / $qty, 2) : 0,
+                    'quantitySold' => $qty,
+                    'orders'       => $orders,
+                    'visits'       => 0,
+                    'abandonRate'  => 0,
+                ],
+                'chart' => $chart,
             ],
         ]);
     }

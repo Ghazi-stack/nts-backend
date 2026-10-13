@@ -470,6 +470,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
        Route::get('/dashboard/search', 'searchIndex');
        Route::get('/customers/{id}/details', 'showSearchCustomersDetails');
        Route::get('/orders/{id}/details', 'showSearchOrderDetails');
+       Route::get('/products/{id}/details', 'showSearchProductDetails');
        Route::get('/analytics-customers', 'analyticsCustomers');
        Route::get('/analytics-orders', 'orderIndex');
     });
