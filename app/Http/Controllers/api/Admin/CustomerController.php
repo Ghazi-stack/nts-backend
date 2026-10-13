@@ -1082,7 +1082,7 @@ class CustomerController extends Controller
         }
     }
 
-    public function exportCSV()
+    public function exportCSV(Request $request)
     {
         try {
             $storeId = current_store_id();
@@ -1094,40 +1094,58 @@ class CustomerController extends Controller
                 ], 400);
             }
 
-            $total = Customer::where('store_id', $storeId)->count();
+            // Optional: customer_ids array se specific customers export karo
+            $customerIds = $request->input('customer_ids', []);
+
+            $query = Customer::where('store_id', $storeId);
+
+            if (!empty($customerIds) && is_array($customerIds)) {
+                $customerIds = array_filter(array_map('intval', $customerIds));
+                $query->whereIn('id', $customerIds);
+            }
+
+            $total = $query->count();
 
             if ($total === 0) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'No customers found to export.'
+                    'message' => empty($customerIds)
+                        ? 'No customers found to export.'
+                        : 'No customers found for the given IDs.'
                 ], 404);
             }
 
-            return response()->streamDownload(function () use ($storeId) {
+            return response()->streamDownload(function () use ($storeId, $customerIds) {
                 set_time_limit(0);
                 ini_set('memory_limit', '512M');
-                DB::disableQueryLog();
+                \DB::disableQueryLog();
 
                 $exporter = new CustomerExport();
                 $handle   = fopen('php://output', 'w');
 
                 fputcsv($handle, $exporter->headings());
 
-                Customer::query()
+                $exportQuery = Customer::query()
                     ->where('store_id', $storeId)
-                    ->orderBy('id')
-                    ->chunkById(200, function ($customers) use ($handle, $exporter) {
-                        foreach ($customers as $customer) {
-                            fputcsv($handle, $exporter->map($customer));
-                        }
+                    ->orderBy('id');
 
-                        unset($customers);
+                // Sirf selected IDs pe filter
+                if (!empty($customerIds) && is_array($customerIds)) {
+                    $exportQuery->whereIn('id', $customerIds);
+                }
 
-                        if (ob_get_level() > 0) {
-                            ob_flush();
-                        }
-                        flush();
-                    });
+                $exportQuery->chunkById(200, function ($customers) use ($handle, $exporter) {
+                    foreach ($customers as $customer) {
+                        fputcsv($handle, $exporter->map($customer));
+                    }
+
+                    unset($customers);
+
+                    if (ob_get_level() > 0) {
+                        ob_flush();
+                    }
+                    flush();
+                });
 
                 fclose($handle);
             }, 'customers.csv', [
