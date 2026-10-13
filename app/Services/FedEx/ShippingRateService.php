@@ -5,14 +5,16 @@ namespace App\Services\FedEx;
 use App\Models\ShippingZone;
 use App\Models\StoreShippingAddress;
 use Illuminate\Support\Facades\Log;
+use App\Services\CurrencyConversionService;
 
 class ShippingRateService
 {
     protected FedExRateService $fedexRateService;
 
-    public function __construct(FedExRateService $fedexRateService)
+    public function __construct(FedExRateService $fedexRateService, CurrencyConversionService $currencyConversionService)
     {
         $this->fedexRateService = $fedexRateService;
+        $this->currencyConversionService = $currencyConversionService;
     }
 
     /**
@@ -66,17 +68,47 @@ class ShippingRateService
                 );
 
                 if ($staticRate !== null) {
-                    $allRates[] = [
-                        'method_id'     => $method->id,
-                        'method_type'   => $method->method_type,
-                        'display_name'  => $method->display_name,
-                        'total_charge'  => round($staticRate, 2),
-                        'currency'      => 'USD',
-                        'transit_days'  => null,
-                        'delivery_date' => null,
-                        'service_type'  => $method->method_type,
-                        'is_fedex'      => false,
-                    ];
+                    $targetCurrency = strtoupper($currency ?: 'USD');
+                    // $allRates[] = [
+                    //     'method_id'     => $method->id,
+                    //     'method_type'   => $method->method_type,
+                    //     'display_name'  => $method->display_name,
+                    //     'total_charge'  => round($staticRate, 2),
+                    //     'currency'      => 'USD',
+                    //     'transit_days'  => null,
+                    //     'delivery_date' => null,
+                    //     'service_type'  => $method->method_type,
+                    //     'is_fedex'      => false,
+                    // ];
+
+                    try {
+                        $convertedRate = $this->currencyConversionService->convert(
+                            (float) $staticRate,
+                            'USD', // Base currency of your configured shipping prices
+                            $targetCurrency
+                        );
+
+                        $allRates[] = [
+                            'method_id'     => $method->id,
+                            'method_type'   => $method->method_type,
+                            'display_name'  => $method->display_name,
+                            'total_charge'  => $convertedRate,
+                            'currency'      => $targetCurrency,
+                            'transit_days'  => null,
+                            'delivery_date' => null,
+                            'service_type'  => $method->method_type,
+                            'is_fedex'      => false,
+                        ];
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::error(
+                            'Static shipping currency conversion failed',
+                            [
+                                'method_id' => $method->id,
+                                'currency' => $targetCurrency,
+                                'error' => $e->getMessage(),
+                            ]
+                        );
+                    }
                 }
                 continue;
             }
