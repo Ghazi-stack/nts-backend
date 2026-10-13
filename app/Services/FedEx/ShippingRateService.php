@@ -24,7 +24,7 @@ class ShippingRateService
      *
      * $storeId: har cheez isi store ke against — zones, methods, origin address
      */
-    public function getCheckoutShippingRates(array $destination, array $packageInfo, ?int $storeId = null, ?array $origin = null): array
+    public function getCheckoutShippingRates(array $destination, array $packageInfo, ?int $storeId = null, ?array $origin = null, ?string $currency = null): array
     {
         $allRates = [];
 
@@ -106,7 +106,7 @@ class ShippingRateService
                 'package_value'            => $packageInfo['package_value'] ?? $packageInfo['order_total'] ?? null,
             ];
 
-            $fedexResult = $this->fedexRateService->getRates($fedexConfig, $shipmentData);
+            $fedexResult = $this->fedexRateService->getRates($fedexConfig, $shipmentData, $currency);
 
             if ($fedexResult['success']) {
                 foreach ($fedexResult['rates'] as $rate) {
