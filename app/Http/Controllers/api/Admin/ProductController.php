@@ -3018,7 +3018,6 @@ class ProductController extends Controller
 
             $spreadsheet->disconnectWorksheets();
             unset($spreadsheet);
-
         } catch (\Throwable $e) {
             Log::error('Failed to count import rows', [
                 'file' => $fullPath,
@@ -3129,7 +3128,7 @@ class ProductController extends Controller
         }
         return $fields;
     }
-    public function exportCSV()
+    public function exportCSV(Request $request)
     {
         try {
             $storeId = current_store_id();
@@ -3141,16 +3140,28 @@ class ProductController extends Controller
                 ], 400);
             }
 
-            $total = Product::where('store_id', $storeId)->count();
+            // Optional: product_ids array se specific products export karo
+            $productIds = $request->input('product_ids', []); // array of IDs
+
+            $query = Product::where('store_id', $storeId);
+
+            if (!empty($productIds) && is_array($productIds)) {
+                $productIds = array_filter(array_map('intval', $productIds)); // clean IDs
+                $query->whereIn('id', $productIds);
+            }
+
+            $total = $query->count();
 
             if ($total === 0) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'No products found to export.'
+                    'message' => empty($productIds)
+                        ? 'No products found to export.'
+                        : 'No products found for the given IDs.'
                 ], 404);
             }
 
-            return response()->streamDownload(function () use ($storeId) {
+            return response()->streamDownload(function () use ($storeId, $productIds) {
                 set_time_limit(0);
                 ini_set('memory_limit', '512M');
                 \DB::disableQueryLog();
@@ -3160,7 +3171,7 @@ class ProductController extends Controller
 
                 fputcsv($handle, $exporter->headings());
 
-                Product::query()
+                $exportQuery = Product::query()
                     ->select([
                         'id',
                         'store_id',
@@ -3196,19 +3207,25 @@ class ProductController extends Controller
                         'images:id,product_id,path,url,is_primary',
                     ])
                     ->where('store_id', $storeId)
-                    ->orderBy('id')
-                    ->chunkById(100, function ($products) use ($handle, $exporter) {
-                        foreach ($products as $product) {
-                            fputcsv($handle, $exporter->map($product));
-                        }
+                    ->orderBy('id');
 
-                        unset($products);
+                // Sirf selected IDs pe filter
+                if (!empty($productIds) && is_array($productIds)) {
+                    $exportQuery->whereIn('id', $productIds);
+                }
 
-                        if (ob_get_level() > 0) {
-                            ob_flush();
-                        }
-                        flush();
-                    });
+                $exportQuery->chunkById(100, function ($products) use ($handle, $exporter) {
+                    foreach ($products as $product) {
+                        fputcsv($handle, $exporter->map($product));
+                    }
+
+                    unset($products);
+
+                    if (ob_get_level() > 0) {
+                        ob_flush();
+                    }
+                    flush();
+                });
 
                 fclose($handle);
             }, 'products.csv', [
