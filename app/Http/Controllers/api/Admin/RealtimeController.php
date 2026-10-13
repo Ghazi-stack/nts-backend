@@ -144,13 +144,26 @@ class RealtimeController extends Controller
                     ->orWhereRaw("CONCAT(COALESCE(first_name,''), ' ', COALESCE(last_name,'')) LIKE ?", ["%{$keyword}%"]);
             })
             ->orderByDesc('id')
-            ->limit(15)
+            ->limit(50)
             ->get(['id', 'first_name', 'last_name', 'name', 'email', 'phone'])
-            ->map(fn ($row) => [
-                'id'    => $row->id,
-                'email' => $row->email,
-                'name'  => trim($row->name ?: ($row->first_name . ' ' . $row->last_name)),
-                'phone' => $row->phone,
+            ->map(function ($row) {
+                $name = trim($row->name ?: ($row->first_name . ' ' . $row->last_name));
+
+                return [
+                    'id'    => $row->id,
+                    'email' => $row->email,
+                    'name'  => $name,
+                    'phone' => $row->phone,
+                    '_key'  => strtolower(trim((string) $row->email)) . '|' . strtolower($name),
+                ];
+            })
+            ->unique('_key')
+            ->take(15)
+            ->map(fn($row) => [
+                'id'    => $row['id'],
+                'email' => $row['email'],
+                'name'  => $row['name'],
+                'phone' => $row['phone'],
             ])
             ->values();
     }
@@ -169,9 +182,11 @@ class RealtimeController extends Controller
                     });
             })
             ->orderByDesc('id')
-            ->limit(15)
+            ->limit(50)
             ->get(['id', 'name', 'sku', 'brand_id'])
-            ->map(fn ($row) => [
+            ->unique(fn($row) => strtolower(trim((string) $row->sku)))
+            ->take(15)
+            ->map(fn($row) => [
                 'id'    => $row->id,
                 'name'  => $row->name,
                 'sku'   => $row->sku,
@@ -219,9 +234,11 @@ class RealtimeController extends Controller
                 });
             })
             ->orderByDesc('id')
-            ->limit(15)
+            ->limit(50)
             ->get(['id', 'order_number'])
-            ->map(fn ($row) => [
+            ->unique('id')
+            ->take(15)
+            ->map(fn($row) => [
                 'id'          => $row->id,
                 'orderNumber' => $row->order_number ?: (string) $row->id,
             ])
