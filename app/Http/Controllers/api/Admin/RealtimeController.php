@@ -240,4 +240,133 @@ class RealtimeController extends Controller
             ])
             ->values();
     }
+
+    public function showSearchCustomersDetails($id)
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Store not found or unauthorized.',
+            ], 403);
+        }
+
+        $customer = Customer::query()
+            ->where('store_id', $storeId)
+            ->find($id);
+
+        if (!$customer) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Customer not found.',
+            ], 404);
+        }
+
+        $orders = $customer->orders()
+            ->with([
+                'items:id,order_id,product_id,quantity,price',
+                'items.product:id,name,sku,price',
+            ])
+            ->where('store_id', $storeId)
+            ->where('is_draft', 0)
+            ->orderByDesc('id')
+            ->get();
+
+        $ordersCount = $orders->count();
+        $totalSpent  = round((float) $orders->sum('total_amount'), 2);
+        $lastOrder   = $orders->sortByDesc('created_at')->first();
+
+        $itemPrices = $orders->flatMap(fn($order) => $order->items->pluck('price'))->filter(fn($price) => $price !== null);
+        $minPrice   = $itemPrices->min();
+        $maxPrice   = $itemPrices->max();
+
+        $discountedOrders = $orders->filter(function ($order) {
+            return (float) $order->discountAmount > 0
+                || (float) $order->manual_discount > 0
+                || !empty($order->coupon_code);
+        })->count();
+
+        $allItems = $orders->flatMap->items;
+        $itemsCount = $allItems->count();
+        $discountedItems = $allItems->filter(function ($item) {
+            $productPrice = (float) optional($item->product)->price;
+            return $productPrice > 0 && (float) $item->price < $productPrice;
+        })->count();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Customer details retrieved successfully',
+            'data'    => [
+                'customer' => [
+                    'id'    => $customer->id,
+                    'name'  => trim($customer->name ?: ($customer->first_name . ' ' . $customer->last_name)),
+                    'email' => $customer->email,
+                    'phone' => $customer->phone,
+                ],
+                'stats' => [
+                    'totalSpent' => $totalSpent,
+                    'orders'     => $ordersCount,
+                    'lastPurchase' => $lastOrder ? [
+                        'date'    => optional($lastOrder->created_at)->toDateString(),
+                        'daysAgo' => Carbon::parse($lastOrder->created_at)->diffInDays(now()),
+                    ] : null,
+                    'aov' => $ordersCount ? round($totalSpent / $ordersCount, 2) : 0,
+                    'itemPriceRange' => [
+                        'min' => $minPrice !== null ? round((float) $minPrice, 2) : 0,
+                        'max' => $maxPrice !== null ? round((float) $maxPrice, 2) : 0,
+                    ],
+                ],
+                'discounts' => [
+                    'orders' => [
+                        'percent'  => $ordersCount ? round(($discountedOrders / $ordersCount) * 100, 2) : 0,
+                        'count'    => $discountedOrders,
+                        'total'    => $ordersCount,
+                    ],
+                    'products' => [
+                        'percent' => $itemsCount ? round(($discountedItems / $itemsCount) * 100, 2) : 0,
+                        'count'   => $discountedItems,
+                        'total'   => $itemsCount,
+                    ],
+                ],
+                'orders' => $orders->map(function ($order) {
+                    $subtotal = round((float) $order->items->sum(fn($item) => $item->price * $item->quantity), 2);
+                    $discount = round((float) $order->discountAmount + (float) $order->manual_discount, 2);
+
+                    return [
+                        'id'          => $order->id,
+                        'orderNumber' => $order->order_number ?: (string) $order->id,
+                        'ordered'     => optional($order->created_at)->toDateString(),
+                        'channel'     => $order->channel ?: 'Direct',
+                        'totalAmount' => round((float) $order->total_amount, 2),
+                        'subtotal'    => $subtotal,
+                        'discounts'   => $discount,
+                        'shipping'    => round((float) $order->shipping_cost, 2),
+                    ];
+                })->values(),
+                'products' => $orders->flatMap(function ($order) {
+                    return $order->items->map(function ($item) use ($order) {
+                        $productPrice = (float) optional($item->product)->price;
+                        $soldPrice    = (float) $item->price;
+                        $percent      = $productPrice > 0 && $soldPrice < $productPrice
+                            ? round((($productPrice - $soldPrice) / $productPrice) * 100, 2)
+                            : 0;
+
+                        return [
+                            'orderId'     => $order->id,
+                            'orderNumber' => $order->order_number ?: (string) $order->id,
+                            'ordered'     => optional($order->created_at)->toDateString(),
+                            'channel'     => $order->channel ?: 'Direct',
+                            'productId'   => $item->product_id,
+                            'product'     => $item->product->name ?? null,
+                            'sku'         => $item->product->sku ?? null,
+                            'qty'         => (int) $item->quantity,
+                            'revenue'     => round($soldPrice * (int) $item->quantity, 2),
+                            'discounted'  => $percent,
+                        ];
+                    });
+                })->values(),
+            ],
+        ]);
+    }
 }
