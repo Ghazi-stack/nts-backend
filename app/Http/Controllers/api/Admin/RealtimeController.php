@@ -369,4 +369,204 @@ class RealtimeController extends Controller
             ],
         ]);
     }
+
+    public function analyticsCustomers(Request $request)
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Store not found or unauthorized.',
+            ], 403);
+        }
+
+        $preset  = $request->query('preset', 'today');
+        $compare = $request->query('compare', 'previous_period');
+
+        if ($request->filled('dateFrom') && $request->filled('dateTo')) {
+            $from = Carbon::parse($request->query('dateFrom'))->startOfDay();
+            $to   = Carbon::parse($request->query('dateTo'))->endOfDay();
+        } else {
+            [$from, $to] = $this->presetRange($preset);
+        }
+
+        if ($request->filled('compareFrom') && $request->filled('compareTo')) {
+            $compareFrom = Carbon::parse($request->query('compareFrom'))->startOfDay();
+            $compareTo   = Carbon::parse($request->query('compareTo'))->endOfDay();
+        } elseif ($compare === 'previous_year') {
+            $compareFrom = $from->copy()->subYear();
+            $compareTo   = $to->copy()->subYear();
+        } else {
+            $days = $from->diffInDays($to) + 1;
+            $compareFrom = $from->copy()->subDays($days);
+            $compareTo   = $from->copy()->subDay()->endOfDay();
+        }
+
+        $toggle = collect(explode(',', (string) $request->query('columns', 'email,name,type')))
+            ->map(fn($col) => trim($col))
+            ->filter(fn($col) => in_array($col, ['email', 'name', 'type'], true))
+            ->values()
+            ->all();
+
+        $columns = array_merge($toggle, [
+            'cohort',
+            'firstChannel',
+            'lastOrderId',
+            'lastOrderDate',
+            'lastOrderAmount',
+            'totalSpent',
+        ]);
+
+        $current  = $this->rows($storeId, $from, $to);
+        $previous = $this->rows($storeId, $compareFrom, $compareTo);
+
+        $rows = $current->map(function ($row) use ($columns) {
+            $out = ['id' => $row['id']];
+            foreach ($columns as $col) {
+                $out[$col] = $row[$col] ?? null;
+            }
+            return $out;
+        })->values();
+
+        if ($request->query('export') === 'csv') {
+            return $this->csv($rows, array_merge(['id'], $columns));
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Customer analytics retrieved successfully',
+            'data'    => [
+                'range' => [
+                    'from' => $from->toDateString(),
+                    'to'   => $to->toDateString(),
+                ],
+                'compare' => [
+                    'from' => $compareFrom->toDateString(),
+                    'to'   => $compareTo->toDateString(),
+                ],
+                'columns' => $columns,
+                'summary' => $this->summary($current, $previous),
+                'customers' => $rows,
+            ],
+        ]);
+    }
+
+    private function presetRange(string $preset): array
+    {
+        $now = now();
+
+        return match ($preset) {
+            'yesterday'       => [$now->copy()->subDay()->startOfDay(), $now->copy()->subDay()->endOfDay()],
+            'last_week'       => [$now->copy()->subWeek()->startOfWeek(), $now->copy()->subWeek()->endOfWeek()],
+            'last_month'      => [$now->copy()->subMonth()->startOfMonth(), $now->copy()->subMonth()->endOfMonth()],
+            'week_to_date'    => [$now->copy()->startOfWeek(), $now->copy()->endOfDay()],
+            'month_to_date'   => [$now->copy()->startOfMonth(), $now->copy()->endOfDay()],
+            'quarter_to_date' => [$now->copy()->startOfQuarter(), $now->copy()->endOfDay()],
+            'year_to_date'    => [$now->copy()->startOfYear(), $now->copy()->endOfDay()],
+            default           => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
+        };
+    }
+
+    private function rows(int $storeId, Carbon $from, Carbon $to)
+    {
+        $customers = Customer::query()
+            ->with(['orders' => function ($q) use ($storeId) {
+                $q->where('store_id', $storeId)
+                    ->where('is_draft', 0)
+                    ->orderBy('created_at');
+            }])
+            ->where('store_id', $storeId)
+            ->whereHas('orders', function ($q) use ($storeId, $from, $to) {
+                $q->where('store_id', $storeId)
+                    ->where('is_draft', 0)
+                    ->whereBetween('created_at', [$from, $to]);
+            })
+            ->get();
+
+        return $customers->map(function ($customer) use ($from, $to) {
+            $orders  = $customer->orders;
+            $inRange = $orders->filter(fn($order) => $order->created_at >= $from && $order->created_at <= $to)->values();
+            $before  = $orders->filter(fn($order) => $order->created_at < $from)->count();
+            $first   = $orders->sortBy('created_at')->first();
+            $last    = $inRange->sortByDesc('created_at')->first();
+
+            return [
+                'id'              => $customer->id,
+                'email'           => $customer->email,
+                'name'            => trim($customer->name ?: ($customer->first_name . ' ' . $customer->last_name)),
+                'type'            => $before > 0 ? 'returning' : 'new',
+                'cohort'          => $from->toDateString() . ' to ' . $to->toDateString(),
+                'firstChannel'    => $first->channel ?: 'Direct',
+                'lastOrderId'     => $last->id ?? null,
+                'lastOrderNumber' => $last ? ($last->order_number ?: (string) $last->id) : null,
+                'lastOrderDate'   => optional($last?->created_at)->toDateString(),
+                'lastOrderAmount' => $last ? round((float) $last->total_amount, 2) : 0,
+                'totalSpent'      => round((float) $inRange->sum('total_amount'), 2),
+            ];
+        })->values();
+    }
+
+    private function summary($current, $previous): array
+    {
+        $customers = $current->count();
+        $new = $current->where('type', 'new')->count();
+        $returning = $customers - $new;
+
+        $prevCustomers = $previous->count();
+        $prevNew = $previous->where('type', 'new')->count();
+        $prevReturning = $prevCustomers - $prevNew;
+
+        $newRate = $customers ? round(($new / $customers) * 100, 2) : 0;
+        $returningRate = $customers ? round(($returning / $customers) * 100, 2) : 0;
+        $prevNewRate = $prevCustomers ? round(($prevNew / $prevCustomers) * 100, 2) : 0;
+        $prevReturningRate = $prevCustomers ? round(($prevReturning / $prevCustomers) * 100, 2) : 0;
+
+        return [
+            'customers' => [
+                'value'  => $customers,
+                'change' => $this->change($customers, $prevCustomers),
+                'from'   => $prevCustomers,
+            ],
+            'newCustomers' => [
+                'value'  => $new,
+                'change' => $this->change($new, $prevNew),
+                'from'   => $prevNew,
+            ],
+            'newCustomersRate' => [
+                'value'  => $newRate,
+                'change' => round($newRate - $prevNewRate, 2),
+                'from'   => $prevNewRate,
+            ],
+            'returningCustomersRate' => [
+                'value'  => $returningRate,
+                'change' => round($returningRate - $prevReturningRate, 2),
+                'from'   => $prevReturningRate,
+            ],
+        ];
+    }
+
+    private function change($current, $previous): float
+    {
+        if (!$previous) {
+            return $current ? 100 : 0;
+        }
+        return round((($current - $previous) / $previous) * 100, 2);
+    }
+
+    private function csv($rows, array $headers)
+    {
+        $lines = [implode(',', $headers)];
+
+        foreach ($rows as $row) {
+            $lines[] = implode(',', array_map(function ($key) use ($row) {
+                return '"' . str_replace('"', '""', (string) ($row[$key] ?? '')) . '"';
+            }, $headers));
+        }
+
+        return response(implode("\n", $lines), 200, [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="customers.csv"',
+        ]);
+    }
 }
