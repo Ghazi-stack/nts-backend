@@ -2823,6 +2823,7 @@ class OrderController extends Controller
             'user',
             'order.customer',
         ])
+            ->where('store_id', current_store_id())   // filter by storeId from header
             ->latest()
             ->paginate(20);
 
