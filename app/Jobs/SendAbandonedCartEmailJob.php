@@ -83,11 +83,6 @@ class SendAbandonedCartEmailJob implements ShouldQueue
             $formattedCartItems = $cartModels->map(function ($cart) {
                 $product = $cart->product;
 
-            \Log::info('Abandoned cart email product details', [
-                'cart_ids' => $cartIds,
-                'products' => $formattedCartItems,
-            ]);    
-
                 // Get the first product image, if available.
                 $thumbnail = $product?->images
                     ->first()
@@ -106,6 +101,11 @@ class SendAbandonedCartEmailJob implements ShouldQueue
                     'thumbnail' => $thumbnail,
                 ];
             })->values()->all();
+
+            \Log::info('Abandoned cart email product details', [
+                'cart_ids' => $cartIds,
+                'products' => $formattedCartItems,
+            ]);
 
             Mail::to($this->userEmail)->send(
                 new AbandonedCartMail(
