@@ -1268,7 +1268,7 @@ class AuthController extends Controller
             }
 
             $user = User::where('id', $id)
-                ->where('userRole', 1)
+                ->where('userRole', '!=', 2)   // Customer exclude, baaki saare roles
                 ->firstOrFail();
 
             // Get user permissions for this store
@@ -1324,7 +1324,7 @@ class AuthController extends Controller
             }
 
             $user = User::where('store_id', $storeId)
-                ->where('userRole', 1)
+                ->where('userRole', '!=', 2)   // Customer exclude, baaki saare roles
                 ->findOrFail($id);
 
             $request->validate([
@@ -1439,7 +1439,7 @@ class AuthController extends Controller
             }
 
             $user = User::where('store_id', $storeId)
-                ->where('userRole', 1)
+                ->where('userRole', '!=', 2)   // Customer exclude, baaki saare roles
                 ->findOrFail($id);
 
             // Delete permissions
