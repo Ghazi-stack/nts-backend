@@ -486,7 +486,7 @@ class RealtimeController extends Controller
             ->whereNull('orders.deleted_at')
             ->where('order_items.product_id', $product->id)
             ->get()
-            ->map(fn ($row) => [
+            ->map(fn($row) => [
                 'order_id' => $row->order_id,
                 'date'     => Carbon::parse($row->created_at)->toDateString(),
                 'qty'      => (int) $row->quantity,
@@ -499,7 +499,7 @@ class RealtimeController extends Controller
         $image   = $product->images->first();
 
         $byDate = $sales->groupBy('date');
-        $chart = $byDate->map(fn ($rows, $date) => [
+        $chart = $byDate->map(fn($rows, $date) => [
             'date'    => $date,
             'label'   => Carbon::parse($date)->format('n/j'),
             'revenue' => round((float) $rows->sum('revenue'), 2),
@@ -950,6 +950,245 @@ class RealtimeController extends Controller
         return response(implode("\n", $lines), 200, [
             'Content-Type'        => 'text/csv',
             'Content-Disposition' => 'attachment; filename="orders.csv"',
+        ]);
+    }
+
+    public function productIndex(Request $request)
+    {
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Store not found or unauthorized.',
+            ], 403);
+        }
+
+        [$from, $to, $compareFrom, $compareTo] = $this->productRange($request);
+
+        $allowed = ['productName', 'sku', 'brand', 'merchRevenue', 'orders', 'quantitySold', 'visits'];
+
+        $columns = collect(explode(',', (string) $request->query('columns', implode(',', $allowed))))
+            ->map(fn($col) => trim($col))
+            ->filter(fn($col) => in_array($col, $allowed, true))
+            ->values()
+            ->all();
+
+        if (!$columns) {
+            $columns = $allowed;
+        }
+
+        $current  = $this->productRows($storeId, $from, $to);
+        $previous = $this->productRows($storeId, $compareFrom, $compareTo);
+
+        $rows = $current->map(function ($row) use ($columns) {
+            $out = ['id' => $row['id']];
+            foreach ($columns as $col) {
+                $out[$col] = $row[$col] ?? null;
+            }
+            return $out;
+        })->values();
+
+        if ($request->query('export') === 'csv') {
+            return $this->productCsv($rows, array_merge(['id'], $columns));
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Merchandising retrieved successfully',
+            'data'    => [
+                'range'    => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+                'compare'  => ['from' => $compareFrom->toDateString(), 'to' => $compareTo->toDateString()],
+                'columns'  => $columns,
+                'summary'  => $this->productSummary($current, $previous),
+                'chart'    => $this->productChart($storeId, $from, $to, $compareFrom),
+                'products' => $rows,
+            ],
+        ]);
+    }
+
+    private function productRange(Request $request): array
+    {
+        $preset  = $request->query('preset', 'today');
+        $compare = $request->query('compare', 'previous_period');
+
+        if ($request->filled('dateFrom') && $request->filled('dateTo')) {
+            $from = Carbon::parse($request->query('dateFrom'))->startOfDay();
+            $to   = Carbon::parse($request->query('dateTo'))->endOfDay();
+        } else {
+            [$from, $to] = $this->productPresetRange($preset);
+        }
+
+        if ($request->filled('compareFrom') && $request->filled('compareTo')) {
+            $compareFrom = Carbon::parse($request->query('compareFrom'))->startOfDay();
+            $compareTo   = Carbon::parse($request->query('compareTo'))->endOfDay();
+        } elseif ($compare === 'previous_year') {
+            $compareFrom = $from->copy()->subYear();
+            $compareTo   = $to->copy()->subYear();
+        } else {
+            $days = $from->diffInDays($to) + 1;
+            $compareFrom = $from->copy()->subDays($days);
+            $compareTo   = $from->copy()->subDay()->endOfDay();
+        }
+
+        return [$from, $to, $compareFrom, $compareTo];
+    }
+
+    private function productPresetRange(string $preset): array
+    {
+        $now = now();
+
+        return match ($preset) {
+            'yesterday'       => [$now->copy()->subDay()->startOfDay(), $now->copy()->subDay()->endOfDay()],
+            'last_week'       => [$now->copy()->subWeek()->startOfWeek(), $now->copy()->subWeek()->endOfWeek()],
+            'last_month'      => [$now->copy()->subMonth()->startOfMonth(), $now->copy()->subMonth()->endOfMonth()],
+            'week_to_date'    => [$now->copy()->startOfWeek(), $now->copy()->endOfDay()],
+            'month_to_date'   => [$now->copy()->startOfMonth(), $now->copy()->endOfDay()],
+            'quarter_to_date' => [$now->copy()->startOfQuarter(), $now->copy()->endOfDay()],
+            'year_to_date'    => [$now->copy()->startOfYear(), $now->copy()->endOfDay()],
+            default           => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
+        };
+    }
+
+    private function productRows(int $storeId, Carbon $from, Carbon $to)
+    {
+        $items = OrderItem::query()
+            ->select(
+                'order_items.product_id',
+                'order_items.order_id',
+                'order_items.quantity',
+                'order_items.price',
+                'orders.created_at'
+            )
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->where('orders.store_id', $storeId)
+            ->where('orders.is_draft', 0)
+            ->whereNull('orders.deleted_at')
+            ->whereBetween('orders.created_at', [$from, $to])
+            ->get();
+
+        $products = Product::query()
+            ->with('brand:id,name')
+            ->whereIn('id', $items->pluck('product_id')->unique())
+            ->get()
+            ->keyBy('id');
+
+        return $items->groupBy('product_id')->map(function ($rows, $productId) use ($products) {
+            $product = $products->get($productId);
+
+            return [
+                'id'           => (int) $productId,
+                'productName'  => $product->name ?? null,
+                'sku'          => $product->sku ?? null,
+                'brand'        => $product->brand->name ?? null,
+                'merchRevenue' => round((float) $rows->sum(fn($r) => $r->price * $r->quantity), 2),
+                'orders'       => $rows->pluck('order_id')->unique()->count(),
+                'quantitySold' => (int) $rows->sum('quantity'),
+                'visits'       => 0,
+                'minPrice'     => round((float) $rows->min('price'), 2),
+                'maxPrice'     => round((float) $rows->max('price'), 2),
+            ];
+        })->sortByDesc('merchRevenue')->values();
+    }
+
+    private function productSummary($current, $previous): array
+    {
+        $products = $current->count();
+        $orders = (int) $current->sum('orders');
+        $revenue = round((float) $current->sum('merchRevenue'), 2);
+        $qty = (int) $current->sum('quantitySold');
+        $avg = $qty ? round($revenue / $qty, 2) : 0;
+        $min = $current->min('minPrice');
+        $max = $current->max('maxPrice');
+
+        $prevProducts = $previous->count();
+        $prevOrders = (int) $previous->sum('orders');
+        $prevRevenue = round((float) $previous->sum('merchRevenue'), 2);
+        $prevQty = (int) $previous->sum('quantitySold');
+        $prevAvg = $prevQty ? round($prevRevenue / $prevQty, 2) : 0;
+        $prevMin = $previous->min('minPrice');
+        $prevMax = $previous->max('maxPrice');
+
+        return [
+            'productsSold' => ['value' => $products, 'change' => $this->productChange($products, $prevProducts), 'from' => $prevProducts],
+            'orders'       => ['value' => $orders, 'change' => $this->productChange($orders, $prevOrders), 'from' => $prevOrders],
+            'revenue'      => ['value' => $revenue, 'change' => $this->productChange($revenue, $prevRevenue), 'from' => $prevRevenue],
+            'averagePrice' => ['value' => $avg, 'change' => $this->productChange($avg, $prevAvg), 'from' => $prevAvg],
+            'priceRange'   => [
+                'min'  => $min !== null ? round((float) $min, 2) : 0,
+                'max'  => $max !== null ? round((float) $max, 2) : 0,
+                'from' => [
+                    'min' => $prevMin !== null ? round((float) $prevMin, 2) : 0,
+                    'max' => $prevMax !== null ? round((float) $prevMax, 2) : 0,
+                ],
+            ],
+        ];
+    }
+
+    private function productChart(int $storeId, Carbon $from, Carbon $to, Carbon $compareFrom): array
+    {
+        $compareTo = $compareFrom->copy()->addDays($from->diffInDays($to))->endOfDay();
+
+        $items = OrderItem::query()
+            ->select('order_items.price', 'order_items.quantity', 'orders.created_at')
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->where('orders.store_id', $storeId)
+            ->where('orders.is_draft', 0)
+            ->whereNull('orders.deleted_at')
+            ->where(function ($q) use ($from, $to, $compareFrom, $compareTo) {
+                $q->whereBetween('orders.created_at', [$from, $to])
+                    ->orWhereBetween('orders.created_at', [$compareFrom, $compareTo]);
+            })
+            ->get()
+            ->map(fn($row) => [
+                'date'    => Carbon::parse($row->created_at)->toDateString(),
+                'revenue' => round((float) $row->price * (int) $row->quantity, 2),
+            ])
+            ->groupBy('date');
+
+        $points = [];
+        $day = 0;
+        $cursor = $from->copy()->startOfDay();
+
+        while ($cursor <= $to) {
+            $currentKey = $cursor->toDateString();
+            $compareKey = $compareFrom->copy()->addDays($day)->toDateString();
+
+            $points[] = [
+                'date'    => $currentKey,
+                'label'   => $cursor->format('n/j'),
+                'current' => isset($items[$currentKey]) ? round((float) $items[$currentKey]->sum('revenue'), 2) : 0,
+                'compare' => isset($items[$compareKey]) ? round((float) $items[$compareKey]->sum('revenue'), 2) : 0,
+            ];
+
+            $cursor->addDay();
+            $day++;
+        }
+
+        return $points;
+    }
+
+    private function productChange($current, $previous): float
+    {
+        if (!$previous) {
+            return $current ? 100 : 0;
+        }
+        return round((($current - $previous) / $previous) * 100, 2);
+    }
+
+    private function productCsv($rows, array $headers)
+    {
+        $lines = [implode(',', $headers)];
+
+        foreach ($rows as $row) {
+            $lines[] = implode(',', array_map(function ($key) use ($row) {
+                return '"' . str_replace('"', '""', (string) ($row[$key] ?? '')) . '"';
+            }, $headers));
+        }
+
+        return response(implode("\n", $lines), 200, [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="products.csv"',
         ]);
     }
 }
