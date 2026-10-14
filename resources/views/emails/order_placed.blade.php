@@ -640,13 +640,25 @@
                                                                     </tr>
                                                                     @endif
 
-                                                                    @if($billing && $billing->shipping_method)
+                                                                    @php
+                                                                    $shippingData = $billing->shipping_data ?? null;
+
+                                                                    if (is_string($shippingData)) {
+                                                                    $shippingData = json_decode($shippingData, true);
+                                                                    }
+
+                                                                    $shippingMethodDisplay = $shippingData['display_name']
+                                                                    ?? $billing->shipping_method
+                                                                    ?? null;
+                                                                    @endphp
+
+                                                                    @if($shippingMethodDisplay)
                                                                     <tr class="total__item">
                                                                         <th class="total__name">
                                                                             <p>Shipping method:</p>
                                                                         </th>
                                                                         <th class="total__value">
-                                                                            <p><strong>{{ $billing->shipping_method }}</strong></p>
+                                                                            <p><strong>{{ $shippingMethodDisplay }}</strong></p>
                                                                         </th>
                                                                     </tr>
                                                                     @endif
