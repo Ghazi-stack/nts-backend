@@ -12,7 +12,7 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        $schedule->command('email:abandoned-carts')->everyFiveMinutes();
+        $schedule->command('cart:send-abandoned-reminders')->everyFiveMinutes()->withoutOverlapping();
     }
 
     /**
