@@ -243,7 +243,19 @@
                 <td><strong>Order:</strong></td>
                 <td>#{{ $order->order_number }}</td>
                 <td><strong>Shipping Method:</strong></td>
-                <td>{{ $shipping->shipping_method ?? 'N/A' }}</td>
+                @php
+                $shippingData = $shipping->shipping_data ?? null;
+
+                if (is_string($shippingData)) {
+                $shippingData = json_decode($shippingData, true);
+                }
+
+                $shippingMethodDisplay = $shippingData['display_name']
+                ?? $shipping->shipping_method
+                ?? 'N/A';
+                @endphp
+
+                <td>{{ $shippingMethodDisplay }}</td>
             </tr>
             <tr>
                 <td><strong>Order Date:</strong></td>
