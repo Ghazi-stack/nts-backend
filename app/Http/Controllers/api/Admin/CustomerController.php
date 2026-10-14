@@ -576,6 +576,51 @@ class CustomerController extends Controller
         }
     }
 
+    public function checkEmail(Request $request)
+    {
+        try {
+            $storeId = $request->header('storeId', $request->input('storeId')) ?: current_store_id();
+
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store ID is required.',
+                ], 400);
+            }
+
+            $request->validate([
+                'email' => 'required|email',
+            ]);
+
+            $email = trim($request->input('email'));
+
+            $exists = Customer::where('store_id', $storeId)
+                ->where('email', $email)
+                ->exists();
+
+            // Agar email pehle se hai
+            if ($exists) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'The email has already been taken.',
+                ]);
+            }
+
+            // Agar email nahi hai → sirf success (koi error message nahi)
+            return response()->json([
+                'status'  => true,
+                'message' => 'Success',
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json(['errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong',
+            ], 500);
+        }
+    }
+
     public function update(Request $request, $id)
     {
         try {

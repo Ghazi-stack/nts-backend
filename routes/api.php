@@ -346,6 +346,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     // Customers — Add
     Route::prefix('customers')->middleware('permission:add_customer')->group(function () {
         Route::post('/add-customer', [CustomerController::class, 'store']);
+        Route::post('/add-customer/check-email', [CustomerController::class, 'checkEmail']);
     });
 
     // Customers — Search
