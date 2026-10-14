@@ -853,7 +853,7 @@ class CartController extends Controller
 
             $status = strtolower((string) $product->purchasability_status);
             $price  = (float) $product->price;
-            $allowPurchase = filter_var($product->allowPurchase, FILTER_VALIDATE_BOOLEAN);
+            $allowPurchase = filter_var($product->allow_purchase, FILTER_VALIDATE_BOOLEAN);
 
             if ($status !== 'available' || $price <= 0) {
                 return response()->json([
