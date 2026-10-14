@@ -1217,15 +1217,15 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            // 2. Is store ke saare admin/sub-users nikalo
+            // 2. Is store ke saare users nikalo (Customer ke ilawa)
             $userIds = DB::table('user_permissions')
                 ->where('store_id', $storeId)
                 ->distinct()
                 ->pluck('user_id');
 
             $users = User::whereIn('id', $userIds)
-                ->where('userRole', 1)
-                ->where('id', '!=', $currentUser->id)   // khud ko exclude
+                ->where('userRole', '!=', 2)          // Customer exclude
+                ->where('id', '!=', $currentUser->id) // khud ko exclude
                 ->latest()
                 ->get();
 
