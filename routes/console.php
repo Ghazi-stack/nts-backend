@@ -20,7 +20,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 
-
-
-Schedule::command('cart:send-abandoned-emails')->everyFifteenMinutes();
 Schedule::command('checkout:clean-expired')->hourly();

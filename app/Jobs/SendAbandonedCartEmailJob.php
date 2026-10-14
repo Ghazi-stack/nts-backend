@@ -74,9 +74,42 @@ class SendAbandonedCartEmailJob implements ShouldQueue
 
             $checkoutLink = $storePath . '/checkout';
 
+            $cartModels = Cart::with(['product.images'])
+                ->whereIn('id', $cartIds)
+                ->where('store_id', $this->storeId)
+                ->whereNull('deleted_at')
+                ->get();
+
+            $formattedCartItems = $cartModels->map(function ($cart) {
+                $product = $cart->product;
+
+            \Log::info('Abandoned cart email product details', [
+                'cart_ids' => $cartIds,
+                'products' => $formattedCartItems,
+            ]);    
+
+                // Get the first product image, if available.
+                $thumbnail = $product?->images
+                    ->first()
+                    ?->url;
+
+                // Replace image_url with the actual image field
+                // used by your ProductImage model if different.
+                if ($thumbnail && !preg_match('#^https?://#i', $thumbnail)) {
+                    $thumbnail = url(ltrim($thumbnail, '/'));
+                }
+
+                return [
+                    'name'      => $product?->name ?? 'Product',
+                    'sku'       => $product?->sku ?? '',
+                    'quantity'  => $cart->quantity,
+                    'thumbnail' => $thumbnail,
+                ];
+            })->values()->all();
+
             Mail::to($this->userEmail)->send(
                 new AbandonedCartMail(
-                    $this->cartItems,
+                    $formattedCartItems,
                     $user,
                     $this->storeId,
                     $this->emailType,
