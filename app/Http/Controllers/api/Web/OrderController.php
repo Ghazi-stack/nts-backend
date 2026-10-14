@@ -105,6 +105,7 @@ class OrderController extends Controller
                             ->where('sender_type', 'customer');
                     }
                 ])
+                ->withExists('messages')   // <-- yeh line add karo
                 ->where('store_id', $storeId)
                 ->where('is_draft', 0)
                 ->when($status, function ($q) use ($status) {
