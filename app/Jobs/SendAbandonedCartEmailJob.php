@@ -84,14 +84,17 @@ class SendAbandonedCartEmailJob implements ShouldQueue
                 $product = $cart->product;
 
                 // Get the first product image, if available.
-                $thumbnail = $product?->images
-                    ->first()
-                    ?->url;
+                $thumbnailPath = $product?->images?->first()?->url;
 
-                // Replace image_url with the actual image field
-                // used by your ProductImage model if different.
-                if ($thumbnail && !preg_match('#^https?://#i', $thumbnail)) {
-                    $thumbnail = url(ltrim($thumbnail, '/'));
+                $awsUrl = rtrim(
+                    config('filesystems.disks.s3.url', ''),
+                    '/'
+                );
+
+                $thumbnail = null;
+
+                if ($thumbnailPath && $awsUrl !== '') {
+                    $thumbnail = $awsUrl . '/' . ltrim($thumbnailPath, '/');
                 }
 
                 return [
@@ -120,6 +123,7 @@ class SendAbandonedCartEmailJob implements ShouldQueue
             // Keep the reminder timestamp after the send call succeeds.
             Cart::whereIn('id', $cartIds)
                 ->where('store_id', $this->storeId)
+                ->whereNull('deleted_at')
                 ->update([
                     $this->timestampColumn => now(),
                 ]);
