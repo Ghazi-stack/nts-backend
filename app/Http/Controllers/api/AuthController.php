@@ -56,12 +56,12 @@ class AuthController extends Controller
 
             $isOwnerRegistration = $request->userRole == 1 && !$storeId;
             $isSubUser           = $request->userRole == 1 && $storeId;
+            $isStaffUser         = $request->userRole >= 3 && $storeId; // Sales Staff, Manager, etc.
 
             // ---------- Dynamic Email Rules ----------
             $emailRules = ['required', 'email'];
 
             if (!$isOwnerRegistration) {
-                // Sub-user / Customer → unique only inside same store
                 $emailRules[] = Rule::unique('users', 'email')->where(function ($query) use ($storeId) {
                     return $query->where('store_id', $storeId);
                 });
@@ -72,7 +72,7 @@ class AuthController extends Controller
                 'lastName'      => 'nullable|string|max:100',
                 'email'         => $emailRules,
                 'phoneNumber'   => 'nullable|string|max:20',
-                'password'      => $isSubUser ? 'nullable|string|min:6' : 'required|string|min:6',
+                'password'      => ($isSubUser || $isStaffUser) ? 'nullable|string|min:6' : 'required|string|min:6',
                 'companyName'   => 'nullable|string|max:255',
                 'addressLine1'  => 'nullable|string|max:255',
                 'addressLine2'  => 'nullable|string|max:255',
@@ -83,8 +83,8 @@ class AuthController extends Controller
                 'storeName'     => 'nullable|string|max:255',
                 'businessSize'  => 'nullable|string|max:100',
                 'region'        => 'nullable|string|max:100',
-                'userRole'      => 'required|in:1,2',
-                'permissions'   => $isSubUser ? 'required|array|min:1' : 'nullable',
+                'userRole'      => 'required|integer|exists:roles,user_role_id',
+                'permissions'   => ($isSubUser || $isStaffUser) ? 'required|array|min:1' : 'nullable',
                 'permissions.*' => 'exists:permissions,id',
                 'base_url'      => 'nullable|string|max:255',
             ]);
@@ -99,126 +99,40 @@ class AuthController extends Controller
 
             DB::beginTransaction();
 
-            if ($request->userRole == 1) {
+            // ===================== OWNER REGISTRATION =====================
+            if ($isOwnerRegistration) {
 
-                // ===================== OWNER REGISTRATION =====================
-                if ($isOwnerRegistration) {
+                $existingUser = User::where('email', $request->email)->first();
 
-                    $existingUser = User::where('email', $request->email)->first();
+                // Additional Store for Existing Owner
+                if ($existingUser) {
 
-                    // ---------- Additional Store for Existing Owner ----------
-                    if ($existingUser) {
-
-                        if ($existingUser->userRole != 1) {
-                            return response()->json([
-                                'status'  => false,
-                                'message' => 'This email is already registered as a customer.',
-                            ], 422);
-                        }
-
-                        if (!Hash::check($request->password, $existingUser->password)) {
-                            return response()->json([
-                                'status'  => false,
-                                'message' => 'Invalid password. For additional stores use the original registration password.',
-                            ], 401);
-                        }
-
-                        $store = Store::create([
-                            'name'     => $request->storeName,
-                            'user_id'  => $existingUser->id,
-                            'base_url' => $request->base_url,
-                        ]);
-
-                        // Assign ALL permissions for new store
-                        $allPermissions = Permission::all();
-                        $inserts = [];
-                        foreach ($allPermissions as $perm) {
-                            $inserts[] = [
-                                'user_id'       => $existingUser->id,
-                                'permission_id' => $perm->id,
-                                'store_id'      => $store->id,
-                                'created_at'    => now(),
-                                'updated_at'    => now(),
-                            ];
-                        }
-                        DB::table('user_permissions')->insert($inserts);
-
-                        DB::commit();
-
-                        $userPermissions = Permission::orderBy('group')
-                            ->orderBy('sort_order')
-                            ->get()
-                            ->groupBy('group')
-                            ->map(function ($items, $group) {
-                                return [
-                                    'group' => $group,
-                                    'permissions' => $items->map(function ($p) {
-                                        return [
-                                            'id'    => $p->id,
-                                            'name'  => $p->name,
-                                            'label' => $p->label,
-                                            'slug'  => $p->slug,
-                                        ];
-                                    })->values(),
-                                ];
-                            })->values();
-
-                        try {
-                            Mail::to($existingUser->email)->send(new UserRegistrationMail($existingUser, $store->id));
-                            $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
-                            Mail::to($adminEmail)->send(new UserRegistrationMail($existingUser, $store->id));
-                        } catch (\Exception $mailError) {
-                            Log::error('REGISTRATION EMAIL FAILED', [
-                                'error'      => $mailError->getMessage(),
-                                'user_email' => $existingUser->email,
-                            ]);
-                        }
-
-                        $token    = $existingUser->createToken('auth_token')->plainTextToken;
-                        $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
-
+                    if ($existingUser->userRole != 1) {
                         return response()->json([
-                            'status'      => true,
-                            'message'     => 'New store created successfully for existing owner',
-                            'token'       => $token,
-                            'expireAt'    => $expireAt,
-                            'user'        => new UserResource($existingUser),
-                            'store'       => $store,
-                            'permissions' => $userPermissions,
-                            'isOwner'     => true,
-                        ], 201);
+                            'status'  => false,
+                            'message' => 'This email is already registered as a customer.',
+                        ], 422);
                     }
 
-                    // ---------- First Time Owner Registration ----------
-                    $user = User::create([
-                        'name'          => $request->firstName . ' ' . $request->lastName,
-                        'email'         => $request->email,
-                        'password'      => bcrypt($request->password),
-                        'userRole'      => 1,
-                        'phone_number'  => $request->phoneNumber,
-                        'store_name'    => $request->storeName,
-                        'base_url'      => $request->base_url,
-                        'business_size' => $request->businessSize,
-                        'region'        => $request->region,
-                        'store_id'      => null,
-                        'customer_id'   => null,
-                    ]);
+                    if (!Hash::check($request->password, $existingUser->password)) {
+                        return response()->json([
+                            'status'  => false,
+                            'message' => 'Invalid password. For additional stores use the original registration password.',
+                        ], 401);
+                    }
 
                     $store = Store::create([
                         'name'     => $request->storeName,
-                        'user_id'  => $user->id,
+                        'user_id'  => $existingUser->id,
                         'base_url' => $request->base_url,
                     ]);
-
-                    $user->store_id = $store->id;
-                    $user->save();
 
                     // Assign ALL permissions
                     $allPermissions = Permission::all();
                     $inserts = [];
                     foreach ($allPermissions as $perm) {
                         $inserts[] = [
-                            'user_id'       => $user->id,
+                            'user_id'       => $existingUser->id,
                             'permission_id' => $perm->id,
                             'store_id'      => $store->id,
                             'created_at'    => now(),
@@ -248,225 +162,298 @@ class AuthController extends Controller
                         })->values();
 
                     try {
-                        Mail::to($user->email)->send(new UserRegistrationMail($user, $store->id));
+                        Mail::to($existingUser->email)->send(new UserRegistrationMail($existingUser, $store->id));
                         $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
-                        Mail::to($adminEmail)->send(new UserRegistrationMail($user, $store->id));
+                        Mail::to($adminEmail)->send(new UserRegistrationMail($existingUser, $store->id));
                     } catch (\Exception $mailError) {
                         Log::error('REGISTRATION EMAIL FAILED', [
                             'error'      => $mailError->getMessage(),
-                            'user_email' => $user->email,
+                            'user_email' => $existingUser->email,
                         ]);
                     }
 
-                    $token    = $user->createToken('auth_token')->plainTextToken;
+                    $token    = $existingUser->createToken('auth_token')->plainTextToken;
                     $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
 
                     return response()->json([
                         'status'      => true,
-                        'message'     => 'Store owner registered successfully',
+                        'message'     => 'New store created successfully for existing owner',
                         'token'       => $token,
                         'expireAt'    => $expireAt,
-                        'user'        => new UserResource($user),
+                        'user'        => new UserResource($existingUser),
                         'store'       => $store,
                         'permissions' => $userPermissions,
                         'isOwner'     => true,
                     ], 201);
                 }
 
-                // ===================== SUB-USER REGISTRATION (storeId header) =====================
-                if ($isSubUser) {
+                // First Time Owner Registration
+                $user = User::create([
+                    'name'          => $request->firstName . ' ' . $request->lastName,
+                    'email'         => $request->email,
+                    'password'      => bcrypt($request->password),
+                    'userRole'      => 1,
+                    'phone_number'  => $request->phoneNumber,
+                    'store_name'    => $request->storeName,
+                    'base_url'      => $request->base_url,
+                    'business_size' => $request->businessSize,
+                    'region'        => $request->region,
+                    'store_id'      => null,
+                    'customer_id'   => null,
+                ]);
 
-                    // Check if sub-user already exists (multi-store)
-                    $existingUser = User::where('email', $request->email)
-                        ->where('userRole', 1)
-                        ->first();
+                $store = Store::create([
+                    'name'     => $request->storeName,
+                    'user_id'  => $user->id,
+                    'base_url' => $request->base_url,
+                ]);
 
-                    if ($existingUser) {
-                        // Check if already has permissions for this store
-                        $alreadyInStore = DB::table('user_permissions')
-                            ->where('user_id', $existingUser->id)
-                            ->where('store_id', $storeId)
-                            ->exists();
+                $user->store_id = $store->id;
+                $user->save();
 
-                        if ($alreadyInStore) {
-                            return response()->json([
-                                'status'  => false,
-                                'message' => 'This user already has access to this store.',
-                            ], 409);
-                        }
-
-                        // Assign selected permissions for this store
-                        $inserts = [];
-                        foreach ($request->permissions as $permId) {
-                            $inserts[] = [
-                                'user_id'       => $existingUser->id,
-                                'permission_id' => $permId,
-                                'store_id'      => $storeId,
-                                'created_at'    => now(),
-                                'updated_at'    => now(),
-                            ];
-                        }
-                        DB::table('user_permissions')->insert($inserts);
-
-                        DB::commit();
-
-                        // Send store access email
-                        try {
-                            $token = app('auth.password.broker')->createToken($existingUser);
-
-                            $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token=' . $token .
-                                '&email=' . urlencode($existingUser->email);
-
-                            Mail::to($existingUser->email)->send(
-                                new StoreAccessMail(
-                                    $existingUser->name,
-                                    $existingUser->email,
-                                    $resetLink,
-                                    $storeId
-                                )
-                            );
-                        } catch (\Exception $mailError) {
-                            Log::error('SUB-USER STORE ACCESS EMAIL FAILED', [
-                                'error' => $mailError->getMessage(),
-                                'email' => $existingUser->email,
-                            ]);
-                        }
-
-                        // Get assigned permissions for response
-                        $userPermissions = Permission::whereIn('id', $request->permissions)
-                            ->orderBy('group')
-                            ->orderBy('sort_order')
-                            ->get()
-                            ->groupBy('group')
-                            ->map(function ($items, $group) {
-                                return [
-                                    'group' => $group,
-                                    'permissions' => $items->map(function ($p) {
-                                        return [
-                                            'id'    => $p->id,
-                                            'name'  => $p->name,
-                                            'label' => $p->label,
-                                            'slug'  => $p->slug,
-                                        ];
-                                    })->values(),
-                                ];
-                            })->values();
-
-                        // Get all stores for this user
-                        $storeIds = DB::table('user_permissions')
-                            ->where('user_id', $existingUser->id)
-                            ->distinct()
-                            ->pluck('store_id');
-                        $allStores = Store::whereIn('id', $storeIds)->get();
-
-                        $token = $existingUser->createToken('auth_token')->plainTextToken;
-                        $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
-
-                        return response()->json([
-                            'status'      => true,
-                            'message'     => 'Existing user added to store with permissions. Store access email sent.',
-                            'token'       => $token,
-                            'expireAt'    => $expireAt,
-                            'user'        => new UserResource($existingUser),
-                            'store'       => Store::find($storeId),
-                            'stores'      => $allStores,
-                            'permissions' => $userPermissions,
-                            'isOwner'     => false,
-                        ], 201);
-                    } else {
-                        // New sub-user — random password, store access email jayega
-                        $user = User::create([
-                            'name'          => $request->firstName . ' ' . $request->lastName,
-                            'email'         => $request->email,
-                            'password'      => bcrypt(Str::random(16)),
-                            'userRole'      => 1,
-                            'phone_number'  => $request->phoneNumber,
-                            'store_name'    => $request->storeName,
-                            'business_size' => $request->businessSize,
-                            'region'        => $request->region,
-                            'store_id'      => $storeId,
-                            'customer_id'   => null,
-                        ]);
-
-                        // Assign selected permissions
-                        $inserts = [];
-                        foreach ($request->permissions as $permId) {
-                            $inserts[] = [
-                                'user_id'       => $user->id,
-                                'permission_id' => $permId,
-                                'store_id'      => $storeId,
-                                'created_at'    => now(),
-                                'updated_at'    => now(),
-                            ];
-                        }
-                        DB::table('user_permissions')->insert($inserts);
-
-                        DB::commit();
-
-                        // Send store access email
-                        try {
-                            $token = app('auth.password.broker')->createToken($user);
-
-                            $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token=' . $token .
-                                '&email=' . urlencode($user->email);
-
-                            Mail::to($user->email)->send(
-                                new StoreAccessMail(
-                                    $request->firstName,
-                                    $user->email,
-                                    $resetLink,
-                                    $storeId
-                                )
-                            );
-                        } catch (\Exception $mailError) {
-                            Log::error('SUB-USER STORE ACCESS EMAIL FAILED', [
-                                'error' => $mailError->getMessage(),
-                                'email' => $user->email,
-                            ]);
-                        }
-
-                        // Get assigned permissions for response
-                        $userPermissions = Permission::whereIn('id', $request->permissions)
-                            ->orderBy('group')
-                            ->orderBy('sort_order')
-                            ->get()
-                            ->groupBy('group')
-                            ->map(function ($items, $group) {
-                                return [
-                                    'group' => $group,
-                                    'permissions' => $items->map(function ($p) {
-                                        return [
-                                            'id'    => $p->id,
-                                            'name'  => $p->name,
-                                            'label' => $p->label,
-                                            'slug'  => $p->slug,
-                                        ];
-                                    })->values(),
-                                ];
-                            })->values();
-
-                        $token = $user->createToken('auth_token')->plainTextToken;
-                        $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
-
-                        return response()->json([
-                            'status'      => true,
-                            'message'     => 'Sub-user registered successfully. Store access email sent.',
-                            'token'       => $token,
-                            'expireAt'    => $expireAt,
-                            'user'        => new UserResource($user),
-                            'store'       => Store::find($storeId),
-                            'stores'      => [Store::find($storeId)],
-                            'permissions' => $userPermissions,
-                            'isOwner'     => false,
-                        ], 201);
-                    }
+                // Assign ALL permissions
+                $allPermissions = Permission::all();
+                $inserts = [];
+                foreach ($allPermissions as $perm) {
+                    $inserts[] = [
+                        'user_id'       => $user->id,
+                        'permission_id' => $perm->id,
+                        'store_id'      => $store->id,
+                        'created_at'    => now(),
+                        'updated_at'    => now(),
+                    ];
                 }
+                DB::table('user_permissions')->insert($inserts);
+
+                DB::commit();
+
+                $userPermissions = Permission::orderBy('group')
+                    ->orderBy('sort_order')
+                    ->get()
+                    ->groupBy('group')
+                    ->map(function ($items, $group) {
+                        return [
+                            'group' => $group,
+                            'permissions' => $items->map(function ($p) {
+                                return [
+                                    'id'    => $p->id,
+                                    'name'  => $p->name,
+                                    'label' => $p->label,
+                                    'slug'  => $p->slug,
+                                ];
+                            })->values(),
+                        ];
+                    })->values();
+
+                try {
+                    Mail::to($user->email)->send(new UserRegistrationMail($user, $store->id));
+                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
+                    Mail::to($adminEmail)->send(new UserRegistrationMail($user, $store->id));
+                } catch (\Exception $mailError) {
+                    Log::error('REGISTRATION EMAIL FAILED', [
+                        'error'      => $mailError->getMessage(),
+                        'user_email' => $user->email,
+                    ]);
+                }
+
+                $token    = $user->createToken('auth_token')->plainTextToken;
+                $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+                return response()->json([
+                    'status'      => true,
+                    'message'     => 'Store owner registered successfully',
+                    'token'       => $token,
+                    'expireAt'    => $expireAt,
+                    'user'        => new UserResource($user),
+                    'store'       => $store,
+                    'permissions' => $userPermissions,
+                    'isOwner'     => true,
+                ], 201);
+            }
+
+            // ===================== SUB-USER + STAFF REGISTRATION =====================
+            if ($isSubUser || $isStaffUser) {
+
+                $existingUser = User::where('email', $request->email)
+                    ->where('userRole', '!=', 2)
+                    ->first();
+
+                if ($existingUser) {
+                    $alreadyInStore = DB::table('user_permissions')
+                        ->where('user_id', $existingUser->id)
+                        ->where('store_id', $storeId)
+                        ->exists();
+
+                    if ($alreadyInStore) {
+                        return response()->json([
+                            'status'  => false,
+                            'message' => 'This user already has access to this store.',
+                        ], 409);
+                    }
+
+                    $inserts = [];
+                    foreach ($request->permissions as $permId) {
+                        $inserts[] = [
+                            'user_id'       => $existingUser->id,
+                            'permission_id' => $permId,
+                            'store_id'      => $storeId,
+                            'created_at'    => now(),
+                            'updated_at'    => now(),
+                        ];
+                    }
+                    DB::table('user_permissions')->insert($inserts);
+
+                    DB::commit();
+
+                    try {
+                        $token = app('auth.password.broker')->createToken($existingUser);
+
+                        $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token=' . $token .
+                            '&email=' . urlencode($existingUser->email);
+
+                        Mail::to($existingUser->email)->send(
+                            new StoreAccessMail(
+                                $existingUser->name,
+                                $existingUser->email,
+                                $resetLink,
+                                $storeId
+                            )
+                        );
+                    } catch (\Exception $mailError) {
+                        Log::error('STAFF STORE ACCESS EMAIL FAILED', [
+                            'error' => $mailError->getMessage(),
+                            'email' => $existingUser->email,
+                        ]);
+                    }
+
+                    $userPermissions = Permission::whereIn('id', $request->permissions)
+                        ->orderBy('group')
+                        ->orderBy('sort_order')
+                        ->get()
+                        ->groupBy('group')
+                        ->map(function ($items, $group) {
+                            return [
+                                'group' => $group,
+                                'permissions' => $items->map(function ($p) {
+                                    return [
+                                        'id'    => $p->id,
+                                        'name'  => $p->name,
+                                        'label' => $p->label,
+                                        'slug'  => $p->slug,
+                                    ];
+                                })->values(),
+                            ];
+                        })->values();
+
+                    $storeIds = DB::table('user_permissions')
+                        ->where('user_id', $existingUser->id)
+                        ->distinct()
+                        ->pluck('store_id');
+                    $allStores = Store::whereIn('id', $storeIds)->get();
+
+                    $token = $existingUser->createToken('auth_token')->plainTextToken;
+                    $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+                    return response()->json([
+                        'status'      => true,
+                        'message'     => 'Existing user added to store with permissions. Store access email sent.',
+                        'token'       => $token,
+                        'expireAt'    => $expireAt,
+                        'user'        => new UserResource($existingUser),
+                        'store'       => Store::find($storeId),
+                        'stores'      => $allStores,
+                        'permissions' => $userPermissions,
+                        'isOwner'     => false,
+                    ], 201);
+                }
+
+                // New Staff / Sub-user
+                $user = User::create([
+                    'name'          => $request->firstName . ' ' . $request->lastName,
+                    'email'         => $request->email,
+                    'password'      => bcrypt(Str::random(16)),
+                    'userRole'      => $request->userRole,
+                    'phone_number'  => $request->phoneNumber,
+                    'store_name'    => $request->storeName,
+                    'business_size' => $request->businessSize,
+                    'region'        => $request->region,
+                    'store_id'      => $storeId,
+                    'customer_id'   => null,
+                ]);
+
+                $inserts = [];
+                foreach ($request->permissions as $permId) {
+                    $inserts[] = [
+                        'user_id'       => $user->id,
+                        'permission_id' => $permId,
+                        'store_id'      => $storeId,
+                        'created_at'    => now(),
+                        'updated_at'    => now(),
+                    ];
+                }
+                DB::table('user_permissions')->insert($inserts);
+
+                DB::commit();
+
+                try {
+                    $token = app('auth.password.broker')->createToken($user);
+
+                    $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token=' . $token .
+                        '&email=' . urlencode($user->email);
+
+                    Mail::to($user->email)->send(
+                        new StoreAccessMail(
+                            $request->firstName,
+                            $user->email,
+                            $resetLink,
+                            $storeId
+                        )
+                    );
+                } catch (\Exception $mailError) {
+                    Log::error('STAFF STORE ACCESS EMAIL FAILED', [
+                        'error' => $mailError->getMessage(),
+                        'email' => $user->email,
+                    ]);
+                }
+
+                $userPermissions = Permission::whereIn('id', $request->permissions)
+                    ->orderBy('group')
+                    ->orderBy('sort_order')
+                    ->get()
+                    ->groupBy('group')
+                    ->map(function ($items, $group) {
+                        return [
+                            'group' => $group,
+                            'permissions' => $items->map(function ($p) {
+                                return [
+                                    'id'    => $p->id,
+                                    'name'  => $p->name,
+                                    'label' => $p->label,
+                                    'slug'  => $p->slug,
+                                ];
+                            })->values(),
+                        ];
+                    })->values();
+
+                $token = $user->createToken('auth_token')->plainTextToken;
+                $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+                return response()->json([
+                    'status'      => true,
+                    'message'     => 'Staff user registered successfully. Store access email sent.',
+                    'token'       => $token,
+                    'expireAt'    => $expireAt,
+                    'user'        => new UserResource($user),
+                    'store'       => Store::find($storeId),
+                    'stores'      => [Store::find($storeId)],
+                    'permissions' => $userPermissions,
+                    'isOwner'     => false,
+                ], 201);
             }
 
             // ===================== CUSTOMER REGISTRATION =====================
             $storeId = current_store_id();
 
-            // Check if guest customer exists with same email
             $existingGuestCustomer = Customer::where('store_id', $storeId)
                 ->where('email', $request->email)
                 ->where('user_type', 'guest')
@@ -485,7 +472,6 @@ class AuthController extends Controller
             ]);
 
             if ($existingGuestCustomer) {
-                // Guest customer exists — update it, don't create new
                 $existingGuestCustomer->update([
                     'first_name'      => $request->firstName,
                     'last_name'       => $request->lastName,
@@ -497,12 +483,11 @@ class AuthController extends Controller
                     'country'         => $request->country,
                     'state'           => $request->state,
                     'zip'             => $request->zip,
-                    'user_type'       => null, // guest → registered
+                    'user_type'       => null,
                 ]);
 
                 $customer = $existingGuestCustomer;
 
-                // Update all guest orders for this email
                 Order::where('store_id', $storeId)
                     ->where('customer_id', $customer->id)
                     ->where('user_type', 'guest')
@@ -535,7 +520,6 @@ class AuthController extends Controller
 
             DB::commit();
 
-            // Send Registration Email to Customer + Admin
             try {
                 Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
 
@@ -596,17 +580,29 @@ class AuthController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | ADMIN / SUB-USER LOGIN (userRole = 1)
+        | ADMIN / SUB-USER / STAFF LOGIN (userRole != 2)
         |--------------------------------------------------------------------------
         */
             $admin = User::where('email', $email)
-                ->where('userRole', 1)
+                ->where('userRole', '!=', 2) // Customer ko is function se block
                 ->first();
 
             if (!$admin) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'Invalid email or password.',
+                ], 401);
+            }
+
+            // Check if userRole exists in roles table
+            $roleExists = DB::table('roles')
+                ->where('user_role_id', $admin->userRole)
+                ->exists();
+
+            if (!$roleExists) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid user role.',
                 ], 401);
             }
 
@@ -717,7 +713,7 @@ class AuthController extends Controller
                 'status'      => true,
                 'message'     => $isOwner
                     ? 'Admin logged in successfully.'
-                    : 'Sub-user logged in successfully.',
+                    : 'User logged in successfully.',
                 'token'       => $plainTextToken,
                 'expireAt'    => $expireAt->toDateTimeString(),
                 'user'        => new UserResource($admin),
@@ -851,7 +847,7 @@ class AuthController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            
+
             $existingTokenIds = $customer->tokens()
                 ->whereIn('name', ['customerToken', 'customer_login'])
                 ->pluck('id')
@@ -971,7 +967,7 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            $allowedTokenNames = ['customerToken', 'customer_login','auth_token'];
+            $allowedTokenNames = ['customerToken', 'customer_login', 'auth_token'];
 
             if (!in_array($accessToken->name, $allowedTokenNames, true)) {
                 return response()->json([
@@ -2064,7 +2060,7 @@ class AuthController extends Controller
     //     ]);
     // }
 
-    
+
     // public function verifyMagicLink(Request $request)
     // {
     //     $request->validate([
@@ -2182,7 +2178,7 @@ class AuthController extends Controller
     // }
 
 
-    
+
     public function sendMagicLink(Request $request)
     {
         $request->validate([
@@ -2272,8 +2268,8 @@ class AuthController extends Controller
         ]);
     }
 
-    
-    
+
+
     public function verifyMagicLink(Request $request)
     {
         $request->validate([
@@ -2389,6 +2385,4 @@ class AuthController extends Controller
             'permissions' => null,
         ]);
     }
-
-
 }
