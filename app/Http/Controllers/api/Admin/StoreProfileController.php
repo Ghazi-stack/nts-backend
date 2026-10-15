@@ -91,7 +91,7 @@ class StoreProfileController extends Controller
 
             'address_type' => [
                 'required',
-                Rule::in(['home_office', 'business', 'warehouse']),
+                Rule::in(['home_office', 'commercial_office', 'retail', 'warehouse']),
             ],
 
             'email' => ['required', 'email', 'max:255'],
