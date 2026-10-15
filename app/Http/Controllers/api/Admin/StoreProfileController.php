@@ -54,6 +54,7 @@ class StoreProfileController extends Controller
      * Laravel parses it and saves the components in the existing
      * store_address JSON column.
      */
+    
     public function update(Request $request)
     {
         $storeId = current_store_id();
@@ -81,11 +82,32 @@ class StoreProfileController extends Controller
             ], 403);
         }
 
+        // Normalize address type before validation.
+        $addressType = $request->input('address_type');
+
+        if (is_string($addressType)) {
+            $normalizedType = strtolower(trim($addressType));
+
+            $addressTypeMap = [
+                'home office' => 'Home Office',
+                'home_office' => 'Home Office',
+                'commercial office' => 'Commercial Office',
+                'commercial_office' => 'Commercial Office',
+                'retail' => 'Retail',
+                'warehouse' => 'Warehouse',
+            ];
+
+            $request->merge([
+                'address_type' => $addressTypeMap[$normalizedType]
+                    ?? $addressType,
+            ]);
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'base_url' => ['nullable', 'url', 'max:2048'],
 
-            // One complete address string, not an array.
+            // One complete multiline address string.
             'store_address' => ['required', 'string', 'max:1000'],
 
             'address_type' => [
@@ -102,17 +124,19 @@ class StoreProfileController extends Controller
             'phone' => ['nullable', 'string', 'max:50'],
         ]);
 
-        // Preserve the original multiline address for the API response.
+        // Preserve the full address exactly as submitted,
+        // except for leading and trailing whitespace.
         $fullAddress = trim($validated['store_address']);
 
+        // Save the original address string separately.
         $validated['store_address_full'] = $fullAddress;
 
-        // Convert the address string into structured JSON.
+        // Save structured address data in the existing JSON column.
         $validated['store_address'] = $this->parseStoreAddress(
             $fullAddress
         );
 
-        // Store normalized values in the database.
+        // Store a normalized address type in the database.
         $addressTypes = [
             'Home Office' => 'home_office',
             'Commercial Office' => 'commercial_office',
@@ -123,6 +147,7 @@ class StoreProfileController extends Controller
         $validated['address_type'] =
             $addressTypes[$validated['address_type']];
 
+        // Normalize an omitted or null phone to an empty string.
         $validated['phone'] = $validated['phone'] ?? '';
 
         $store->fill($validated);
@@ -135,6 +160,7 @@ class StoreProfileController extends Controller
             'data' => $this->profileData($store),
         ]);
     }
+
 
     /**
      * Check store ownership or staff access.
@@ -201,7 +227,6 @@ class StoreProfileController extends Controller
         }
 
         $result = [
-            'full_address' => $address,
             'line1' => $lines[0] ?? '',
             'line2' => '',
             'city' => '',
