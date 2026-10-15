@@ -28,7 +28,8 @@ use App\Http\Controllers\api\Admin\{
     RealtimeController,
     StaffLogController,
     StoreSettingController,
-    UrlSettingController
+    UrlSettingController,
+    StoreProfileController
 };
 use App\Http\Controllers\api\Web\{
     CartController,
@@ -128,6 +129,17 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::put('/update-name', 'updateName');
         Route::post('/update-password', 'updatePassword');
     });
+
+    // Store Profile 
+        Route::get(
+            '/settings/store-profile',
+            [StoreProfileController::class, 'show']
+        );
+
+        Route::put(
+            '/settings/store-profile',
+            [StoreProfileController::class, 'update']
+        );
 
 
     Route::get('/staff-logs', [StaffLogController::class, 'index']);
