@@ -14,6 +14,7 @@ class Store extends Model
         'user_id',
         'base_url',
         'store_address',
+        'store_address_full',
         'address_type',
         'email',
         'phone',

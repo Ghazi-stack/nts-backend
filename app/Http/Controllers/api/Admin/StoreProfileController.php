@@ -49,6 +49,10 @@ class StoreProfileController extends Controller
 
     /**
      * Update the selected store's profile.
+     *
+     * The frontend submits store_address as one multiline string.
+     * Laravel parses it and saves the components in the existing
+     * store_address JSON column.
      */
     public function update(Request $request)
     {
@@ -81,29 +85,48 @@ class StoreProfileController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'base_url' => ['nullable', 'url', 'max:2048'],
 
-            'store_address' => ['required', 'array'],
-            'store_address.line1' => ['required', 'string', 'max:255'],
-            'store_address.line2' => ['nullable', 'string', 'max:255'],
-            'store_address.city' => ['required', 'string', 'max:100'],
-            'store_address.state' => ['required', 'string', 'max:100'],
-            'store_address.zip' => ['required', 'string', 'max:20'],
-            'store_address.country' => ['required', 'string', 'size:2'],
+            // One complete address string, not an array.
+            'store_address' => ['required', 'string', 'max:1000'],
 
             'address_type' => [
                 'required',
-                Rule::in(['home_office', 'commercial_office', 'retail', 'warehouse']),
+                Rule::in([
+                    'Home Office',
+                    'Commercial Office',
+                    'Retail',
+                    'Warehouse',
+                ]),
             ],
 
             'email' => ['required', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
         ]);
 
-        $validated['store_address']['country'] =
-            strtoupper($validated['store_address']['country']);
+        // Preserve the original multiline address for the API response.
+        $fullAddress = trim($validated['store_address']);
+
+        $validated['store_address_full'] = $fullAddress;
+
+        // Convert the address string into structured JSON.
+        $validated['store_address'] = $this->parseStoreAddress(
+            $fullAddress
+        );
+
+        // Store normalized values in the database.
+        $addressTypes = [
+            'Home Office' => 'home_office',
+            'Commercial Office' => 'commercial_office',
+            'Retail' => 'retail',
+            'Warehouse' => 'warehouse',
+        ];
+
+        $validated['address_type'] =
+            $addressTypes[$validated['address_type']];
+
+        $validated['phone'] = $validated['phone'] ?? '';
 
         $store->fill($validated);
         $store->save();
-
         $store->refresh();
 
         return response()->json([
@@ -114,9 +137,7 @@ class StoreProfileController extends Controller
     }
 
     /**
-     * Check ownership or store access.
-     *
-     * Adjust this if your project has a dedicated permission service.
+     * Check store ownership or staff access.
      */
     private function canManageStore(Request $request, Store $store): bool
     {
@@ -126,13 +147,12 @@ class StoreProfileController extends Controller
             return false;
         }
 
-        // Store owner
+        // Store owner.
         if ((int) $store->user_id === (int) $user->id) {
             return true;
         }
 
-        // Staff access: adapt the permission check to your
-        // actual permission slugs and role model.
+        // Staff access.
         return DB::table('user_permissions')
             ->where('user_id', $user->id)
             ->where('store_id', $store->id)
@@ -152,18 +172,179 @@ class StoreProfileController extends Controller
     }
 
     /**
-     * Keep the profile response consistent.
+     * Parse a multiline US-style address.
+     *
+     * Example:
+     * Address:
+     * 2210 Goldsmith Lane
+     * Ste 126-5001
+     * Louisville, KY 40218
+     * US
+     *
+     * International address formats may require country-specific parsing.
+     */
+    private function parseStoreAddress(string $address): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', trim($address));
+
+        $lines = array_values(array_filter(
+            array_map('trim', $lines),
+            fn ($line) => $line !== ''
+        ));
+
+        // Remove an optional "Address:" heading.
+        if (
+            !empty($lines) &&
+            strtolower(rtrim($lines[0], ':')) === 'address'
+        ) {
+            array_shift($lines);
+        }
+
+        $result = [
+            'full_address' => $address,
+            'line1' => $lines[0] ?? '',
+            'line2' => '',
+            'city' => '',
+            'state' => '',
+            'zip' => '',
+            'country' => '',
+        ];
+
+        if (empty($lines)) {
+            return $result;
+        }
+
+        // Recognize common US country labels when provided.
+        $lastLine = trim(end($lines));
+
+        $countryCodes = [
+            'US' => 'US',
+            'USA' => 'US',
+            'UNITED STATES' => 'US',
+            'UNITED STATES OF AMERICA' => 'US',
+        ];
+
+        if (isset($countryCodes[strtoupper($lastLine)])) {
+            $result['country'] = $countryCodes[strtoupper($lastLine)];
+            array_pop($lines);
+        }
+
+        // Parse the final location line, e.g. Louisville, KY 40218.
+        if (!empty($lines)) {
+            $locationLine = trim(end($lines));
+
+            if (preg_match(
+                '/^(.+?),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/i',
+                $locationLine,
+                $matches
+            )) {
+                $result['city'] = trim($matches[1]);
+                $result['state'] = strtoupper($matches[2]);
+                $result['zip'] = $matches[3];
+
+                array_pop($lines);
+
+                $result['line1'] = $lines[0] ?? '';
+
+                if (count($lines) > 1) {
+                    $result['line2'] = implode(
+                        ', ',
+                        array_slice($lines, 1)
+                    );
+                }
+            } else {
+                // Keep unrecognized lines rather than guessing their meaning.
+                $result['line1'] = $lines[0] ?? '';
+
+                if (count($lines) > 1) {
+                    $result['line2'] = implode(
+                        ', ',
+                        array_slice($lines, 1)
+                    );
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Format an address for the single frontend address field.
+     *
+     * Existing records without full_address are formatted from
+     * their structured address fields.
+     */
+    private function formatStoreAddress(array $address): string
+    {
+        $streetLines = array_filter([
+            $address['line1'] ?? '',
+            $address['line2'] ?? '',
+        ], fn ($line) => trim((string) $line) !== '');
+
+        $cityStateZip = trim(implode(', ', array_filter([
+            $address['city'] ?? '',
+            trim(
+                ($address['state'] ?? '') .
+                ' ' .
+                ($address['zip'] ?? '')
+            ),
+        ], fn ($value) => trim((string) $value) !== '')));
+
+        $lines = array_merge(
+            $streetLines,
+            $cityStateZip !== '' ? [$cityStateZip] : [],
+            !empty($address['country']) ? [$address['country']] : []
+        );
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Keep the profile response consistent with BigCommerce-style fields.
      */
     private function profileData(Store $store): array
     {
+        $addressTypes = [
+            'home_office' => 'Home Office',
+            'commercial_office' => 'Commercial Office',
+            'retail' => 'Retail',
+            'warehouse' => 'Warehouse',
+        ];
+
+        $address = $store->store_address ?? [];
+
+        if (is_string($address)) {
+            // Handle legacy records stored as a plain string.
+            $address = [
+                'full_address' => $address,
+            ];
+        }
+
+        if (!is_array($address)) {
+            $address = [];
+        }
+
+        $fullAddress = $address['full_address']
+            ?? $this->formatStoreAddress($address);
+
         return [
             'id' => $store->id,
-            'name' => $store->name,
+            'store_name' => $store->name,
             'base_url' => $store->base_url,
-            'store_address' => $store->store_address,
-            'address_type' => $store->address_type,
-            'email' => $store->email,
-            'phone' => $store->phone,
+
+            // Single multiline string for the frontend.
+            'store_address' => $store->store_address_full
+            ?? $this->formatStoreAddress($store->store_address ?? []),
+
+            // Structured components for shipping/tax integrations.
+            'store_address_details' => $address,
+
+            'store_address_type' => $addressTypes[$store->address_type]
+                ?? $store->address_type,
+
+            'store_email' => $store->email,
+            'store_phone' => $store->phone ?? '',
+
             'created_at' => $store->created_at,
             'updated_at' => $store->updated_at,
         ];
