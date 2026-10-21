@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Crypt;
 class FedexConfiguration extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
 
     protected $fillable = ['shipping_method_id','client_id','client_secret','account_number','api_base_url','ws_key','ws_password','meter_number','display_name','dropoff_type','packaging_type','packing_method','rate_type','include_package_value','destination_type','enabled_services','is_connected'];
 

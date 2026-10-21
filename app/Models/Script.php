@@ -9,6 +9,7 @@ class Script extends Model
 {
 
     use HasFactory;
+    protected $connection = 'tenant';
     protected $table = 'scripts';
 
     protected $fillable = [

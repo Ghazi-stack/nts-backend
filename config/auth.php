@@ -65,6 +65,11 @@ return [
             'model' => App\Models\User::class,
         ],
 
+        'central_users' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\CentralUser::class,
+        ],
+
         // 'users' => [
         //     'driver' => 'database',
         //     'table' => 'users',

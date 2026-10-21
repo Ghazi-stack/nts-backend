@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class ProductExtra extends Model
 {
     use HasFactory;
+
+    protected $connection = 'tenant';
     protected $table = 'product_extra';
 
     protected $fillable = [

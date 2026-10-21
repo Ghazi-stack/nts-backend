@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class ContactRequest extends Model
 {
+    protected $connection = 'tenant';
     protected $fillable = [
         'store_id',
         'full_name',

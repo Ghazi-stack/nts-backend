@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Review extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
     protected $fillable = ['user_id', 'product_id', 'rating', 'name', 'email', 'subject', 'comment', 'approved', 'store_id'];
 
     public function product()

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Shipment extends Model
 {
+    protected $connection = 'tenant';
      protected $fillable = [
         'order_id',
         'store_id',

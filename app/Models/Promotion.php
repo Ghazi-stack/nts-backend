@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Promotion extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
 
     public const KIND_AUTOMATIC = 'automatic';
     public const KIND_COUPON    = 'coupon';

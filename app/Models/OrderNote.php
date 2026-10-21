@@ -11,6 +11,7 @@ class OrderNote extends Model
 {
     use HasFactory;
 
+    protected $connection = 'tenant';
      protected $fillable = [
         'order_id',
         'user_id',

@@ -14,9 +14,14 @@ class Permission extends Model
         'sort_order',
     ];
 
-    public function users()
+    public function users(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'user_permissions')
+        return $this->belongsToMany(
+            CentralUser::class,
+            'user_permissions',
+            'permission_id',
+            'user_id'
+        )
             ->withPivot('store_id')
             ->withTimestamps();
     }

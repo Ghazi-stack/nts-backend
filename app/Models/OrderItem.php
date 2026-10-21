@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class OrderItem extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
     protected $fillable = [
         'order_id', 
         'product_id', 

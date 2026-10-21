@@ -8,6 +8,7 @@ class OrderCartItemProduct extends Model
 {
     protected $table = 'order_cart_item_products';
 
+    protected $connection = 'tenant';
     protected $fillable = [
         'order_id',
         'user_id',

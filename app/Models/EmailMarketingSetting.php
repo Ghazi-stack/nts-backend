@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class EmailMarketingSetting extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
     protected $fillable = [
         'store_id',
         'allowNewsletterSubscriptions',

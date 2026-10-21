@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class WebPage extends Model
 {
      use HasFactory;
+     protected $connection = 'tenant';
 
     protected $table = 'web_pages';
 

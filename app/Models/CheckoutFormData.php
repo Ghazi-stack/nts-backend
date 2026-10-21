@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class CheckoutFormData extends Model
 {
+    protected $connection = 'tenant';
     protected $fillable = [
         'store_id',
         'user_id',

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class ProductSeo extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
     protected $table = 'product_seo';
 
    protected $fillable = [

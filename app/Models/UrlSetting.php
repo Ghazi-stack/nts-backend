@@ -9,6 +9,7 @@ class UrlSetting extends Model
 {
     use HasFactory;
 
+    protected $connection = 'tenant';
     protected $fillable = [
         'store_id',
         'entity_type',

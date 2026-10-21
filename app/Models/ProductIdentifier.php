@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class ProductIdentifier extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
     protected $fillable = ['product_id', 'mpn', 'upc', 'gtin', 'bpn','store_id'];
 
     public function product() {

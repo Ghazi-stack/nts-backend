@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class BillingInformation extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
     protected $fillable = [
         'store_id',
         'customer_id',

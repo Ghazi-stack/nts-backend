@@ -12,6 +12,7 @@ class Cart extends Model
 {
     use SoftDeletes;
     use HasFactory;
+    protected $connection = 'tenant';
 
     protected $fillable = [
         'store_id',

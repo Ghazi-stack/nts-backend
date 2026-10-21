@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class CouponUsage extends Model
 {
     protected $table = 'coupon_usages';
+    protected $connection = 'tenant';
 
     protected $fillable = [
         'store_id',

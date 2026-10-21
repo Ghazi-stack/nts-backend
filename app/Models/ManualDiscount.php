@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class ManualDiscount extends Model
 {
     protected $table = 'manual_discounts';
+    protected $connection = 'tenant';
 
     protected $fillable = [
         'store_id',

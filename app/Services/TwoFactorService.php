@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\User;
+use App\Models\CentralUser;
 use App\Mail\TwoFactorOtpMail;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
@@ -22,30 +22,49 @@ class TwoFactorService
     //  EMAIL OTP
     // ─────────────────────────────────────────────────────────────
 
-    public function sendEmailOtp(User $user): bool
+    // public function sendEmailOtp(CentralUser $user): bool
+    // {
+    //     $otp       = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    //     $expiresAt = now()->addMinutes(10);
+
+    //     $user->update([
+    //         'two_factor_otp'            => bcrypt($otp),
+    //         'two_factor_otp_expires_at' => $expiresAt,
+    //     ]);
+
+    //     $storeId = $user->store_id;
+
+    //     if (!$storeId) {
+    //         throw new \RuntimeException(
+    //             'Cannot send OTP: no store is associated with this user.'
+    //         );
+    //     }
+
+    //     Mail::to($user->email)->send(new TwoFactorOtpMail($otp, $user->name, (int) $storeId));
+
+    //     return true;
+    // }
+
+    public function sendEmailOtp(CentralUser $user, ?int $storeId = null): bool
     {
-        $otp       = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $expiresAt = now()->addMinutes(10);
+        $otp = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
         $user->update([
-            'two_factor_otp'            => bcrypt($otp),
-            'two_factor_otp_expires_at' => $expiresAt,
+            'two_factor_otp' => bcrypt($otp),
+            'two_factor_otp_expires_at' => now()->addMinutes(10),
         ]);
 
-        $storeId = $user->store_id;
+        // Preserve the existing store-specific email behavior.
+        $storeId = $storeId ?? ($user->store_id ?? null);
 
-        if (!$storeId) {
-            throw new \RuntimeException(
-                'Cannot send OTP: no store is associated with this user.'
-            );
-        }
-
-        Mail::to($user->email)->send(new TwoFactorOtpMail($otp, $user->name, (int) $storeId));
+        Mail::to($user->email)->send(
+            new TwoFactorOtpMail($otp, $user->name, $storeId)
+        );
 
         return true;
     }
 
-    public function verifyEmailOtp(User $user, string $otp): bool
+    public function verifyEmailOtp(CentralUser $user, string $otp): bool
     {
         if (!$user->two_factor_otp_expires_at || now()->isAfter($user->two_factor_otp_expires_at)) {
             return false;
@@ -67,7 +86,7 @@ class TwoFactorService
     //  AUTHENTICATOR APP (Google Authenticator / Authy)
     // ─────────────────────────────────────────────────────────────
 
-    public function generateAuthenticatorSecret(User $user): array
+    public function generateAuthenticatorSecret(CentralUser $user): array
     {
         $secret = $this->google2fa->generateSecretKey();
 
@@ -88,7 +107,7 @@ class TwoFactorService
         ];
     }
 
-    public function confirmAuthenticatorSetup(User $user, string $code): bool
+    public function confirmAuthenticatorSetup(CentralUser $user, string $code): bool
     {
         if (!$user->two_factor_secret) {
             return false;
@@ -104,7 +123,7 @@ class TwoFactorService
         return $valid;
     }
 
-    public function verifyAuthenticatorOtp(User $user, string $code): bool
+    public function verifyAuthenticatorOtp(CentralUser $user, string $code): bool
     {
         if (!$user->two_factor_secret || !$user->two_factor_confirmed) {
             return false;
@@ -119,7 +138,7 @@ class TwoFactorService
     //  PENDING LOGIN TOKEN (Cache)
     // ─────────────────────────────────────────────────────────────
 
-    public function storePendingLogin(User $user): string
+    public function storePendingLogin(CentralUser $user): string
     {
         $token = Str::uuid()->toString();
 
@@ -132,7 +151,7 @@ class TwoFactorService
         return $token;
     }
 
-    public function getUserFromPendingToken(string $token): ?User
+    public function getUserFromPendingToken(string $token): ?CentralUser
     {
         $data = Cache::get('2fa_pending_' . $token);
 
@@ -140,7 +159,7 @@ class TwoFactorService
             return null;
         }
 
-        return User::find($data['user_id']);
+        return CentralUser::find($data['user_id']);
     }
 
     public function clearPendingToken(string $token): void

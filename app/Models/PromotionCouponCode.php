@@ -8,6 +8,7 @@ class PromotionCouponCode extends Model
 {
     protected $table = 'promotion_coupon_codes';
 
+    protected $connection = 'tenant';
     protected $fillable = [
         'store_id',
         'promotion_id',

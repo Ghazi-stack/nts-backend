@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class ProductContent extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
     protected $fillable = ['product_id', 'description', 'warranty', 'availability_text', 'template_layout', 'store_id'];
 
     public function product() {

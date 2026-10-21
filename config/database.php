@@ -43,6 +43,23 @@ return [
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
         ],
 
+        // Central/platform registry connection. Initially uses the existing DB credentials.
+        'central' => [
+            'driver' => 'mysql',
+            'host' => env('CENTRAL_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('CENTRAL_DB_PORT', env('DB_PORT', '3306')),
+            'database' => env('CENTRAL_DB_DATABASE', 'platform_central'),
+            'username' => env('CENTRAL_DB_USERNAME', env('DB_USERNAME')),
+            'password' => env('CENTRAL_DB_PASSWORD', env('DB_PASSWORD')),
+            'unix_socket' => env('CENTRAL_DB_SOCKET', env('DB_SOCKET', '')),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+        ],
+
         'mysql' => [
             'driver' => 'mysql',
             'url' => env('DATABASE_URL'),
@@ -91,6 +108,26 @@ return [
             'prefix_indexes' => true,
             // 'encrypt' => env('DB_ENCRYPT', 'yes'),
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
+        ],
+
+        'tenant' => [
+            'driver' => 'mysql',
+            'host' => env('TENANT_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('TENANT_DB_PORT', env('DB_PORT', '3306')),
+            'database' => env('TENANT_DB_DATABASE'),
+            'username' => env('TENANT_DB_USERNAME', env('DB_USERNAME')),
+            'password' => env('TENANT_DB_PASSWORD', env('DB_PASSWORD')),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'account_host' => env('TENANT_DB_USER_HOST', '127.0.0.1'),
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
         ],
 
     ],

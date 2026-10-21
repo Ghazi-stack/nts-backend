@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class ProductFilter extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
     protected $fillable = [
         'name',
         'type',

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class ShippingZone extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
 
     protected $fillable = ['store_id', 'name', 'zone_type', 'countries', 'states', 'zip_ranges', 'is_active', 'sort_order'];
 

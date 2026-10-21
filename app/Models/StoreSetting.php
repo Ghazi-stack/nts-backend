@@ -8,6 +8,7 @@ class StoreSetting extends Model
 {
     protected $table = 'store_settings';
 
+    protected $connection = 'tenant';
     protected $fillable = [
         'store_id',
         'website',

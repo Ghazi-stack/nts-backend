@@ -110,4 +110,27 @@ class User extends Authenticatable
     {
         return $this->belongsTo(Customer::class);
     }
+
+    public function getConnectionName()
+    {
+        if (request()->attributes->get('tenant_store')) {
+            return 'tenant';
+        }
+
+        return parent::getConnectionName();
+    }
+
+    public function tokens()
+    {
+        $relation = $this->morphMany(
+            \App\Models\PersonalAccessToken::class,
+            'tokenable'
+        );
+
+        $relation->getRelated()->setConnection(
+            $this->getConnectionName()
+        );
+
+        return $relation;
+    }
 }

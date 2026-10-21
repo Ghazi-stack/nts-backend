@@ -11,6 +11,9 @@ class Store extends Model
     use HasFactory;
     protected $fillable = [
         'name',
+        'store_hash',
+        'tenant_database',
+        'provisioning_status',
         'user_id',
         'base_url',
         'store_address',

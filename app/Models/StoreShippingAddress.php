@@ -8,8 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 class StoreShippingAddress extends Model
 {
     use HasFactory;
-
+    protected $connection = 'tenant';
     protected $table = 'store_shipping_address';
+    
 
     protected $fillable = [
         'address_line_1',

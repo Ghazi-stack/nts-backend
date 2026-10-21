@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class StaffLog extends Model
 {
+    protected $connection = 'tenant';
+
     protected $fillable = [
         'store_id',
         'user_id',
@@ -24,9 +26,6 @@ class StaffLog extends Model
         'new_values' => 'array',
     ];
 
-    /**
-     * Easy helper to create log
-     */
     public static function record(array $data): self
     {
         $user = auth('sanctum')->user();

@@ -57,6 +57,7 @@ use App\Http\Controllers\api\FedEx\FedexConfigurationController;
 use App\Http\Controllers\api\FedEx\CheckoutShippingController;
 use App\Http\Controllers\api\FedEx\StoreShippingAddressController;
 use App\Http\Controllers\FedExTestController;
+use Illuminate\Support\Facades\DB;
 
 // ===============================
 // 🔐 AUTHENTICATED USER CHECK
@@ -131,28 +132,54 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Store Profile 
-        Route::get(
-            '/settings/store-profile',
-            [StoreProfileController::class, 'show']
-        );
+        // Route::get(
+        //     '/settings/store-profile',
+        //     [StoreProfileController::class, 'show']
+        // );
 
-        Route::put(
-            '/settings/store-profile',
-            [StoreProfileController::class, 'update']
-        );
+        // Route::put(
+        //     '/settings/store-profile',
+        //     [StoreProfileController::class, 'update']
+        // );
+
+    Route::get('/settings/store-profile', [StoreProfileController::class, 'show'])
+        ->middleware(['store.hash', 'tenant.dashboard']);
+
+    Route::put('/settings/store-profile', [StoreProfileController::class, 'update'])
+        ->middleware(['store.hash', 'tenant.dashboard']);    
 
 
-    Route::get('/staff-logs', [StaffLogController::class, 'index']);
+    // Route::get('/staff-logs', [StaffLogController::class, 'index']);
 
-    Route::get('/admin-users', [AuthController::class, 'getAdminUsers']);
-    Route::get('/admin-users/{id}', [AuthController::class, 'getAdminUser']);
-    Route::put('/admin-users/{id}', [AuthController::class, 'updateAdminUser']);
-    Route::delete('/admin-users/{id}', [AuthController::class, 'deleteAdminUser']);
+    Route::get('/staff-logs', [StaffLogController::class, 'index'])
+    ->middleware(['store.hash', 'tenant.dashboard']);
 
-    Route::post('/login-as-customer', [AuthController::class, 'loginAsCustomer']);
+    // Route::get('/admin-users', [AuthController::class, 'getAdminUsers']);
+    // Route::get('/admin-users/{id}', [AuthController::class, 'getAdminUser']);
+    // Route::put('/admin-users/{id}', [AuthController::class, 'updateAdminUser']);
+    // Route::delete('/admin-users/{id}', [AuthController::class, 'deleteAdminUser']);
+    Route::get('/admin-users', [AuthController::class, 'getAdminUsers'])
+        ->middleware(['store.hash', 'tenant.dashboard']);
 
-    // Main Search (no permission needed)
-    Route::get('/global-search', [GlobalSearchController::class, 'search']);
+    Route::get('/admin-users/{id}', [AuthController::class, 'getAdminUser'])
+        ->middleware(['store.hash', 'tenant.dashboard']);
+
+    Route::put('/admin-users/{id}', [AuthController::class, 'updateAdminUser'])
+        ->middleware(['store.hash', 'tenant.dashboard']);
+
+    Route::delete('/admin-users/{id}', [AuthController::class, 'deleteAdminUser'])
+        ->middleware(['store.hash', 'tenant.dashboard']);
+
+    // Route::post('/login-as-customer', [AuthController::class, 'loginAsCustomer']);
+
+    // // Main Search (no permission needed)
+    // Route::get('/global-search', [GlobalSearchController::class, 'search']);
+
+    Route::get('/global-search', [GlobalSearchController::class, 'search'])
+        ->middleware(['store.hash', 'tenant.dashboard']);
+
+    Route::post('/login-as-customer', [AuthController::class, 'loginAsCustomer'])
+        ->middleware(['store.hash', 'tenant.dashboard']);
 
     // Store Management (no permission needed — store selection)
     Route::prefix('stores')->controller(StoreController::class)->group(function () {
@@ -161,11 +188,19 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Dashboard (no permission needed — everyone sees dashboard)
-    Route::get('/store-performance', [HomeController::class, 'storePerformance']);
-    Route::get('/store-count-filtered', [HomeController::class, 'storeCountFiltered']);
-    Route::get('/store-count', [HomeController::class, 'storeCount']);
-    Route::post('/track-visit', [HomeController::class, 'track']);
-    Route::get('/total-count', [HomeController::class, 'getStoreStats']);
+    // Route::get('/store-performance', [HomeController::class, 'storePerformance']);
+    // Route::get('/store-count-filtered', [HomeController::class, 'storeCountFiltered']);
+    // Route::get('/store-count', [HomeController::class, 'storeCount']);
+    // Route::post('/track-visit', [HomeController::class, 'track']);
+    // Route::get('/total-count', [HomeController::class, 'getStoreStats']);
+
+    Route::middleware(['store.hash', 'tenant.dashboard'])->group(function () {
+        Route::get('/store-performance', [HomeController::class, 'storePerformance']);
+        Route::get('/store-count-filtered', [HomeController::class, 'storeCountFiltered']);
+        Route::get('/store-count', [HomeController::class, 'storeCount']);
+        Route::post('/track-visit', [HomeController::class, 'track']);
+        Route::get('/total-count', [HomeController::class, 'getStoreStats']);
+    });
 
     // Permissions (no permission needed — self check)
     Route::get('/permissions', [PermissionController::class, 'index']);
@@ -174,7 +209,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::post('/permissions/assign/{userId}', [PermissionController::class, 'assignPermissions']);
 
     // ===================== ORDERS =====================
-    Route::prefix('orders')->middleware('permission:all_orders')->controller(OrderController::class)->group(function () {
+    Route::prefix('orders')->middleware(['store.hash', 'tenant.dashboard', 'permission:all_orders'])->controller(OrderController::class)->group(function () {
 
         Route::get('/dashboard/overview', 'overview');
         Route::get('/show-order/{id}', 'show');
@@ -192,10 +227,14 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::get('/customer/{customerId}/orders', 'getCustomerWithOrders');
     });
 
-    Route::get('/customer-discounts', [OrderController::class, 'getCustomerOrderDiscounts'])
-        ->middleware('auth:sanctum');
+    // Route::get('/customer-discounts', [OrderController::class, 'getCustomerOrderDiscounts'])
+    //     ->middleware('auth:sanctum');
+    Route::get(
+        '/customer-discounts',
+        [OrderController::class, 'getCustomerOrderDiscounts']
+    )->middleware(['store.hash', 'tenant.dashboard']);
     // Orders — Add
-    Route::prefix('orders')->middleware('permission:add_order')->controller(OrderController::class)->group(function () {
+    Route::prefix('orders')->middleware(['store.hash', 'tenant.dashboard', 'permission:add_order'])->controller(OrderController::class)->group(function () {
 
         Route::post('/existing-customer', 'storeFromDashboard');
         Route::post('/new-customer', 'storeNewCustomerOrder');
@@ -207,12 +246,12 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     // });
 
     // Orders — Export
-    Route::prefix('orders')->middleware('permission:export_orders')->controller(OrderController::class)->group(function () {
+    Route::prefix('orders')->middleware(['store.hash', 'tenant.dashboard', 'permission:export_orders'])->controller(OrderController::class)->group(function () {
         Route::get('/export-orders', 'exportToExcel');
     });
 
     // Orders — Draft
-    Route::prefix('orders')->controller(OrderController::class)->group(function () {
+    Route::prefix('orders')->middleware('store.hash', 'tenant.dashboard')->controller(OrderController::class)->group(function () {
         Route::get('/list-orders', 'index');
         Route::get('/list-drafts', 'listDraftOrders');
         Route::post('/create-draft', 'createDraftOrder');
@@ -220,7 +259,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Orders — Shipments
-    Route::prefix('shipments')->middleware('permission:shipments')->controller(ShipmentController::class)->group(function () {
+    Route::prefix('shipments')->middleware(['store.hash', 'tenant.dashboard', 'permission:shipments'])->controller(ShipmentController::class)->group(function () {
         Route::post('/add-shipment', 'store');
         Route::put('/update-shipment/{id}', 'update');
         Route::delete('/destroy-shipment', 'destroy');
@@ -228,20 +267,20 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/advanced-search', 'advancedSearch');
         Route::get('/export-csv', 'exportCSV');
     });
-    Route::prefix('shipments')->controller(ShipmentController::class)->group(function () {
+    Route::prefix('shipments')->middleware(['store.hash', 'tenant.dashboard'])->controller(ShipmentController::class)->group(function () {
         Route::get('/list-shipment', 'index');
         Route::get('/get-shipment/{id}', 'show');
         Route::get('/shipment-by-order', 'getShipmentByOrderId');
     });
 
     // Orders — Return Request
-    Route::prefix('orders')->controller(OrderController::class)->group(function () {
+    Route::prefix('orders')->middleware(['store.hash', 'tenant.dashboard'])->controller(OrderController::class)->group(function () {
         Route::get('admin-return-requests', [OrderController::class, 'listReturnRequestsForAdmin']);
         Route::get('customer-return-requests', [OrderController::class, 'listReturnRequestsForCustomer']);
     });
 
     // Orders — Tracking
-    Route::prefix('orders-tracking')->middleware('permission:shipments')->controller(OrderTrackingImportController::class)->group(function () {
+    Route::prefix('orders-tracking')->middleware(['store.hash', 'tenant.dashboard', 'permission:shipments'])->controller(OrderTrackingImportController::class)->group(function () {
         Route::post('/tracking/import', 'import');
         Route::get('/tracking/template', 'template');
         Route::get('/tracking/export', 'export');
@@ -249,24 +288,24 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Order Items
-    Route::prefix('order-items')->middleware('permission:all_orders')->controller(OrderItemController::class)->group(function () {
+    Route::prefix('order-items')->middleware(['store.hash', 'tenant.dashboard', 'permission:all_orders'])->controller(OrderItemController::class)->group(function () {
         Route::post('/add/{orderId}', 'store');
         Route::put('/update/{id}', 'update');
         Route::delete('/delete/{id}', 'destroy');
     });
-    Route::prefix('order-items')->controller(OrderItemController::class)->group(function () {
+    Route::prefix('order-items')->middleware(['store.hash', 'tenant.dashboard'])->controller(OrderItemController::class)->group(function () {
         Route::get('/{orderId}', 'index');
     });
 
     // ===================== PRODUCTS =====================
-    Route::prefix('products')->middleware('permission:all_products')->controller(ProductController::class)->group(function () {
+    Route::prefix('products')->middleware(['store.hash', 'tenant.dashboard', 'permission:all_products'])->controller(ProductController::class)->group(function () {
         Route::put('/update-product', 'updateProduct');
         Route::post('/update-single-product/{id}', 'updateSingleProduct');
         Route::get('/product/{id}', 'show');
         Route::delete('/delete-product/categories', 'destroyProductCategories');
         Route::delete('/delete-product/{id?}', 'destroyProduct');
     });
-    Route::prefix('products')->controller(ProductController::class)->group(function () {
+    Route::prefix('products')->middleware(['store.hash', 'tenant.dashboard', 'permission:all_products'])->controller(ProductController::class)->group(function () {
         Route::get('/products-list', 'index');
         Route::get('/purchasable-products', 'purchasableProducts');
         Route::get('/products-filter', 'filterProducts');
@@ -275,30 +314,30 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Products — Add
-    Route::prefix('products')->middleware('permission:add_product')->controller(ProductController::class)->group(function () {
+    Route::prefix('products')->middleware(['store.hash', 'tenant.dashboard', 'permission:add_product'])->controller(ProductController::class)->group(function () {
         Route::post('/add-product', 'addProduct');
     });
 
     // Products — Search
-    Route::prefix('products')->middleware('permission:search_products')->controller(ProductController::class)->group(function () {
+    Route::prefix('products')->middleware(['store.hash', 'tenant.dashboard', 'permission:search_products'])->controller(ProductController::class)->group(function () {
         Route::get('/search-product', 'searchProduct');
         // Route::post('/advanced-search', 'searchAdvanced');
     });
 
     // Products — Import
-    Route::prefix('products')->middleware('permission:import_products')->controller(ProductController::class)->group(function () {
+    Route::prefix('products')->middleware(['store.hash', 'tenant.dashboard', 'permission:import_products'])->controller(ProductController::class)->group(function () {
         Route::post('/import-csv', 'importCSV');
         Route::post('/cancel-import', 'cancelImport');
         Route::get('/import-progress/{progressKey}', 'importProgress');
     });
 
     // Products — Export
-    Route::prefix('products')->middleware('permission:export_products')->controller(ProductController::class)->group(function () {
+    Route::prefix('products')->middleware(['store.hash', 'tenant.dashboard', 'permission:export_products'])->controller(ProductController::class)->group(function () {
         Route::get('/export-csv', 'exportCSV');
     });
 
     // Products — Categories
-    Route::prefix('categories')->middleware('permission:categories')->controller(CategoryController::class)->group(function () {
+    Route::prefix('categories')->middleware(['store.hash', 'tenant.dashboard', 'permission:categories'])->controller(CategoryController::class)->group(function () {
         Route::post('/add-categories', 'storeCategory');
         Route::put('/update-category/{id}', 'updateSingleCategory');
         Route::put('/update-bulk-category', 'updateBulkCategory');
@@ -306,7 +345,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::delete('/delete-subcategories/{id}', 'destroyOnlySubcategories');
         Route::post('/update-categorySingle/{id}', 'updateCategoryExtras');
     });
-    Route::prefix('categories')->controller(CategoryController::class)->group(function () {
+    Route::prefix('categories')->middleware(['store.hash', 'tenant.dashboard', 'permission:categories'])->controller(CategoryController::class)->group(function () {
         Route::get('/list-categories', 'listCategory');
         Route::get('/category/{id}', 'show');
         Route::get('/slug/{slug}', 'showBySlug');
@@ -314,7 +353,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
     // Products — Reviews
 
-    Route::prefix('reviews')->middleware('permission:reviews')->controller(ReviewController::class)->group(function () {
+    Route::prefix('reviews')->middleware(['store.hash', 'tenant.dashboard', 'permission:reviews'])->controller(ReviewController::class)->group(function () {
         Route::put('/update-review/{id}', 'update');
         Route::put('/bulk-status-review', 'bulkStatusUpdate');
         Route::post('/approve', 'approveSelected');
@@ -322,18 +361,18 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         Route::post('/delete', 'deleteSelected');
         Route::delete('/bulk-delete-review', 'bulkDelete');
     });
-    Route::prefix('reviews')->controller(ReviewController::class)->group(function () {
+    Route::prefix('reviews')->middleware(['store.hash', 'tenant.dashboard', 'permission:reviews'])->controller(ReviewController::class)->group(function () {
         Route::get('/admin', 'adminIndex');
         Route::get('/get-by-id/{id}', 'show');
     });
     // Products — Brands
-    Route::prefix('brands')->middleware('permission:brands')->controller(BrandController::class)->group(function () {
+    Route::prefix('brands')->middleware(['store.hash', 'tenant.dashboard', 'permission:brands'])->controller(BrandController::class)->group(function () {
 
         Route::post('/add-brand', 'storeBrands');
         Route::post('/update-brand/{id}', 'updateBrands');
         Route::delete('/delete-brand/{id}', 'destroyBrands');
     });
-    Route::prefix('brands')->controller(BrandController::class)->group(function () {
+    Route::prefix('brands')->middleware(['store.hash', 'tenant.dashboard', 'permission:brands'])->controller(BrandController::class)->group(function () {
         Route::get('/brand-list', 'index');
         Route::get('/brand/{id}', 'showBrands');
     });
@@ -345,18 +384,22 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     // });
 
     // ===================== CUSTOMERS =====================
-    Route::prefix('customers')->middleware('permission:all_customers')->group(function () {
+    Route::prefix('customers')->middleware([
+        'store.hash',
+        'tenant.dashboard',
+        'permission:all_customers',
+    ])->group(function () {
         Route::get('customers-by-email', [CustomerController::class, 'showByEmail']);
         Route::put('/update-customer/{id}', [CustomerController::class, 'update']);
         Route::delete('/delete-customer/{id?}', [CustomerController::class, 'destroy']);
     });
-    Route::prefix('customers')->group(function () {
+    Route::prefix('customers')->middleware(['store.hash', 'tenant.dashboard'])->group(function () {
         Route::get('/get-customers', [CustomerController::class, 'index']);
         Route::get('/get-customer/{id}', [CustomerController::class, 'show']);
     });
 
     // Customers — Add
-    Route::prefix('customers')->middleware('permission:add_customer')->group(function () {
+    Route::prefix('customers')->middleware(['store.hash', 'tenant.dashboard', 'permission:add_customer'])->group(function () {
         Route::post('/add-customer', [CustomerController::class, 'store']);
         Route::post('/add-customer/check-email', [CustomerController::class, 'checkEmail']);
     });
@@ -367,24 +410,24 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     // });
 
     // Customers — Import
-    Route::prefix('customers')->middleware('permission:import_customers')->group(function () {
+    Route::prefix('customers')->middleware(['store.hash', 'tenant.dashboard', 'permission:import_customers'])->group(function () {
         Route::post('/import', [CustomerController::class, 'importCSV']);
     });
 
     // Customers — Export
-    Route::prefix('customers')->middleware('permission:export_customers')->group(function () {
+    Route::prefix('customers')->middleware(['store.hash', 'tenant.dashboard', 'permission:export_customers'])->group(function () {
         Route::get('/export', [CustomerController::class, 'exportCSV']);
     });
 
     // Customer self-service (no permission — own account)
-    Route::prefix('customers')->group(function () {
+    Route::prefix('customers')->middleware(['store.hash', 'tenant.dashboard'])->group(function () {
         Route::post('/account-settings', [CustomerController::class, 'updateAccount']);
         Route::get('/my-orders', [CustomerController::class, 'myOrders']);
         Route::get('/my-addresses', [CustomerController::class, 'getMyAddresses']);
         Route::delete('/delete-my-address/{addressId}', [CustomerController::class, 'deleteMyAddress']);
     });
 
-    Route::prefix('customer-address')->controller(CustomerAddressController::class)->group(function () {
+    Route::prefix('customer-address')->middleware(['store.hash', 'tenant.dashboard'])->controller(CustomerAddressController::class)->group(function () {
         Route::post('/store', 'store');
         Route::put('/update/{id}', 'update');
         Route::delete('/delete/{id}', 'destroy');
@@ -394,7 +437,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== STOREFRONT — LOGO =====================
-    Route::prefix('logos')->middleware('permission:logo')->controller(LogoController::class)->group(function () {
+    Route::prefix('logos')->middleware(['store.hash', 'tenant.dashboard', 'permission:logo'])->controller(LogoController::class)->group(function () {
         Route::get('/get-logos', 'index');
         Route::get('/get-logo/{id}', 'showById');
         Route::post('/add-logo', 'store');
@@ -403,7 +446,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== STOREFRONT — CAROUSEL =====================
-    Route::prefix('carousels')->middleware('permission:home_page_carousel')->controller(CarouselController::class)->group(function () {
+    Route::prefix('carousels')->middleware(['store.hash', 'tenant.dashboard', 'permission:home_page_carousel'])->controller(CarouselController::class)->group(function () {
         Route::get('/get-crousel', 'index');
         Route::get('/get-single/{id}', 'show');
         Route::post('/add-crousel', 'store');
@@ -412,7 +455,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== STOREFRONT — SCRIPTS =====================
-    Route::prefix('scripts')->middleware('permission:script_manager')->controller(ScriptController::class)->group(function () {
+    Route::prefix('scripts')->middleware(['store.hash', 'tenant.dashboard', 'permission:script_manager'])->controller(ScriptController::class)->group(function () {
         Route::get('/get-script', 'index');
         Route::get('/get-script/{id}', 'show');
         Route::post('/add-script', 'store');
@@ -421,7 +464,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== STOREFRONT — WEB PAGES =====================
-    Route::prefix('webpages')->middleware('permission:web_pages')->controller(WebPageController::class)->group(function () {
+    Route::prefix('webpages')->middleware(['store.hash', 'tenant.dashboard', 'permission:web_pages'])->controller(WebPageController::class)->group(function () {
         Route::get('/dashboard-web-pages', 'dashboardIndex');
         Route::get('/single-page/{id}', 'show');
         Route::post('/create-page', 'store');
@@ -431,13 +474,13 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // ===================== STOREFRONT — BLOG =====================
-    Route::prefix('blogs')->middleware('permission:blog')->controller(BlogPostController::class)->group(function () {
+    Route::prefix('blogs')->middleware(['store.hash', 'tenant.dashboard', 'permission:blog'])->controller(BlogPostController::class)->group(function () {
 
         Route::post('/add-blog', 'store');
         Route::post('/update-blog/{id}', 'update');
         Route::delete('/delete-blog/{ids}', 'destroy');
     });
-    Route::prefix('blogs')->controller(BlogPostController::class)->group(function () {
+    Route::prefix('blogs')->middleware(['store.hash', 'tenant.dashboard', 'permission:blog'])->controller(BlogPostController::class)->group(function () {
         Route::get('/get-blog', 'index');
         Route::get('/get-blogSingle/{id}', 'show');
         Route::get('/draft-blogs', 'drafts');
@@ -445,7 +488,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
 
     // ===================== MARKETING — COUPONS =====================
-    Route::prefix('coupons')->middleware('permission:coupon_codes')->controller(CouponCodeController::class)->group(function () {
+    Route::prefix('coupons')->middleware(['store.hash', 'tenant.dashboard', 'permission:coupon_codes'])->controller(CouponCodeController::class)->group(function () {
 
         Route::post('/add-couponcode', 'store');
         Route::put('/update-couponcode/{id}', 'update');
@@ -453,12 +496,12 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
         Route::delete('/delete-couponcode/{id}', 'destroy');
     });
-    Route::prefix('coupons')->controller(CouponCodeController::class)->group(function () {
+    Route::prefix('coupons')->middleware(['store.hash', 'tenant.dashboard', 'permission:coupon_codes'])->controller(CouponCodeController::class)->group(function () {
         Route::get('/get-couponcode', 'index');
         Route::get('/get-couponcode/{id}', 'show');
     });
 
-    Route::prefix('coupons')->controller(CouponCodeController::class)->group(function () {
+    Route::prefix('coupons')->middleware(['store.hash', 'tenant.dashboard', 'permission:coupon_codes'])->controller(CouponCodeController::class)->group(function () {
         Route::get('/get-couponcode-dashboard', 'showDashboardCouponCode');
         Route::post('/coupon-usage/draft', 'updateMyCouponDraft');
         Route::delete('/coupon-usage/remove', 'deleteCouponUsageByEmail');
@@ -467,18 +510,36 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     // ===================== SETTINGS =====================
 
     // URL Settings
-    Route::post('/url-settings/product', [UrlSettingController::class, 'updateProduct']);
-    Route::post('/url-settings/category', [UrlSettingController::class, 'updateCategory']);
-    Route::post('/url-settings/webpage', [UrlSettingController::class, 'updateWebpage']);
-    Route::get('/url-settings/{entity}', [UrlSettingController::class, 'show']);
+    // Route::post('/url-settings/product', [UrlSettingController::class, 'updateProduct']);
+    // Route::post('/url-settings/category', [UrlSettingController::class, 'updateCategory']);
+    // Route::post('/url-settings/webpage', [UrlSettingController::class, 'updateWebpage']);
+    // Route::get('/url-settings/{entity}', [UrlSettingController::class, 'show']);
+
+    Route::prefix('url-settings')
+        ->middleware([
+            'store.hash',
+            'tenant.dashboard',
+            'permission:settings',
+        ])
+        ->controller(UrlSettingController::class)
+        ->group(function () {
+            Route::post('/product', 'updateProduct');
+            Route::post('/category', 'updateCategory');
+            Route::post('/webpage', 'updateWebpage');
+            Route::get('/{entity}', 'show');
+        });
 
     // Email Marketing
-    Route::prefix('email-marketings')->controller(EmailMarketingController::class)->group(function () {
+    Route::prefix('email-marketings')->middleware([
+        'store.hash',
+        'tenant.dashboard',
+        'permission:settings',
+    ])->controller(EmailMarketingController::class)->group(function () {
         Route::get('/get-email-marketing', 'show');
         Route::put('/email-marketing', 'update');
     });
     // Analytics — Visitor Sessions
-    Route::prefix('analytics')->controller(RealtimeController::class)->group(function () {
+    Route::prefix('analytics')->middleware(['store.hash', 'tenant.dashboard'])->controller(RealtimeController::class)->group(function () {
        Route::get('/realtime', 'index');
        Route::get('/dashboard/search', 'searchIndex');
        Route::get('/customers/{id}/details', 'showSearchCustomersDetails');
@@ -489,7 +550,11 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
        Route::get('/analytics-products', 'productIndex');
     });
 
-    Route::middleware('permission:settings')->group(function () {
+    Route::middleware([
+    'store.hash',
+    'tenant.dashboard',
+    'permission:settings',
+])->group(function () {
         // Store Setting
         Route::prefix('store-setting')->controller(StoreSettingController::class)->group(function () {
             Route::get('/get-store-setting', 'index');
@@ -573,10 +638,22 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     });
 
     // Stripe Capture
-    Route::post('/stripe/capture', [StripePaymentController::class, 'capturePayment']);
+    // Route::post('/stripe/capture', [StripePaymentController::class, 'capturePayment']);
+    Route::post(
+        '/stripe/capture',
+        [StripePaymentController::class, 'capturePayment']
+    )->middleware(['store.hash', 'tenant.dashboard']);
     //Newsletter
-    Route::get('/subscribers/export', [NewsletterController::class, 'exportSubscribers']);
-    Route::delete('/subscribers/delete-all', [NewsletterController::class, 'deleteAllSubscribers']);
+    // Route::get('/subscribers/export', [NewsletterController::class, 'exportSubscribers']);
+    // Route::delete('/subscribers/delete-all', [NewsletterController::class, 'deleteAllSubscribers']);
+    Route::middleware([
+        'store.hash',
+        'tenant.dashboard',
+        'permission:settings',
+    ])->group(function () {
+        Route::get('/subscribers/export', [NewsletterController::class, 'exportSubscribers']);
+        Route::delete('/subscribers/delete-all', [NewsletterController::class, 'deleteAllSubscribers']);
+    });
 });
 
 
@@ -590,7 +667,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
 // 🔓 Public Routes (accessible without login)
 
-Route::prefix('web')->group(function () {
+Route::prefix('web')->middleware(['store.hash', 'tenant.database'])->group(function () {
 
     Route::middleware('auth:sanctum')->get('/customer-profile', [AuthController::class, 'getCustomerProfile']);
     Route::post('/customer/check-token', [AuthController::class, 'checkCustomerToken']);
@@ -806,24 +883,45 @@ Route::prefix('web')->group(function () {
 
 
 // ===================== SITEMAP ROUTES (Clean Version) =====================
-Route::prefix('sitemap')->group(function () {
+// Route::prefix('sitemap')->group(function () {
 
-    // Main Entry Point (yeh important hai)
-    Route::get('/xmlsitemap', [SitemapController::class, 'index']);
+//     // Main Entry Point (yeh important hai)
+//     Route::get('/xmlsitemap', [SitemapController::class, 'index']);
 
-    // Individual sitemaps
-    Route::get('/pages',       [SitemapController::class, 'pagesXml']);
-    Route::get('/products/{page?}', [SitemapController::class, 'productsXml'])
-        ->where('page', '[0-9]+');
+//     // Individual sitemaps
+//     Route::get('/pages',       [SitemapController::class, 'pagesXml']);
+//     Route::get('/products/{page?}', [SitemapController::class, 'productsXml'])
+//         ->where('page', '[0-9]+');
 
-    Route::get('/categories/{page?}', [SitemapController::class, 'categoriesXml'])
-        ->where('page', '[0-9]+');
+//     Route::get('/categories/{page?}', [SitemapController::class, 'categoriesXml'])
+//         ->where('page', '[0-9]+');
 
-    Route::get('/brands/{page?}', [SitemapController::class, 'brandsXml'])
-        ->where('page', '[0-9]+');
+//     Route::get('/brands/{page?}', [SitemapController::class, 'brandsXml'])
+//         ->where('page', '[0-9]+');
 
-    Route::post('/clear-cache', [SitemapController::class, 'clearCache']);
-});
+//     Route::post('/clear-cache', [SitemapController::class, 'clearCache']);
+// });
+
+Route::prefix('sitemap')
+    ->middleware(['store.hash', 'tenant.database'])
+    ->group(function () {
+
+        Route::get('/xmlsitemap', [SitemapController::class, 'index']);
+
+        Route::get('/pages', [SitemapController::class, 'pagesXml']);
+
+        Route::get('/products/{page?}', [SitemapController::class, 'productsXml'])
+            ->where('page', '[0-9]+');
+
+        Route::get('/categories/{page?}', [SitemapController::class, 'categoriesXml'])
+            ->where('page', '[0-9]+');
+
+        Route::get('/brands/{page?}', [SitemapController::class, 'brandsXml'])
+            ->where('page', '[0-9]+');
+
+        Route::post('/clear-cache', [SitemapController::class, 'clearCache'])
+            ->middleware('auth:sanctum');
+    });
 
 Route::get('/test-s3', function () {
     $path = 'debug/tests.txt';
@@ -835,4 +933,36 @@ Route::get('/test-s3', function () {
     ];
 });
 
-Route::post('/test/fedex/rates', [FedExTestController::class, 'rates']);
+// Route::post('/test/fedex/rates', [FedExTestController::class, 'rates']);
+
+// Route::get('/test-store-hash', function (Request $request) {
+//     $store = current_store_registry();
+
+//     return response()->json([
+//         'success' => true,
+//         'store_hash' => current_store_hash(),
+//         'registry_id' => $store->id ?? null,
+//         'legacy_store_id' => $store->legacy_store_id ?? null,
+//         'provisioning_status' => $store->provisioning_status ?? null,
+//     ]);
+// })->middleware('store.hash');
+
+// Route::get('/test-tenant-connection', function (Request $request) {
+//     $store = $request->attributes->get('tenant_store');
+
+//     return response()->json([
+//         'success' => true,
+//         'store_hash' => $store->store_hash,
+//         'database' => DB::connection('tenant')->getDatabaseName(),
+//         'tenant_record' => $store->name ?? null,
+//     ]);
+// })->middleware(['store.hash', 'tenant.database']);
+
+// Route::get('/debug-sodium', function () {
+//     return response()->json([
+//         'php_version' => PHP_VERSION,
+//         'php_binary' => PHP_BINARY,
+//         'sodium_loaded' => extension_loaded('sodium'),
+//         'secretbox_open_exists' => function_exists('sodium_crypto_secretbox_open'),
+//     ]);
+// });

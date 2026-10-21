@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Wishlist extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
     protected $fillable = ['user_id', 'product_id', 'quantity', 'store_id'];
 
     public function product()

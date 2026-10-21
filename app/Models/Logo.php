@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Logo extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
     protected $fillable = [
         'store_id',
         'logo_text',

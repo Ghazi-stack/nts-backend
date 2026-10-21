@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Carousel extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
     protected $fillable = [
         'store_id','alt_text','heading','button_text','text','link','image_url','order'
     ];

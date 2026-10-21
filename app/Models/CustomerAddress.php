@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class CustomerAddress extends Model
 {
+    protected $connection = 'tenant';
     protected $fillable = [
         'store_id',
         'customer_id',

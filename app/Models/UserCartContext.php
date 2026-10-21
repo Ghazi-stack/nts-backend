@@ -10,6 +10,7 @@ class UserCartContext extends Model
     use HasFactory;
 
     protected $table = 'user_cart_contexts';
+    protected $connection = 'tenant';
 
     protected $fillable = [
         'store_id',

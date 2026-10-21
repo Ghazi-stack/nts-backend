@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Payment extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
     protected $fillable = [
         'order_id',
         'stripe_session_id',

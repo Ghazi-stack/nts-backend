@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class TransactionalEmailTemplate extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
     protected $fillable = [
         'store_id','key','name','enabled',
         'from_name','from_email','reply_to','cc','bcc',

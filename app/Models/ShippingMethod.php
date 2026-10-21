@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class ShippingMethod extends Model
 {
     use HasFactory;
+    protected $connection = 'tenant';
 
     protected $fillable = ['store_id', 'shipping_zone_id', 'method_type', 'display_name', 'is_active', 'sort_order', 'flat_rate_amount', 'flat_rate_type', 'weight_threshold', 'weight_rate_amount', 'free_shipping_min_order', 'custom_description', 'charge_shipping_by', 'default_shipping_cost', 'rate_display_type', 'ranges'];
 
