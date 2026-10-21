@@ -5,6 +5,9 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+use RuntimeException;
+use Throwable;
 
 class CopyStoresToCentralRegistry extends Command
 {
@@ -43,10 +46,33 @@ class CopyStoresToCentralRegistry extends Command
         $legacyColumns = Schema::connection('mysql')
             ->getColumnListing('stores');
 
-        foreach (['id', 'store_hash', 'name', 'base_url', 'user_id'] as $column) {
+        foreach (['id', 'name', 'base_url', 'user_id'] as $column) {
             if (!in_array($column, $legacyColumns, true)) {
                 $this->error(
                     "Legacy stores table is missing column: {$column}"
+                );
+
+                return self::FAILURE;
+            }
+        }
+
+        $centralColumns = Schema::connection('central')
+            ->getColumnListing('stores');
+
+        foreach (
+            [
+                'legacy_store_id',
+                'user_id',
+                'store_hash',
+                'name',
+                'base_url',
+                'tenant_database',
+                'provisioning_status',
+            ] as $column
+        ) {
+            if (!in_array($column, $centralColumns, true)) {
+                $this->error(
+                    "Central stores table is missing column: {$column}"
                 );
 
                 return self::FAILURE;
@@ -57,83 +83,143 @@ class CopyStoresToCentralRegistry extends Command
         $this->info("Central database: {$centralDatabase}");
 
         $count = 0;
+        $skipped = 0;
 
-        $legacyConnection->table('stores')
-            ->orderBy('id')
-            ->chunk(100, function ($stores) use (
-                $centralConnection,
-                &$count
-            ) {
-                foreach ($stores as $store) {
-                    $hash = $store->store_hash;
+        try {
+            $legacyConnection->table('stores')
+                ->orderBy('id')
+                ->chunk(100, function ($stores) use (
+                    $centralConnection,
+                    $centralColumns,
+                    &$count,
+                    &$skipped
+                ) {
+                    foreach ($stores as $store) {
+                        $legacyId = (int) $store->id;
 
-                    if (
-                        !is_string($hash) ||
-                        !preg_match('/^store-[a-z0-9]{12}$/', $hash)
-                    ) {
-                        throw new \RuntimeException(
-                            "Invalid store hash for legacy store ID {$store->id}."
-                        );
-                    }
+                        // Look up the legacy ID first so reruns don't create
+                        // duplicate registry records.
+                        $existingByLegacyId = $centralConnection
+                            ->table('stores')
+                            ->where('legacy_store_id', $legacyId)
+                            ->first();
 
-                    $existingByLegacyId = $centralConnection
-                        ->table('stores')
-                        ->where('legacy_store_id', $store->id)
-                        ->first();
+                        $hash = isset($store->store_hash)
+                            ? trim((string) $store->store_hash)
+                            : '';
 
-                    $existingByHash = $centralConnection
-                        ->table('stores')
-                        ->where('store_hash', $hash)
-                        ->first();
+                        if ($hash !== '' &&
+                            !preg_match('/^store-[a-z0-9]{12}$/', $hash)) {
+                            $this->error(
+                                "Invalid hash on legacy store ID {$legacyId}."
+                            );
 
-                    if ($existingByLegacyId || $existingByHash) {
-                        if (
-                            $existingByLegacyId &&
-                            $existingByHash &&
-                            $existingByLegacyId->id === $existingByHash->id &&
-                            (int) $existingByLegacyId->legacy_store_id ===
-                                (int) $store->id &&
-                            $existingByLegacyId->store_hash === $hash
-                        ) {
-                            // Safe to rerun: this record was already copied.
+                            throw new RuntimeException(
+                                "Invalid store hash for legacy store ID {$legacyId}."
+                            );
+                        }
+
+                        if ($existingByLegacyId) {
+                            // Preserve the existing central hash. If it is
+                            // missing/invalid, the backfill command can fix it.
+                            if (
+                                $hash !== '' &&
+                                !empty($existingByLegacyId->store_hash) &&
+                                $existingByLegacyId->store_hash !== $hash
+                            ) {
+                                throw new RuntimeException(
+                                    "Hash conflict for legacy store ID {$legacyId}."
+                                );
+                            }
+
+                            $skipped++;
                             continue;
                         }
 
-                        throw new \RuntimeException(
-                            "Central registry conflict for legacy store ID {$store->id}."
+                        // Reuse a valid source hash only if it isn't already
+                        // assigned to another central store.
+                        if ($hash !== '') {
+                            $existingByHash = $centralConnection
+                                ->table('stores')
+                                ->where('store_hash', $hash)
+                                ->first();
+
+                            if ($existingByHash) {
+                                throw new RuntimeException(
+                                    "Store hash {$hash} is already assigned to central store ID {$existingByHash->id}."
+                                );
+                            }
+                        } else {
+                            // Generate a unique hash directly for the
+                            // central record. Do not change the live record.
+                            do {
+                                $hash = 'store-' . strtolower(
+                                    Str::random(12)
+                                );
+
+                                $hashExists = $centralConnection
+                                    ->table('stores')
+                                    ->where('store_hash', $hash)
+                                    ->exists();
+                            } while ($hashExists);
+                        }
+
+                        $legacyValues = (array) $store;
+
+                        $record = [
+                            'legacy_store_id' => $legacyId,
+                            'user_id' => $store->user_id,
+                            'store_hash' => $hash,
+                            'name' => $store->name,
+                            'base_url' => $store->base_url,
+                            'tenant_database' => null,
+                            'provisioning_status' => 'pending',
+                        ];
+
+                        foreach (['created_at', 'updated_at'] as $timestamp) {
+                            if (
+                                in_array($timestamp, $centralColumns, true) &&
+                                isset($legacyValues[$timestamp])
+                            ) {
+                                $record[$timestamp] = $legacyValues[$timestamp];
+                            }
+                        }
+
+                        // A central registry insert is isolated per store.
+                        // Existing live store data is never modified.
+                        $centralConnection->transaction(function () use (
+                            $centralConnection,
+                            $record
+                        ) {
+                            $centralConnection->table('stores')
+                                ->insert($record);
+                        });
+
+                        $count++;
+
+                        $this->line(
+                            "Copied legacy store ID {$legacyId} with hash {$hash}."
                         );
                     }
+                });
+        } catch (Throwable $exception) {
+            report($exception);
 
-                    $record = [
-                        'legacy_store_id' => $store->id,
-                        'user_id' => $store->user_id,
-                        'store_hash' => $hash,
-                        'name' => $store->name,
-                        'base_url' => $store->base_url,
-                        'tenant_database' => null,
-                        'provisioning_status' => 'pending',
-                    ];
+            $this->error(
+                'Store registry copy failed: ' . $exception->getMessage()
+            );
 
-                    $legacyValues = (array) $store;
+            $this->warn(
+                'Any previously inserted central records remain in place. ' .
+                'Correct the reported issue and rerun this command.'
+            );
 
-                    foreach (['created_at', 'updated_at'] as $timestamp) {
-                        if (isset($legacyValues[$timestamp])) {
-                            $record[$timestamp] = $legacyValues[$timestamp];
-                        }
-                    }
+            return self::FAILURE;
+        }
 
-                    $centralConnection->table('stores')->insert($record);
-
-                    $count++;
-                    $this->line(
-                        "Copied legacy store ID {$store->id}."
-                    );
-                }
-            });
-
-        $this->info(
-            "Store registry copy completed. New records copied: {$count}"
-        );
+        $this->info("New records copied: {$count}");
+        $this->info("Existing records skipped: {$skipped}");
+        $this->info('Store registry copy completed successfully.');
 
         return self::SUCCESS;
     }
