@@ -3,7 +3,6 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use RuntimeException;
 
 return new class extends Migration
 {
@@ -16,7 +15,7 @@ return new class extends Migration
 
         foreach (['users', 'stores', 'user_permissions', 'permissions'] as $table) {
             if (!Schema::connection('mysql')->hasTable($table)) {
-                throw new RuntimeException(
+                throw new \RuntimeException(
                     "Legacy table {$table} does not exist."
                 );
             }
@@ -24,7 +23,7 @@ return new class extends Migration
 
         foreach (['users', 'stores', 'store_user', 'user_permissions', 'permissions'] as $table) {
             if (!Schema::connection('central')->hasTable($table)) {
-                throw new RuntimeException(
+                throw new \RuntimeException(
                     "Central table {$table} does not exist."
                 );
             }
