@@ -18,7 +18,7 @@ class TenantProvisioningService
     public function provisionDatabase(int $registryStoreId): object
     {
         $central = DB::connection('central');
-        $admin = DB::connection('mysql');
+        $admin = DB::connection('provisioner');
 
         $store = $central->table('stores')
             ->where('id', $registryStoreId)
@@ -43,15 +43,9 @@ class TenantProvisioningService
         $username = 'tn_' . Str::lower(Str::random(12));
         $password = Str::random(48);
 
-        $host = (string) config(
-            'database.connections.mysql.host',
-            '127.0.0.1'
-        );
+        $host = (string) config('database.connections.provisioner.host');
 
-        $port = (int) config(
-            'database.connections.mysql.port',
-            3306
-        );
+        $port = (int) config('database.connections.provisioner.port', 3306);
 
         $accountHost = (string) config(
             'database.connections.tenant.account_host',
