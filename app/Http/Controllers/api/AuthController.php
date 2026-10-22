@@ -863,54 +863,42 @@ class AuthController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            // $selectedStore = null;
-
-            // // Resolve an explicitly requested store first.
-            // if ($storeId !== null && $storeId !== '') {
-            //     $selectedStore = $central->table('stores')
-            //         ->where('legacy_store_id', $storeId)
-            //         ->first();
-
-            //     if (!$selectedStore) {
-            //         $selectedStore = $stores->first(
-            //             fn ($store) => (int) $store->id === (int) $storeId
-            //         );
-            //     }
-
-            //     if (
-            //         !$selectedStore ||
-            //         !in_array((int) $selectedStore->id, $accessibleStoreIds, true)
-            //     ) {
-            //         return response()->json([
-            //             'status' => false,
-            //             'message' => 'You do not have access to this store.',
-            //         ], 403);
-            //     }
-            // } else {
-            //     // No store was specified: default to the first owned store.
-            //     $selectedStore = $ownedStores->first();
-
-            //     // If the user owns no stores, use their first accessible store.
-            //     if (!$selectedStore) {
-            //         $selectedStore = $stores->first();
-            //     }
-            // }
-
-            // $permissionStoreId = $selectedStore
-            //     ? (int) $selectedStore->id
-            //     : null;
-
-            /*
-            |--------------------------------------------------------------------------
-            | LOGIN WITHOUT SELECTING A STORE
-            |--------------------------------------------------------------------------
-            | The dashboard will select a store after login.
-            | Do not resolve a selected store or load store-specific permissions here.
-            */
-
             $selectedStore = null;
 
-            $adminPermissions = collect();
+            // Resolve an explicitly requested store first.
+            if ($storeId !== null && $storeId !== '') {
+                $selectedStore = $central->table('stores')
+                    ->where('legacy_store_id', $storeId)
+                    ->first();
+
+                if (!$selectedStore) {
+                    $selectedStore = $stores->first(
+                        fn ($store) => (int) $store->id === (int) $storeId
+                    );
+                }
+
+                if (
+                    !$selectedStore ||
+                    !in_array((int) $selectedStore->id, $accessibleStoreIds, true)
+                ) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'You do not have access to this store.',
+                    ], 403);
+                }
+            } else {
+                // No store was specified: default to the first owned store.
+                $selectedStore = $ownedStores->first();
+
+                // If the user owns no stores, use their first accessible store.
+                if (!$selectedStore) {
+                    $selectedStore = $stores->first();
+                }
+            }
+
+            $permissionStoreId = $selectedStore
+                ? (int) $selectedStore->id
+                : null;
 
             /*
             |--------------------------------------------------------------------------
@@ -963,34 +951,34 @@ class AuthController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            // if ($selectedStore) {
-            //     \Log::info('Selected store tenant fields before login connection', [
-            //         'id' => $selectedStore->id ?? null,
-            //         'name' => $selectedStore->name ?? null,
-            //         'tenant_database' => $selectedStore->tenant_database ?? null,
-            //         'db_username' => $selectedStore->db_username ?? null,
-            //         'has_encrypted_password' => !empty($selectedStore->db_password_encrypted),
-            //         'db_host' => $selectedStore->db_host ?? null,
-            //         'db_port' => $selectedStore->db_port ?? null,
-            //     ]);  
-            //     app(\App\Services\TenantDatabaseManager::class)
-            //         ->connectForStore($selectedStore);  
+            if ($selectedStore) {
+                \Log::info('Selected store tenant fields before login connection', [
+                    'id' => $selectedStore->id ?? null,
+                    'name' => $selectedStore->name ?? null,
+                    'tenant_database' => $selectedStore->tenant_database ?? null,
+                    'db_username' => $selectedStore->db_username ?? null,
+                    'has_encrypted_password' => !empty($selectedStore->db_password_encrypted),
+                    'db_host' => $selectedStore->db_host ?? null,
+                    'db_port' => $selectedStore->db_port ?? null,
+                ]);  
+                app(\App\Services\TenantDatabaseManager::class)
+                    ->connectForStore($selectedStore);  
 
-            //     try {
-            //         StaffLog::record([
-            //             // Tenant logs retain the legacy store ID.
-            //             'store_id'    => $selectedStore->legacy_store_id,
-            //             'user_id'     => $admin->id,
-            //             'username'    => $admin->email,
-            //             'action'      => '(Successfully logged in)',
-            //             'action_type' => 'login',
-            //             'ip_address'  => $request->ip(),
-            //         ]);
-            //     } finally {
-            //         app(\App\Services\TenantDatabaseManager::class)
-            //             ->disconnect();
-            //     }
-            // }
+                try {
+                    StaffLog::record([
+                        // Tenant logs retain the legacy store ID.
+                        'store_id'    => $selectedStore->legacy_store_id,
+                        'user_id'     => $admin->id,
+                        'username'    => $admin->email,
+                        'action'      => '(Successfully logged in)',
+                        'action_type' => 'login',
+                        'ip_address'  => $request->ip(),
+                    ]);
+                } finally {
+                    app(\App\Services\TenantDatabaseManager::class)
+                        ->disconnect();
+                }
+            }
 
             /*
             |--------------------------------------------------------------------------
