@@ -8,6 +8,7 @@ use Laravel\Sanctum\PersonalAccessToken as SanctumPersonalAccessToken;
 class PersonalAccessToken extends SanctumPersonalAccessToken
 {
     
+    
     public static function findToken($token)
     {
         $request = request();
@@ -32,27 +33,42 @@ class PersonalAccessToken extends SanctumPersonalAccessToken
         }
 
         $hash = hash('sha256', $plainTextToken);
+        $path = $request->path();
 
         $resolvedStore = $request->attributes->get('resolved_store');
         $tenantStore = $request->attributes->get('tenant_store');
 
-        $hasTenantContext = $resolvedStore !== null || $tenantStore !== null;
-        $isTenantRoute = str_starts_with($request->path(), 'api/web/');
+        $hasTenantContext =
+            $resolvedStore !== null || $tenantStore !== null;
 
-        if ($isTenantRoute && !$hasTenantContext) {
-            Log::warning('Sanctum rejected tenant request: context missing', [
-                'path' => $request->path(),
-                'resolved_store_present' => $resolvedStore !== null,
-                'tenant_store_present' => $tenantStore !== null,
-            ]);
+        // Dashboard tokens are stored in the central database,
+        // even when the dashboard request has connected a tenant.
+        if (str_starts_with($path, 'api/dashboard/')) {
+            $connection = 'central';
+        } elseif (str_starts_with($path, 'api/web/')) {
+            // Storefront customer tokens must remain tenant-specific.
+            if (!$hasTenantContext) {
+                Log::warning(
+                    'Sanctum rejected tenant request: context missing',
+                    [
+                        'path' => $path,
+                        'resolved_store_present' => $resolvedStore !== null,
+                        'tenant_store_present' => $tenantStore !== null,
+                    ]
+                );
 
-            return null;
+                return null;
+            }
+
+            $connection = 'tenant';
+        } else {
+            // Preserve the existing central-database behavior
+            // for other routes.
+            $connection = 'central';
         }
 
-        $connection = $hasTenantContext ? 'tenant' : 'central';
-
         Log::info('Sanctum selecting token database', [
-            'path' => $request->path(),
+            'path' => $path,
             'connection' => $connection,
             'tenant_context_available' => $hasTenantContext,
             'token_uses_id_prefix' => $id !== null,
@@ -60,7 +76,6 @@ class PersonalAccessToken extends SanctumPersonalAccessToken
 
         return static::queryOnConnection($connection, $id, $hash);
     }
-
 
     protected static function queryOnConnection(
         string $connection,
