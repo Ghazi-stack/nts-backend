@@ -122,7 +122,8 @@ Route::middleware('auth:sanctum')->group(function () {
 // ===============================
 
 
-Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
+Route::prefix('dashboard')->middleware(['store.hash',
+        'tenant.database', 'auth:sanctum'])->group(function () {
 
     // Profile (no permission needed — own profile)
     Route::prefix('profile')->controller(AuthController::class)->group(function () {
