@@ -20,6 +20,14 @@ class ConnectTenantDatabase
 
     public function handle(Request $request, Closure $next): Response
     {
+
+        Log::info('ConnectTenantDatabase entered', [
+            'path' => $request->path(),
+            'store_hash_present' =>
+                $request->attributes->has('store_hash'),
+            'resolved_store_present' =>
+                $request->attributes->has('resolved_store'),
+        ]);
         /*
         |--------------------------------------------------------------------------
         | 1. Middleware started
