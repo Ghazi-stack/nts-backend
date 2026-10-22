@@ -953,9 +953,6 @@ class AuthController extends Controller
             */
 
             if ($selectedStore) {
-                app(\App\Services\TenantDatabaseManager::class)
-                    ->connectForStore($selectedStore);
-
                 \Log::info('Selected store tenant fields before login connection', [
                     'id' => $selectedStore->id ?? null,
                     'name' => $selectedStore->name ?? null,
@@ -964,7 +961,9 @@ class AuthController extends Controller
                     'has_encrypted_password' => !empty($selectedStore->db_password_encrypted),
                     'db_host' => $selectedStore->db_host ?? null,
                     'db_port' => $selectedStore->db_port ?? null,
-                ]);    
+                ]);  
+                app(\App\Services\TenantDatabaseManager::class)
+                    ->connectForStore($selectedStore);  
 
                 try {
                     StaffLog::record([
