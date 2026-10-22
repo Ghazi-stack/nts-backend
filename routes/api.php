@@ -386,7 +386,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
         'permission:all_customers',
     ])->group(function () {
         Route::get('customers-by-email', [CustomerController::class, 'showByEmail']);
-        // Route::put('/update-customer/{id}', [CustomerController::class, 'update']);
+        Route::put('/update-customer/{id}', [CustomerController::class, 'update']);
         Route::delete('/delete-customer/{id?}', [CustomerController::class, 'destroy']);
     });
     Route::prefix('customers')->middleware(['store.hash', 'tenant.dashboard'])->group(function () {
@@ -418,10 +418,10 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
 
     Route::prefix('customer-address')->middleware(['store.hash', 'tenant.dashboard'])->controller(CustomerAddressController::class)->group(function () {
-        // Route::post('/store', 'store');
-        // Route::put('/update/{id}', 'update');
-        // Route::delete('/delete/{id}', 'destroy');
-        //Route::get('/list', 'index');
+        Route::post('/store', 'store');
+        Route::put('/update/{id}', 'update');
+        Route::delete('/delete/{id}', 'destroy');
+        Route::get('/list', 'index');
         Route::get('/show/{id}', 'show');
         Route::delete('/delete-multiple', 'destroyMultiple');
     });
