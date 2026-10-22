@@ -19,6 +19,7 @@ class StoreResource extends JsonResource
             'user_id' => $this->user_id,
             'name' => $this->name,
             'baseUrl' => $this->base_url,
+            'storeHash' => $this->store_hash ?? null,
             'createdAt' => $this->created_at,
             'updatedAt' => $this->updated_at,
         ];
