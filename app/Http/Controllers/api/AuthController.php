@@ -1397,7 +1397,7 @@ class AuthController extends Controller
                     'message'     => 'Customer logged in successfully.',
                     'token'       => $plainTextToken,
                     'expireAt'    => $expireAt->toDateTimeString(),
-                    'store'       => $store,
+                    // 'store'       => $store,
                     'customer'    => $customerProfile
                         ? new CustomerResource($customerProfile)
                         : null,
