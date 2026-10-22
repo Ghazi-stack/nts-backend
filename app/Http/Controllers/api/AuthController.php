@@ -903,6 +903,21 @@ class AuthController extends Controller
             |--------------------------------------------------------------------------
             */
 
+            \Log::info('Admin login permission diagnostics', [
+                'user_id' => $admin->id,
+                'user_connection' => $admin->getConnectionName(),
+                'selected_store_id' => $selectedStore->id ?? null,
+                'requested_store_id' => $storeId,
+                'permission_store_id' => $permissionStoreId,
+                'permission_connection' => $admin->permissions()->getRelated()->getConnectionName(),
+                'pivot_count' => $permissionStoreId
+                    ? $central->table('user_permissions')
+                        ->where('user_id', $admin->id)
+                        ->where('store_id', $permissionStoreId)
+                        ->count()
+                    : null,
+            ]);
+
             $adminPermissions = $permissionStoreId
                 ? $admin->permissions()
                     ->wherePivot('store_id', $permissionStoreId)
