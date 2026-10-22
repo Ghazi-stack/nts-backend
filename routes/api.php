@@ -85,7 +85,7 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
 
 
 Route::post('/auth/login', [AuthController::class, 'login']);
-Route::post('/customer-login', [AuthController::class, 'customerLogin']);
+Route::post('/customer-login', [AuthController::class, 'customerLogin'])->middleware(['store.hash']);
 Route::post('/admin/forgot-password', [AuthController::class, 'adminForgotPassword']);
 Route::post('/admin/reset-password', [AuthController::class, 'adminResetPassword']);
 
@@ -674,7 +674,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
 // 🔓 Public Routes (accessible without login)
 
-Route::prefix('web')->middleware(['store.hash', 'tenant.database'])->group(function () {
+Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class, \App\Http\Middleware\ConnectTenantDatabase::class])->group(function () {
 
     Route::middleware('auth:sanctum')->get('/customer-profile', [AuthController::class, 'getCustomerProfile']);
     Route::post('/customer/check-token', [AuthController::class, 'checkCustomerToken']);
@@ -738,7 +738,7 @@ Route::prefix('web')->middleware(['store.hash', 'tenant.database'])->group(funct
     Route::get('/customer-discounts', [OrderController::class, 'getCustomerOrderDiscounts']);
 
     // 🔀 Cart Transfer (auth required)
-    Route::prefix('cart')->middleware('auth:sanctum')->controller(CartController::class)->group(function () {
+    Route::prefix('cart')->middleware(['auth:sanctum'])->controller(CartController::class)->group(function () {
         Route::post('/transfer', 'transferGuestCartToUser');
     });
 

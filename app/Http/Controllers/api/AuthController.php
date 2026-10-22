@@ -1204,12 +1204,12 @@ class AuthController extends Controller
                 'password' => 'required',
             ]);
 
-            $email    = $request->email;
+            $email = $request->email;
             $password = $request->password;
 
             /*
             |--------------------------------------------------------------------------
-            | Resolve store using existing helpers
+            | Resolve store using existing middleware and helpers
             |--------------------------------------------------------------------------
             */
 
@@ -1250,29 +1250,7 @@ class AuthController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Authenticate user against the central database
-            |--------------------------------------------------------------------------
-            */
-
-            $customer = User::on('central')
-                ->where('email', $email)
-                ->where('userRole', 2)
-                ->where('store_id', $storeId)
-                ->first();
-
-            if (
-                !$customer ||
-                !Hash::check($password, $customer->password)
-            ) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Invalid email or password.',
-                ], 401);
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | Connect to the selected tenant
+            | Connect to the selected tenant BEFORE querying customer users
             |--------------------------------------------------------------------------
             */
 
@@ -1285,13 +1263,43 @@ class AuthController extends Controller
             try {
                 /*
                 |--------------------------------------------------------------------------
-                | Load tenant customer profile
+                | Authenticate against the tenant users table
                 |--------------------------------------------------------------------------
                 */
 
-                $customerProfile = \App\Models\Customer::on('tenant')
-                    ->where('id', $customer->customer_id)
+                $customer = User::on('tenant')
+                    ->where('email', $email)
+                    ->where('userRole', 2)
+                    ->where('store_id', $storeId)
                     ->first();
+
+                if (
+                    !$customer ||
+                    !Hash::check($password, $customer->password)
+                ) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Invalid email or password.',
+                    ], 401);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Load customer profile from the same tenant
+                |--------------------------------------------------------------------------
+                */
+
+                $customerProfile = null;
+
+                if (!empty($customer->customer_id)) {
+                    $customerProfile = \App\Models\Customer::on('tenant')
+                        ->where('id', $customer->customer_id)
+                        ->first();
+                } else {
+                    // Fall back to the model relationship if no customer_id
+                    // is available directly on the user record.
+                    $customerProfile = $customer->customer;
+                }
 
                 /*
                 |--------------------------------------------------------------------------
@@ -1299,8 +1307,11 @@ class AuthController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
-                if ($customerProfile && $customerProfile->force_password_reset) {
-                    DB::connection('central')
+                if (
+                    $customerProfile &&
+                    $customerProfile->force_password_reset
+                ) {
+                    DB::connection('tenant')
                         ->table('password_reset_tokens')
                         ->where('email', $customer->email)
                         ->delete();
@@ -1348,7 +1359,10 @@ class AuthController extends Controller
                 */
 
                 $existingTokenIds = $customer->tokens()
-                    ->whereIn('name', ['customerToken', 'customer_login'])
+                    ->whereIn('name', [
+                        'customerToken',
+                        'customer_login',
+                    ])
                     ->pluck('id')
                     ->toArray();
 
@@ -1356,7 +1370,8 @@ class AuthController extends Controller
                 $plainTextToken = $tokenResult->plainTextToken;
                 $expireAt = now()->addHours(24);
 
-                $accessToken = PersonalAccessToken::on('central')
+                // Sanctum stores the SHA-256 hash, not the plain-text token.
+                $accessToken = \App\Models\PersonalAccessToken::on('tenant')
                     ->where('token', hash('sha256', $plainTextToken))
                     ->first();
 
@@ -1408,95 +1423,393 @@ class AuthController extends Controller
 
     public function checkCustomerToken(Request $request)
     {
+        $tenantManager = null;
+
         try {
-            $storeId = $request->header('storeId', $request->input('storeId'));
-            $token   = $request->bearerToken()
+            /*
+            |--------------------------------------------------------------------------
+            | Initial diagnostic log
+            |--------------------------------------------------------------------------
+            */
+
+            Log::info('Customer token check started', [
+                'path' => $request->path(),
+                'method' => $request->method(),
+                'has_bearer_token' => $request->bearerToken() !== null,
+                'has_token_header' => $request->hasHeader('token'),
+                'has_store_hash' => $request->hasHeader('X-Store-Hash'),
+                'store_hash_resolved' => current_store_hash() !== null,
+                'store_registry_resolved' => current_store_registry() !== null,
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Resolve store and token
+            |--------------------------------------------------------------------------
+            */
+
+            $store = current_store_registry();
+            $storeHash = current_store_hash();
+            $storeId = current_store_id();
+
+            $token = $request->bearerToken()
                 ?? $request->header('token')
                 ?? $request->input('token');
 
-            if (!$storeId) {
+            Log::info('Customer token context resolved', [
+                'store_id' => $storeId,
+                'registry_id' => $store->id ?? null,
+                'legacy_store_id' => $store->legacy_store_id ?? null,
+                'store_status' => $store->provisioning_status ?? null,
+                'store_hash_present' => !empty($storeHash),
+                'token_present' => !empty($token),
+            ]);
+
+            if (!$store || !$storeHash) {
+                Log::warning('Customer token rejected', [
+                    'reason' => 'store_context_missing',
+                ]);
+
                 return response()->json([
-                    'status'  => false,
-                    'message' => 'Store ID is required.',
+                    'status' => false,
+                    'message' => 'A valid X-Store-Hash header is required.',
                 ], 422);
             }
 
-            if (!$token) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Token expired',
-                ], 401);
-            }
+            if (
+                empty($store->store_hash) ||
+                !hash_equals((string) $store->store_hash, (string) $storeHash)
+            ) {
+                Log::warning('Customer token rejected', [
+                    'reason' => 'store_hash_mismatch',
+                    'registry_id' => $store->id ?? null,
+                ]);
 
-            $store = Store::where('id', $storeId)->first();
-
-            if (!$store) {
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => 'Invalid store.',
                 ], 404);
             }
 
-            $accessToken = PersonalAccessToken::findToken($token);
+            if (($store->provisioning_status ?? null) !== 'active') {
+                Log::warning('Customer token rejected', [
+                    'reason' => 'store_not_active',
+                    'registry_id' => $store->id ?? null,
+                    'store_status' => $store->provisioning_status ?? null,
+                ]);
 
-            if (!$accessToken) {
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
+                    'message' => 'The store is not active.',
+                ], 403);
+            }
+
+            if ($storeId === null || $storeId === '') {
+                Log::warning('Customer token rejected', [
+                    'reason' => 'store_id_missing',
+                    'registry_id' => $store->id ?? null,
+                ]);
+
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store ID could not be resolved.',
+                ], 422);
+            }
+
+            if (!$token) {
+                Log::warning('Customer token rejected', [
+                    'reason' => 'token_missing',
+                    'store_id' => $storeId,
+                ]);
+
+                return response()->json([
+                    'status' => false,
                     'message' => 'Token expired',
                 ], 401);
             }
 
-            if ($accessToken->expires_at && $accessToken->expires_at->isPast()) {
+            /*
+            |--------------------------------------------------------------------------
+            | Connect to the selected tenant database
+            |--------------------------------------------------------------------------
+            */
+
+            $tenantManager = app(
+                \App\Services\TenantDatabaseManager::class
+            );
+
+            $tenantManager->connectForStore($store);
+
+            $tenantDatabase = DB::connection('tenant')->getDatabaseName();
+
+            Log::info('Customer token check tenant connected', [
+                'store_id' => $storeId,
+                'registry_id' => $store->id ?? null,
+                'tenant_database' => $tenantDatabase,
+                'tenant_store_attribute' =>
+                    request()->attributes->get('tenant_store') !== null,
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Parse the Sanctum token
+            |--------------------------------------------------------------------------
+            |
+            | Supports:
+            | 1. ID|plaintext-token
+            | 2. plaintext-token
+            |
+            */
+
+            $plainToken = $token;
+            $tokenId = null;
+
+            if (str_contains($token, '|')) {
+                [$possibleId, $possiblePlainToken] = explode('|', $token, 2);
+
+                if (
+                    $possibleId !== '' &&
+                    ctype_digit($possibleId) &&
+                    $possiblePlainToken !== ''
+                ) {
+                    $tokenId = $possibleId;
+                    $plainToken = $possiblePlainToken;
+                }
+            }
+
+            $hashedToken = hash('sha256', $plainToken);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Find the token in the tenant database
+            |--------------------------------------------------------------------------
+            */
+
+            $tokenQuery = \App\Models\PersonalAccessToken::on('tenant');
+
+            if ($tokenId !== null) {
+                $accessToken = $tokenQuery
+                    ->whereKey((int) $tokenId)
+                    ->where('token', $hashedToken)
+                    ->first();
+            } else {
+                $accessToken = $tokenQuery
+                    ->where('token', $hashedToken)
+                    ->first();
+            }
+
+            Log::info('Customer token lookup result', [
+                'found' => $accessToken !== null,
+                'lookup_by_id' => $tokenId !== null,
+                'token_id' => $tokenId,
+                'token_name' => $accessToken?->name,
+                'tokenable_type' => $accessToken?->tokenable_type,
+                'tokenable_id' => $accessToken?->tokenable_id,
+                'tenant_database' => $tenantDatabase,
+            ]);
+
+            if (!$accessToken) {
+                Log::warning('Customer token rejected', [
+                    'reason' => 'token_not_found',
+                    'store_id' => $storeId,
+                    'tenant_database' => $tenantDatabase,
+                    'lookup_by_id' => $tokenId !== null,
+                ]);
+
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Token expired',
+                ], 401);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Validate token expiration
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                $accessToken->expires_at &&
+                $accessToken->expires_at->isPast()
+            ) {
+                Log::warning('Customer token rejected', [
+                    'reason' => 'token_expired',
+                    'token_id' => $accessToken->getKey(),
+                    'expires_at' => $accessToken->expires_at->toDateTimeString(),
+                ]);
+
                 $accessToken->delete();
 
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => 'Token expired',
                 ], 401);
             }
 
-            $allowedTokenNames = ['customerToken', 'customer_login', 'auth_token'];
+            /*
+            |--------------------------------------------------------------------------
+            | Validate token name
+            |--------------------------------------------------------------------------
+            */
+
+            $allowedTokenNames = [
+                'customerToken',
+                'customer_login',
+                'auth_token',
+            ];
 
             if (!in_array($accessToken->name, $allowedTokenNames, true)) {
+                Log::warning('Customer token rejected', [
+                    'reason' => 'token_name_not_allowed',
+                    'token_id' => $accessToken->getKey(),
+                    'token_name' => $accessToken->name,
+                ]);
+
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => 'Token expired',
                 ], 401);
             }
 
-            $user = $accessToken->tokenable;
+            /*
+            |--------------------------------------------------------------------------
+            | Validate token owner type
+            |--------------------------------------------------------------------------
+            */
+
+            $expectedMorphType = (new User())->getMorphClass();
+
+            if ($accessToken->tokenable_type !== $expectedMorphType) {
+                Log::warning('Customer token rejected', [
+                    'reason' => 'token_owner_type_mismatch',
+                    'token_id' => $accessToken->getKey(),
+                    'actual_type' => $accessToken->tokenable_type,
+                    'expected_type' => $expectedMorphType,
+                ]);
+
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Token expired',
+                ], 401);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Resolve token owner from the tenant database
+            |--------------------------------------------------------------------------
+            */
+
+            $user = User::on('tenant')
+                ->whereKey($accessToken->tokenable_id)
+                ->first();
 
             if (!$user) {
+                Log::warning('Customer token rejected', [
+                    'reason' => 'token_owner_not_found',
+                    'token_id' => $accessToken->getKey(),
+                    'tokenable_id' => $accessToken->tokenable_id,
+                    'tenant_database' => $tenantDatabase,
+                ]);
+
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => 'Token expired',
                 ], 401);
             }
 
-            // Normal customer (userRole = 2) ya login-as user (customer_id + store)
+            /*
+            |--------------------------------------------------------------------------
+            | Validate customer access
+            |--------------------------------------------------------------------------
+            */
+
             $isNormalCustomer = (int) $user->userRole === 2;
-            $isLoginAsUser    = !empty($user->customer_id) && (int) $user->store_id === (int) $storeId;
+
+            $isLoginAsUser = !empty($user->customer_id)
+                && (int) $user->store_id === (int) $storeId;
+
+            Log::info('Customer token owner resolved', [
+                'user_id' => $user->getKey(),
+                'user_role' => $user->userRole,
+                'customer_id' => $user->customer_id,
+                'user_store_id' => $user->store_id,
+                'requested_store_id' => $storeId,
+                'is_normal_customer' => $isNormalCustomer,
+                'is_login_as_user' => $isLoginAsUser,
+            ]);
 
             if (!$isNormalCustomer && !$isLoginAsUser) {
+                Log::warning('Customer token rejected', [
+                    'reason' => 'customer_access_denied',
+                    'user_id' => $user->getKey(),
+                    'user_role' => $user->userRole,
+                    'user_store_id' => $user->store_id,
+                    'requested_store_id' => $storeId,
+                ]);
+
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => 'Token expired',
                 ], 401);
             }
 
-            return response()->json([
-                'status'   => true,
-                'message'  => 'Already existed',
-                'store'    => new StoreResource($store),
-                'customer' => $user->customer ? new CustomerResource($user->customer) : null,
+            /*
+            |--------------------------------------------------------------------------
+            | Load customer profile from the tenant database
+            |--------------------------------------------------------------------------
+            */
+
+            $customerProfile = null;
+
+            if (!empty($user->customer_id)) {
+                $customerProfile = \App\Models\Customer::on('tenant')
+                    ->whereKey($user->customer_id)
+                    ->first();
+            } else {
+                $customerProfile = $user->customer;
+            }
+
+            Log::info('Customer token check successful', [
+                'user_id' => $user->getKey(),
+                'customer_found' => $customerProfile !== null,
+                'store_id' => $storeId,
+                'tenant_database' => $tenantDatabase,
             ]);
-        } catch (\Exception $e) {
-            Log::error('Customer token check failed: ' . $e->getMessage());
 
             return response()->json([
-                'status'  => false,
+                'status' => true,
+                'message' => 'Already existed',
+                'store' => $store,
+                'customer' => $customerProfile
+                    ? new CustomerResource($customerProfile)
+                    : null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Customer token check failed', [
+                'message' => $e->getMessage(),
+                'exception' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'path' => $request->path(),
+            ]);
+
+            return response()->json([
+                'status' => false,
                 'message' => 'Something went wrong during token check.',
             ], 500);
+        } finally {
+            if ($tenantManager) {
+                try {
+                    $tenantManager->disconnect();
+
+                    Log::info('Customer token check tenant disconnected');
+                } catch (\Throwable $disconnectException) {
+                    Log::error('Customer token tenant disconnect failed', [
+                        'message' => $disconnectException->getMessage(),
+                        'exception' => get_class($disconnectException),
+                    ]);
+                }
+            }
         }
     }
 

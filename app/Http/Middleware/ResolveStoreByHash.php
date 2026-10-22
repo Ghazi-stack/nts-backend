@@ -6,11 +6,22 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Support\Facades\Log;
 
 class ResolveStoreByHash
 {
     public function handle(Request $request, Closure $next): Response
     {
+
+        Log::info('ResolveStoreByHash entered', [
+            'path' => $request->path(),
+            'method' => $request->method(),
+            'store_hash_header_present' => $request->hasHeader('X-Store-Hash'),
+            'store_hash_attribute_present' =>
+                $request->attributes->has('store_hash'),
+            'resolved_store_present' =>
+                $request->attributes->has('resolved_store'),
+        ]);
         $storeHash = $request->header('X-Store-Hash');
 
         // Require the new store identifier.
