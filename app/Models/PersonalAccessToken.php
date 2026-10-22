@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Laravel\Sanctum\PersonalAccessToken as SanctumPersonalAccessToken;
+use Illuminate\Support\Facades\Log;
 
 class PersonalAccessToken extends SanctumPersonalAccessToken
 {
@@ -70,6 +71,12 @@ class PersonalAccessToken extends SanctumPersonalAccessToken
             if (!$token || !hash_equals($token->token, $hash)) {
                 return null;
             }
+
+            Log::info('Sanctum token lookup', [
+                'connection' => $connection,
+                'database' => $model->getConnection()->getDatabaseName(),
+                'token_found' => $token !== null,
+            ]);
 
             return $token;
         } catch (\Throwable $e) {
