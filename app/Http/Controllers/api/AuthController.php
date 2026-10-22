@@ -918,6 +918,7 @@ class AuthController extends Controller
                     : null,
             ]);
 
+            
             $adminPermissions = $permissionStoreId
                 ? $admin->permissions()
                     ->wherePivot('store_id', $permissionStoreId)
