@@ -2641,7 +2641,7 @@ class AuthController extends Controller
             if (!$user) {
                 return response()->json([
                     'status' => false,
-                    'message' => 'Unauthenticated.',
+                    'message' => 'Unauthenticated. Auth',
                 ], 401);
             }
 
