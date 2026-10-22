@@ -5,11 +5,15 @@ namespace App\Http\Controllers\api\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\UrlSetting;
+use App\Models\Redirect;
+use App\Models\ProductSeo;
+use App\Models\Product;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class UrlSettingController extends Controller
 {
-  private function getStoreId()
+    private function getStoreId()
     {
         $storeId = current_store_id();   // aapka existing helper function
 
@@ -42,9 +46,9 @@ class UrlSettingController extends Controller
             ['store_id' => $storeId, 'entity_type' => 'product'],
             [
                 'format_type'   => $validated['format_type'],
-                'custom_format' => $validated['format_type'] === 'custom' 
-                                   ? $validated['custom_format'] 
-                                   : null,
+                'custom_format' => $validated['format_type'] === 'custom'
+                    ? $validated['custom_format']
+                    : null,
             ]
         );
 
@@ -76,9 +80,9 @@ class UrlSettingController extends Controller
             ['store_id' => $storeId, 'entity_type' => 'category'],
             [
                 'format_type'   => $validated['format_type'],
-                'custom_format' => $validated['format_type'] === 'custom' 
-                                   ? $validated['custom_format'] 
-                                   : null,
+                'custom_format' => $validated['format_type'] === 'custom'
+                    ? $validated['custom_format']
+                    : null,
             ]
         );
 
@@ -109,9 +113,9 @@ class UrlSettingController extends Controller
             ['store_id' => $storeId, 'entity_type' => 'webpage'],
             [
                 'format_type'   => $validated['format_type'],
-                'custom_format' => $validated['format_type'] === 'custom' 
-                                   ? $validated['custom_format'] 
-                                   : null,
+                'custom_format' => $validated['format_type'] === 'custom'
+                    ? $validated['custom_format']
+                    : null,
             ]
         );
 
@@ -134,8 +138,8 @@ class UrlSettingController extends Controller
         }
 
         $setting = UrlSetting::where('store_id', $storeId)
-                    ->where('entity_type', $entity)
-                    ->first();
+            ->where('entity_type', $entity)
+            ->first();
 
         return response()->json([
             'status' => true,
@@ -144,5 +148,385 @@ class UrlSettingController extends Controller
                 'custom_format' => null
             ]
         ]);
+    }
+
+    /**
+     * Bulk Update Product URLs + Create Redirects
+     * Yeh method sirf "Update Product URLs..." button se call hoga
+     * product_seo.product_url ko kabhi update nahi karega
+     */
+    public function bulkUpdateProductUrls(Request $request)
+    {
+        $storeId = $this->getStoreId();
+
+        $validated = $request->validate([
+            'update_all'       => 'required|boolean',
+            'create_redirects' => 'required|boolean',
+        ]);
+
+        // Agar redirects nahi banane hain to kuch mat karo
+        if (!$validated['create_redirects']) {
+            return response()->json([
+                'status'  => true,
+                'message' => 'Redirects creation skipped.'
+            ]);
+        }
+
+        // Current product URL setting le lo
+        $setting = UrlSetting::where('store_id', $storeId)
+            ->where('entity_type', 'product')
+            ->first();
+
+        if (!$setting) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Product URL setting not found.'
+            ], 400);
+        }
+
+        $products = Product::where('store_id', $storeId)->get();
+        $created  = 0;
+
+        foreach ($products as $product) {
+
+            // product_seo record le lo (old URL yahan se aayega)
+            $seo = ProductSeo::where('product_id', $product->id)
+                ->where('store_id', $storeId)
+                ->first();
+
+            if (!$seo || empty($seo->product_url)) {
+                continue;
+            }
+
+            $oldUrl = $seo->product_url; // yeh change nahi hoga
+
+            // Naya URL generate karo current setting ke hisaab se
+            $newUrl = $this->generateProductUrl($product, $setting);
+
+            // Agar same hai to skip
+            if (rtrim($oldUrl, '/') === rtrim($newUrl, '/')) {
+                continue;
+            }
+
+            // Sirf redirects table mein save karo
+            Redirect::updateOrCreate(
+                [
+                    'store_id' => $storeId,
+                    'old_url'  => $oldUrl,
+                ],
+                [
+                    'product_id'  => $product->id,
+                    'entity_type' => 'product',
+                    'new_url'     => $newUrl,
+                    'is_active'   => true,
+                ]
+            );
+
+            $created++;
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Redirects created successfully: {$created}",
+            'created' => $created,
+        ]);
+    }
+
+    /**
+     * Product ke liye naya URL generate karo
+     * Product model ke fields use karta hai: name, sku, category_id
+     */
+    private function generateProductUrl($product, $setting): string
+    {
+        $format = $setting->format_type;
+        $custom = $setting->custom_format;
+
+        // Title se slug
+        $titleSlug = Str::slug($product->name ?? '');
+
+        // SKU
+        $sku = $product->sku ?? '';
+
+        // Category slug
+        $categorySlug = 'uncategorized';
+        if ($product->category_id) {
+            $category = \App\Models\Category::find($product->category_id);
+            if ($category) {
+                $categorySlug = $category->slug ?? Str::slug($category->name);
+            }
+        }
+
+        switch ($format) {
+
+            case 'seo_optimized_short':
+                return '/' . $titleSlug . '/';
+
+            case 'seo_optimized_long':
+                return '/products/' . $titleSlug . '.html';
+
+            case 'seo_optimized_category':
+                return '/' . $categorySlug . '/' . $titleSlug . '/';
+
+            case 'custom':
+                if (empty($custom)) {
+                    return '/' . $titleSlug . '/';
+                }
+
+                $url = $custom;
+
+                // Placeholders replace
+                $url = str_replace('%title%', $titleSlug, $url);
+                $url = str_replace('%sku%', $sku, $url);
+                $url = str_replace('%id%', $product->id, $url);
+                $url = str_replace('%categoryname%', $categorySlug, $url);
+                $url = str_replace('%parent%', $categorySlug, $url);
+
+                if (!str_starts_with($url, '/')) {
+                    $url = '/' . $url;
+                }
+
+                if (!str_ends_with($url, '/') && !str_contains($url, '.')) {
+                    $url .= '/';
+                }
+
+                return $url;
+
+            default:
+                return '/' . $titleSlug . '/';
+        }
+    }
+
+    /**
+     * Bulk Update Category URLs + Create Redirects
+     * category ka existing URL change nahi karega
+     */
+    public function bulkUpdateCategoryUrls(Request $request)
+    {
+        $storeId = $this->getStoreId();
+
+        $validated = $request->validate([
+            'update_all'       => 'required|boolean',
+            'create_redirects' => 'required|boolean',
+        ]);
+
+        if (!$validated['create_redirects']) {
+            return response()->json([
+                'status'  => true,
+                'message' => 'Redirects creation skipped.'
+            ]);
+        }
+
+        $setting = UrlSetting::where('store_id', $storeId)
+            ->where('entity_type', 'category')
+            ->first();
+
+        if (!$setting) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Category URL setting not found.'
+            ], 400);
+        }
+
+        $categories = \App\Models\Category::where('store_id', $storeId)->get();
+        $created = 0;
+
+        foreach ($categories as $category) {
+
+            // Old URL (category ka current slug based URL)
+            $oldUrl = '/' . ($category->slug ?? Str::slug($category->name)) . '/';
+
+            // New URL generate karo
+            $newUrl = $this->generateCategoryUrl($category, $setting);
+
+            if (rtrim($oldUrl, '/') === rtrim($newUrl, '/')) {
+                continue;
+            }
+
+            Redirect::updateOrCreate(
+                [
+                    'store_id' => $storeId,
+                    'old_url'  => $oldUrl,
+                ],
+                [
+                    'product_id'  => null,
+                    'entity_type' => 'category',
+                    'new_url'     => $newUrl,
+                    'is_active'   => true,
+                ]
+            );
+
+            $created++;
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Category redirects created: {$created}",
+            'created' => $created,
+        ]);
+    }
+
+    /**
+     * Category URL generate karo
+     */
+    private function generateCategoryUrl($category, $setting): string
+    {
+        $format = $setting->format_type;
+        $custom = $setting->custom_format;
+
+        $categorySlug = $category->slug ?? Str::slug($category->name ?? '');
+
+        // Parent category slug (agar hai)
+        $parentSlug = '';
+        if ($category->parent_id) {
+            $parent = \App\Models\Category::find($category->parent_id);
+            $parentSlug = $parent->slug ?? Str::slug($parent->name ?? '');
+        }
+
+        switch ($format) {
+
+            case 'seo_optimized_short':
+                return '/' . $categorySlug . '/';
+
+            case 'seo_optimized_long':
+                return '/categories/' . $categorySlug . '.html';
+
+            case 'custom':
+                if (empty($custom)) {
+                    return '/' . $categorySlug . '/';
+                }
+
+                $url = $custom;
+                $url = str_replace('%categoryname%', $categorySlug, $url);
+                $url = str_replace('%parent%', $parentSlug, $url);
+                $url = str_replace('%id%', $category->id, $url);
+
+                if (!str_starts_with($url, '/')) {
+                    $url = '/' . $url;
+                }
+
+                if (!str_ends_with($url, '/') && !str_contains($url, '.')) {
+                    $url .= '/';
+                }
+
+                return $url;
+
+            default:
+                return '/' . $categorySlug . '/';
+        }
+    }
+
+    /**
+     * Bulk Update Web Page URLs + Create Redirects
+     */
+    public function bulkUpdateWebpageUrls(Request $request)
+    {
+        $storeId = $this->getStoreId();
+
+        $validated = $request->validate([
+            'update_all'       => 'required|boolean',
+            'create_redirects' => 'required|boolean',
+        ]);
+
+        if (!$validated['create_redirects']) {
+            return response()->json([
+                'status'  => true,
+                'message' => 'Redirects creation skipped.'
+            ]);
+        }
+
+        $setting = UrlSetting::where('store_id', $storeId)
+            ->where('entity_type', 'webpage')
+            ->first();
+
+        if (!$setting) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Web Page URL setting not found.'
+            ], 400);
+        }
+
+        $pages = \App\Models\WebPage::where('store_id', $storeId)->get();
+        $created = 0;
+
+        foreach ($pages as $page) {
+
+            // Old URL (page_url field se)
+            $oldUrl = $page->page_url ?? ('/' . Str::slug($page->page_name) . '/');
+
+            // Ensure leading slash
+            if (!str_starts_with($oldUrl, '/')) {
+                $oldUrl = '/' . $oldUrl;
+            }
+
+            $newUrl = $this->generateWebpageUrl($page, $setting);
+
+            if (rtrim($oldUrl, '/') === rtrim($newUrl, '/')) {
+                continue;
+            }
+
+            Redirect::updateOrCreate(
+                [
+                    'store_id' => $storeId,
+                    'old_url'  => $oldUrl,
+                ],
+                [
+                    'product_id'  => null,
+                    'entity_type' => 'webpage',
+                    'new_url'     => $newUrl,
+                    'is_active'   => true,
+                ]
+            );
+
+            $created++;
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Web Page redirects created: {$created}",
+            'created' => $created,
+        ]);
+    }
+
+    /**
+     * Web Page URL generate karo
+     */
+    private function generateWebpageUrl($page, $setting): string
+    {
+        $format = $setting->format_type;
+        $custom = $setting->custom_format;
+
+        // page_name se slug
+        $pageSlug = Str::slug($page->page_name ?? '');
+
+        switch ($format) {
+
+            case 'seo_optimized_short':
+                return '/' . $pageSlug . '/';
+
+            case 'seo_optimized_long':
+                return '/pages/' . $pageSlug . '.html';
+
+            case 'custom':
+                if (empty($custom)) {
+                    return '/' . $pageSlug . '/';
+                }
+
+                $url = $custom;
+                $url = str_replace('%title%', $pageSlug, $url);
+                $url = str_replace('%id%', $page->id, $url);
+
+                if (!str_starts_with($url, '/')) {
+                    $url = '/' . $url;
+                }
+
+                if (!str_ends_with($url, '/') && !str_contains($url, '.')) {
+                    $url .= '/';
+                }
+
+                return $url;
+
+            default:
+                return '/' . $pageSlug . '/';
+        }
     }
 }
