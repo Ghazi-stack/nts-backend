@@ -47,6 +47,29 @@ class Kernel extends HttpKernel
     ];
 
     /**
+     * The priority-sorted list of middleware.
+     *
+     * Tenant resolution must happen before authentication.
+     *
+     * @var array<int, class-string>
+     */
+    protected $middlewarePriority = [
+        \Illuminate\Foundation\Http\Middleware\HandlePrecognitiveRequests::class,
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \App\Http\Middleware\ResolveStoreByHash::class,
+        \App\Http\Middleware\ConnectTenantDatabase::class,
+        \Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests::class,
+        \Illuminate\Routing\Middleware\ThrottleRequests::class,
+        \Illuminate\Routing\Middleware\ThrottleRequestsWithRedis::class,
+        \Illuminate\Session\Middleware\AuthenticateSession::class,
+        \Illuminate\Routing\Middleware\SubstituteBindings::class,
+        \Illuminate\Auth\Middleware\Authorize::class,
+    ];
+
+    /**
      * The application's middleware aliases.
      *
      * Aliases may be used instead of class names to conveniently assign middleware to routes and groups.
