@@ -893,10 +893,6 @@ class AuthController extends Controller
                 }
             }
 
-            if (!$selectedStore) {
-                $selectedStore = $stores->first();
-            }
-
             $permissionStoreId = $selectedStore
                 ? (int) $selectedStore->id
                 : null;
