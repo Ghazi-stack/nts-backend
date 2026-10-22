@@ -865,13 +865,12 @@ class AuthController extends Controller
 
             $selectedStore = null;
 
+            // Resolve an explicitly requested store first.
             if ($storeId !== null && $storeId !== '') {
-                // Prefer mapping the frontend's legacy store ID.
                 $selectedStore = $central->table('stores')
                     ->where('legacy_store_id', $storeId)
                     ->first();
 
-                // If no legacy mapping exists, try the central registry ID.
                 if (!$selectedStore) {
                     $selectedStore = $stores->first(
                         fn ($store) => (int) $store->id === (int) $storeId
@@ -880,16 +879,20 @@ class AuthController extends Controller
 
                 if (
                     !$selectedStore ||
-                    !in_array(
-                        (int) $selectedStore->id,
-                        $accessibleStoreIds,
-                        true
-                    )
+                    !in_array((int) $selectedStore->id, $accessibleStoreIds, true)
                 ) {
                     return response()->json([
-                        'status'  => false,
+                        'status' => false,
                         'message' => 'You do not have access to this store.',
                     ], 403);
+                }
+            } else {
+                // No store was specified: default to the first owned store.
+                $selectedStore = $ownedStores->first();
+
+                // If the user owns no stores, use their first accessible store.
+                if (!$selectedStore) {
+                    $selectedStore = $stores->first();
                 }
             }
 
