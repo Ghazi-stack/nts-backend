@@ -5,13 +5,10 @@ namespace App\Services;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use InvalidArgumentException;
+use App\Services\TenantCredentialCrypt;
 
 class TenantDatabaseManager
 {
-    /**
-     * Find the store in the central registry and connect
-     * only if the store is marked active.
-     */
     public function connectByStoreHash(string $storeHash): object
     {
         if (!preg_match('/^store-[a-z0-9]{12}$/', $storeHash)) {
@@ -42,16 +39,27 @@ class TenantDatabaseManager
         return $store;
     }
 
-    /**
-     * Configure and connect using a trusted registry record.
-     */
     public function connectForStore(object $store): void
     {
         $databaseName = $store->tenant_database ?? null;
+        $username = $store->db_username ?? null;
+        $encryptedPassword = $store->db_password_encrypted ?? null;
+        $host = $store->db_host ?? null;
+        $port = $store->db_port ?? null;
 
-        if (!is_string($databaseName) || $databaseName === '') {
+        if (
+            !is_string($databaseName) ||
+            $databaseName === '' ||
+            !is_string($username) ||
+            $username === '' ||
+            !is_string($encryptedPassword) ||
+            $encryptedPassword === '' ||
+            !is_string($host) ||
+            $host === '' ||
+            !is_numeric($port)
+        ) {
             throw new RuntimeException(
-                'No tenant database is configured for this store.'
+                'Tenant database credentials are incomplete.'
             );
         }
 
@@ -61,25 +69,42 @@ class TenantDatabaseManager
             );
         }
 
+        if (!preg_match('/^[a-zA-Z0-9_]{1,32}$/', $username)) {
+            throw new InvalidArgumentException(
+                'The tenant database username is invalid.'
+            );
+        }
+
+        $password = app(TenantCredentialCrypt::class)
+            ->decrypt($encryptedPassword);
+
+        if (!is_string($password) || $password === '') {
+            throw new RuntimeException(
+                'Tenant database password could not be decrypted.'
+            );
+        }
+
         config([
+            'database.connections.tenant.host' => $host,
+            'database.connections.tenant.port' => (int) $port,
             'database.connections.tenant.database' => $databaseName,
+            'database.connections.tenant.username' => $username,
+            'database.connections.tenant.password' => $password,
         ]);
 
         DB::purge('tenant');
 
-        // Verify the connection is reachable.
         DB::connection('tenant')->getPdo();
     }
 
-    /**
-     * Disconnect the tenant connection and clear its database name.
-     */
     public function disconnect(): void
     {
         DB::purge('tenant');
 
         config([
             'database.connections.tenant.database' => null,
+            'database.connections.tenant.username' => null,
+            'database.connections.tenant.password' => null,
         ]);
     }
 }
