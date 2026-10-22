@@ -2,36 +2,52 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Builder;
 use Laravel\Sanctum\PersonalAccessToken as SanctumPersonalAccessToken;
 
 class PersonalAccessToken extends SanctumPersonalAccessToken
 {
     public static function findToken($token)
     {
+        if (!is_string($token) || $token === '') {
+            return null;
+        }
+
         $id = null;
         $plainTextToken = $token;
 
         if (str_contains($token, '|')) {
             [$id, $plainTextToken] = explode('|', $token, 2);
+
+            if ($id === '' || !ctype_digit($id)) {
+                return null;
+            }
         }
 
         $hash = hash('sha256', $plainTextToken);
 
-        // Search central first so staff tokens remain valid
-        // even when the request includes tenant context.
-        $centralToken = static::queryOnConnection('central', $id, $hash);
+        // Prefer tenant tokens when a store has been resolved.
+        $hasTenantContext =
+            request()->attributes->get('resolved_store') !== null
+            || request()->attributes->get('tenant_store') !== null;
 
-        if ($centralToken) {
-            return $centralToken;
+        if ($hasTenantContext) {
+            $tenantToken = static::queryOnConnection(
+                'tenant',
+                $id,
+                $hash
+            );
+
+            if ($tenantToken) {
+                return $tenantToken;
+            }
         }
 
-        // Search tenant only after a store has been resolved.
-        if (request()->attributes->get('tenant_store')) {
-            return static::queryOnConnection('tenant', $id, $hash);
-        }
-
-        return null;
+        // Preserve central tokens for staff and other central authentication.
+        return static::queryOnConnection(
+            'central',
+            $id,
+            $hash
+        );
     }
 
     protected static function queryOnConnection(
@@ -39,21 +55,33 @@ class PersonalAccessToken extends SanctumPersonalAccessToken
         ?string $id,
         string $hash
     ): ?self {
-        $model = new static();
-        $model->setConnection($connection);
+        try {
+            $model = new static();
+            $model->setConnection($connection);
 
-        $query = $model->newQuery();
+            $query = $model->newQuery();
 
-        if ($id !== null) {
-            $token = $query->whereKey($id)->first();
-        } else {
-            $token = $query->where('token', $hash)->first();
-        }
+            if ($id !== null) {
+                $token = $query->whereKey((int) $id)->first();
+            } else {
+                $token = $query->where('token', $hash)->first();
+            }
 
-        if (!$token || !hash_equals($token->token, $hash)) {
+            if (!$token || !hash_equals($token->token, $hash)) {
+                return null;
+            }
+
+            return $token;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning(
+                'Sanctum token lookup failed.',
+                [
+                    'connection' => $connection,
+                    'message' => $e->getMessage(),
+                ]
+            );
+
             return null;
         }
-
-        return $token;
     }
 }
