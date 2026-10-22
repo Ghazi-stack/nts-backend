@@ -97,11 +97,20 @@ class PersonalAccessToken extends SanctumPersonalAccessToken
         |--------------------------------------------------------------------------
         */
 
-        return static::queryOnConnection(
-            'central',
-            $id,
-            $hash
-        );
+        // Tenant-scoped requests must never authenticate using central tokens.
+        if (str_starts_with($request->path(), 'api/web/')) {
+            Log::warning('Tenant authentication rejected: missing tenant context', [
+                'path' => $request->path(),
+                'resolved_store_present' =>
+                    $request->attributes->get('resolved_store') !== null,
+                'tenant_store_present' =>
+                    $request->attributes->get('tenant_store') !== null,
+            ]);
+
+            return null;
+        }
+
+        return static::queryOnConnection('central', $id, $hash);
     }
 
     protected static function queryOnConnection(

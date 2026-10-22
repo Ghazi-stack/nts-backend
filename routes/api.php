@@ -729,8 +729,7 @@ Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class
     });
 
     // 🔀 Cart Transfer (auth required)
-    Route::prefix('cart')->middleware([\App\Http\Middleware\ResolveStoreByHash::class,
-        \App\Http\Middleware\ConnectTenantDatabase::class,'auth:sanctum'])->controller(CartController::class)->group(function () {
+    Route::prefix('cart')->middleware(['auth:sanctum'])->controller(CartController::class)->group(function () {
         Route::post('/transfer', 'transferGuestCartToUser');
     });
 
