@@ -667,7 +667,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
 
 // 🔓 Public Routes (accessible without login)
 
-Route::prefix('web')->middleware(['store.hash', 'tenant.database'])->group(function () {
+Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class, \App\Http\Middleware\ConnectTenantDatabase::class])->group(function () {
 
     Route::middleware('auth:sanctum')->get('/customer-profile', [AuthController::class, 'getCustomerProfile']);
     Route::post('/customer/check-token', [AuthController::class, 'checkCustomerToken']);
