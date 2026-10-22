@@ -85,7 +85,7 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
 
 
 Route::post('/auth/login', [AuthController::class, 'login']);
-Route::post('/customer-login', [AuthController::class, 'customerLogin']);
+Route::post('/customer-login', [AuthController::class, 'customerLogin'])->middleware(['store.hash']);
 Route::post('/admin/forgot-password', [AuthController::class, 'adminForgotPassword']);
 Route::post('/admin/reset-password', [AuthController::class, 'adminResetPassword']);
 
