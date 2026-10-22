@@ -956,6 +956,16 @@ class AuthController extends Controller
                 app(\App\Services\TenantDatabaseManager::class)
                     ->connectForStore($selectedStore);
 
+                \Log::info('Selected store tenant fields before login connection', [
+                    'id' => $selectedStore->id ?? null,
+                    'name' => $selectedStore->name ?? null,
+                    'tenant_database' => $selectedStore->tenant_database ?? null,
+                    'db_username' => $selectedStore->db_username ?? null,
+                    'has_encrypted_password' => !empty($selectedStore->db_password_encrypted),
+                    'db_host' => $selectedStore->db_host ?? null,
+                    'db_port' => $selectedStore->db_port ?? null,
+                ]);    
+
                 try {
                     StaffLog::record([
                         // Tenant logs retain the legacy store ID.
