@@ -1008,6 +1008,194 @@ class AuthController extends Controller
     }
 
 
+    // public function customerLogin(Request $request)
+    // {
+    //     try {
+    //         $request->validate([
+    //             'email'    => 'required|email',
+    //             'password' => 'required',
+    //         ]);
+
+    //         $email    = $request->email;
+    //         $password = $request->password;
+    //         $storeId  = $request->header('storeId', $request->input('storeId'));
+
+    //         /*
+    //     |--------------------------------------------------------------------------
+    //     | CUSTOMER LOGIN (userRole = 2)
+    //     |--------------------------------------------------------------------------
+    //     */
+
+    //         $customer = User::where('email', $email)
+    //             ->where('userRole', 2)
+    //             ->where('store_id', '=', $storeId)
+    //             ->first();
+
+    //         if (!$customer) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Invalid email or password.',
+    //             ], 401);
+    //         }
+
+    //         if (!Hash::check($password, $customer->password)) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Invalid email or password.',
+    //             ], 401);
+    //         }
+
+    //         /*
+    //     |--------------------------------------------------------------------------
+    //     | STORE ID
+    //     |--------------------------------------------------------------------------
+    //     */
+
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Store ID is required for customer login.',
+    //             ], 422);
+    //         }
+
+    //         $store = Store::where('id', $storeId)->first();
+
+    //         if (!$store) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Invalid store.',
+    //             ], 404);
+    //         }
+
+    //         /*
+    //     |--------------------------------------------------------------------------
+    //     | FORCE PASSWORD RESET
+    //     |--------------------------------------------------------------------------
+    //     */
+
+    //         if ($customer->customer && $customer->customer->force_password_reset) {
+
+    //             DB::table('password_reset_tokens')
+    //                 ->where('email', $customer->email)
+    //                 ->delete();
+
+    //             Password::sendResetLink([
+    //                 'email' => $customer->email
+    //             ]);
+
+    //             return response()->json([
+    //                 'status'               => false,
+    //                 'force_password_reset' => true,
+    //                 'message'              => 'Password reset is required. A reset link has been sent to your email.',
+    //             ], 403);
+    //         }
+
+    //         /*
+    //     |--------------------------------------------------------------------------
+    //     | 2FA CHECK
+    //     |--------------------------------------------------------------------------
+    //     */
+
+    //         if ($customer->two_factor_enabled) {
+
+    //             if ($customer->two_factor_type === 'email') {
+    //                 $this->twoFactorService->sendEmailOtp($customer);
+    //             }
+
+    //             $pendingToken = $this->twoFactorService->storePendingLogin($customer);
+
+    //             return response()->json([
+    //                 'status'              => true,
+    //                 'two_factor_required' => true,
+    //                 'two_factor_type'     => $customer->two_factor_type,
+    //                 'pending_token'       => $pendingToken,
+    //                 'message'             => $customer->two_factor_type === 'email'
+    //                     ? 'OTP sent to your email. Please verify to continue.'
+    //                     : 'Please enter the code from your authenticator app.',
+    //             ], 200);
+    //         }
+
+    //         /*
+    //         |--------------------------------------------------------------------------
+    //         | SINGLE SESSION
+    //         |--------------------------------------------------------------------------
+    //         | Create the new token first.
+    //         | Then remove only the customer's previous customer sessions.
+    //         |--------------------------------------------------------------------------
+    //         */
+
+
+    //         $existingTokenIds = $customer->tokens()
+    //             ->whereIn('name', ['customerToken', 'customer_login'])
+    //             ->pluck('id')
+    //             ->toArray();
+
+    //         /*
+    //         |--------------------------------------------------------------------------
+    //         | Create new customer token
+    //         |--------------------------------------------------------------------------
+    //         */
+
+    //         $tokenResult    = $customer->createToken('customerToken');
+    //         $plainTextToken = $tokenResult->plainTextToken;
+
+    //         $expireAt = now()->addHours(24);
+
+    //         $accessToken = PersonalAccessToken::findToken($plainTextToken);
+
+    //         if ($accessToken) {
+    //             $accessToken->expires_at = $expireAt;
+    //         }
+
+    //         /*
+    //         |--------------------------------------------------------------------------
+    //         | Delete previous sessions only
+    //         |--------------------------------------------------------------------------
+    //         */
+
+    //         if (!empty($existingTokenIds)) {
+    //             $customer->tokens()
+    //                 ->whereIn('id', $existingTokenIds)
+    //                 ->delete();
+    //         }
+
+    //         /*
+    //         |--------------------------------------------------------------------------
+    //         | Save new token expiry
+    //         |--------------------------------------------------------------------------
+    //         */
+
+    //         if ($accessToken) {
+    //             $accessToken->save();
+    //         }
+
+    //         /*
+    //     |--------------------------------------------------------------------------
+    //     | RESPONSE
+    //     |--------------------------------------------------------------------------
+    //     */
+
+    //         return response()->json([
+    //             'status'      => true,
+    //             'message'     => 'Customer logged in successfully.',
+    //             'token'       => $plainTextToken,
+    //             'expireAt'    => $expireAt->toDateTimeString(),
+    //             'store'       => new StoreResource($store),
+    //             'customer'    => new CustomerResource($customer->customer),
+    //             'permissions' => null,
+    //         ]);
+    //     } catch (\Exception $e) {
+
+    //         Log::error('Customer login failed: ' . $e->getMessage());
+
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Something went wrong during login.',
+    //         ], 500);
+    //     }
+    // }
+
+    
     public function customerLogin(Request $request)
     {
         try {
@@ -1020,45 +1208,30 @@ class AuthController extends Controller
             $password = $request->password;
             $storeId  = $request->header('storeId', $request->input('storeId'));
 
-            /*
-        |--------------------------------------------------------------------------
-        | CUSTOMER LOGIN (userRole = 2)
-        |--------------------------------------------------------------------------
-        */
-
-            $customer = User::where('email', $email)
-                ->where('userRole', 2)
-                ->where('store_id', '=', $storeId)
-                ->first();
-
-            if (!$customer) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Invalid email or password.',
-                ], 401);
-            }
-
-            if (!Hash::check($password, $customer->password)) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Invalid email or password.',
-                ], 401);
-            }
-
-            /*
-        |--------------------------------------------------------------------------
-        | STORE ID
-        |--------------------------------------------------------------------------
-        */
-
-            if (!$storeId) {
+            if ($storeId === null || $storeId === '') {
                 return response()->json([
                     'status'  => false,
                     'message' => 'Store ID is required for customer login.',
                 ], 422);
             }
 
-            $store = Store::where('id', $storeId)->first();
+            /*
+            |--------------------------------------------------------------------------
+            | Resolve store from central registry
+            |--------------------------------------------------------------------------
+            */
+
+            $central = DB::connection('central');
+
+            $store = $central->table('stores')
+                ->where('legacy_store_id', $storeId)
+                ->first();
+
+            if (!$store) {
+                $store = $central->table('stores')
+                    ->where('id', $storeId)
+                    ->first();
+            }
 
             if (!$store) {
                 return response()->json([
@@ -1067,125 +1240,135 @@ class AuthController extends Controller
                 ], 404);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | FORCE PASSWORD RESET
-        |--------------------------------------------------------------------------
-        */
-
-            if ($customer->customer && $customer->customer->force_password_reset) {
-
-                DB::table('password_reset_tokens')
-                    ->where('email', $customer->email)
-                    ->delete();
-
-                Password::sendResetLink([
-                    'email' => $customer->email
-                ]);
-
+            if (($store->provisioning_status ?? null) !== 'active') {
                 return response()->json([
-                    'status'               => false,
-                    'force_password_reset' => true,
-                    'message'              => 'Password reset is required. A reset link has been sent to your email.',
+                    'status'  => false,
+                    'message' => 'The store is not active.',
                 ], 403);
             }
 
             /*
-        |--------------------------------------------------------------------------
-        | 2FA CHECK
-        |--------------------------------------------------------------------------
-        */
+            |--------------------------------------------------------------------------
+            | Authenticate customer user in central database
+            |--------------------------------------------------------------------------
+            */
 
-            if ($customer->two_factor_enabled) {
+            $customer = User::where('email', $email)
+                ->where('userRole', 2)
+                ->where('store_id', $store->legacy_store_id)
+                ->first();
 
-                if ($customer->two_factor_type === 'email') {
-                    $this->twoFactorService->sendEmailOtp($customer);
+            if (!$customer || !Hash::check($password, $customer->password)) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid email or password.',
+                ], 401);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Connect to the selected tenant before customer relationship access
+            |--------------------------------------------------------------------------
+            */
+
+            $tenantManager = app(\App\Services\TenantDatabaseManager::class);
+            $tenantManager->connectForStore($store);
+
+            try {
+                /*
+                |--------------------------------------------------------------------------
+                | FORCE PASSWORD RESET
+                |--------------------------------------------------------------------------
+                */
+
+                if ($customer->customer && $customer->customer->force_password_reset) {
+                    DB::table('password_reset_tokens')
+                        ->where('email', $customer->email)
+                        ->delete();
+
+                    Password::sendResetLink([
+                        'email' => $customer->email,
+                    ]);
+
+                    return response()->json([
+                        'status'               => false,
+                        'force_password_reset' => true,
+                        'message'              => 'Password reset is required. A reset link has been sent to your email.',
+                    ], 403);
                 }
 
-                $pendingToken = $this->twoFactorService->storePendingLogin($customer);
+                /*
+                |--------------------------------------------------------------------------
+                | TWO-FACTOR AUTHENTICATION
+                |--------------------------------------------------------------------------
+                */
+
+                if ($customer->two_factor_enabled) {
+                    if ($customer->two_factor_type === 'email') {
+                        $this->twoFactorService->sendEmailOtp($customer);
+                    }
+
+                    $pendingToken = $this->twoFactorService
+                        ->storePendingLogin($customer);
+
+                    return response()->json([
+                        'status'              => true,
+                        'two_factor_required' => true,
+                        'two_factor_type'     => $customer->two_factor_type,
+                        'pending_token'       => $pendingToken,
+                        'message'             => $customer->two_factor_type === 'email'
+                            ? 'OTP sent to your email. Please verify to continue.'
+                            : 'Please enter the code from your authenticator app.',
+                    ], 200);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | SINGLE SESSION
+                |--------------------------------------------------------------------------
+                */
+
+                $existingTokenIds = $customer->tokens()
+                    ->whereIn('name', ['customerToken', 'customer_login'])
+                    ->pluck('id')
+                    ->toArray();
+
+                $tokenResult = $customer->createToken('customerToken');
+                $plainTextToken = $tokenResult->plainTextToken;
+                $expireAt = now()->addHours(24);
+
+                $accessToken = PersonalAccessToken::findToken($plainTextToken);
+
+                if ($accessToken) {
+                    $accessToken->expires_at = $expireAt;
+                    $accessToken->save();
+                }
+
+                if (!empty($existingTokenIds)) {
+                    $customer->tokens()
+                        ->whereIn('id', $existingTokenIds)
+                        ->delete();
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | RESPONSE
+                |--------------------------------------------------------------------------
+                */
 
                 return response()->json([
-                    'status'              => true,
-                    'two_factor_required' => true,
-                    'two_factor_type'     => $customer->two_factor_type,
-                    'pending_token'       => $pendingToken,
-                    'message'             => $customer->two_factor_type === 'email'
-                        ? 'OTP sent to your email. Please verify to continue.'
-                        : 'Please enter the code from your authenticator app.',
-                ], 200);
+                    'status'      => true,
+                    'message'     => 'Customer logged in successfully.',
+                    'token'       => $plainTextToken,
+                    'expireAt'    => $expireAt->toDateTimeString(),
+                    'store'       => new StoreResource($store),
+                    'customer'    => new CustomerResource($customer->customer),
+                    'permissions' => null,
+                ]);
+            } finally {
+                $tenantManager->disconnect();
             }
-
-            /*
-            |--------------------------------------------------------------------------
-            | SINGLE SESSION
-            |--------------------------------------------------------------------------
-            | Create the new token first.
-            | Then remove only the customer's previous customer sessions.
-            |--------------------------------------------------------------------------
-            */
-
-
-            $existingTokenIds = $customer->tokens()
-                ->whereIn('name', ['customerToken', 'customer_login'])
-                ->pluck('id')
-                ->toArray();
-
-            /*
-            |--------------------------------------------------------------------------
-            | Create new customer token
-            |--------------------------------------------------------------------------
-            */
-
-            $tokenResult    = $customer->createToken('customerToken');
-            $plainTextToken = $tokenResult->plainTextToken;
-
-            $expireAt = now()->addHours(24);
-
-            $accessToken = PersonalAccessToken::findToken($plainTextToken);
-
-            if ($accessToken) {
-                $accessToken->expires_at = $expireAt;
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | Delete previous sessions only
-            |--------------------------------------------------------------------------
-            */
-
-            if (!empty($existingTokenIds)) {
-                $customer->tokens()
-                    ->whereIn('id', $existingTokenIds)
-                    ->delete();
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | Save new token expiry
-            |--------------------------------------------------------------------------
-            */
-
-            if ($accessToken) {
-                $accessToken->save();
-            }
-
-            /*
-        |--------------------------------------------------------------------------
-        | RESPONSE
-        |--------------------------------------------------------------------------
-        */
-
-            return response()->json([
-                'status'      => true,
-                'message'     => 'Customer logged in successfully.',
-                'token'       => $plainTextToken,
-                'expireAt'    => $expireAt->toDateTimeString(),
-                'store'       => new StoreResource($store),
-                'customer'    => new CustomerResource($customer->customer),
-                'permissions' => null,
-            ]);
         } catch (\Exception $e) {
-
             Log::error('Customer login failed: ' . $e->getMessage());
 
             return response()->json([
@@ -1194,6 +1377,7 @@ class AuthController extends Controller
             ], 500);
         }
     }
+
 
     public function checkCustomerToken(Request $request)
     {
