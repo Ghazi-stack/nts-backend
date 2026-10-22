@@ -1206,34 +1206,28 @@ class AuthController extends Controller
 
             $email    = $request->email;
             $password = $request->password;
-            $storeId  = $request->header('storeId', $request->input('storeId'));
-
-            if ($storeId === null || $storeId === '') {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Store ID is required for customer login.',
-                ], 422);
-            }
 
             /*
             |--------------------------------------------------------------------------
-            | Resolve store from central registry
+            | Resolve store using existing helpers
             |--------------------------------------------------------------------------
             */
 
-            $central = DB::connection('central');
+            $store = current_store_registry();
+            $storeHash = current_store_hash();
+            $storeId = current_store_id();
 
-            $store = $central->table('stores')
-                ->where('legacy_store_id', $storeId)
-                ->first();
-
-            if (!$store) {
-                $store = $central->table('stores')
-                    ->where('id', $storeId)
-                    ->first();
+            if (!$store || !$storeHash) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'A valid X-Store-Hash header is required.',
+                ], 422);
             }
 
-            if (!$store) {
+            if (
+                !isset($store->store_hash) ||
+                !hash_equals((string) $store->store_hash, $storeHash)
+            ) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'Invalid store.',
@@ -1247,18 +1241,29 @@ class AuthController extends Controller
                 ], 403);
             }
 
+            if ($storeId === null || $storeId === '') {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store ID could not be resolved.',
+                ], 422);
+            }
+
             /*
             |--------------------------------------------------------------------------
-            | Authenticate customer user in central database
+            | Authenticate user against the central database
             |--------------------------------------------------------------------------
             */
 
-            $customer = User::where('email', $email)
+            $customer = User::on('central')
+                ->where('email', $email)
                 ->where('userRole', 2)
-                ->where('store_id', $store->legacy_store_id)
+                ->where('store_id', $storeId)
                 ->first();
 
-            if (!$customer || !Hash::check($password, $customer->password)) {
+            if (
+                !$customer ||
+                !Hash::check($password, $customer->password)
+            ) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'Invalid email or password.',
@@ -1267,22 +1272,36 @@ class AuthController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Connect to the selected tenant before customer relationship access
+            | Connect to the selected tenant
             |--------------------------------------------------------------------------
             */
 
-            $tenantManager = app(\App\Services\TenantDatabaseManager::class);
+            $tenantManager = app(
+                \App\Services\TenantDatabaseManager::class
+            );
+
             $tenantManager->connectForStore($store);
 
             try {
                 /*
                 |--------------------------------------------------------------------------
-                | FORCE PASSWORD RESET
+                | Load tenant customer profile
                 |--------------------------------------------------------------------------
                 */
 
-                if ($customer->customer && $customer->customer->force_password_reset) {
-                    DB::table('password_reset_tokens')
+                $customerProfile = \App\Models\Customer::on('tenant')
+                    ->where('id', $customer->customer_id)
+                    ->first();
+
+                /*
+                |--------------------------------------------------------------------------
+                | Force password reset
+                |--------------------------------------------------------------------------
+                */
+
+                if ($customerProfile && $customerProfile->force_password_reset) {
+                    DB::connection('central')
+                        ->table('password_reset_tokens')
                         ->where('email', $customer->email)
                         ->delete();
 
@@ -1291,15 +1310,15 @@ class AuthController extends Controller
                     ]);
 
                     return response()->json([
-                        'status'               => false,
+                        'status'                => false,
                         'force_password_reset' => true,
-                        'message'              => 'Password reset is required. A reset link has been sent to your email.',
+                        'message'               => 'Password reset is required. A reset link has been sent to your email.',
                     ], 403);
                 }
 
                 /*
                 |--------------------------------------------------------------------------
-                | TWO-FACTOR AUTHENTICATION
+                | Two-factor authentication
                 |--------------------------------------------------------------------------
                 */
 
@@ -1324,7 +1343,7 @@ class AuthController extends Controller
 
                 /*
                 |--------------------------------------------------------------------------
-                | SINGLE SESSION
+                | Single active customer session
                 |--------------------------------------------------------------------------
                 */
 
@@ -1337,7 +1356,9 @@ class AuthController extends Controller
                 $plainTextToken = $tokenResult->plainTextToken;
                 $expireAt = now()->addHours(24);
 
-                $accessToken = PersonalAccessToken::findToken($plainTextToken);
+                $accessToken = PersonalAccessToken::on('central')
+                    ->where('token', hash('sha256', $plainTextToken))
+                    ->first();
 
                 if ($accessToken) {
                     $accessToken->expires_at = $expireAt;
@@ -1352,7 +1373,7 @@ class AuthController extends Controller
 
                 /*
                 |--------------------------------------------------------------------------
-                | RESPONSE
+                | Response
                 |--------------------------------------------------------------------------
                 */
 
@@ -1361,15 +1382,21 @@ class AuthController extends Controller
                     'message'     => 'Customer logged in successfully.',
                     'token'       => $plainTextToken,
                     'expireAt'    => $expireAt->toDateTimeString(),
-                    'store'       => new StoreResource($store),
-                    'customer'    => new CustomerResource($customer->customer),
+                    'store'       => $store,
+                    'customer'    => $customerProfile
+                        ? new CustomerResource($customerProfile)
+                        : null,
                     'permissions' => null,
                 ]);
             } finally {
                 $tenantManager->disconnect();
             }
-        } catch (\Exception $e) {
-            Log::error('Customer login failed: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('Customer login failed', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ]);
 
             return response()->json([
                 'status'  => false,
