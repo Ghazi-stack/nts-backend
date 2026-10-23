@@ -11,6 +11,7 @@ use Symfony\Component\HttpFoundation\Response;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ConnectTenantDatabase
 {
@@ -93,32 +94,82 @@ class ConnectTenantDatabase
             |--------------------------------------------------------------------------
             */
 
+            // try {
+            //     $response = $next($request);
+
+            //     Log::info('Tenant middleware downstream response', [
+            //         'path' => $request->path(),
+            //         'status' => $response->getStatusCode(),
+            //     ]);
+
+            //     return $response;
+            // } finally {
+            //     /*
+            //     |--------------------------------------------------------------------------
+            //     | 4. Disconnect after request
+            //     |--------------------------------------------------------------------------
+            //     */
+
+            //     Log::info('Tenant disconnection starting', [
+            //         'path' => $request->path(),
+            //     ]);
+
+            //     DB::setDefaultConnection($previousConnection);
+            //     $this->resolver->disconnect();
+
+            //     Log::info('Tenant disconnection completed', [
+            //         'path' => $request->path(),
+            //     ]);
+            // }
+
             try {
                 $response = $next($request);
 
                 Log::info('Tenant middleware downstream response', [
                     'path' => $request->path(),
                     'status' => $response->getStatusCode(),
+                    'streamed' => $response instanceof StreamedResponse,
                 ]);
+
+                if ($response instanceof StreamedResponse) {
+                    // Keep tenant DB connected until the streamed response finishes.
+                    $originalCallback = $response->getCallback();
+
+                    $response->setCallback(function () use (
+                        $originalCallback,
+                        $previousConnection,
+                        $request
+                    ) {
+                        try {
+                            $originalCallback();
+                        } finally {
+                            Log::info('Tenant stream completed; disconnecting tenant', [
+                                'path' => $request->path(),
+                            ]);
+
+                            DB::setDefaultConnection($previousConnection);
+                            $this->resolver->disconnect();
+                        }
+                    });
+
+                    return $response;
+                }
 
                 return $response;
             } finally {
-                /*
-                |--------------------------------------------------------------------------
-                | 4. Disconnect after request
-                |--------------------------------------------------------------------------
-                */
+                // Streamed responses clean up after their callback completes.
+                if (!isset($response) || !($response instanceof StreamedResponse)) {
+                    Log::info('Tenant disconnection starting', [
+                        'path' => $request->path(),
+                    ]);
 
-                Log::info('Tenant disconnection starting', [
-                    'path' => $request->path(),
-                ]);
+                    DB::setDefaultConnection($previousConnection);
+                    $this->resolver->disconnect();
 
-                DB::setDefaultConnection($previousConnection);
-                $this->resolver->disconnect();
-
-                Log::info('Tenant disconnection completed', [
-                    'path' => $request->path(),
-                ]);
+                    Log::info('Tenant disconnection completed', [
+                        'path' => $request->path(),
+                    ]);
+                }
             }
         } catch (InvalidArgumentException $e) {
             DB::setDefaultConnection($previousConnection);
