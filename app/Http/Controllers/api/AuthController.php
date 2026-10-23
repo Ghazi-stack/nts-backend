@@ -2576,7 +2576,9 @@ class AuthController extends Controller
                 'message' => 'Admin logout successful',
             ]);
         } catch (\Throwable $e) {
-            \Log::error('Admin Logout Error: ' . $e->getMessage());
+            \Log::error('Admin logout failed', [
+                'error' => $e->getMessage(),
+            ]);
 
             return response()->json([
                 'status' => false,
@@ -2608,7 +2610,9 @@ class AuthController extends Controller
                 'message' => 'Customer logout successful',
             ]);
         } catch (\Throwable $e) {
-            \Log::error('Customer Logout Error: ' . $e->getMessage());
+            \Log::error('Customer logout failed', [
+                'error' => $e->getMessage(),
+            ]);
 
             return response()->json([
                 'status' => false,
