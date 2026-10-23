@@ -2681,6 +2681,13 @@ class OrderController extends Controller
                 ], 404);
             }
 
+            Log::info('Tenant export callback started', [
+                'default_connection' => DB::getDefaultConnection(),
+                'tenant_config_host' => config('database.connections.tenant.host'),
+                'tenant_config_hosts' => config('database.connections.tenant.hosts'),
+                'tenant_database' => config('database.connections.tenant.database'),
+                'tenant_connection_database' => DB::connection('tenant')->getDatabaseName(),
+            ]);
             return response()->streamDownload(function () use ($storeId, $orderIds) {
                 set_time_limit(0);
                 ini_set('memory_limit', '512M');
