@@ -71,32 +71,57 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 // ===============================
 
 
+// Route::prefix('user')->controller(AuthController::class)->group(function () {
+//     Route::post('/register', 'register');
+
+//     Route::post('/login', 'login');
+//     Route::post('/forgot-password', 'forgotPassword');
+//     Route::post('/reset-password', 'resetPassword');
+
+
+//     Route::middleware('auth:sanctum')->post('/logout', 'logout');
+// });
+
 Route::prefix('user')->controller(AuthController::class)->group(function () {
-    Route::post('/register', 'register');
 
+    // Customer registration: resolve store and connect tenant
+    Route::post('/register', 'register')
+        ->middleware(['store.hash', 'tenant.database']);
+
+    // Admin login: central database only; no store required
     Route::post('/login', 'login');
-    Route::post('/forgot-password', 'forgotPassword');
-    Route::post('/reset-password', 'resetPassword');
 
-    Route::middleware('auth:sanctum')->post('/logout', 'logout');
+    // Customer password reset endpoints
+    Route::post('/forgot-password', 'forgotPassword')
+        ->middleware(['store.hash', 'tenant.database']);
+
+    Route::post('/reset-password', 'resetPassword')
+        ->middleware(['store.hash', 'tenant.database']);
+
+    // Customer logout
+    Route::middleware([
+        'store.hash',
+        'tenant.database',
+        'auth:sanctum',
+    ])->post('/logout', 'logout');
 });
 
 
 
 Route::post('/auth/login', [AuthController::class, 'login']);
-Route::post('/customer-login', [AuthController::class, 'customerLogin'])->middleware(['store.hash']);
+Route::post('/customer-login', [AuthController::class, 'customerLogin'])->middleware(['store.hash', 'tenant.database']);
 Route::post('/admin/forgot-password', [AuthController::class, 'adminForgotPassword']);
 Route::post('/admin/reset-password', [AuthController::class, 'adminResetPassword']);
 
 Route::post('/auth/send-magic-link', [
     AuthController::class,
     'sendMagicLink',
-]);
+])->middleware(['store.hash', 'tenant.database']);
 
 Route::post('/auth/verify-magic-link', [
     AuthController::class,
     'verifyMagicLink',
-]);
+])->middleware(['store.hash', 'tenant.database']);
 
 Route::prefix('2fa')->group(function () {
     Route::post('/verify',     [TwoFactorController::class, 'verify']);      // OTP verify → real token
@@ -395,6 +420,22 @@ Route::prefix('dashboard')->middleware([
     Route::prefix('customers')->middleware(['store.hash', 'tenant.dashboard'])->group(function () {
         Route::get('/get-customers', [CustomerController::class, 'index']);
         Route::get('/get-customer/{id}', [CustomerController::class, 'show']);
+    });
+
+    Route::prefix('customer-messages')->middleware([
+        'store.hash',
+        'tenant.dashboard'
+    ])->controller(CustomerMessageController::class)->group(function () {
+
+        // Admin APIs
+        Route::post('/admin-reply', 'adminReply');
+        Route::get('/admin-messages', 'adminMessages');
+        Route::get('/show/{id}', 'showMessage');
+        Route::post('/mark-read', 'markAsRead');
+        Route::post('/mark-unread', 'markAsUnread');
+        Route::post('/toggle-flag', 'toggleFlag');
+        Route::put('/update/{id}', 'updateMessage');
+        Route::post('/delete', 'deleteMessages');
     });
 
     // Customers — Add
@@ -783,14 +824,14 @@ Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class
         Route::get('/my-messages', 'myMessages');
 
         // Admin APIs
-        Route::post('/admin-reply', 'adminReply');
-        Route::get('/admin-messages', 'adminMessages');
-        Route::get('/show/{id}', 'showMessage');
-        Route::post('/mark-read', 'markAsRead');
-        Route::post('/mark-unread', 'markAsUnread');
-        Route::post('/toggle-flag', 'toggleFlag');
-        Route::put('/update/{id}', 'updateMessage');
-        Route::post('/delete', 'deleteMessages');
+        // Route::post('/admin-reply', 'adminReply');
+        // Route::get('/admin-messages', 'adminMessages');
+        // Route::get('/show/{id}', 'showMessage');
+        // Route::post('/mark-read', 'markAsRead');
+        // Route::post('/mark-unread', 'markAsUnread');
+        // Route::post('/toggle-flag', 'toggleFlag');
+        // Route::put('/update/{id}', 'updateMessage');
+        // Route::post('/delete', 'deleteMessages');
     });
 
     // Customer self-service (no permission — own account)

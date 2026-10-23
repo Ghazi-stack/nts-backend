@@ -122,20 +122,36 @@ class PermissionController extends Controller
     }
 
     // Get my permissions (logged in user)
-    public function myPermissions()
+
+    public function myPermissions(Request $request)
     {
         $user = auth('sanctum')->user();
-        $storeId = current_store_id();
 
-        if ($user->userRole == 2) {
+        if (!$user) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
+
+        if ((int) $user->userRole === 2) {
             return response()->json([
                 'status' => true,
-                'data'   => null,
+                'data' => null,
             ]);
         }
 
+        // Use the central registry store ID when the store was resolved
+        // by the store.hash middleware.
+        $store = $request->attributes->get('resolved_store');
+
+        $storeId = $store
+            ? (int) $store->id
+            : (int) current_store_id();
+
+        // Permissions are stored in the central database.
         $permissions = $user->permissions()
-            ->where('user_permissions.store_id', $storeId)
+            ->wherePivot('store_id', $storeId)
             ->orderBy('group')
             ->orderBy('sort_order')
             ->get()
@@ -145,10 +161,10 @@ class PermissionController extends Controller
                     'group' => $group,
                     'permissions' => $items->map(function ($p) {
                         return [
-                            'id'    => $p->id,
-                            'name'  => $p->name,
+                            'id' => $p->id,
+                            'name' => $p->name,
                             'label' => $p->label,
-                            'slug'  => $p->slug,
+                            'slug' => $p->slug,
                         ];
                     })->values(),
                 ];
@@ -156,7 +172,7 @@ class PermissionController extends Controller
 
         return response()->json([
             'status' => true,
-            'data'   => $permissions,
+            'data' => $permissions,
         ]);
     }
 }
