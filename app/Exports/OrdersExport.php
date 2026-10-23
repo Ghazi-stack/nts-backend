@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Models\Store;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 
 class OrdersExport
 {
@@ -13,7 +14,9 @@ class OrdersExport
     public function __construct(int $storeId)
     {
         $this->storeId = $storeId;
-        $this->channelName = Store::query()
+
+        $this->channelName = DB::connection('central')
+            ->table('stores')
             ->where('id', $storeId)
             ->value('name') ?: '';
     }
