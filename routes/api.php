@@ -101,7 +101,7 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
     // Customer logout
     Route::middleware([
         'auth:sanctum',
-    ])->post('/admin/logout', 'logout');
+    ])->post('/logout', 'logout');
 });
 
 // Admin logout — central database
