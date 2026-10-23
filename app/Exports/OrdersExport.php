@@ -17,7 +17,7 @@ class OrdersExport
 
         $this->channelName = DB::connection('central')
             ->table('stores')
-            ->where('legacy_store_id', $storeId)
+            ->where('id', $storeId)
             ->value('name') ?: '';
     }
     public function headings(): array

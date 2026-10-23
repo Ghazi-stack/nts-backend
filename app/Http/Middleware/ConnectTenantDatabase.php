@@ -8,10 +8,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ConnectTenantDatabase
 {
@@ -21,19 +21,11 @@ class ConnectTenantDatabase
 
     public function handle(Request $request, Closure $next): Response
     {
-
         Log::info('ConnectTenantDatabase entered', [
             'path' => $request->path(),
-            'store_hash_present' =>
-                $request->attributes->has('store_hash'),
-            'resolved_store_present' =>
-                $request->attributes->has('resolved_store'),
+            'store_hash_present' => $request->attributes->has('store_hash'),
+            'resolved_store_present' => $request->attributes->has('resolved_store'),
         ]);
-        /*
-        |--------------------------------------------------------------------------
-        | 1. Middleware started
-        |--------------------------------------------------------------------------
-        */
 
         Log::info('Tenant middleware started', [
             'path' => $request->path(),
@@ -47,7 +39,6 @@ class ConnectTenantDatabase
                 $request->attributes->get('tenant_store') !== null,
         ]);
 
-        // The preceding store.hash middleware must validate the hash.
         $storeHash = $request->attributes->get('store_hash');
 
         if (!is_string($storeHash) || $storeHash === '') {
@@ -63,21 +54,19 @@ class ConnectTenantDatabase
         }
 
         $previousConnection = DB::getDefaultConnection();
+        $tenantConnected = false;
+        $cleanupScheduled = false;
 
         try {
-            /*
-            |--------------------------------------------------------------------------
-            | 2. Connect to tenant
-            |--------------------------------------------------------------------------
-            */
-
             Log::info('Tenant connection starting', [
                 'path' => $request->path(),
             ]);
 
             $store = $this->resolver->connectByStoreHash($storeHash);
+            $tenantConnected = true;
 
             $request->attributes->set('tenant_store', $store);
+
             DB::setDefaultConnection('tenant');
 
             Log::info('Tenant connection successful', [
@@ -88,107 +77,70 @@ class ConnectTenantDatabase
                 'tenant_store_present' => true,
             ]);
 
-            /*
-            |--------------------------------------------------------------------------
-            | 3. Run authentication and controller
-            |--------------------------------------------------------------------------
-            */
+            $response = $next($request);
 
-            // try {
-            //     $response = $next($request);
+            Log::info('Tenant middleware downstream response', [
+                'path' => $request->path(),
+                'status' => $response->getStatusCode(),
+                'streamed' => $response instanceof StreamedResponse,
+            ]);
 
-            //     Log::info('Tenant middleware downstream response', [
-            //         'path' => $request->path(),
-            //         'status' => $response->getStatusCode(),
-            //     ]);
+            if ($response instanceof StreamedResponse) {
+                $originalCallback = $response->getCallback();
 
-            //     return $response;
-            // } finally {
-            //     /*
-            //     |--------------------------------------------------------------------------
-            //     | 4. Disconnect after request
-            //     |--------------------------------------------------------------------------
-            //     */
-
-            //     Log::info('Tenant disconnection starting', [
-            //         'path' => $request->path(),
-            //     ]);
-
-            //     DB::setDefaultConnection($previousConnection);
-            //     $this->resolver->disconnect();
-
-            //     Log::info('Tenant disconnection completed', [
-            //         'path' => $request->path(),
-            //     ]);
-            // }
-
-            try {
-                $response = $next($request);
-
-                Log::info('Tenant middleware downstream response', [
-                    'path' => $request->path(),
-                    'status' => $response->getStatusCode(),
-                    'streamed' => $response instanceof StreamedResponse,
-                ]);
-
-                if ($response instanceof StreamedResponse) {
-                    // Keep tenant DB connected until the streamed response finishes.
-                    $originalCallback = $response->getCallback();
-
-                    $response->setCallback(function () use (
-                        $originalCallback,
-                        $previousConnection,
-                        $request
-                    ) {
-                        try {
+                $response->setCallback(function () use (
+                    $originalCallback,
+                    $previousConnection,
+                    $request
+                ) {
+                    try {
+                        if ($originalCallback !== null) {
                             $originalCallback();
-                        } finally {
-                            Log::info('Tenant stream completed; disconnecting tenant', [
+                        }
+                    } finally {
+                        Log::info('Tenant stream callback finished', [
+                            'path' => $request->path(),
+                        ]);
+
+                        DB::setDefaultConnection($previousConnection);
+
+                        try {
+                            $this->resolver->disconnect();
+
+                            Log::info('Tenant stream cleanup completed', [
                                 'path' => $request->path(),
                             ]);
+                        } catch (Throwable $cleanupError) {
+                            Log::error('Tenant stream cleanup failed', [
+                                'path' => $request->path(),
+                                'message' => $cleanupError->getMessage(),
+                            ]);
 
-                            DB::setDefaultConnection($previousConnection);
-                            $this->resolver->disconnect();
+                            report($cleanupError);
                         }
-                    });
+                    }
+                });
 
-                    return $response;
-                }
+                $cleanupScheduled = true;
 
                 return $response;
-            } finally {
-                // Streamed responses clean up after their callback completes.
-                if (!isset($response) || !($response instanceof StreamedResponse)) {
-                    Log::info('Tenant disconnection starting', [
-                        'path' => $request->path(),
-                    ]);
-
-                    DB::setDefaultConnection($previousConnection);
-                    $this->resolver->disconnect();
-
-                    Log::info('Tenant disconnection completed', [
-                        'path' => $request->path(),
-                    ]);
-                }
             }
-        } catch (InvalidArgumentException $e) {
-            DB::setDefaultConnection($previousConnection);
-            $this->resolver->disconnect();
 
+            return $response;
+        } catch (InvalidArgumentException $e) {
             Log::error('Tenant configuration rejected', [
                 'path' => $request->path(),
                 'exception' => get_class($e),
                 'message' => $e->getMessage(),
             ]);
 
+            report($e);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid tenant configuration.',
             ], 400);
         } catch (RuntimeException $e) {
-            DB::setDefaultConnection($previousConnection);
-            $this->resolver->disconnect();
-
             Log::error('Tenant database unavailable', [
                 'path' => $request->path(),
                 'exception' => get_class($e),
@@ -202,9 +154,6 @@ class ConnectTenantDatabase
                 'message' => 'Tenant database is not available.',
             ], 503);
         } catch (Throwable $e) {
-            DB::setDefaultConnection($previousConnection);
-            $this->resolver->disconnect();
-
             Log::error('Tenant request failed', [
                 'path' => $request->path(),
                 'exception' => get_class($e),
@@ -219,6 +168,25 @@ class ConnectTenantDatabase
                 'success' => false,
                 'message' => 'Unable to process the tenant request.',
             ], 500);
+        } finally {
+            if ($tenantConnected && !$cleanupScheduled) {
+                DB::setDefaultConnection($previousConnection);
+
+                try {
+                    $this->resolver->disconnect();
+
+                    Log::info('Tenant disconnection completed', [
+                        'path' => $request->path(),
+                    ]);
+                } catch (Throwable $cleanupError) {
+                    Log::error('Tenant disconnection failed', [
+                        'path' => $request->path(),
+                        'message' => $cleanupError->getMessage(),
+                    ]);
+
+                    report($cleanupError);
+                }
+            }
         }
     }
 }
