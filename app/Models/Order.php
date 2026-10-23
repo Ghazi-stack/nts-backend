@@ -104,7 +104,11 @@ class Order extends Model
 
     public function store()
     {
-        return $this->belongsTo(Store::class);
+        return $this->belongsTo(
+            Store::class,
+            'store_id',
+            'legacy_store_id'
+        );
     }
     public function notes()
     {
