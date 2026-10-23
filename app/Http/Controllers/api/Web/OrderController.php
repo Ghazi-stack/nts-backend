@@ -1065,7 +1065,7 @@ class OrderController extends Controller
         try {
 
             $validated = $request->validate([
-                'orderId'        => 'nullable|integer|exists:tenant.orders,id',
+                'orderId'        => 'nullable|integer|exists:orders,id',
                 'userType'       => 'nullable|string|max:100',
                 'deviceType'     => 'nullable|string|max:1000',
                 'firstName'      => 'required_if:isMultiAddress,false|string|max:255',
@@ -1117,11 +1117,11 @@ class OrderController extends Controller
                 'destinations.*.shippingData'   => 'nullable',
 
                 'destinations.*.products'       => 'required|array|min:1',
-                'destinations.*.products.*.product_id' => 'required|integer|exists:tenant.products,id',
+                'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
                 'destinations.*.products.*.quantity'   => 'required|integer|min:1',
 
                 'products'       => 'required_if:isMultiAddress,false|array|min:1',
-                'products.*.product_id' => 'required|integer|exists:tenant.products,id',
+                'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
             ]);
 
@@ -2802,7 +2802,7 @@ class OrderController extends Controller
         $user = auth('sanctum')->user();
 
         $request->validate([
-            'orderId'       => 'required|exists:tenant.orders,id|unique:return_requests,order_id',
+            'orderId'       => 'required|exists:orders,id|unique:return_requests,order_id',
             'reason'        => 'nullable|string|max:500',
             'returnAction'  => 'nullable|string|max:500',
             'comments'      => 'nullable|string|max:500',
@@ -3402,7 +3402,7 @@ class OrderController extends Controller
 
         try {
             $validated = $request->validate([
-                'customerId'   => 'required|exists:tenant.customers,id',
+                'customerId'   => 'required|exists:customers,id',
                 'isDraft'      => 'nullable|boolean',
                 'deviceType'   => 'nullable|string|max:1000',
                 'comments'     => 'nullable|string|max:1000',
@@ -3461,8 +3461,8 @@ class OrderController extends Controller
                 'paymentMethod.emailInvoice'     => 'nullable|boolean',
 
                 'products'              => 'required|array|min:1',
-                'products.*.productId'  => 'required_without:products.*.product_id|integer|exists:tenant.products,id',
-                'products.*.product_id' => 'required_without:products.*.productId|integer|exists:tenant.products,id',
+                'products.*.productId'  => 'required_without:products.*.product_id|integer|exists:products,id',
+                'products.*.product_id' => 'required_without:products.*.productId|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
                 'products.*.price'      => 'nullable|numeric|min:0',
 
@@ -5064,7 +5064,7 @@ class OrderController extends Controller
         }
 
         $validated = $request->validate([
-            'customerId'     => 'nullable|exists:tenant.customers,id',
+            'customerId'     => 'nullable|exists:customers,id',
             'customerGroup'  => 'nullable|string|max:255',
             'receiveOffers'  => 'nullable|boolean',
             'comments'       => 'nullable|string|max:1000',
@@ -5084,8 +5084,8 @@ class OrderController extends Controller
             'paymentMethod' => 'nullable|array',
 
             'products' => 'nullable|array|min:1',
-            'products.*.productId'  => 'required_without:products.*.product_id|exists:tenant.products,id',
-            'products.*.product_id' => 'required_without:products.*.productId|exists:tenant.products,id',
+            'products.*.productId'  => 'required_without:products.*.product_id|exists:products,id',
+            'products.*.product_id' => 'required_without:products.*.productId|exists:products,id',
             'products.*.quantity'   => 'required_with:products|integer|min:1',
             'products.*.price'      => 'nullable|numeric|min:0',
 
@@ -6237,8 +6237,8 @@ class OrderController extends Controller
                 'paymentMethod.cardType'             => 'nullable|string',
 
                 'products'              => 'required|array|min:1',
-                'products.*.productId'  => 'required_without:products.*.product_id|integer|exists:tenant.products,id',
-                'products.*.product_id' => 'required_without:products.*.productId|integer|exists:tenant.products,id',
+                'products.*.productId'  => 'required_without:products.*.product_id|integer|exists:products,id',
+                'products.*.product_id' => 'required_without:products.*.productId|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
                 'products.*.price'      => 'nullable|numeric|min:0',
 
