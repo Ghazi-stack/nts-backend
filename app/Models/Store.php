@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Store extends Model
 {
     use HasFactory;
+    protected $connection = 'central';
     protected $fillable = [
         'name',
         'store_hash',
