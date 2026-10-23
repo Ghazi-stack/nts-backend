@@ -110,6 +110,30 @@ class Order extends Model
             'legacy_store_id'
         );
     }
+
+    public function resolveCentralStore()
+    {
+        $storeId = $this->store_id;
+
+        if (!$storeId) {
+            return null;
+        }
+
+        // Prefer a matching legacy store ID.
+        $store = Store::on('central')
+            ->where('legacy_store_id', $storeId)
+            ->first();
+
+        if ($store) {
+            return $store;
+        }
+
+        // Fall back to the central registry ID.
+        return Store::on('central')
+            ->where('id', $storeId)
+            ->first();
+    }
+    
     public function notes()
     {
         return $this->hasMany(OrderNote::class);

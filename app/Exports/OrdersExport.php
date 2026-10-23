@@ -11,14 +11,33 @@ class OrdersExport
     protected int $storeId;
     protected string $channelName;
 
+    // public function __construct(int $storeId)
+    // {
+    //     $this->storeId = $storeId;
+
+    //     $this->channelName = DB::connection('central')
+    //         ->table('stores')
+    //         ->where('legacy_store_id', $storeId)
+    //         ->value('name') ?: '';
+    // }
+
     public function __construct(int $storeId)
     {
         $this->storeId = $storeId;
 
-        $this->channelName = DB::connection('central')
+        $store = DB::connection('central')
             ->table('stores')
             ->where('legacy_store_id', $storeId)
-            ->value('name') ?: '';
+            ->first();
+
+        if (!$store) {
+            $store = DB::connection('central')
+                ->table('stores')
+                ->where('id', $storeId)
+                ->first();
+        }
+
+        $this->channelName = $store->name ?? '';
     }
     public function headings(): array
     {
