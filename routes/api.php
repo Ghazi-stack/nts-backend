@@ -71,33 +71,57 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 // ===============================
 
 
+// Route::prefix('user')->controller(AuthController::class)->group(function () {
+//     Route::post('/register', 'register');
+
+//     Route::post('/login', 'login');
+//     Route::post('/forgot-password', 'forgotPassword');
+//     Route::post('/reset-password', 'resetPassword');
+
+
+//     Route::middleware('auth:sanctum')->post('/logout', 'logout');
+// });
+
 Route::prefix('user')->controller(AuthController::class)->group(function () {
-    Route::post('/register', 'register');
 
+    // Customer registration: resolve store and connect tenant
+    Route::post('/register', 'register')
+        ->middleware(['store.hash', 'tenant.database']);
+
+    // Admin login: central database only; no store required
     Route::post('/login', 'login');
-    Route::post('/forgot-password', 'forgotPassword');
-    Route::post('/reset-password', 'resetPassword');
 
+    // Customer password reset endpoints
+    Route::post('/forgot-password', 'forgotPassword')
+        ->middleware(['store.hash', 'tenant.database']);
 
-    Route::middleware('auth:sanctum')->post('/logout', 'logout');
+    Route::post('/reset-password', 'resetPassword')
+        ->middleware(['store.hash', 'tenant.database']);
+
+    // Customer logout
+    Route::middleware([
+        'store.hash',
+        'tenant.database',
+        'auth:sanctum',
+    ])->post('/logout', 'logout');
 });
 
 
 
 Route::post('/auth/login', [AuthController::class, 'login']);
-Route::post('/customer-login', [AuthController::class, 'customerLogin'])->middleware(['store.hash']);
+Route::post('/customer-login', [AuthController::class, 'customerLogin'])->middleware(['store.hash', 'tenant.database']);
 Route::post('/admin/forgot-password', [AuthController::class, 'adminForgotPassword']);
 Route::post('/admin/reset-password', [AuthController::class, 'adminResetPassword']);
 
 Route::post('/auth/send-magic-link', [
     AuthController::class,
     'sendMagicLink',
-]);
+])->middleware(['store.hash', 'tenant.database']);
 
 Route::post('/auth/verify-magic-link', [
     AuthController::class,
     'verifyMagicLink',
-]);
+])->middleware(['store.hash', 'tenant.database']);
 
 Route::prefix('2fa')->group(function () {
     Route::post('/verify',     [TwoFactorController::class, 'verify']);      // OTP verify → real token
