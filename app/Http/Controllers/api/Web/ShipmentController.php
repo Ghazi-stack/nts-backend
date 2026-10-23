@@ -232,7 +232,7 @@ class ShipmentController extends Controller
         $storeId = current_store_id();
 
         $request->validate([
-            'order_id' => 'required|exists:orders,id',
+            'order_id' => 'required|exists:tenant.orders,id',
         ]);
 
         $shipment = Shipment::with([

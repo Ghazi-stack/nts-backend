@@ -61,6 +61,8 @@ class ConnectTenantDatabase
             ], 400);
         }
 
+        $previousConnection = DB::getDefaultConnection();
+
         try {
             /*
             |--------------------------------------------------------------------------
@@ -75,6 +77,7 @@ class ConnectTenantDatabase
             $store = $this->resolver->connectByStoreHash($storeHash);
 
             $request->attributes->set('tenant_store', $store);
+            DB::setDefaultConnection('tenant');
 
             Log::info('Tenant connection successful', [
                 'path' => $request->path(),
@@ -110,6 +113,7 @@ class ConnectTenantDatabase
                     'path' => $request->path(),
                 ]);
 
+                DB::setDefaultConnection($previousConnection);
                 $this->resolver->disconnect();
 
                 Log::info('Tenant disconnection completed', [
@@ -117,6 +121,7 @@ class ConnectTenantDatabase
                 ]);
             }
         } catch (InvalidArgumentException $e) {
+            DB::setDefaultConnection($previousConnection);
             $this->resolver->disconnect();
 
             Log::error('Tenant configuration rejected', [
@@ -130,6 +135,7 @@ class ConnectTenantDatabase
                 'message' => 'Invalid tenant configuration.',
             ], 400);
         } catch (RuntimeException $e) {
+            DB::setDefaultConnection($previousConnection);
             $this->resolver->disconnect();
 
             Log::error('Tenant database unavailable', [
@@ -145,6 +151,7 @@ class ConnectTenantDatabase
                 'message' => 'Tenant database is not available.',
             ], 503);
         } catch (Throwable $e) {
+            DB::setDefaultConnection($previousConnection);
             $this->resolver->disconnect();
 
             Log::error('Tenant request failed', [
