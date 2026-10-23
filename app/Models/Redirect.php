@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Redirect extends Model
 {
+    protected $connection = 'tenant';
+    
     protected $fillable = [
         'store_id',
         'product_id',
