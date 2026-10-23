@@ -395,6 +395,20 @@ Route::prefix('dashboard')->middleware(['store.hash',
         Route::get('/get-customer/{id}', [CustomerController::class, 'show']);
     });
 
+    Route::prefix('customer-messages')->middleware(['store.hash',
+        'tenant.dashboard'])->controller(CustomerMessageController::class)->group(function () {
+
+        // Admin APIs
+        Route::post('/admin-reply', 'adminReply');
+        Route::get('/admin-messages', 'adminMessages');
+        Route::get('/show/{id}', 'showMessage');
+        Route::post('/mark-read', 'markAsRead');
+        Route::post('/mark-unread', 'markAsUnread');
+        Route::post('/toggle-flag', 'toggleFlag');
+        Route::put('/update/{id}', 'updateMessage');
+        Route::post('/delete', 'deleteMessages');
+    });
+
     // Customers — Add
     Route::prefix('customers')->middleware(['store.hash', 'tenant.dashboard', 'permission:add_customer'])->group(function () {
         Route::post('/add-customer', [CustomerController::class, 'store']);
@@ -781,14 +795,14 @@ Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class
         Route::get('/my-messages', 'myMessages');
 
         // Admin APIs
-        Route::post('/admin-reply', 'adminReply');
-        Route::get('/admin-messages', 'adminMessages');
-        Route::get('/show/{id}', 'showMessage');
-        Route::post('/mark-read', 'markAsRead');
-        Route::post('/mark-unread', 'markAsUnread');
-        Route::post('/toggle-flag', 'toggleFlag');
-        Route::put('/update/{id}', 'updateMessage');
-        Route::post('/delete', 'deleteMessages');
+        // Route::post('/admin-reply', 'adminReply');
+        // Route::get('/admin-messages', 'adminMessages');
+        // Route::get('/show/{id}', 'showMessage');
+        // Route::post('/mark-read', 'markAsRead');
+        // Route::post('/mark-unread', 'markAsUnread');
+        // Route::post('/toggle-flag', 'toggleFlag');
+        // Route::put('/update/{id}', 'updateMessage');
+        // Route::post('/delete', 'deleteMessages');
     });
 
     // Customer self-service (no permission — own account)
