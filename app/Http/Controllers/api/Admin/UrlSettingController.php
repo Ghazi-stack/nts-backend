@@ -160,12 +160,12 @@ class UrlSettingController extends Controller
         $storeId = $this->getStoreId();
 
         $validated = $request->validate([
-            'update_all'       => 'required|boolean',
-            'create_redirects' => 'required|boolean',
+            'updateAll'       => 'required|boolean',
+            'createRedirects' => 'required|boolean',
         ]);
 
         // Agar redirects nahi banane hain to kuch mat karo
-        if (!$validated['create_redirects']) {
+        if (!$validated['createRedirects']) {
             return response()->json([
                 'status'  => true,
                 'message' => 'Redirects creation skipped.'
@@ -305,11 +305,11 @@ class UrlSettingController extends Controller
         $storeId = $this->getStoreId();
 
         $validated = $request->validate([
-            'update_all'       => 'required|boolean',
-            'create_redirects' => 'required|boolean',
+            'updateAll'       => 'required|boolean',
+            'createRedirects' => 'required|boolean',
         ]);
 
-        if (!$validated['create_redirects']) {
+        if (!$validated['createRedirects']) {
             return response()->json([
                 'status'  => true,
                 'message' => 'Redirects creation skipped.'
@@ -423,11 +423,11 @@ class UrlSettingController extends Controller
         $storeId = $this->getStoreId();
 
         $validated = $request->validate([
-            'update_all'       => 'required|boolean',
-            'create_redirects' => 'required|boolean',
+            'updateAll'       => 'required|boolean',
+            'createRedirects' => 'required|boolean',
         ]);
 
-        if (!$validated['create_redirects']) {
+        if (!$validated['createRedirects']) {
             return response()->json([
                 'status'  => true,
                 'message' => 'Redirects creation skipped.'
