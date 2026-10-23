@@ -100,8 +100,6 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
 
     // Customer logout
     Route::middleware([
-        'store.hash',
-        'tenant.database',
         'auth:sanctum',
     ])->post('/logout', 'logout');
 });
