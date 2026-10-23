@@ -10,11 +10,16 @@ class LogAdminLogoutRequest
 {
     public function handle(Request $request, Closure $next)
     {
-        Log::info('Admin logout request received', [
-            'path' => $request->path(),
-            'method' => $request->method(),
-            'authorization_present' => $request->bearerToken() !== null,
-        ]);
+        file_put_contents(
+            storage_path('logs/admin-logout-debug.log'),
+            now()->toDateTimeString()
+                . ' | '
+                . $request->method()
+                . ' | '
+                . $request->fullUrl()
+                . PHP_EOL,
+            FILE_APPEND
+        );
 
         return $next($request);
     }
