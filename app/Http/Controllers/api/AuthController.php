@@ -2553,6 +2553,70 @@ class AuthController extends Controller
         }
     }
 
+    public function adminLogout(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Unauthenticated',
+                ], 401);
+            }
+
+            $token = $user->currentAccessToken();
+
+            if ($token) {
+                $token->delete();
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Admin logout successful',
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('Admin Logout Error: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Admin logout failed',
+            ], 500);
+        }
+    }
+
+    public function customerLogout(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Unauthenticated',
+                ], 401);
+            }
+
+            $token = $user->currentAccessToken();
+
+            if ($token) {
+                $token->delete();
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Customer logout successful',
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('Customer Logout Error: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Customer logout failed',
+            ], 500);
+        }
+    }
+
     public function updateName(Request $request)
     {
         try {

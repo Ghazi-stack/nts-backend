@@ -106,6 +106,16 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
     ])->post('/logout', 'logout');
 });
 
+Route::middleware(['auth:sanctum'])
+    ->post('/admin/logout', [AuthController::class, 'adminLogout']);
+
+// Customer logout — Tenant database
+Route::middleware([
+    'store.hash',
+    'tenant.database',
+    'auth:sanctum',
+])->post('/customer/logout', [AuthController::class, 'customerLogout']);
+
 
 
 Route::post('/auth/login', [AuthController::class, 'login']);
