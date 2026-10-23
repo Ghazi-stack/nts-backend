@@ -3402,7 +3402,7 @@ class OrderController extends Controller
 
         try {
             $validated = $request->validate([
-                'customerId'   => 'required|exists:customers,id',
+                'customerId'   => 'required|exists:tenant.customers,id',
                 'isDraft'      => 'nullable|boolean',
                 'deviceType'   => 'nullable|string|max:1000',
                 'comments'     => 'nullable|string|max:1000',
@@ -3461,8 +3461,8 @@ class OrderController extends Controller
                 'paymentMethod.emailInvoice'     => 'nullable|boolean',
 
                 'products'              => 'required|array|min:1',
-                'products.*.productId'  => 'required_without:products.*.product_id|integer|exists:products,id',
-                'products.*.product_id' => 'required_without:products.*.productId|integer|exists:products,id',
+                'products.*.productId'  => 'required_without:products.*.product_id|integer|exists:tenant.products,id',
+                'products.*.product_id' => 'required_without:products.*.productId|integer|exists:tenant.products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
                 'products.*.price'      => 'nullable|numeric|min:0',
 
