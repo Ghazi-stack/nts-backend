@@ -78,7 +78,6 @@ Route::prefix('user')->controller(AuthController::class)->group(function () {
     Route::post('/forgot-password', 'forgotPassword');
     Route::post('/reset-password', 'resetPassword');
 
-
     Route::middleware('auth:sanctum')->post('/logout', 'logout');
 });
 
@@ -122,8 +121,11 @@ Route::middleware('auth:sanctum')->group(function () {
 // ===============================
 
 
-Route::prefix('dashboard')->middleware(['store.hash',
-        'tenant.database', 'auth:sanctum'])->group(function () {
+Route::prefix('dashboard')->middleware([
+    'store.hash',
+    'tenant.database',
+    'auth:sanctum'
+])->group(function () {
 
     // Profile (no permission needed — own profile)
     Route::prefix('profile')->controller(AuthController::class)->group(function () {
@@ -796,7 +798,7 @@ Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class
         Route::post('/account-settings', 'updateAccount');
         Route::get('/my-orders', 'myOrders');
         Route::get('/my-addresses', 'getMyAddresses');
-       // Route::delete('/delete-my-address/{addressId}', 'deleteMyAddress');
+        // Route::delete('/delete-my-address/{addressId}', 'deleteMyAddress');
         Route::put('/update-customer/{id}', 'update');
     });
     Route::prefix('order-items')->middleware('auth:sanctum')->controller(OrderController::class)->group(function () {

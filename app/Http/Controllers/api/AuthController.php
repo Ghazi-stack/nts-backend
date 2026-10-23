@@ -131,10 +131,10 @@ class AuthController extends Controller
                     ]);
 
                     $registryStore = app(StoreRegistryService::class)
-                    ->registerPendingStore($store, (int) $existingUser->id);
+                        ->registerPendingStore($store, (int) $existingUser->id);
 
                     $registryStore = app(TenantProvisioningService::class)
-                    ->provisionDatabase((int) $registryStore->id);
+                        ->provisionDatabase((int) $registryStore->id);
 
                     // Assign ALL permissions
                     $allPermissions = Permission::all();
@@ -220,10 +220,10 @@ class AuthController extends Controller
                 ]);
 
                 $registryStore = app(StoreRegistryService::class)
-                ->registerPendingStore($store, (int) $user->id);
+                    ->registerPendingStore($store, (int) $user->id);
 
                 $registryStore = app(TenantProvisioningService::class)
-                ->provisionDatabase((int) $registryStore->id);
+                    ->provisionDatabase((int) $registryStore->id);
 
                 $user->store_id = $store->id;
                 $user->save();
@@ -754,7 +754,7 @@ class AuthController extends Controller
     //     }
     // }
 
-    
+
     public function login(Request $request)
     {
         try {
@@ -834,27 +834,27 @@ class AuthController extends Controller
             $membershipStoreIds = $central->table('store_user')
                 ->where('user_id', $admin->id)
                 ->pluck('store_id')
-                ->map(fn ($id) => (int) $id)
+                ->map(fn($id) => (int) $id)
                 ->all();
 
             $permissionStoreIds = $central->table('user_permissions')
                 ->where('user_id', $admin->id)
                 ->distinct()
                 ->pluck('store_id')
-                ->map(fn ($id) => (int) $id)
+                ->map(fn($id) => (int) $id)
                 ->all();
 
             $accessibleStoreIds = array_values(array_unique(array_merge(
-                $ownedStores->pluck('id')->map(fn ($id) => (int) $id)->all(),
+                $ownedStores->pluck('id')->map(fn($id) => (int) $id)->all(),
                 $membershipStoreIds,
                 $permissionStoreIds
             )));
 
             $stores = !empty($accessibleStoreIds)
                 ? $central->table('stores')
-                    ->whereIn('id', $accessibleStoreIds)
-                    ->orderBy('id')
-                    ->get()
+                ->whereIn('id', $accessibleStoreIds)
+                ->orderBy('id')
+                ->get()
                 : collect();
 
             /*
@@ -874,7 +874,7 @@ class AuthController extends Controller
                 // If no legacy mapping exists, try the central registry ID.
                 if (!$selectedStore) {
                     $selectedStore = $stores->first(
-                        fn ($store) => (int) $store->id === (int) $storeId
+                        fn($store) => (int) $store->id === (int) $storeId
                     );
                 }
 
@@ -905,24 +905,24 @@ class AuthController extends Controller
 
             $adminPermissions = $permissionStoreId
                 ? $admin->permissions()
-                    ->wherePivot('store_id', $permissionStoreId)
-                    ->orderBy('group')
-                    ->orderBy('sort_order')
-                    ->get()
-                    ->groupBy('group')
-                    ->map(function ($items, $group) {
-                        return [
-                            'group' => $group,
-                            'permissions' => $items->map(function ($permission) {
-                                return [
-                                    'id'    => $permission->id,
-                                    'name'  => $permission->name,
-                                    'label' => $permission->label,
-                                    'slug'  => $permission->slug,
-                                ];
-                            })->values(),
-                        ];
-                    })->values()
+                ->wherePivot('store_id', $permissionStoreId)
+                ->orderBy('group')
+                ->orderBy('sort_order')
+                ->get()
+                ->groupBy('group')
+                ->map(function ($items, $group) {
+                    return [
+                        'group' => $group,
+                        'permissions' => $items->map(function ($permission) {
+                            return [
+                                'id'    => $permission->id,
+                                'name'  => $permission->name,
+                                'label' => $permission->label,
+                                'slug'  => $permission->slug,
+                            ];
+                        })->values(),
+                    ];
+                })->values()
                 : collect();
 
             /*
@@ -957,9 +957,9 @@ class AuthController extends Controller
                     'has_encrypted_password' => !empty($selectedStore->db_password_encrypted),
                     'db_host' => $selectedStore->db_host ?? null,
                     'db_port' => $selectedStore->db_port ?? null,
-                ]);  
+                ]);
                 app(\App\Services\TenantDatabaseManager::class)
-                    ->connectForStore($selectedStore);  
+                    ->connectForStore($selectedStore);
 
                 try {
                     StaffLog::record([
@@ -1195,7 +1195,7 @@ class AuthController extends Controller
     //     }
     // }
 
-    
+
     public function customerLogin(Request $request)
     {
         try {
@@ -1547,7 +1547,7 @@ class AuthController extends Controller
                 'registry_id' => $store->id ?? null,
                 'tenant_database' => $tenantDatabase,
                 'tenant_store_attribute' =>
-                    request()->attributes->get('tenant_store') !== null,
+                request()->attributes->get('tenant_store') !== null,
             ]);
 
             /*
@@ -2503,22 +2503,28 @@ class AuthController extends Controller
         try {
             $user = $request->user();
 
-            // 🗑️ Delete all cart items for this user
-            Cart::where('user_id', $user->id)->delete();
+            if (!$user) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Unauthenticated',
+                ], 401);
+            }
 
-            // 🔐 Revoke the current token
-            $user->currentAccessToken()->delete();
+            // Current token revoke karo (jo request ke saath aaya hai)
+            if ($user->currentAccessToken()) {
+                $user->currentAccessToken()->delete();
+            }
 
             return response()->json([
-                'status' => true,
-                'message' => 'Logout successful and cart cleared',
+                'status'  => true,
+                'message' => 'Logout successful',
             ]);
-        } catch (Exception $e) {
-            Log::error('Logout failed: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            \Log::error('Logout Error: ' . $e->getMessage());
 
             return response()->json([
-                'status' => false,
-                'message' => 'Something went wrong during logout. Please try again.',
+                'status'  => false,
+                'message' => 'Logout failed',
             ], 500);
         }
     }
