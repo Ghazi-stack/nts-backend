@@ -2647,26 +2647,141 @@ class OrderController extends Controller
         }
     }
 
+    // public function exportToExcel(Request $request)
+    // {
+    //     try {
+    //         $storeId = current_store_id();
+
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Store not selected or token invalid.'
+    //             ], 400);
+    //         }
+
+    //         // Optional: order_ids array se specific orders export karo
+    //         $orderIds = $request->input('order_ids', []);
+
+    //         $query = Order::where('store_id', $storeId)
+    //             ->where('is_draft', 0);
+
+    //         if (!empty($orderIds) && is_array($orderIds)) {
+    //             $orderIds = array_filter(array_map('intval', $orderIds));
+    //             $query->whereIn('id', $orderIds);
+    //         }
+
+    //         $total = $query->count();
+
+    //         if ($total === 0) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => empty($orderIds)
+    //                     ? 'No orders found for this store to export.'
+    //                     : 'No orders found for the given IDs.'
+    //             ], 404);
+    //         }
+
+    //         Log::info('Tenant export callback started', [
+    //             'default_connection' => DB::getDefaultConnection(),
+    //             'tenant_config_host' => config('database.connections.tenant.host'),
+    //             'tenant_config_hosts' => config('database.connections.tenant.hosts'),
+    //             'tenant_database' => config('database.connections.tenant.database'),
+    //             'tenant_connection_database' => DB::connection('tenant')->getDatabaseName(),
+    //         ]);
+    //         return response()->streamDownload(function () use ($storeId, $orderIds) {
+    //             set_time_limit(0);
+    //             ini_set('memory_limit', '512M');
+    //             \DB::disableQueryLog();
+
+    //             $exporter = new OrdersExport($storeId);
+    //             $handle   = fopen('php://output', 'w');
+
+    //             fputcsv($handle, $exporter->headings());
+
+    //             $exportQuery = Order::query()
+    //                 ->with([
+    //                     'items.product',
+    //                     'customer',
+    //                     'store',
+    //                     'billingInformation',
+    //                     'notes:id,order_id,note',
+    //                     'payment',
+    //                     'shipment:id,order_id,tracking_number,tracking_carrie,date_shipped,shipping_method,shipped_by,packing_slip_note',
+    //                     'manualDiscounts:id,order_id,discount_amount',
+    //                 ])
+    //                 ->where('store_id', $storeId)
+    //                 ->where('is_draft', 0)
+    //                 ->orderBy('id');
+
+    //             // Sirf selected IDs pe filter
+    //             if (!empty($orderIds) && is_array($orderIds)) {
+    //                 $exportQuery->whereIn('id', $orderIds);
+    //             }
+
+    //             $exportQuery->chunkById(500, function ($orders) use ($handle, $exporter) {
+    //                 foreach ($orders as $order) {
+    //                     fputcsv($handle, $exporter->map($order));
+    //                 }
+
+    //                 unset($orders);
+
+    //                 if (ob_get_level() > 0) {
+    //                     ob_flush();
+    //                 }
+    //                 flush();
+    //             });
+
+    //             fclose($handle);
+    //         }, 'orders.csv', [
+    //             'Content-Type'        => 'text/csv',
+    //             'Cache-Control'       => 'no-store, no-cache',
+    //             'Content-Disposition' => 'attachment; filename="orders.csv"',
+    //             'total-rows'               => $total,
+    //             'Access-Control-Expose-Headers' => 'total',
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Failed to export orders: ' . $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
     public function exportToExcel(Request $request)
     {
+        $filePath = null;
+        $handle = null;
+
         try {
             $storeId = current_store_id();
 
             if (!$storeId) {
                 return response()->json([
-                    'status'  => false,
-                    'message' => 'Store not selected or token invalid.'
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.',
                 ], 400);
             }
 
-            // Optional: order_ids array se specific orders export karo
             $orderIds = $request->input('order_ids', []);
+
+            if (!is_array($orderIds)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'order_ids must be an array.',
+                ], 422);
+            }
+
+            $orderIds = array_values(array_unique(
+                array_filter(
+                    array_map('intval', $orderIds),
+                    fn ($id) => $id > 0
+                )
+            ));
 
             $query = Order::where('store_id', $storeId)
                 ->where('is_draft', 0);
 
-            if (!empty($orderIds) && is_array($orderIds)) {
-                $orderIds = array_filter(array_map('intval', $orderIds));
+            if (!empty($orderIds)) {
                 $query->whereIn('id', $orderIds);
             }
 
@@ -2674,75 +2789,104 @@ class OrderController extends Controller
 
             if ($total === 0) {
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => empty($orderIds)
                         ? 'No orders found for this store to export.'
-                        : 'No orders found for the given IDs.'
+                        : 'No orders found for the given IDs.',
                 ], 404);
             }
 
-            Log::info('Tenant export callback started', [
-                'default_connection' => DB::getDefaultConnection(),
-                'tenant_config_host' => config('database.connections.tenant.host'),
-                'tenant_config_hosts' => config('database.connections.tenant.hosts'),
-                'tenant_database' => config('database.connections.tenant.database'),
-                'tenant_connection_database' => DB::connection('tenant')->getDatabaseName(),
-            ]);
-            return response()->streamDownload(function () use ($storeId, $orderIds) {
-                set_time_limit(0);
-                ini_set('memory_limit', '512M');
-                \DB::disableQueryLog();
+            set_time_limit(0);
+            ini_set('memory_limit', '512M');
+            \DB::disableQueryLog();
 
-                $exporter = new OrdersExport($storeId);
-                $handle   = fopen('php://output', 'w');
+            // Create a temporary CSV file on disk.
+            $filePath = tempnam(sys_get_temp_dir(), 'orders_export_');
 
-                fputcsv($handle, $exporter->headings());
+            if ($filePath === false) {
+                throw new \RuntimeException(
+                    'Unable to create temporary export file.'
+                );
+            }
 
-                $exportQuery = Order::query()
-                    ->with([
-                        'items.product',
-                        'customer',
-                        'store',
-                        'billingInformation',
-                        'notes:id,order_id,note',
-                        'payment',
-                        'shipment:id,order_id,tracking_number,tracking_carrie,date_shipped,shipping_method,shipped_by,packing_slip_note',
-                        'manualDiscounts:id,order_id,discount_amount',
-                    ])
-                    ->where('store_id', $storeId)
-                    ->where('is_draft', 0)
-                    ->orderBy('id');
+            $handle = fopen($filePath, 'wb');
 
-                // Sirf selected IDs pe filter
-                if (!empty($orderIds) && is_array($orderIds)) {
-                    $exportQuery->whereIn('id', $orderIds);
+            if ($handle === false) {
+                throw new \RuntimeException(
+                    'Unable to open temporary export file.'
+                );
+            }
+
+            $exporter = new \App\Exports\OrdersExport($storeId);
+
+            fputcsv($handle, $exporter->headings());
+
+            $exportQuery = Order::query()
+                ->with([
+                    'items.product',
+                    'customer',
+                    'store',
+                    'billingInformation',
+                    'notes:id,order_id,note',
+                    'payment',
+                    'shipment:id,order_id,tracking_number,tracking_carrie,date_shipped,shipping_method,shipped_by,packing_slip_note',
+                    'manualDiscounts:id,order_id,discount_amount',
+                ])
+                ->where('store_id', $storeId)
+                ->where('is_draft', 0)
+                ->orderBy('id');
+
+            if (!empty($orderIds)) {
+                $exportQuery->whereIn('id', $orderIds);
+            }
+
+            // All database queries run before the controller returns.
+            $exportQuery->chunkById(500, function ($orders) use (
+                $handle,
+                $exporter
+            ) {
+                foreach ($orders as $order) {
+                    fputcsv($handle, $exporter->map($order));
                 }
 
-                $exportQuery->chunkById(500, function ($orders) use ($handle, $exporter) {
-                    foreach ($orders as $order) {
-                        fputcsv($handle, $exporter->map($order));
-                    }
+                unset($orders);
+            });
 
-                    unset($orders);
+            fclose($handle);
+            $handle = null;
 
-                    if (ob_get_level() > 0) {
-                        ob_flush();
-                    }
-                    flush();
-                });
+            // The tenant database is no longer needed to send the file.
+            return response()
+                ->download($filePath, 'orders.csv', [
+                    'Content-Type' => 'text/csv; charset=UTF-8',
+                    'Cache-Control' => 'no-store, no-cache, must-revalidate',
+                    'Pragma' => 'no-cache',
+                    'X-Total-Rows' => (string) $total,
+                    'Access-Control-Expose-Headers' => 'X-Total-Rows',
+                ])
+                ->deleteFileAfterSend(true);
 
+        } catch (\Throwable $e) {
+            if (is_resource($handle)) {
                 fclose($handle);
-            }, 'orders.csv', [
-                'Content-Type'        => 'text/csv',
-                'Cache-Control'       => 'no-store, no-cache',
-                'Content-Disposition' => 'attachment; filename="orders.csv"',
-                'total-rows'               => $total,
-                'Access-Control-Expose-Headers' => 'total',
+            }
+
+            if ($filePath !== null && is_file($filePath)) {
+                @unlink($filePath);
+            }
+
+            \Log::error('Order CSV export failed', [
+                'store_id' => $storeId ?? null,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
             ]);
-        } catch (\Exception $e) {
+
+            report($e);
+
             return response()->json([
-                'status'  => false,
-                'message' => 'Failed to export orders: ' . $e->getMessage()
+                'status' => false,
+                'message' => 'Failed to export orders.',
             ], 500);
         }
     }
