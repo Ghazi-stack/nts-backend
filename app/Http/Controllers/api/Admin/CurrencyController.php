@@ -84,30 +84,50 @@ class CurrencyController extends Controller
      */
     public function options()
     {
-        $options = Cache::remember('currency_options_full_v3', now()->addDays(7), function () {
+        $options = Cache::remember('currency_options_country_only_v1', now()->addDays(7), function () {
             try {
-                $response = Http::timeout(20)->get(
-                    'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies.json'
+                // Countries API se currencies nikaalo
+                $response = Http::timeout(25)->get(
+                    'https://countries.dev/countries?fields=name,alpha2Code,currencies'
                 );
 
                 if (!$response->successful()) {
                     return [];
                 }
 
-                $currencies = $response->json();
+                $countries = $response->json();
+
+                if (!is_array($countries)) {
+                    return [];
+                }
+
+                $currencies = [];
+
+                foreach ($countries as $country) {
+                    if (!isset($country['currencies']) || !is_array($country['currencies'])) {
+                        continue;
+                    }
+
+                    foreach ($country['currencies'] as $currency) {
+                        $code = $currency['code'] ?? null;
+                        $name = $currency['name'] ?? null;
+
+                        if ($code && $name && strlen($code) === 3) {
+                            $currencies[$code] = [
+                                'code'  => strtoupper($code),
+                                'name'  => $name,
+                                'label' => strtoupper($code) . ' - ' . $name,
+                            ];
+                        }
+                    }
+                }
 
                 return collect($currencies)
-                    ->filter(fn($name, $code) => !empty($name) && strlen($code) === 3)
-                    ->map(fn($name, $code) => [
-                        'code'  => strtoupper($code),
-                        'name'  => $name,
-                        'label' => strtoupper($code) . ' - ' . $name,
-                    ])
                     ->sortBy('code')
                     ->values()
                     ->toArray();
             } catch (\Exception $e) {
-                \Log::error('Currency API failed: ' . $e->getMessage());
+                \Log::error('Currency options failed: ' . $e->getMessage());
                 return [];
             }
         });
