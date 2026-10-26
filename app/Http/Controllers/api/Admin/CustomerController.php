@@ -1127,25 +1127,121 @@ class CustomerController extends Controller
         }
     }
 
+    // public function exportCSV(Request $request)
+    // {
+    //     try {
+    //         $storeId = current_store_id();
+
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Store not selected or token invalid.'
+    //             ], 400);
+    //         }
+
+    //         // Optional: customer_ids array se specific customers export karo
+    //         $customerIds = $request->input('customer_ids', []);
+
+    //         $query = Customer::where('store_id', $storeId);
+
+    //         if (!empty($customerIds) && is_array($customerIds)) {
+    //             $customerIds = array_filter(array_map('intval', $customerIds));
+    //             $query->whereIn('id', $customerIds);
+    //         }
+
+    //         $total = $query->count();
+
+    //         if ($total === 0) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => empty($customerIds)
+    //                     ? 'No customers found to export.'
+    //                     : 'No customers found for the given IDs.'
+    //             ], 404);
+    //         }
+
+    //         return response()->streamDownload(function () use ($storeId, $customerIds) {
+    //             set_time_limit(0);
+    //             ini_set('memory_limit', '512M');
+    //             \DB::disableQueryLog();
+
+    //             $exporter = new CustomerExport();
+    //             $handle   = fopen('php://output', 'w');
+
+    //             fputcsv($handle, $exporter->headings());
+
+    //             $exportQuery = Customer::query()
+    //                 ->where('store_id', $storeId)
+    //                 ->orderBy('id');
+
+    //             // Sirf selected IDs pe filter
+    //             if (!empty($customerIds) && is_array($customerIds)) {
+    //                 $exportQuery->whereIn('id', $customerIds);
+    //             }
+
+    //             $exportQuery->chunkById(200, function ($customers) use ($handle, $exporter) {
+    //                 foreach ($customers as $customer) {
+    //                     fputcsv($handle, $exporter->map($customer));
+    //                 }
+
+    //                 unset($customers);
+
+    //                 if (ob_get_level() > 0) {
+    //                     ob_flush();
+    //                 }
+    //                 flush();
+    //             });
+
+    //             fclose($handle);
+    //         }, 'customers.csv', [
+    //             'Content-Type' => 'text/csv',
+    //             'total-rows' => $total,
+    //             'Access-Control-Expose-Headers' => 'total-rows',
+    //         ]);
+    //     } catch (\Throwable $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Export failed: ' . $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
+    
     public function exportCSV(Request $request)
     {
+        $storeId = null;
+        $filePath = null;
+        $handle = null;
+
         try {
             $storeId = current_store_id();
 
             if (!$storeId) {
                 return response()->json([
-                    'status'  => false,
-                    'message' => 'Store not selected or token invalid.'
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.',
                 ], 400);
             }
 
-            // Optional: customer_ids array se specific customers export karo
+            // Normalize optional customer IDs.
             $customerIds = $request->input('customer_ids', []);
 
-            $query = Customer::where('store_id', $storeId);
+            if (!is_array($customerIds)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'customer_ids must be an array.',
+                ], 422);
+            }
 
-            if (!empty($customerIds) && is_array($customerIds)) {
-                $customerIds = array_filter(array_map('intval', $customerIds));
+            $customerIds = array_values(array_unique(array_filter(
+                array_map('intval', $customerIds),
+                fn ($id) => $id > 0
+            )));
+
+            // Count matching customers while the tenant connection is active.
+            $query = Customer::query()->where('store_id', $storeId);
+
+            if (!empty($customerIds)) {
                 $query->whereIn('id', $customerIds);
             }
 
@@ -1153,58 +1249,100 @@ class CustomerController extends Controller
 
             if ($total === 0) {
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => empty($customerIds)
                         ? 'No customers found to export.'
-                        : 'No customers found for the given IDs.'
+                        : 'No customers found for the given IDs.',
                 ], 404);
             }
 
-            return response()->streamDownload(function () use ($storeId, $customerIds) {
-                set_time_limit(0);
-                ini_set('memory_limit', '512M');
-                \DB::disableQueryLog();
+            set_time_limit(0);
+            ini_set('memory_limit', '512M');
 
-                $exporter = new CustomerExport();
-                $handle   = fopen('php://output', 'w');
+            \DB::disableQueryLog();
 
-                fputcsv($handle, $exporter->headings());
+            // Create a temporary CSV file instead of using php://output.
+            $filePath = tempnam(sys_get_temp_dir(), 'customers_export_');
 
-                $exportQuery = Customer::query()
-                    ->where('store_id', $storeId)
-                    ->orderBy('id');
+            if ($filePath === false) {
+                throw new \RuntimeException(
+                    'Unable to create temporary export file.'
+                );
+            }
 
-                // Sirf selected IDs pe filter
-                if (!empty($customerIds) && is_array($customerIds)) {
-                    $exportQuery->whereIn('id', $customerIds);
+            $handle = fopen($filePath, 'wb');
+
+            if ($handle === false) {
+                throw new \RuntimeException(
+                    'Unable to open temporary export file.'
+                );
+            }
+
+            $exporter = new \App\Exports\CustomerExport();
+
+            // Write CSV headings.
+            fputcsv($handle, $exporter->headings());
+
+            $exportQuery = Customer::query()
+                ->where('store_id', $storeId)
+                ->orderBy('id');
+
+            if (!empty($customerIds)) {
+                $exportQuery->whereIn('id', $customerIds);
+            }
+
+            // Process customers in chunks while the tenant DB is connected.
+            $exportQuery->chunkById(200, function ($customers) use (
+                $handle,
+                $exporter
+            ) {
+                foreach ($customers as $customer) {
+                    fputcsv($handle, $exporter->map($customer));
                 }
 
-                $exportQuery->chunkById(200, function ($customers) use ($handle, $exporter) {
-                    foreach ($customers as $customer) {
-                        fputcsv($handle, $exporter->map($customer));
-                    }
+                unset($customers);
+            });
 
-                    unset($customers);
+            fclose($handle);
+            $handle = null;
 
-                    if (ob_get_level() > 0) {
-                        ob_flush();
-                    }
-                    flush();
-                });
+            // The CSV is complete. It is now safe for tenant middleware
+            // to disconnect before the file is sent to the client.
+            return response()
+                ->download($filePath, 'customers.csv', [
+                    'Content-Type' => 'text/csv; charset=UTF-8',
+                    'Cache-Control' => 'no-store, no-cache, must-revalidate',
+                    'Pragma' => 'no-cache',
+                    'X-Total-Rows' => (string) $total,
+                    'Access-Control-Expose-Headers' => 'X-Total-Rows',
+                ])
+                ->deleteFileAfterSend(true);
 
-                fclose($handle);
-            }, 'customers.csv', [
-                'Content-Type' => 'text/csv',
-                'total-rows' => $total,
-                'Access-Control-Expose-Headers' => 'total-rows',
-            ]);
         } catch (\Throwable $e) {
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
+
+            if ($filePath && is_file($filePath)) {
+                @unlink($filePath);
+            }
+
+            \Log::error('Customer CSV export failed', [
+                'store_id' => $storeId,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            report($e);
+
             return response()->json([
-                'status'  => false,
-                'message' => 'Export failed: ' . $e->getMessage(),
+                'status' => false,
+                'message' => 'Customer export failed. Please try again.',
             ], 500);
         }
     }
+
     public function search(Request $request)
     {
         $storeId = current_store_id();
