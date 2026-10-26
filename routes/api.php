@@ -600,25 +600,23 @@ Route::prefix('dashboard')->middleware([
         'permission:settings',
     ])->group(function () {
 
-        // List
-        Route::get('/', [CurrencyController::class, 'index']);
-        Route::get('/{currency}', [CurrencyController::class, 'show']);
-        // Dropdowns (API se data aayega)
+        // Specific routes PEHLE (wildcard se pehle)
         Route::get('/options', [CurrencyController::class, 'options']);
         Route::get('/countries', [CurrencyController::class, 'countries']);
+        Route::get('/current-rate', [CurrencyController::class, 'getCurrentRate']);
+        Route::get('/default', [CurrencyController::class, 'getDefault']);
+
+        // List
+        Route::get('/', [CurrencyController::class, 'index']);
 
         // CRUD
         Route::post('/', [CurrencyController::class, 'store']);
+
+        // Single currency (ID se) — LAST mein
+        Route::get('/{currency}', [CurrencyController::class, 'show']);
         Route::put('/{currency}', [CurrencyController::class, 'update']);
         Route::delete('/{currency}', [CurrencyController::class, 'destroy']);
-
-        // Actions
         Route::post('/{currency}/set-default', [CurrencyController::class, 'setAsDefault']);
-
-        Route::get('/default', [CurrencyController::class, 'getDefault']);
-
-        // Get current rate
-        Route::get('/current-rate', [CurrencyController::class, 'getCurrentRate']);
     });
 
 
