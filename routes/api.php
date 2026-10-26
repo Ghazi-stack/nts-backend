@@ -602,7 +602,7 @@ Route::prefix('dashboard')->middleware([
 
         // List
         Route::get('/', [CurrencyController::class, 'index']);
-
+        Route::get('/{currency}', [CurrencyController::class, 'show']);
         // Dropdowns (API se data aayega)
         Route::get('/options', [CurrencyController::class, 'options']);
         Route::get('/countries', [CurrencyController::class, 'countries']);

@@ -80,6 +80,27 @@ class CurrencyController extends Controller
     }
 
     /**
+     * GET /currencies/{id}
+     * Single currency by ID
+     */
+    public function show(Currency $currency)
+    {
+        $storeId = $this->getStoreId();
+
+        if ($currency->store_id != $storeId) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unauthorized',
+            ], 403);
+        }
+
+        return response()->json([
+            'status' => true,
+            'data'   => $this->formatCurrency($currency),
+        ]);
+    }
+
+    /**
      * Currency Codes Dropdown (200+ currencies)
      */
     public function options()
