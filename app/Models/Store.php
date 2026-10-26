@@ -28,6 +28,15 @@ class Store extends Model
 
         'store_address'  => 'array',
     ];
+
+    protected $hidden = [
+        'db_username',
+        'db_password_encrypted',
+        'db_host',
+        'db_port',
+        'tenant_database',
+        'provisioning_status'
+    ];
     public function users()
     {
         return $this->belongsToMany(User::class);

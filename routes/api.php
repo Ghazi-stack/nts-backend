@@ -86,6 +86,11 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 Route::prefix('user')->controller(AuthController::class)->group(function () {
 
     // Customer registration: resolve store and connect tenant
+    Route::post('/register-owner', [
+        AuthController::class,
+        'registerOwner',
+    ]);
+    // Customer registration: resolve store and connect tenant
     Route::post('/register', 'register')
         ->middleware(['store.hash', 'tenant.database']);
 

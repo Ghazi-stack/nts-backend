@@ -42,400 +42,203 @@ use App\Models\CentralUser;
 class AuthController extends Controller
 {
 
-    public function register(Request $request)
+    
+    public function registerOwner(Request $request)
     {
+        $central = DB::connection('central');
+
         try {
-            $storeId = current_store_id();
+            $userRole = (int) $request->input('userRole');
 
-            // Fallback headers
-            if (!$storeId) {
-                $storeId = $request->header('storeId')
-                    ?: $request->header('Store-Id')
-                    ?: $request->header('X-Store-Id');
-            }
-            if ($storeId) {
-                $storeId = (int) $storeId;
-            }
-
-            $isOwnerRegistration = $request->userRole == 1 && !$storeId;
-            $isSubUser           = $request->userRole == 1 && $storeId;
-            $isStaffUser         = $request->userRole >= 3 && $storeId; // Sales Staff, Manager, etc.
-
-            // ---------- Dynamic Email Rules ----------
-            $emailRules = ['required', 'email'];
-
-            if (!$isOwnerRegistration) {
-                $emailRules[] = Rule::unique('users', 'email')->where(function ($query) use ($storeId) {
-                    return $query->where('store_id', $storeId);
-                });
+            // This endpoint handles owners and central staff, not customers.
+            if (!in_array($userRole, [1, 3, 4, 5, 6], true)) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Customer registration must use the customer registration endpoint.',
+                ], 422);
             }
 
             $validator = Validator::make($request->all(), [
-                'firstName'     => 'required|string|max:100',
-                'lastName'      => 'nullable|string|max:100',
-                'email'         => $emailRules,
-                'phoneNumber'   => 'nullable|string|max:20',
-                'password'      => ($isSubUser || $isStaffUser) ? 'nullable|string|min:6' : 'required|string|min:6',
-                'companyName'   => 'nullable|string|max:255',
-                'addressLine1'  => 'nullable|string|max:255',
-                'addressLine2'  => 'nullable|string|max:255',
-                'suburb'        => 'nullable|string|max:255',
-                'country'       => 'nullable|string|max:100',
-                'state'         => 'nullable|string|max:100',
-                'zip'           => 'nullable|string|max:20',
-                'storeName'     => 'nullable|string|max:255',
-                'businessSize'  => 'nullable|string|max:100',
-                'region'        => 'nullable|string|max:100',
-                'userRole'      => 'required|integer|exists:roles,user_role_id',
-                'permissions'   => ($isSubUser || $isStaffUser) ? 'required|array|min:1' : 'nullable',
-                'permissions.*' => 'exists:permissions,id',
-                'base_url'      => 'nullable|string|max:255',
+                'firstName'    => 'required|string|max:100',
+                'lastName'     => 'nullable|string|max:100',
+                'email'        => 'required|email',
+                'phoneNumber'  => 'nullable|string|max:20',
+                'password'     => $userRole === 1
+                    ? 'required|string|min:6'
+                    : 'nullable|string|min:6',
+                'companyName'  => 'nullable|string|max:255',
+                'addressLine1' => 'nullable|string|max:255',
+                'addressLine2' => 'nullable|string|max:255',
+                'suburb'       => 'nullable|string|max:255',
+                'country'      => 'nullable|string|max:100',
+                'state'        => 'nullable|string|max:100',
+                'zip'          => 'nullable|string|max:20',
+                'storeName'    => 'nullable|string|max:255',
+                'businessSize' => 'nullable|string|max:100',
+                'region'       => 'nullable|string|max:100',
+                'userRole'     => 'required|integer|in:1,3,4,5,6',
+                'base_url'     => 'nullable|string|max:255',
+                'permissions'  => $userRole === 1
+                    ? 'nullable|array'
+                    : 'required|array|min:1',
+                'permissions.*' => [
+                    'required',
+                    'integer',
+                    'distinct',
+                    'exists:central.permissions,id',
+                ],
             ]);
 
             if ($validator->fails()) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'Validation errors',
-                    'errors'  => $validator->errors()
+                    'errors'  => $validator->errors(),
                 ], 422);
             }
 
-            DB::beginTransaction();
+            /*
+            |--------------------------------------------------------------------------
+            | Resolve central store for roles 3–6
+            |--------------------------------------------------------------------------
+            */
 
-            // ===================== OWNER REGISTRATION =====================
-            if ($isOwnerRegistration) {
+            $registryStore = null;
+            $registryStoreId = null;
 
-                $existingUser = User::where('email', $request->email)->first();
+            if ($userRole !== 1) {
+                $storeHash = $request->header('x-store-hash')
+                    ?: $request->header('store_hash')
+                    ?: $request->header('storeHash');
 
-                // Additional Store for Existing Owner
-                if ($existingUser) {
-
-                    if ($existingUser->userRole != 1) {
-                        return response()->json([
-                            'status'  => false,
-                            'message' => 'This email is already registered as a customer.',
-                        ], 422);
-                    }
-
-                    if (!Hash::check($request->password, $existingUser->password)) {
-                        return response()->json([
-                            'status'  => false,
-                            'message' => 'Invalid password. For additional stores use the original registration password.',
-                        ], 401);
-                    }
-
-                    $store = Store::create([
-                        'name'     => $request->storeName,
-                        'user_id'  => $existingUser->id,
-                        'base_url' => $request->base_url,
-                    ]);
-
-                    $registryStore = app(StoreRegistryService::class)
-                        ->registerPendingStore($store, (int) $existingUser->id);
-
-                    $registryStore = app(TenantProvisioningService::class)
-                        ->provisionDatabase((int) $registryStore->id);
-
-                    // Assign ALL permissions
-                    $allPermissions = Permission::all();
-                    $inserts = [];
-                    foreach ($allPermissions as $perm) {
-                        $inserts[] = [
-                            'user_id'       => $existingUser->id,
-                            'permission_id' => $perm->id,
-                            'store_id'      => $store->id,
-                            'created_at'    => now(),
-                            'updated_at'    => now(),
-                        ];
-                    }
-                    DB::table('user_permissions')->insert($inserts);
-
-                    DB::commit();
-
-                    $userPermissions = Permission::orderBy('group')
-                        ->orderBy('sort_order')
-                        ->get()
-                        ->groupBy('group')
-                        ->map(function ($items, $group) {
-                            return [
-                                'group' => $group,
-                                'permissions' => $items->map(function ($p) {
-                                    return [
-                                        'id'    => $p->id,
-                                        'name'  => $p->name,
-                                        'label' => $p->label,
-                                        'slug'  => $p->slug,
-                                    ];
-                                })->values(),
-                            ];
-                        })->values();
-
-                    try {
-                        Mail::to($existingUser->email)->send(new UserRegistrationMail($existingUser, $store->id));
-                        $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
-                        Mail::to($adminEmail)->send(new UserRegistrationMail($existingUser, $store->id));
-                    } catch (\Exception $mailError) {
-                        Log::error('REGISTRATION EMAIL FAILED', [
-                            'error'      => $mailError->getMessage(),
-                            'user_email' => $existingUser->email,
-                        ]);
-                    }
-
-                    $token    = $existingUser->createToken('auth_token')->plainTextToken;
-                    $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
-
+                if (!$storeHash) {
                     return response()->json([
-                        'status'      => true,
-                        'message'     => 'New store created successfully for existing owner',
-                        'token'       => $token,
-                        'expireAt'    => $expireAt,
-                        'user'        => new UserResource($existingUser),
-                        'store'       => $store,
-                        'permissions' => $userPermissions,
-                        'isOwner'     => true,
-                        'store_hash' => $registryStore->store_hash,
-                        'provisioning_status' => $registryStore->provisioning_status,
-                    ], 201);
+                        'status'  => false,
+                        'message' => 'The x-store-hash header is required.',
+                    ], 400);
                 }
 
-                // First Time Owner Registration
-                $user = User::create([
-                    'name'          => $request->firstName . ' ' . $request->lastName,
-                    'email'         => $request->email,
-                    'password'      => bcrypt($request->password),
-                    'userRole'      => 1,
-                    'phone_number'  => $request->phoneNumber,
-                    'store_name'    => $request->storeName,
-                    'base_url'      => $request->base_url,
-                    'business_size' => $request->businessSize,
-                    'region'        => $request->region,
-                    'store_id'      => null,
-                    'customer_id'   => null,
-                ]);
-
-                $store = Store::create([
-                    'name'     => $request->storeName,
-                    'user_id'  => $user->id,
-                    'base_url' => $request->base_url,
-                ]);
-
-                $registryStore = app(StoreRegistryService::class)
-                    ->registerPendingStore($store, (int) $user->id);
-
-                $registryStore = app(TenantProvisioningService::class)
-                    ->provisionDatabase((int) $registryStore->id);
-
-                $user->store_id = $store->id;
-                $user->save();
-
-                // Assign ALL permissions
-                $allPermissions = Permission::all();
-                $inserts = [];
-                foreach ($allPermissions as $perm) {
-                    $inserts[] = [
-                        'user_id'       => $user->id,
-                        'permission_id' => $perm->id,
-                        'store_id'      => $store->id,
-                        'created_at'    => now(),
-                        'updated_at'    => now(),
-                    ];
-                }
-                DB::table('user_permissions')->insert($inserts);
-
-                DB::commit();
-
-                $userPermissions = Permission::orderBy('group')
-                    ->orderBy('sort_order')
-                    ->get()
-                    ->groupBy('group')
-                    ->map(function ($items, $group) {
-                        return [
-                            'group' => $group,
-                            'permissions' => $items->map(function ($p) {
-                                return [
-                                    'id'    => $p->id,
-                                    'name'  => $p->name,
-                                    'label' => $p->label,
-                                    'slug'  => $p->slug,
-                                ];
-                            })->values(),
-                        ];
-                    })->values();
-
-                try {
-                    Mail::to($user->email)->send(new UserRegistrationMail($user, $store->id));
-                    $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
-                    Mail::to($adminEmail)->send(new UserRegistrationMail($user, $store->id));
-                } catch (\Exception $mailError) {
-                    Log::error('REGISTRATION EMAIL FAILED', [
-                        'error'      => $mailError->getMessage(),
-                        'user_email' => $user->email,
-                    ]);
-                }
-
-                $token    = $user->createToken('auth_token')->plainTextToken;
-                $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
-
-                return response()->json([
-                    'status'      => true,
-                    'message'     => 'Store owner registered successfully',
-                    'token'       => $token,
-                    'expireAt'    => $expireAt,
-                    'user'        => new UserResource($user),
-                    'store'       => $store,
-                    'permissions' => $userPermissions,
-                    'isOwner'     => true,
-                    'store_hash' => $registryStore->store_hash,
-                    'provisioning_status' => $registryStore->provisioning_status,
-                ], 201);
-            }
-
-            // ===================== SUB-USER + STAFF REGISTRATION =====================
-            if ($isSubUser || $isStaffUser) {
-
-                $existingUser = User::where('email', $request->email)
-                    ->where('userRole', '!=', 2)
+                $registryStore = $central->table('stores')
+                    ->where('store_hash', $storeHash)
+                    ->where('provisioning_status', 'active')
                     ->first();
 
+                if (!$registryStore) {
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Store not found or not active.',
+                    ], 404);
+                }
+
+                $registryStoreId = (int) $registryStore->id;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | CENTRAL STAFF REGISTRATION: roles 3–6
+            |--------------------------------------------------------------------------
+            */
+
+            if ($userRole !== 1) {
+                $central->beginTransaction();
+
+                $existingUser = User::on('central')
+                    ->where('email', $request->email)
+                    ->first();
+
+                if ($existingUser && (int) $existingUser->userRole === 2) {
+                    $central->rollBack();
+
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'This email already belongs to a customer.',
+                    ], 422);
+                }
+
                 if ($existingUser) {
-                    $alreadyInStore = DB::table('user_permissions')
+                    $membershipExists = $central->table('store_user')
                         ->where('user_id', $existingUser->id)
-                        ->where('store_id', $storeId)
+                        ->where('store_id', $registryStoreId)
                         ->exists();
 
-                    if ($alreadyInStore) {
+                    if ($membershipExists) {
+                        $central->rollBack();
+
                         return response()->json([
                             'status'  => false,
                             'message' => 'This user already has access to this store.',
                         ], 409);
                     }
 
-                    $inserts = [];
-                    foreach ($request->permissions as $permId) {
-                        $inserts[] = [
-                            'user_id'       => $existingUser->id,
-                            'permission_id' => $permId,
-                            'store_id'      => $storeId,
-                            'created_at'    => now(),
-                            'updated_at'    => now(),
-                        ];
-                    }
-                    DB::table('user_permissions')->insert($inserts);
-
-                    DB::commit();
-
-                    try {
-                        $token = app('auth.password.broker')->createToken($existingUser);
-
-                        $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token=' . $token .
-                            '&email=' . urlencode($existingUser->email);
-
-                        Mail::to($existingUser->email)->send(
-                            new StoreAccessMail(
-                                $existingUser->name,
-                                $existingUser->email,
-                                $resetLink,
-                                $storeId
-                            )
-                        );
-                    } catch (\Exception $mailError) {
-                        Log::error('STAFF STORE ACCESS EMAIL FAILED', [
-                            'error' => $mailError->getMessage(),
-                            'email' => $existingUser->email,
-                        ]);
-                    }
-
-                    $userPermissions = Permission::whereIn('id', $request->permissions)
-                        ->orderBy('group')
-                        ->orderBy('sort_order')
-                        ->get()
-                        ->groupBy('group')
-                        ->map(function ($items, $group) {
-                            return [
-                                'group' => $group,
-                                'permissions' => $items->map(function ($p) {
-                                    return [
-                                        'id'    => $p->id,
-                                        'name'  => $p->name,
-                                        'label' => $p->label,
-                                        'slug'  => $p->slug,
-                                    ];
-                                })->values(),
-                            ];
-                        })->values();
-
-                    $storeIds = DB::table('user_permissions')
-                        ->where('user_id', $existingUser->id)
-                        ->distinct()
-                        ->pluck('store_id');
-                    $allStores = Store::whereIn('id', $storeIds)->get();
-
-                    $token = $existingUser->createToken('auth_token')->plainTextToken;
-                    $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
-
-                    return response()->json([
-                        'status'      => true,
-                        'message'     => 'Existing user added to store with permissions. Store access email sent.',
-                        'token'       => $token,
-                        'expireAt'    => $expireAt,
-                        'user'        => new UserResource($existingUser),
-                        'store'       => Store::find($storeId),
-                        'stores'      => $allStores,
-                        'permissions' => $userPermissions,
-                        'isOwner'     => false,
-                    ], 201);
+                    $user = $existingUser;
+                } else {
+                    // Use only fields confirmed to belong to central.users.
+                    $user = User::on('central')->create([
+                        'name'         => trim(
+                            $request->firstName . ' ' . ($request->lastName ?? '')
+                        ),
+                        'email'        => $request->email,
+                        'password'     => bcrypt(Str::random(32)),
+                        'userRole'     => $userRole,
+                        'phone_number' => $request->phoneNumber,
+                    ]);
                 }
 
-                // New Staff / Sub-user
-                $user = User::create([
-                    'name'          => $request->firstName . ' ' . $request->lastName,
-                    'email'         => $request->email,
-                    'password'      => bcrypt(Str::random(16)),
-                    'userRole'      => $request->userRole,
-                    'phone_number'  => $request->phoneNumber,
-                    'store_name'    => $request->storeName,
-                    'business_size' => $request->businessSize,
-                    'region'        => $request->region,
-                    'store_id'      => $storeId,
-                    'customer_id'   => null,
+                // Store membership belongs in the central pivot table.
+                $central->table('store_user')->insert([
+                    'user_id'    => $user->id,
+                    'store_id'   => $registryStoreId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
 
-                $inserts = [];
-                foreach ($request->permissions as $permId) {
-                    $inserts[] = [
+                $permissionIds = array_values(array_unique(
+                    array_map('intval', $request->input('permissions', []))
+                ));
+
+                $permissionRows = [];
+
+                foreach ($permissionIds as $permissionId) {
+                    $permissionRows[] = [
                         'user_id'       => $user->id,
-                        'permission_id' => $permId,
-                        'store_id'      => $storeId,
+                        'permission_id' => $permissionId,
+                        'store_id'      => $registryStoreId,
                         'created_at'    => now(),
                         'updated_at'    => now(),
                     ];
                 }
-                DB::table('user_permissions')->insert($inserts);
 
-                DB::commit();
+                if ($permissionRows) {
+                    $central->table('user_permissions')->insert($permissionRows);
+                }
+
+                $central->commit();
 
                 try {
-                    $token = app('auth.password.broker')->createToken($user);
+                    $resetToken = app('auth.password.broker')->createToken($user);
 
-                    $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token=' . $token .
-                        '&email=' . urlencode($user->email);
+                    $resetLink =
+                        'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
+                        . $resetToken
+                        . '&email=' . urlencode($user->email);
 
                     Mail::to($user->email)->send(
                         new StoreAccessMail(
-                            $request->firstName,
+                            $user->name,
                             $user->email,
                             $resetLink,
-                            $storeId
+                            $registryStoreId
                         )
                     );
-                } catch (\Exception $mailError) {
-                    Log::error('STAFF STORE ACCESS EMAIL FAILED', [
+                } catch (\Throwable $mailError) {
+                    Log::error('CENTRAL STAFF ACCESS EMAIL FAILED', [
                         'error' => $mailError->getMessage(),
                         'email' => $user->email,
                     ]);
                 }
 
-                $userPermissions = Permission::whereIn('id', $request->permissions)
+                $userPermissions = Permission::on('central')
+                    ->whereIn('id', $permissionIds)
                     ->orderBy('group')
                     ->orderBy('sort_order')
                     ->get()
@@ -455,6 +258,810 @@ class AuthController extends Controller
                     })->values();
 
                 $token = $user->createToken('auth_token')->plainTextToken;
+
+                $publicStore = [
+                    'id'         => $registryStore->id,
+                    'name'       => $registryStore->name,
+                    'base_url'   => $registryStore->base_url ?? null,
+                    'created_at' => $registryStore->created_at,
+                    'updated_at' => $registryStore->updated_at,
+                ];
+
+                return response()->json([
+                    'status'      => true,
+                    'message'     => $existingUser
+                        ? 'Existing user added to store with permissions. Store access email sent.'
+                        : 'Staff user registered successfully. Store access email sent.',
+                    'token'       => $token,
+                    'expireAt'    => Carbon::now()->addDays(1)->format('Y-m-d H:i:s'),
+                    'user'        => new UserResource($user),
+                    'store'       => $publicStore,
+                    'stores'      => [$publicStore],
+                    'permissions' => $userPermissions,
+                    'isOwner'     => false,
+                ], 201);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | STORE OWNER REGISTRATION: role 1
+            |--------------------------------------------------------------------------
+            */
+
+            $central->beginTransaction();
+
+            $existingUser = User::on('central')
+                ->where('email', $request->email)
+                ->first();
+
+            if ($existingUser) {
+                if ((int) $existingUser->userRole !== 1) {
+                    $central->rollBack();
+
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'This email is already registered with another role.',
+                    ], 422);
+                }
+
+                if (!Hash::check($request->password, $existingUser->password)) {
+                    $central->rollBack();
+
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'Invalid password. For additional stores use the original registration password.',
+                    ], 401);
+                }
+
+                $user = $existingUser;
+            } else {
+                // No store_id or store-detail fields are written to central.users.
+                $user = User::on('central')->create([
+                    'name'         => trim(
+                        $request->firstName . ' ' . ($request->lastName ?? '')
+                    ),
+                    'email'        => $request->email,
+                    'password'     => bcrypt($request->password),
+                    'userRole'     => 1,
+                    'phone_number' => $request->phoneNumber,
+                ]);
+            }
+
+            /*
+            * Keep the original Store model behavior.
+            * StoreRegistryService remains responsible for registry registration.
+            */
+            $store = Store::create([
+                'name'     => $request->storeName,
+                'user_id'  => $user->id,
+                'base_url' => $request->base_url,
+            ]);
+
+            $registryStore = app(StoreRegistryService::class)
+                ->registerPendingStore($store, (int) $user->id);
+
+            $registryStore = app(TenantProvisioningService::class)
+                ->provisionDatabase((int) $registryStore->id);
+
+            $registryStoreId = (int) $registryStore->id;
+
+            // Associate the owner with the central registry store.
+            $membershipExists = $central->table('store_user')
+                ->where('user_id', $user->id)
+                ->where('store_id', $registryStoreId)
+                ->exists();
+
+            if (!$membershipExists) {
+                $central->table('store_user')->insert([
+                    'user_id'    => $user->id,
+                    'store_id'   => $registryStoreId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            // Assign all central permissions to the owner for this store.
+            $allPermissions = Permission::on('central')->get();
+
+            $permissionRows = [];
+
+            foreach ($allPermissions as $permission) {
+                $alreadyAssigned = $central->table('user_permissions')
+                    ->where('user_id', $user->id)
+                    ->where('permission_id', $permission->id)
+                    ->where('store_id', $registryStoreId)
+                    ->exists();
+
+                if (!$alreadyAssigned) {
+                    $permissionRows[] = [
+                        'user_id'       => $user->id,
+                        'permission_id' => $permission->id,
+                        'store_id'      => $registryStoreId,
+                        'created_at'    => now(),
+                        'updated_at'    => now(),
+                    ];
+                }
+            }
+
+            if ($permissionRows) {
+                $central->table('user_permissions')->insert($permissionRows);
+            }
+
+            $central->commit();
+
+            $userPermissions = $allPermissions
+                ->sortBy('sort_order')
+                ->groupBy('group')
+                ->map(function ($items, $group) {
+                    return [
+                        'group' => $group,
+                        'permissions' => $items->map(function ($p) {
+                            return [
+                                'id'    => $p->id,
+                                'name'  => $p->name,
+                                'label' => $p->label,
+                                'slug'  => $p->slug,
+                            ];
+                        })->values(),
+                    ];
+                })->values();
+
+            try {
+                Mail::to($user->email)->send(
+                    new UserRegistrationMail($user, $store->id)
+                );
+
+                $adminEmail = env(
+                    'MAIL_FROM_SB_ADMIN',
+                    'hkinza575@gmail.com'
+                );
+
+                Mail::to($adminEmail)->send(
+                    new UserRegistrationMail($user, $store->id)
+                );
+            } catch (\Throwable $mailError) {
+                Log::error('REGISTRATION EMAIL FAILED', [
+                    'error'      => $mailError->getMessage(),
+                    'user_email' => $user->email,
+                ]);
+            }
+
+            $token = $user->createToken('auth_token')->plainTextToken;
+            $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+            return response()->json([
+                'status'              => true,
+                'message'             => $existingUser
+                    ? 'New store created successfully for existing owner'
+                    : 'Store owner registered successfully',
+                'token'               => $token,
+                'expireAt'            => $expireAt,
+                'user'                => new UserResource($user),
+                'store'               => $store,
+                'permissions'         => $userPermissions,
+                'isOwner'             => true,
+                'store_hash'          => $registryStore->store_hash,
+                'provisioning_status' => $registryStore->provisioning_status,
+            ], 201);
+
+        } catch (\Throwable $e) {
+            if ($central->transactionLevel() > 0) {
+                $central->rollBack();
+            }
+
+            Log::error('Owner/staff registration failed', [
+                'error' => $e->getMessage(),
+                'line'  => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Something went wrong during registration.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    
+    // public function registerOwner(Request $request)
+    // {
+    //     try {
+    //         // This endpoint is exclusively for owner registration.
+    //         $validator = Validator::make($request->all(), [
+    //             'firstName'    => 'required|string|max:100',
+    //             'lastName'     => 'nullable|string|max:100',
+    //             'email'        => 'required|email',
+    //             'phoneNumber'  => 'nullable|string|max:20',
+    //             'password'     => 'required|string|min:6',
+    //             'companyName'  => 'nullable|string|max:255',
+    //             'addressLine1' => 'nullable|string|max:255',
+    //             'addressLine2' => 'nullable|string|max:255',
+    //             'suburb'       => 'nullable|string|max:255',
+    //             'country'      => 'nullable|string|max:100',
+    //             'state'        => 'nullable|string|max:100',
+    //             'zip'          => 'nullable|string|max:20',
+    //             'storeName'    => 'nullable|string|max:255',
+    //             'businessSize' => 'nullable|string|max:100',
+    //             'region'       => 'nullable|string|max:100',
+    //             'userRole'     => 'required|integer|in:1',
+    //             'base_url'     => 'nullable|string|max:255',
+    //         ]);
+
+    //         if ($validator->fails()) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Validation errors',
+    //                 'errors'  => $validator->errors(),
+    //             ], 422);
+    //         }
+
+    //         DB::beginTransaction();
+
+    //         // Check whether this email already belongs to an owner.
+    //         $existingUser = User::where('email', $request->email)->first();
+
+    //         if ($existingUser) {
+    //             if ($existingUser->userRole != 1) {
+    //                 DB::rollBack();
+
+    //                 return response()->json([
+    //                     'status'  => false,
+    //                     'message' => 'This email is already registered as a customer.',
+    //                 ], 422);
+    //             }
+
+    //             if (!Hash::check($request->password, $existingUser->password)) {
+    //                 DB::rollBack();
+
+    //                 return response()->json([
+    //                     'status'  => false,
+    //                     'message' => 'Invalid password. For additional stores use the original registration password.',
+    //                 ], 401);
+    //             }
+
+    //             // Create an additional store for the existing owner.
+    //             $store = Store::create([
+    //                 'name'     => $request->storeName,
+    //                 'user_id'  => $existingUser->id,
+    //                 'base_url' => $request->base_url,
+    //             ]);
+
+    //             $registryStore = app(StoreRegistryService::class)
+    //                 ->registerPendingStore($store, (int) $existingUser->id);
+
+    //             $registryStore = app(TenantProvisioningService::class)
+    //                 ->provisionDatabase((int) $registryStore->id);
+
+    //             // Assign all permissions to this owner for the new store.
+    //             $allPermissions = Permission::all();
+    //             $inserts = [];
+
+    //             foreach ($allPermissions as $perm) {
+    //                 $inserts[] = [
+    //                     'user_id'       => $existingUser->id,
+    //                     'permission_id' => $perm->id,
+    //                     'store_id'      => $store->id,
+    //                     'created_at'    => now(),
+    //                     'updated_at'    => now(),
+    //                 ];
+    //             }
+
+    //             if (!empty($inserts)) {
+    //                 DB::table('user_permissions')->insert($inserts);
+    //             }
+
+    //             DB::commit();
+
+    //             $userPermissions = Permission::orderBy('group')
+    //                 ->orderBy('sort_order')
+    //                 ->get()
+    //                 ->groupBy('group')
+    //                 ->map(function ($items, $group) {
+    //                     return [
+    //                         'group' => $group,
+    //                         'permissions' => $items->map(function ($p) {
+    //                             return [
+    //                                 'id'    => $p->id,
+    //                                 'name'  => $p->name,
+    //                                 'label' => $p->label,
+    //                                 'slug'  => $p->slug,
+    //                             ];
+    //                         })->values(),
+    //                     ];
+    //                 })->values();
+
+    //             try {
+    //                 Mail::to($existingUser->email)->send(
+    //                     new UserRegistrationMail($existingUser, $store->id)
+    //                 );
+
+    //                 $adminEmail = env(
+    //                     'MAIL_FROM_SB_ADMIN',
+    //                     'hkinza575@gmail.com'
+    //                 );
+
+    //                 Mail::to($adminEmail)->send(
+    //                     new UserRegistrationMail($existingUser, $store->id)
+    //                 );
+    //             } catch (\Exception $mailError) {
+    //                 Log::error('REGISTRATION EMAIL FAILED', [
+    //                     'error'      => $mailError->getMessage(),
+    //                     'user_email' => $existingUser->email,
+    //                 ]);
+    //             }
+
+    //             $token = $existingUser->createToken('auth_token')->plainTextToken;
+    //             $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+    //             return response()->json([
+    //                 'status'              => true,
+    //                 'message'             => 'New store created successfully for existing owner',
+    //                 'token'               => $token,
+    //                 'expireAt'            => $expireAt,
+    //                 'user'                => new UserResource($existingUser),
+    //                 'store'               => $store,
+    //                 'permissions'         => $userPermissions,
+    //                 'isOwner'             => true,
+    //                 'store_hash'          => $registryStore->store_hash,
+    //                 'provisioning_status' => $registryStore->provisioning_status,
+    //             ], 201);
+    //         }
+
+    //         // First-time owner registration.
+    //         $user = User::create([
+    //             'name'          => $request->firstName . ' ' . $request->lastName,
+    //             'email'         => $request->email,
+    //             'password'      => bcrypt($request->password),
+    //             'userRole'      => 1,
+    //             'phone_number'  => $request->phoneNumber,
+    //             'store_name'    => $request->storeName,
+    //             'base_url'      => $request->base_url,
+    //             'business_size' => $request->businessSize,
+    //             'region'        => $request->region,
+    //             'store_id'      => null,
+    //             'customer_id'   => null,
+    //         ]);
+
+    //         $store = Store::create([
+    //             'name'     => $request->storeName,
+    //             'user_id'  => $user->id,
+    //             'base_url' => $request->base_url,
+    //         ]);
+
+    //         $registryStore = app(StoreRegistryService::class)
+    //             ->registerPendingStore($store, (int) $user->id);
+
+    //         $registryStore = app(TenantProvisioningService::class)
+    //             ->provisionDatabase((int) $registryStore->id);
+
+    //         $user->store_id = $store->id;
+    //         $user->save();
+
+    //         // Assign all permissions to the owner.
+    //         $allPermissions = Permission::all();
+    //         $inserts = [];
+
+    //         foreach ($allPermissions as $perm) {
+    //             $inserts[] = [
+    //                 'user_id'       => $user->id,
+    //                 'permission_id' => $perm->id,
+    //                 'store_id'      => $store->id,
+    //                 'created_at'    => now(),
+    //                 'updated_at'    => now(),
+    //             ];
+    //         }
+
+    //         if (!empty($inserts)) {
+    //             DB::table('user_permissions')->insert($inserts);
+    //         }
+
+    //         DB::commit();
+
+    //         $userPermissions = Permission::orderBy('group')
+    //             ->orderBy('sort_order')
+    //             ->get()
+    //             ->groupBy('group')
+    //             ->map(function ($items, $group) {
+    //                 return [
+    //                     'group' => $group,
+    //                     'permissions' => $items->map(function ($p) {
+    //                         return [
+    //                             'id'    => $p->id,
+    //                             'name'  => $p->name,
+    //                             'label' => $p->label,
+    //                             'slug'  => $p->slug,
+    //                         ];
+    //                     })->values(),
+    //                 ];
+    //             })->values();
+
+    //         try {
+    //             Mail::to($user->email)->send(
+    //                 new UserRegistrationMail($user, $store->id)
+    //             );
+
+    //             $adminEmail = env(
+    //                 'MAIL_FROM_SB_ADMIN',
+    //                 'hkinza575@gmail.com'
+    //             );
+
+    //             Mail::to($adminEmail)->send(
+    //                 new UserRegistrationMail($user, $store->id)
+    //             );
+    //         } catch (\Exception $mailError) {
+    //             Log::error('REGISTRATION EMAIL FAILED', [
+    //                 'error'      => $mailError->getMessage(),
+    //                 'user_email' => $user->email,
+    //             ]);
+    //         }
+
+    //         $token = $user->createToken('auth_token')->plainTextToken;
+    //         $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+    //         return response()->json([
+    //             'status'              => true,
+    //             'message'             => 'Store owner registered successfully',
+    //             'token'               => $token,
+    //             'expireAt'            => $expireAt,
+    //             'user'                => new UserResource($user),
+    //             'store'               => $store,
+    //             'permissions'         => $userPermissions,
+    //             'isOwner'             => true,
+    //             'store_hash'          => $registryStore->store_hash,
+    //             'provisioning_status' => $registryStore->provisioning_status,
+    //         ], 201);
+
+    //     } catch (\Throwable $e) {
+    //         if (DB::transactionLevel() > 0) {
+    //             DB::rollBack();
+    //         }
+
+    //         Log::error('Owner registration failed', [
+    //             'error' => $e->getMessage(),
+    //             'line'  => $e->getLine(),
+    //         ]);
+
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Something went wrong during registration.',
+    //             'error'   => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
+
+    public function register(Request $request)
+    {
+        try {
+            /*
+            |--------------------------------------------------------------------------
+            | 1. Resolve store using store hash
+            |--------------------------------------------------------------------------
+            */
+
+            $storeHash = $request->header('x-store-hash')
+                ?: $request->header('store_hash')
+                ?: $request->header('storeHash');
+
+            if (!$storeHash) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'The store-hash header is required.',
+                ], 400);
+            }
+
+            // Always resolve the store from the central registry.
+            $registryStore = DB::connection('central')
+                ->table('stores')
+                ->where('store_hash', $storeHash)
+                ->first();
+
+            if (!$registryStore) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid store hash.',
+                ], 404);
+            }
+
+            if ($registryStore->provisioning_status !== 'active') {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'The store is not active.',
+                ], 409);
+            }
+
+            // Keep the IDs separate.
+            $registryStoreId = (int) $registryStore->id;
+            $legacyStoreId = (int) $registryStore->legacy_store_id;
+
+            if ($legacyStoreId <= 0) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Legacy store ID is missing or invalid.',
+                ], 422);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | 2. Determine registration type
+            |--------------------------------------------------------------------------
+            */
+
+            $userRole = (int) $request->input('userRole');
+
+            $isSubUser = $userRole === 1;
+            $isStaffUser = $userRole >= 3;
+            $isCustomer = $userRole === 2;
+
+            if (!$isSubUser && !$isStaffUser && !$isCustomer) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Invalid user role for store registration.',
+                ], 422);
+            }
+
+            $isStaffRegistration = $isSubUser || $isStaffUser;
+
+            /*
+            |--------------------------------------------------------------------------
+            | 3. Validation
+            |--------------------------------------------------------------------------
+            */
+
+            $emailRules = ['required', 'email'];
+
+            $emailRules[] = Rule::unique('users', 'email')
+                ->where(function ($query) use (
+                    $registryStoreId,
+                    $legacyStoreId,
+                    $isCustomer
+                ) {
+                    return $query->where(
+                        'store_id',
+                        $isCustomer ? $legacyStoreId : $registryStoreId
+                    );
+                });
+
+            $validator = Validator::make($request->all(), [
+                'firstName'     => 'required|string|max:100',
+                'lastName'      => 'nullable|string|max:100',
+                'email'         => $emailRules,
+                'phoneNumber'   => 'nullable|string|max:20',
+
+                'password'      => $isStaffRegistration
+                    ? 'nullable|string|min:6'
+                    : 'required|string|min:6',
+
+                'companyName'   => 'nullable|string|max:255',
+                'addressLine1'  => 'nullable|string|max:255',
+                'addressLine2'  => 'nullable|string|max:255',
+                'suburb'        => 'nullable|string|max:255',
+                'country'       => 'nullable|string|max:100',
+                'state'         => 'nullable|string|max:100',
+                'zip'           => 'nullable|string|max:20',
+                'storeName'     => 'nullable|string|max:255',
+                'businessSize'  => 'nullable|string|max:100',
+                'region'        => 'nullable|string|max:100',
+
+                // Customer registration is always role 2.
+                'userRole'      => $isCustomer
+                    ? 'required|integer|in:2'
+                    : 'required|integer|exists:central.roles,user_role_id',
+
+                'permissions'   => $isStaffRegistration
+                    ? 'required|array|min:1'
+                    : 'nullable',
+
+                'permissions.*' => 'exists:central.permissions,id',
+                'base_url'      => 'nullable|string|max:255',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Validation errors',
+                    'errors'  => $validator->errors(),
+                ], 422);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | 4. Staff / sub-user registration
+            |--------------------------------------------------------------------------
+            */
+
+            if ($isStaffRegistration) {
+                DB::beginTransaction();
+
+                $existingUser = User::where('email', $request->email)
+                    ->where('userRole', '!=', 2)
+                    ->first();
+
+                if ($existingUser) {
+                    $alreadyInStore = DB::connection('central')
+                        ->table('user_permissions')
+                        ->where('user_id', $existingUser->id)
+                        ->where('store_id', $registryStoreId)
+                        ->exists();
+
+                    if ($alreadyInStore) {
+                        DB::rollBack();
+
+                        return response()->json([
+                            'status'  => false,
+                            'message' => 'This user already has access to this store.',
+                        ], 409);
+                    }
+
+                    $inserts = [];
+
+                    foreach ($request->permissions as $permissionId) {
+                        $inserts[] = [
+                            'user_id'       => $existingUser->id,
+                            'permission_id' => $permissionId,
+                            'store_id'      => $registryStoreId,
+                            'created_at'    => now(),
+                            'updated_at'    => now(),
+                        ];
+                    }
+
+                    DB::connection('central')
+                        ->table('user_permissions')
+                        ->insert($inserts);
+
+                    DB::commit();
+
+                    try {
+                        $resetToken = app('auth.password.broker')
+                            ->createToken($existingUser);
+
+                        $resetLink =
+                            'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
+                            . $resetToken
+                            . '&email=' . urlencode($existingUser->email);
+
+                        Mail::to($existingUser->email)->send(
+                            new StoreAccessMail(
+                                $existingUser->name,
+                                $existingUser->email,
+                                $resetLink,
+                                $registryStoreId
+                            )
+                        );
+                    } catch (\Throwable $mailError) {
+                        Log::error('STAFF STORE ACCESS EMAIL FAILED', [
+                            'error' => $mailError->getMessage(),
+                            'email' => $existingUser->email,
+                        ]);
+                    }
+
+                    $userPermissions = Permission::whereIn(
+                        'id',
+                        $request->permissions
+                    )
+                        ->orderBy('group')
+                        ->orderBy('sort_order')
+                        ->get()
+                        ->groupBy('group')
+                        ->map(function ($items, $group) {
+                            return [
+                                'group' => $group,
+                                'permissions' => $items->map(function ($permission) {
+                                    return [
+                                        'id'    => $permission->id,
+                                        'name'  => $permission->name,
+                                        'label' => $permission->label,
+                                        'slug'  => $permission->slug,
+                                    ];
+                                })->values(),
+                            ];
+                        })->values();
+
+                    $storeIds = DB::connection('central')
+                        ->table('user_permissions')
+                        ->where('user_id', $existingUser->id)
+                        ->distinct()
+                        ->pluck('store_id');
+
+                    $allStores = Store::whereIn('id', $storeIds)->get();
+
+                    $token = $existingUser->createToken('auth_token')
+                        ->plainTextToken;
+
+                    $expireAt = Carbon::now()
+                        ->addDays(1)
+                        ->format('Y-m-d H:i:s');
+
+                    return response()->json([
+                        'status'      => true,
+                        'message'     => 'Existing user added to store with permissions. Store access email sent.',
+                        'token'       => $token,
+                        'expireAt'    => $expireAt,
+                        'user'        => new UserResource($existingUser),
+                        'store'       => Store::find($registryStoreId),
+                        'stores'      => $allStores,
+                        'permissions' => $userPermissions,
+                        'isOwner'     => false,
+                    ], 201);
+                }
+
+                $user = User::create([
+                    'name'          => trim($request->firstName . ' ' . $request->lastName),
+                    'email'         => $request->email,
+                    'password'      => bcrypt(Str::random(16)),
+                    'userRole'      => $userRole,
+                    'phone_number'  => $request->phoneNumber,
+                    'store_name'    => $request->storeName,
+                    'business_size' => $request->businessSize,
+                    'region'        => $request->region,
+                    'store_id'      => $registryStoreId,
+                    'customer_id'   => null,
+                ]);
+
+                $inserts = [];
+
+                foreach ($request->permissions as $permissionId) {
+                    $inserts[] = [
+                        'user_id'       => $user->id,
+                        'permission_id' => $permissionId,
+                        'store_id'      => $registryStoreId,
+                        'created_at'    => now(),
+                        'updated_at'    => now(),
+                    ];
+                }
+
+                DB::connection('central')
+                    ->table('user_permissions')
+                    ->insert($inserts);
+
+                DB::commit();
+
+                try {
+                    $resetToken = app('auth.password.broker')->createToken($user);
+
+                    $resetLink =
+                        'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
+                        . $resetToken
+                        . '&email=' . urlencode($user->email);
+
+                    Mail::to($user->email)->send(
+                        new StoreAccessMail(
+                            $request->firstName,
+                            $user->email,
+                            $resetLink,
+                            $registryStoreId
+                        )
+                    );
+                } catch (\Throwable $mailError) {
+                    Log::error('STAFF STORE ACCESS EMAIL FAILED', [
+                        'error' => $mailError->getMessage(),
+                        'email' => $user->email,
+                    ]);
+                }
+
+                $userPermissions = Permission::whereIn(
+                    'id',
+                    $request->permissions
+                )
+                    ->orderBy('group')
+                    ->orderBy('sort_order')
+                    ->get()
+                    ->groupBy('group')
+                    ->map(function ($items, $group) {
+                        return [
+                            'group' => $group,
+                            'permissions' => $items->map(function ($permission) {
+                                return [
+                                    'id'    => $permission->id,
+                                    'name'  => $permission->name,
+                                    'label' => $permission->label,
+                                    'slug'  => $permission->slug,
+                                ];
+                            })->values(),
+                        ];
+                    })->values();
+
+                $token = $user->createToken('auth_token')->plainTextToken;
                 $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
 
                 return response()->json([
@@ -463,23 +1070,28 @@ class AuthController extends Controller
                     'token'       => $token,
                     'expireAt'    => $expireAt,
                     'user'        => new UserResource($user),
-                    'store'       => Store::find($storeId),
-                    'stores'      => [Store::find($storeId)],
+                    'store'       => Store::find($registryStoreId),
+                    'stores'      => [Store::find($registryStoreId)],
                     'permissions' => $userPermissions,
                     'isOwner'     => false,
                 ], 201);
             }
 
-            // ===================== CUSTOMER REGISTRATION =====================
-            $storeId = current_store_id();
+            /*
+            |--------------------------------------------------------------------------
+            | 5. Customer registration (tenant database)
+            |--------------------------------------------------------------------------
+            */
 
-            $existingGuestCustomer = Customer::where('store_id', $storeId)
+            DB::connection('tenant')->beginTransaction();
+
+            $existingGuestCustomer = Customer::where('store_id', $legacyStoreId)
                 ->where('email', $request->email)
                 ->where('user_type', 'guest')
                 ->first();
 
             $user = User::create([
-                'name'          => $request->firstName . ' ' . $request->lastName,
+                'name'          => trim($request->firstName . ' ' . $request->lastName),
                 'email'         => $request->email,
                 'password'      => bcrypt($request->password),
                 'userRole'      => 2,
@@ -487,7 +1099,7 @@ class AuthController extends Controller
                 'store_name'    => $request->storeName,
                 'business_size' => $request->businessSize,
                 'region'        => $request->region,
-                'store_id'      => $storeId,
+                'store_id'      => $legacyStoreId,
             ]);
 
             if ($existingGuestCustomer) {
@@ -507,7 +1119,7 @@ class AuthController extends Controller
 
                 $customer = $existingGuestCustomer;
 
-                Order::where('store_id', $storeId)
+                Order::where('store_id', $legacyStoreId)
                     ->where('customer_id', $customer->id)
                     ->where('user_type', 'guest')
                     ->update([
@@ -516,19 +1128,19 @@ class AuthController extends Controller
                     ]);
             } else {
                 $customer = Customer::create([
-                    'store_id'        => $storeId,
-                    'first_name'      => $request->firstName,
-                    'last_name'       => $request->lastName,
-                    'email'           => $request->email,
-                    'phone'           => $request->phoneNumber,
-                    'company_name'    => $request->companyName,
-                    'address'         => $request->addressLine1,
-                    'address_line_2'  => $request->addressLine2,
-                    'city'            => $request->suburb,
-                    'country'         => $request->country,
-                    'state'           => $request->state,
-                    'zip'             => $request->zip,
-                    'store_credit'    => 0,
+                    'store_id'              => $legacyStoreId,
+                    'first_name'            => $request->firstName,
+                    'last_name'             => $request->lastName,
+                    'email'                 => $request->email,
+                    'phone'                 => $request->phoneNumber,
+                    'company_name'          => $request->companyName,
+                    'address'               => $request->addressLine1,
+                    'address_line_2'        => $request->addressLine2,
+                    'city'                  => $request->suburb,
+                    'country'               => $request->country,
+                    'state'                 => $request->state,
+                    'zip'                   => $request->zip,
+                    'store_credit'          => 0,
                     'receive_review_emails' => false,
                     'force_password_reset'  => false,
                 ]);
@@ -537,16 +1149,24 @@ class AuthController extends Controller
             $user->customer_id = $customer->id;
             $user->save();
 
-            DB::commit();
+            DB::connection('tenant')->commit();
 
             try {
-                Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
+                Mail::to($user->email)->send(
+                    new UserRegistrationMail($user, $legacyStoreId)
+                );
 
-                $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
-                Mail::to($adminEmail)->send(new UserRegistrationMail($user, $storeId));
-            } catch (\Exception $mailError) {
+                $adminEmail = env(
+                    'MAIL_FROM_SB_ADMIN',
+                    'hkinza575@gmail.com'
+                );
+
+                Mail::to($adminEmail)->send(
+                    new UserRegistrationMail($user, $legacyStoreId)
+                );
+            } catch (\Throwable $mailError) {
                 Log::error('REGISTRATION EMAIL FAILED', [
-                    'error' => $mailError->getMessage(),
+                    'error'      => $mailError->getMessage(),
                     'user_email' => $user->email,
                 ]);
             }
@@ -559,15 +1179,26 @@ class AuthController extends Controller
                 'message'     => 'Customer registered successfully',
                 'token'       => $token,
                 'expireAt'    => $expireAt,
-                'store'       => Store::find($storeId),
+                'store'       => Store::find($registryStoreId),
                 'user'        => new UserResource($user),
                 'customer'    => new CustomerResource($customer),
                 'permissions' => null,
                 'isOwner'     => false,
             ], 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Registration failed: ' . $e->getMessage() . ' | Line: ' . $e->getLine());
+
+        } catch (\Throwable $e) {
+            if (DB::connection('tenant')->transactionLevel() > 0) {
+                DB::connection('tenant')->rollBack();
+            }
+
+            if (DB::connection('central')->transactionLevel() > 0) {
+                DB::connection('central')->rollBack();
+            }
+
+            Log::error('Registration failed', [
+                'error' => $e->getMessage(),
+                'line'  => $e->getLine(),
+            ]);
 
             return response()->json([
                 'status'  => false,
@@ -576,6 +1207,541 @@ class AuthController extends Controller
             ], 500);
         }
     }
+
+    // public function register(Request $request)
+    // {
+    //     try {
+    //         $storeId = current_store_id();
+
+    //         // Fallback headers
+    //         if (!$storeId) {
+    //             $storeId = $request->header('storeId')
+    //                 ?: $request->header('Store-Id')
+    //                 ?: $request->header('X-Store-Id');
+    //         }
+    //         if ($storeId) {
+    //             $storeId = (int) $storeId;
+    //         }
+
+    //         $isOwnerRegistration = $request->userRole == 1 && !$storeId;
+    //         $isSubUser           = $request->userRole == 1 && $storeId;
+    //         $isStaffUser         = $request->userRole >= 3 && $storeId; // Sales Staff, Manager, etc.
+
+    //         // ---------- Dynamic Email Rules ----------
+    //         $emailRules = ['required', 'email'];
+
+    //         if (!$isOwnerRegistration) {
+    //             $emailRules[] = Rule::unique('users', 'email')->where(function ($query) use ($storeId) {
+    //                 return $query->where('store_id', $storeId);
+    //             });
+    //         }
+
+    //         $validator = Validator::make($request->all(), [
+    //             'firstName'     => 'required|string|max:100',
+    //             'lastName'      => 'nullable|string|max:100',
+    //             'email'         => $emailRules,
+    //             'phoneNumber'   => 'nullable|string|max:20',
+    //             'password'      => ($isSubUser || $isStaffUser) ? 'nullable|string|min:6' : 'required|string|min:6',
+    //             'companyName'   => 'nullable|string|max:255',
+    //             'addressLine1'  => 'nullable|string|max:255',
+    //             'addressLine2'  => 'nullable|string|max:255',
+    //             'suburb'        => 'nullable|string|max:255',
+    //             'country'       => 'nullable|string|max:100',
+    //             'state'         => 'nullable|string|max:100',
+    //             'zip'           => 'nullable|string|max:20',
+    //             'storeName'     => 'nullable|string|max:255',
+    //             'businessSize'  => 'nullable|string|max:100',
+    //             'region'        => 'nullable|string|max:100',
+    //             'userRole'      => 'required|integer|exists:roles,user_role_id',
+    //             'permissions'   => ($isSubUser || $isStaffUser) ? 'required|array|min:1' : 'nullable',
+    //             'permissions.*' => 'exists:permissions,id',
+    //             'base_url'      => 'nullable|string|max:255',
+    //         ]);
+
+    //         if ($validator->fails()) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Validation errors',
+    //                 'errors'  => $validator->errors()
+    //             ], 422);
+    //         }
+
+    //         DB::beginTransaction();
+
+    //         // ===================== OWNER REGISTRATION =====================
+    //         if ($isOwnerRegistration) {
+
+    //             $existingUser = User::where('email', $request->email)->first();
+
+    //             // Additional Store for Existing Owner
+    //             if ($existingUser) {
+
+    //                 if ($existingUser->userRole != 1) {
+    //                     return response()->json([
+    //                         'status'  => false,
+    //                         'message' => 'This email is already registered as a customer.',
+    //                     ], 422);
+    //                 }
+
+    //                 if (!Hash::check($request->password, $existingUser->password)) {
+    //                     return response()->json([
+    //                         'status'  => false,
+    //                         'message' => 'Invalid password. For additional stores use the original registration password.',
+    //                     ], 401);
+    //                 }
+
+    //                 $store = Store::create([
+    //                     'name'     => $request->storeName,
+    //                     'user_id'  => $existingUser->id,
+    //                     'base_url' => $request->base_url,
+    //                 ]);
+
+    //                 $registryStore = app(StoreRegistryService::class)
+    //                     ->registerPendingStore($store, (int) $existingUser->id);
+
+    //                 $registryStore = app(TenantProvisioningService::class)
+    //                     ->provisionDatabase((int) $registryStore->id);
+
+    //                 // Assign ALL permissions
+    //                 $allPermissions = Permission::all();
+    //                 $inserts = [];
+    //                 foreach ($allPermissions as $perm) {
+    //                     $inserts[] = [
+    //                         'user_id'       => $existingUser->id,
+    //                         'permission_id' => $perm->id,
+    //                         'store_id'      => $store->id,
+    //                         'created_at'    => now(),
+    //                         'updated_at'    => now(),
+    //                     ];
+    //                 }
+    //                 DB::table('user_permissions')->insert($inserts);
+
+    //                 DB::commit();
+
+    //                 $userPermissions = Permission::orderBy('group')
+    //                     ->orderBy('sort_order')
+    //                     ->get()
+    //                     ->groupBy('group')
+    //                     ->map(function ($items, $group) {
+    //                         return [
+    //                             'group' => $group,
+    //                             'permissions' => $items->map(function ($p) {
+    //                                 return [
+    //                                     'id'    => $p->id,
+    //                                     'name'  => $p->name,
+    //                                     'label' => $p->label,
+    //                                     'slug'  => $p->slug,
+    //                                 ];
+    //                             })->values(),
+    //                         ];
+    //                     })->values();
+
+    //                 try {
+    //                     Mail::to($existingUser->email)->send(new UserRegistrationMail($existingUser, $store->id));
+    //                     $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
+    //                     Mail::to($adminEmail)->send(new UserRegistrationMail($existingUser, $store->id));
+    //                 } catch (\Exception $mailError) {
+    //                     Log::error('REGISTRATION EMAIL FAILED', [
+    //                         'error'      => $mailError->getMessage(),
+    //                         'user_email' => $existingUser->email,
+    //                     ]);
+    //                 }
+
+    //                 $token    = $existingUser->createToken('auth_token')->plainTextToken;
+    //                 $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+    //                 return response()->json([
+    //                     'status'      => true,
+    //                     'message'     => 'New store created successfully for existing owner',
+    //                     'token'       => $token,
+    //                     'expireAt'    => $expireAt,
+    //                     'user'        => new UserResource($existingUser),
+    //                     'store'       => $store,
+    //                     'permissions' => $userPermissions,
+    //                     'isOwner'     => true,
+    //                     'store_hash' => $registryStore->store_hash,
+    //                     'provisioning_status' => $registryStore->provisioning_status,
+    //                 ], 201);
+    //             }
+
+    //             // First Time Owner Registration
+    //             $user = User::create([
+    //                 'name'          => $request->firstName . ' ' . $request->lastName,
+    //                 'email'         => $request->email,
+    //                 'password'      => bcrypt($request->password),
+    //                 'userRole'      => 1,
+    //                 'phone_number'  => $request->phoneNumber,
+    //                 'store_name'    => $request->storeName,
+    //                 'base_url'      => $request->base_url,
+    //                 'business_size' => $request->businessSize,
+    //                 'region'        => $request->region,
+    //                 'store_id'      => null,
+    //                 'customer_id'   => null,
+    //             ]);
+
+    //             $store = Store::create([
+    //                 'name'     => $request->storeName,
+    //                 'user_id'  => $user->id,
+    //                 'base_url' => $request->base_url,
+    //             ]);
+
+    //             $registryStore = app(StoreRegistryService::class)
+    //                 ->registerPendingStore($store, (int) $user->id);
+
+    //             $registryStore = app(TenantProvisioningService::class)
+    //                 ->provisionDatabase((int) $registryStore->id);
+
+    //             $user->store_id = $store->id;
+    //             $user->save();
+
+    //             // Assign ALL permissions
+    //             $allPermissions = Permission::all();
+    //             $inserts = [];
+    //             foreach ($allPermissions as $perm) {
+    //                 $inserts[] = [
+    //                     'user_id'       => $user->id,
+    //                     'permission_id' => $perm->id,
+    //                     'store_id'      => $store->id,
+    //                     'created_at'    => now(),
+    //                     'updated_at'    => now(),
+    //                 ];
+    //             }
+    //             DB::table('user_permissions')->insert($inserts);
+
+    //             DB::commit();
+
+    //             $userPermissions = Permission::orderBy('group')
+    //                 ->orderBy('sort_order')
+    //                 ->get()
+    //                 ->groupBy('group')
+    //                 ->map(function ($items, $group) {
+    //                     return [
+    //                         'group' => $group,
+    //                         'permissions' => $items->map(function ($p) {
+    //                             return [
+    //                                 'id'    => $p->id,
+    //                                 'name'  => $p->name,
+    //                                 'label' => $p->label,
+    //                                 'slug'  => $p->slug,
+    //                             ];
+    //                         })->values(),
+    //                     ];
+    //                 })->values();
+
+    //             try {
+    //                 Mail::to($user->email)->send(new UserRegistrationMail($user, $store->id));
+    //                 $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
+    //                 Mail::to($adminEmail)->send(new UserRegistrationMail($user, $store->id));
+    //             } catch (\Exception $mailError) {
+    //                 Log::error('REGISTRATION EMAIL FAILED', [
+    //                     'error'      => $mailError->getMessage(),
+    //                     'user_email' => $user->email,
+    //                 ]);
+    //             }
+
+    //             $token    = $user->createToken('auth_token')->plainTextToken;
+    //             $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+    //             return response()->json([
+    //                 'status'      => true,
+    //                 'message'     => 'Store owner registered successfully',
+    //                 'token'       => $token,
+    //                 'expireAt'    => $expireAt,
+    //                 'user'        => new UserResource($user),
+    //                 'store'       => $store,
+    //                 'permissions' => $userPermissions,
+    //                 'isOwner'     => true,
+    //                 'store_hash' => $registryStore->store_hash,
+    //                 'provisioning_status' => $registryStore->provisioning_status,
+    //             ], 201);
+    //         }
+
+    //         // ===================== SUB-USER + STAFF REGISTRATION =====================
+    //         if ($isSubUser || $isStaffUser) {
+
+    //             $existingUser = User::where('email', $request->email)
+    //                 ->where('userRole', '!=', 2)
+    //                 ->first();
+
+    //             if ($existingUser) {
+    //                 $alreadyInStore = DB::table('user_permissions')
+    //                     ->where('user_id', $existingUser->id)
+    //                     ->where('store_id', $storeId)
+    //                     ->exists();
+
+    //                 if ($alreadyInStore) {
+    //                     return response()->json([
+    //                         'status'  => false,
+    //                         'message' => 'This user already has access to this store.',
+    //                     ], 409);
+    //                 }
+
+    //                 $inserts = [];
+    //                 foreach ($request->permissions as $permId) {
+    //                     $inserts[] = [
+    //                         'user_id'       => $existingUser->id,
+    //                         'permission_id' => $permId,
+    //                         'store_id'      => $storeId,
+    //                         'created_at'    => now(),
+    //                         'updated_at'    => now(),
+    //                     ];
+    //                 }
+    //                 DB::table('user_permissions')->insert($inserts);
+
+    //                 DB::commit();
+
+    //                 try {
+    //                     $token = app('auth.password.broker')->createToken($existingUser);
+
+    //                     $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token=' . $token .
+    //                         '&email=' . urlencode($existingUser->email);
+
+    //                     Mail::to($existingUser->email)->send(
+    //                         new StoreAccessMail(
+    //                             $existingUser->name,
+    //                             $existingUser->email,
+    //                             $resetLink,
+    //                             $storeId
+    //                         )
+    //                     );
+    //                 } catch (\Exception $mailError) {
+    //                     Log::error('STAFF STORE ACCESS EMAIL FAILED', [
+    //                         'error' => $mailError->getMessage(),
+    //                         'email' => $existingUser->email,
+    //                     ]);
+    //                 }
+
+    //                 $userPermissions = Permission::whereIn('id', $request->permissions)
+    //                     ->orderBy('group')
+    //                     ->orderBy('sort_order')
+    //                     ->get()
+    //                     ->groupBy('group')
+    //                     ->map(function ($items, $group) {
+    //                         return [
+    //                             'group' => $group,
+    //                             'permissions' => $items->map(function ($p) {
+    //                                 return [
+    //                                     'id'    => $p->id,
+    //                                     'name'  => $p->name,
+    //                                     'label' => $p->label,
+    //                                     'slug'  => $p->slug,
+    //                                 ];
+    //                             })->values(),
+    //                         ];
+    //                     })->values();
+
+    //                 $storeIds = DB::table('user_permissions')
+    //                     ->where('user_id', $existingUser->id)
+    //                     ->distinct()
+    //                     ->pluck('store_id');
+    //                 $allStores = Store::whereIn('id', $storeIds)->get();
+
+    //                 $token = $existingUser->createToken('auth_token')->plainTextToken;
+    //                 $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+    //                 return response()->json([
+    //                     'status'      => true,
+    //                     'message'     => 'Existing user added to store with permissions. Store access email sent.',
+    //                     'token'       => $token,
+    //                     'expireAt'    => $expireAt,
+    //                     'user'        => new UserResource($existingUser),
+    //                     'store'       => Store::find($storeId),
+    //                     'stores'      => $allStores,
+    //                     'permissions' => $userPermissions,
+    //                     'isOwner'     => false,
+    //                 ], 201);
+    //             }
+
+    //             // New Staff / Sub-user
+    //             $user = User::create([
+    //                 'name'          => $request->firstName . ' ' . $request->lastName,
+    //                 'email'         => $request->email,
+    //                 'password'      => bcrypt(Str::random(16)),
+    //                 'userRole'      => $request->userRole,
+    //                 'phone_number'  => $request->phoneNumber,
+    //                 'store_name'    => $request->storeName,
+    //                 'business_size' => $request->businessSize,
+    //                 'region'        => $request->region,
+    //                 'store_id'      => $storeId,
+    //                 'customer_id'   => null,
+    //             ]);
+
+    //             $inserts = [];
+    //             foreach ($request->permissions as $permId) {
+    //                 $inserts[] = [
+    //                     'user_id'       => $user->id,
+    //                     'permission_id' => $permId,
+    //                     'store_id'      => $storeId,
+    //                     'created_at'    => now(),
+    //                     'updated_at'    => now(),
+    //                 ];
+    //             }
+    //             DB::table('user_permissions')->insert($inserts);
+
+    //             DB::commit();
+
+    //             try {
+    //                 $token = app('auth.password.broker')->createToken($user);
+
+    //                 $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token=' . $token .
+    //                     '&email=' . urlencode($user->email);
+
+    //                 Mail::to($user->email)->send(
+    //                     new StoreAccessMail(
+    //                         $request->firstName,
+    //                         $user->email,
+    //                         $resetLink,
+    //                         $storeId
+    //                     )
+    //                 );
+    //             } catch (\Exception $mailError) {
+    //                 Log::error('STAFF STORE ACCESS EMAIL FAILED', [
+    //                     'error' => $mailError->getMessage(),
+    //                     'email' => $user->email,
+    //                 ]);
+    //             }
+
+    //             $userPermissions = Permission::whereIn('id', $request->permissions)
+    //                 ->orderBy('group')
+    //                 ->orderBy('sort_order')
+    //                 ->get()
+    //                 ->groupBy('group')
+    //                 ->map(function ($items, $group) {
+    //                     return [
+    //                         'group' => $group,
+    //                         'permissions' => $items->map(function ($p) {
+    //                             return [
+    //                                 'id'    => $p->id,
+    //                                 'name'  => $p->name,
+    //                                 'label' => $p->label,
+    //                                 'slug'  => $p->slug,
+    //                             ];
+    //                         })->values(),
+    //                     ];
+    //                 })->values();
+
+    //             $token = $user->createToken('auth_token')->plainTextToken;
+    //             $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+    //             return response()->json([
+    //                 'status'      => true,
+    //                 'message'     => 'Staff user registered successfully. Store access email sent.',
+    //                 'token'       => $token,
+    //                 'expireAt'    => $expireAt,
+    //                 'user'        => new UserResource($user),
+    //                 'store'       => Store::find($storeId),
+    //                 'stores'      => [Store::find($storeId)],
+    //                 'permissions' => $userPermissions,
+    //                 'isOwner'     => false,
+    //             ], 201);
+    //         }
+
+    //         // ===================== CUSTOMER REGISTRATION =====================
+    //         $storeId = current_store_id();
+
+    //         $existingGuestCustomer = Customer::where('store_id', $storeId)
+    //             ->where('email', $request->email)
+    //             ->where('user_type', 'guest')
+    //             ->first();
+
+    //         $user = User::create([
+    //             'name'          => $request->firstName . ' ' . $request->lastName,
+    //             'email'         => $request->email,
+    //             'password'      => bcrypt($request->password),
+    //             'userRole'      => 2,
+    //             'phone_number'  => $request->phoneNumber,
+    //             'store_name'    => $request->storeName,
+    //             'business_size' => $request->businessSize,
+    //             'region'        => $request->region,
+    //             'store_id'      => $storeId,
+    //         ]);
+
+    //         if ($existingGuestCustomer) {
+    //             $existingGuestCustomer->update([
+    //                 'first_name'      => $request->firstName,
+    //                 'last_name'       => $request->lastName,
+    //                 'phone'           => $request->phoneNumber,
+    //                 'company_name'    => $request->companyName,
+    //                 'address'         => $request->addressLine1,
+    //                 'address_line_2'  => $request->addressLine2,
+    //                 'city'            => $request->suburb,
+    //                 'country'         => $request->country,
+    //                 'state'           => $request->state,
+    //                 'zip'             => $request->zip,
+    //                 'user_type'       => null,
+    //             ]);
+
+    //             $customer = $existingGuestCustomer;
+
+    //             Order::where('store_id', $storeId)
+    //                 ->where('customer_id', $customer->id)
+    //                 ->where('user_type', 'guest')
+    //                 ->update([
+    //                     'user_id'   => $user->id,
+    //                     'user_type' => null,
+    //                 ]);
+    //         } else {
+    //             $customer = Customer::create([
+    //                 'store_id'        => $storeId,
+    //                 'first_name'      => $request->firstName,
+    //                 'last_name'       => $request->lastName,
+    //                 'email'           => $request->email,
+    //                 'phone'           => $request->phoneNumber,
+    //                 'company_name'    => $request->companyName,
+    //                 'address'         => $request->addressLine1,
+    //                 'address_line_2'  => $request->addressLine2,
+    //                 'city'            => $request->suburb,
+    //                 'country'         => $request->country,
+    //                 'state'           => $request->state,
+    //                 'zip'             => $request->zip,
+    //                 'store_credit'    => 0,
+    //                 'receive_review_emails' => false,
+    //                 'force_password_reset'  => false,
+    //             ]);
+    //         }
+
+    //         $user->customer_id = $customer->id;
+    //         $user->save();
+
+    //         DB::commit();
+
+    //         try {
+    //             Mail::to($user->email)->send(new UserRegistrationMail($user, $storeId));
+
+    //             $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
+    //             Mail::to($adminEmail)->send(new UserRegistrationMail($user, $storeId));
+    //         } catch (\Exception $mailError) {
+    //             Log::error('REGISTRATION EMAIL FAILED', [
+    //                 'error' => $mailError->getMessage(),
+    //                 'user_email' => $user->email,
+    //             ]);
+    //         }
+
+    //         $token = $user->createToken('auth_token')->plainTextToken;
+    //         $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+    //         return response()->json([
+    //             'status'      => true,
+    //             'message'     => 'Customer registered successfully',
+    //             'token'       => $token,
+    //             'expireAt'    => $expireAt,
+    //             'store'       => Store::find($storeId),
+    //             'user'        => new UserResource($user),
+    //             'customer'    => new CustomerResource($customer),
+    //             'permissions' => null,
+    //             'isOwner'     => false,
+    //         ], 201);
+    //     } catch (\Exception $e) {
+    //         DB::rollBack();
+    //         Log::error('Registration failed: ' . $e->getMessage() . ' | Line: ' . $e->getLine());
+
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Something went wrong during registration.',
+    //             'error'   => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
 
 
     protected TwoFactorService $twoFactorService;

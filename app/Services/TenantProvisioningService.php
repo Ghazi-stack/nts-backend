@@ -6,13 +6,15 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
+use Database\Seeders\TenantRoleSeeder;
 
 class TenantProvisioningService
 {
     public function __construct(
         private TenantCredentialCrypt $crypt,
         private TenantSchemaInstaller $schemaInstaller,
-        private TenantDataMigrator $dataMigrator
+        private TenantDataMigrator $dataMigrator,
+        private TenantRoleSeeder $tenantRoleSeeder
     ) {}
 
     public function provisionDatabase(int $registryStoreId): object
@@ -152,6 +154,8 @@ class TenantProvisioningService
 
             // 2. Install the tenant schema in the correct database.
             $this->schemaInstaller->install($registryStoreId);
+
+            $this->tenantRoleSeeder->run();
 
             // Verify the schema installer did not change the target connection.
             DB::purge('tenant');
