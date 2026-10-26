@@ -84,9 +84,8 @@ class CurrencyController extends Controller
      */
     public function options()
     {
-        $options = Cache::remember('currency_options_country_only_v1', now()->addDays(7), function () {
+        $options = Cache::remember('currency_options_all_countries_v1', now()->addDays(7), function () {
             try {
-                // Countries API se currencies nikaalo
                 $response = Http::timeout(25)->get(
                     'https://countries.dev/countries?fields=name,alpha2Code,currencies'
                 );
@@ -96,11 +95,6 @@ class CurrencyController extends Controller
                 }
 
                 $countries = $response->json();
-
-                if (!is_array($countries)) {
-                    return [];
-                }
-
                 $currencies = [];
 
                 foreach ($countries as $country) {
