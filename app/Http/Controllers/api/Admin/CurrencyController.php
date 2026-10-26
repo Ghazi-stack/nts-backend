@@ -80,6 +80,24 @@ class CurrencyController extends Controller
     }
 
     /**
+     * GET /currencies/all
+     * Sab currencies ek list mein (default sabse upar)
+     */
+    public function allCurrencyWeb()
+    {
+        $storeId = $this->getStoreId();
+
+        $currencies = Currency::where('store_id', $storeId)
+            ->orderBy('is_default', 'desc')
+            ->orderBy('code')
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'data'   => $currencies->map(fn($c) => $this->formatCurrency($c))->values(),
+        ]);
+    }
+    /**
      * GET /currencies/{id}
      * Single currency by ID
      */
