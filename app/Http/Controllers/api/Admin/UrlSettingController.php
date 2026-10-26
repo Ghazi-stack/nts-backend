@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\BulkCreateProductRedirects;
 use Illuminate\Http\Request;
 use App\Models\UrlSetting;
 use App\Models\Redirect;
 use App\Models\ProductSeo;
 use App\Models\Product;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -164,7 +166,6 @@ class UrlSettingController extends Controller
             'createRedirects' => 'required|boolean',
         ]);
 
-        // Agar redirects nahi banane hain to kuch mat karo
         if (!$validated['createRedirects']) {
             return response()->json([
                 'status'  => true,
@@ -172,7 +173,6 @@ class UrlSettingController extends Controller
             ]);
         }
 
-        // Current product URL setting le lo
         $setting = UrlSetting::where('store_id', $storeId)
             ->where('entity_type', 'product')
             ->first();
@@ -184,52 +184,49 @@ class UrlSettingController extends Controller
             ], 400);
         }
 
-        $products = Product::where('store_id', $storeId)->get();
-        $created  = 0;
+        $total = Product::where('store_id', $storeId)->count();
 
-        foreach ($products as $product) {
-
-            // product_seo record le lo (old URL yahan se aayega)
-            $seo = ProductSeo::where('product_id', $product->id)
-                ->where('store_id', $storeId)
-                ->first();
-
-            if (!$seo || empty($seo->product_url)) {
-                continue;
-            }
-
-            $oldUrl = $seo->product_url; // yeh change nahi hoga
-
-            // Naya URL generate karo current setting ke hisaab se
-            $newUrl = $this->generateProductUrl($product, $setting);
-
-            // Agar same hai to skip
-            if (rtrim($oldUrl, '/') === rtrim($newUrl, '/')) {
-                continue;
-            }
-
-            // Sirf redirects table mein save karo
-            Redirect::updateOrCreate(
-                [
-                    'store_id' => $storeId,
-                    'old_url'  => $oldUrl,
-                ],
-                [
-                    'product_id'  => $product->id,
-                    'entity_type' => 'product',
-                    'new_url'     => $newUrl,
-                    'is_active'   => true,
-                ]
-            );
-
-            $created++;
+        if ($total === 0) {
+            return response()->json([
+                'status'  => true,
+                'message' => 'No products found.',
+                'created' => 0,
+            ]);
         }
 
+        $progressKey = 'url_redirect_' . Str::uuid();
+
+        Cache::put($progressKey, [
+            'current' => 0,
+            'total'   => $total,
+            'created' => 0,
+            'status'  => 'queued',
+        ], 7200);
+
+        dispatch(new BulkCreateProductRedirects(
+            $storeId,
+            $progressKey,
+            $setting->toArray()
+        ))->onQueue('imports');
+
         return response()->json([
-            'status'  => true,
-            'message' => "Redirects created successfully: {$created}",
-            'created' => $created,
+            'status'       => true,
+            'message'      => 'Redirect creation started.',
+            'progress_key' => $progressKey,
+            'total'        => $total,
         ]);
+    }
+
+    public function bulkUpdateProgress($progressKey)
+    {
+        $progress = Cache::get($progressKey, [
+            'current' => 0,
+            'total'   => 0,
+            'created' => 0,
+            'status'  => 'unknown',
+        ]);
+
+        return response()->json($progress);
     }
 
     /**

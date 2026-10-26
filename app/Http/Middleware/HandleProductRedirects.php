@@ -5,13 +5,17 @@ namespace App\Http\Middleware;
 use Closure;
 use App\Models\ProductSeo;
 use App\Models\Redirect;
-use Illuminate\Support\Facades\DB;
 
 class HandleProductRedirects
 {
     public function handle($request, Closure $next)
     {
-        // Tenant resolution must happen before querying tenant models.
+        // API routes skip karo
+        if ($request->is('api/*')) {
+            return $next($request);
+        }
+
+        // Tenant resolution check
         $resolvedStore = $request->attributes->get('resolved_store');
         $tenantStore = $request->attributes->get('tenant_store');
 
@@ -19,7 +23,7 @@ class HandleProductRedirects
             return $next($request);
         }
 
-        // Ensure the tenant connection has a selected database.
+        // Database selected hai ya nahi
         $database = config('database.connections.tenant.database');
 
         if (!is_string($database) || $database === '') {
@@ -28,7 +32,7 @@ class HandleProductRedirects
 
         $path = '/' . trim($request->path(), '/');
 
-        // Normalize trailing slash.
+        // Trailing slash normalize
         if (!str_ends_with($path, '/') && !str_contains($path, '.')) {
             $path .= '/';
         }
@@ -41,6 +45,7 @@ class HandleProductRedirects
 
         $clean = rtrim($path, '/');
 
+        // product_seo check
         $seo = ProductSeo::where('store_id', $storeId)
             ->where(function ($query) use ($path, $clean) {
                 $query->where('product_url', $path)
@@ -50,6 +55,7 @@ class HandleProductRedirects
             ->first();
 
         if ($seo) {
+            // redirects table check
             $redirect = Redirect::where('store_id', $storeId)
                 ->where('old_url', $seo->product_url)
                 ->where('is_active', true)
