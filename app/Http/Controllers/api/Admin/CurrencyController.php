@@ -52,27 +52,37 @@ class CurrencyController extends Controller
     }
 
     /**
-     * Currency Codes Dropdown (Frankfurter API se)
-     * Format: AED - United Arab Emirates dirham
+     * Currency Codes Dropdown (200+ currencies)
+     * API: fawazahmed0/currency-api
      */
     public function options()
     {
-        $options = Cache::remember('currency_options_list', now()->addDays(7), function () {
-            $response = Http::timeout(10)->get('https://api.frankfurter.dev/v1/currencies');
+        $options = Cache::remember('currency_options_full_v3', now()->addDays(7), function () {
+            try {
+                $response = Http::timeout(20)->get(
+                    'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies.json'
+                );
 
-            if (!$response->successful()) {
+                if (!$response->successful()) {
+                    return [];
+                }
+
+                $currencies = $response->json();
+
+                return collect($currencies)
+                    ->filter(fn($name, $code) => !empty($name) && strlen($code) === 3) // sirf 3 letter codes
+                    ->map(fn($name, $code) => [
+                        'code'  => strtoupper($code),
+                        'name'  => $name,
+                        'label' => strtoupper($code) . ' - ' . $name,
+                    ])
+                    ->sortBy('code')
+                    ->values()
+                    ->toArray();
+            } catch (\Exception $e) {
+                \Log::error('Currency API failed: ' . $e->getMessage());
                 return [];
             }
-
-            return collect($response->json())
-                ->map(fn($name, $code) => [
-                    'code'  => $code,
-                    'name'  => $name,
-                    'label' => $code . ' - ' . $name,
-                ])
-                ->sortBy('code')
-                ->values()
-                ->toArray();
         });
 
         return response()->json([
@@ -82,13 +92,16 @@ class CurrencyController extends Controller
     }
 
     /**
-     * Countries Dropdown (RestCountries API se)
+     * Countries Dropdown (250+ countries)
+     * API: countries.dev
      */
     public function countries()
     {
-        $countries = Cache::remember('countries_list', now()->addDays(30), function () {
+        $countries = Cache::remember('countries_list_v3', now()->addDays(30), function () {
             try {
-                $response = Http::timeout(20)->get('https://restcountries.com/v3.1/all?fields=cca2,name');
+                $response = Http::timeout(20)->get(
+                    'https://countries.dev/countries?fields=name,alpha2Code'
+                );
 
                 if (!$response->successful()) {
                     return [];
@@ -101,15 +114,16 @@ class CurrencyController extends Controller
                 }
 
                 return collect($data)
-                    ->filter(fn($country) => isset($country['cca2']) && isset($country['name']['common']))
-                    ->map(fn($country) => [
-                        'code' => $country['cca2'],
-                        'name' => $country['name']['common'],
+                    ->filter(fn($c) => isset($c['alpha2Code']) && isset($c['name']))
+                    ->map(fn($c) => [
+                        'code' => $c['alpha2Code'],
+                        'name' => $c['name'],
                     ])
                     ->sortBy('name')
                     ->values()
                     ->toArray();
             } catch (\Exception $e) {
+                \Log::error('Countries API failed: ' . $e->getMessage());
                 return [];
             }
         });
