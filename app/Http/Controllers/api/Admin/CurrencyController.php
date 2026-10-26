@@ -87,20 +87,31 @@ class CurrencyController extends Controller
     public function countries()
     {
         $countries = Cache::remember('countries_list', now()->addDays(30), function () {
-            $response = Http::timeout(15)->get('https://restcountries.com/v3.1/all?fields=cca2,name');
+            try {
+                $response = Http::timeout(20)->get('https://restcountries.com/v3.1/all?fields=cca2,name');
 
-            if (!$response->successful()) {
+                if (!$response->successful()) {
+                    return [];
+                }
+
+                $data = $response->json();
+
+                if (!is_array($data)) {
+                    return [];
+                }
+
+                return collect($data)
+                    ->filter(fn($country) => isset($country['cca2']) && isset($country['name']['common']))
+                    ->map(fn($country) => [
+                        'code' => $country['cca2'],
+                        'name' => $country['name']['common'],
+                    ])
+                    ->sortBy('name')
+                    ->values()
+                    ->toArray();
+            } catch (\Exception $e) {
                 return [];
             }
-
-            return collect($response->json())
-                ->map(fn($country) => [
-                    'code' => $country['cca2'],
-                    'name' => $country['name']['common'],
-                ])
-                ->sortBy('name')
-                ->values()
-                ->toArray();
         });
 
         return response()->json([
