@@ -154,19 +154,32 @@ class CurrencyController extends Controller
             'auto_update'           => 'boolean',
             'default_for_countries' => 'nullable|array',
             'enabled'               => 'boolean',
+            'is_default'            => 'boolean', // optional
         ]);
 
+        $code = strtoupper($validated['code']);
+
         // Duplicate check (same store)
-        if (Currency::where('store_id', $storeId)->where('code', $validated['code'])->exists()) {
+        if (Currency::where('store_id', $storeId)->where('code', $code)->exists()) {
             return response()->json([
                 'status'  => false,
                 'message' => 'This currency is already added for this store.',
             ], 422);
         }
 
+        $isDefault = $request->boolean('is_default', false);
+
+        // Agar is_default true hai to pehle wali default hata do
+        if ($isDefault) {
+            Currency::where('store_id', $storeId)
+                ->where('is_default', true)
+                ->update(['is_default' => false]);
+        }
+
         $currency = Currency::create(array_merge($validated, [
             'store_id'   => $storeId,
-            'is_default' => false,
+            'code'       => $code,
+            'is_default' => $isDefault,
         ]));
 
         return response()->json([
