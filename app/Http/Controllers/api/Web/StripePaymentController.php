@@ -40,7 +40,7 @@ class StripePaymentController extends Controller
         //     $product = Product::find($item['product_id']);
         //     $totalAmount += $product->price * $item['quantity'];
         // }
-        $currency = 'usd';
+        $currency = $request->input('currency', 'usd'); // default usd
 
         // 2️⃣ Generate order number
         $orderNumber = 'ORD-' . strtoupper(Str::random(8));
