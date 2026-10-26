@@ -588,6 +588,7 @@ Route::prefix('dashboard')->middleware([
 
             // Bulk Update + Redirects
             Route::post('/product/bulk-update', 'bulkUpdateProductUrls');
+            Route::get('/product/bulk-update/progress/{progressKey}', 'bulkUpdateProgress');
             Route::post('/category/bulk-update', 'bulkUpdateCategoryUrls');
             Route::post('/webpage/bulk-update', 'bulkUpdateWebpageUrls');
         });
