@@ -961,6 +961,8 @@ Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class
 
     //globalSearch
     Route::get('/search', [SearchController::class, 'globalSearch']);
+    //get Currency
+    Route::get('/currencies', [CurrencyController::class, 'index']);
 
     // 💳 Stripe - User/Guest (token optional)
     Route::post('/stripe/pay', [StripePaymentController::class, 'pay']);
