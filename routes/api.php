@@ -25,6 +25,7 @@ use App\Http\Controllers\api\Admin\{
     LogoController,
     ScriptController,
     CouponCodeController,
+    CurrencyController,
     RealtimeController,
     StaffLogController,
     StoreSettingController,
@@ -593,6 +594,30 @@ Route::prefix('dashboard')->middleware([
             Route::post('/webpage/bulk-update', 'bulkUpdateWebpageUrls');
         });
 
+    Route::prefix('currencies')->middleware([
+        'store.hash',
+        'tenant.dashboard',
+        'permission:settings',
+    ])->group(function () {
+
+        // List
+        Route::get('/', [CurrencyController::class, 'index']);
+
+        // Dropdowns (API se data aayega)
+        Route::get('/options', [CurrencyController::class, 'options']);
+        Route::get('/countries', [CurrencyController::class, 'countries']);
+
+        // CRUD
+        Route::post('/', [CurrencyController::class, 'store']);
+        Route::put('/{currency}', [CurrencyController::class, 'update']);
+        Route::delete('/{currency}', [CurrencyController::class, 'destroy']);
+
+        // Actions
+        Route::post('/{currency}/set-default', [CurrencyController::class, 'setAsDefault']);
+
+        // Get current rate
+        Route::get('/current-rate', [CurrencyController::class, 'getCurrentRate']);
+    });
 
 
     // Email Marketing
