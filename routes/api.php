@@ -593,6 +593,8 @@ Route::prefix('dashboard')->middleware([
             Route::post('/webpage/bulk-update', 'bulkUpdateWebpageUrls');
         });
 
+
+
     // Email Marketing
     Route::prefix('email-marketings')->middleware([
         'store.hash',
@@ -978,6 +980,36 @@ Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class
 
 //     Route::post('/clear-cache', [SitemapController::class, 'clearCache']);
 // });
+Route::get('/check-redirect', function (\Illuminate\Http\Request $request) {
+    $path = $request->query('path');
+    $storeId = $request->query('store_id');
+
+    if (!$path || !$storeId) {
+        return response()->json(['redirect' => null]);
+    }
+
+    $seo = \App\Models\ProductSeo::where('store_id', $storeId)
+        ->where(function ($q) use ($path) {
+            $clean = rtrim($path, '/');
+            $q->where('product_url', $path)
+                ->orWhere('product_url', $clean)
+                ->orWhere('product_url', $clean . '/');
+        })
+        ->first();
+
+    if ($seo) {
+        $redirect = \App\Models\Redirect::where('store_id', $storeId)
+            ->where('old_url', $seo->product_url)
+            ->where('is_active', true)
+            ->first();
+
+        if ($redirect && !empty($redirect->new_url) && $redirect->new_url !== $seo->product_url) {
+            return response()->json(['redirect' => $redirect->new_url]);
+        }
+    }
+
+    return response()->json(['redirect' => null]);
+});
 
 Route::prefix('sitemap')
     ->middleware(['store.hash', 'tenant.database'])

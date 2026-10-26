@@ -167,53 +167,38 @@ class UrlSettingController extends Controller
         ]);
 
         if (!$validated['createRedirects']) {
-            return response()->json([
-                'status'  => true,
-                'message' => 'Redirects creation skipped.'
-            ]);
+            return response()->json(['status' => true, 'message' => 'Redirects creation skipped.']);
         }
 
-        $setting = UrlSetting::where('store_id', $storeId)
-            ->where('entity_type', 'product')
-            ->first();
+        $setting = UrlSetting::where('store_id', $storeId)->where('entity_type', 'product')->first();
 
         if (!$setting) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Product URL setting not found.'
-            ], 400);
+            return response()->json(['status' => false, 'message' => 'Product URL setting not found.'], 400);
         }
 
         $total = Product::where('store_id', $storeId)->count();
 
         if ($total === 0) {
-            return response()->json([
-                'status'  => true,
-                'message' => 'No products found.',
-                'created' => 0,
-            ]);
+            return response()->json(['status' => true, 'message' => 'No products found.', 'created' => 0]);
         }
 
         $progressKey = 'url_redirect_' . Str::uuid();
 
         Cache::put($progressKey, [
             'current' => 0,
-            'total'   => $total,
+            'total' => $total,
             'created' => 0,
-            'status'  => 'queued',
+            'status' => 'queued',
         ], 7200);
 
-        dispatch(new BulkCreateProductRedirects(
-            $storeId,
-            $progressKey,
-            $setting->toArray()
-        ))->onQueue('imports');
+        dispatch(new BulkCreateProductRedirects($storeId, $progressKey, $setting->toArray()))
+            ->onQueue('imports');
 
         return response()->json([
-            'status'       => true,
-            'message'      => 'Redirect creation started.',
+            'status' => true,
+            'message' => 'Redirect creation started.',
             'progress_key' => $progressKey,
-            'total'        => $total,
+            'total' => $total,
         ]);
     }
 
@@ -221,9 +206,9 @@ class UrlSettingController extends Controller
     {
         $progress = Cache::get($progressKey, [
             'current' => 0,
-            'total'   => 0,
+            'total' => 0,
             'created' => 0,
-            'status'  => 'unknown',
+            'status' => 'unknown',
         ]);
 
         return response()->json($progress);

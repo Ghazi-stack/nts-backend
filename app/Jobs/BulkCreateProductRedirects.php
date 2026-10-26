@@ -50,7 +50,6 @@ class BulkCreateProductRedirects implements ShouldQueue
             ->chunkById(200, function ($products) use (&$created, &$processed, $total) {
 
                 foreach ($products as $product) {
-
                     $seo = ProductSeo::where('product_id', $product->id)
                         ->where('store_id', $this->storeId)
                         ->first();
@@ -69,10 +68,7 @@ class BulkCreateProductRedirects implements ShouldQueue
                     }
 
                     Redirect::updateOrCreate(
-                        [
-                            'store_id' => $this->storeId,
-                            'old_url'  => $oldUrl,
-                        ],
+                        ['store_id' => $this->storeId, 'old_url' => $oldUrl],
                         [
                             'product_id'  => $product->id,
                             'entity_type' => 'product',
@@ -107,7 +103,6 @@ class BulkCreateProductRedirects implements ShouldQueue
     {
         $format = $this->setting->format_type;
         $custom = $this->setting->custom_format;
-
         $titleSlug = Str::slug($product->name ?? '');
         $sku = $product->sku ?? '';
 
@@ -122,35 +117,20 @@ class BulkCreateProductRedirects implements ShouldQueue
         switch ($format) {
             case 'seo_optimized_short':
                 return '/' . $titleSlug . '/';
-
             case 'seo_optimized_long':
                 return '/products/' . $titleSlug . '.html';
-
             case 'seo_optimized_category':
                 return '/' . $categorySlug . '/' . $titleSlug . '/';
-
             case 'custom':
-                if (empty($custom)) {
-                    return '/' . $titleSlug . '/';
-                }
-
-                $url = $custom;
-                $url = str_replace('%title%', $titleSlug, $url);
-                $url = str_replace('%sku%', $sku, $url);
-                $url = str_replace('%id%', $product->id, $url);
-                $url = str_replace('%categoryname%', $categorySlug, $url);
-                $url = str_replace('%parent%', $categorySlug, $url);
-
-                if (!str_starts_with($url, '/')) {
-                    $url = '/' . $url;
-                }
-
-                if (!str_ends_with($url, '/') && !str_contains($url, '.')) {
-                    $url .= '/';
-                }
-
+                if (empty($custom)) return '/' . $titleSlug . '/';
+                $url = str_replace(
+                    ['%title%', '%sku%', '%id%', '%categoryname%', '%parent%'],
+                    [$titleSlug, $sku, $product->id, $categorySlug, $categorySlug],
+                    $custom
+                );
+                if (!str_starts_with($url, '/')) $url = '/' . $url;
+                if (!str_ends_with($url, '/') && !str_contains($url, '.')) $url .= '/';
                 return $url;
-
             default:
                 return '/' . $titleSlug . '/';
         }
