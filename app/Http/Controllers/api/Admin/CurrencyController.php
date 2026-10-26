@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Cache;
 class CurrencyController extends Controller
 {
     /**
-     * Store ID header se lo (aapke Category controller jaisa)
+     * Store ID header se lo
      */
     private function getStoreId()
     {
@@ -53,7 +53,6 @@ class CurrencyController extends Controller
 
     /**
      * Currency Codes Dropdown (200+ currencies)
-     * API: fawazahmed0/currency-api
      */
     public function options()
     {
@@ -70,7 +69,7 @@ class CurrencyController extends Controller
                 $currencies = $response->json();
 
                 return collect($currencies)
-                    ->filter(fn($name, $code) => !empty($name) && strlen($code) === 3) // sirf 3 letter codes
+                    ->filter(fn($name, $code) => !empty($name) && strlen($code) === 3)
                     ->map(fn($name, $code) => [
                         'code'  => strtoupper($code),
                         'name'  => $name,
@@ -93,7 +92,6 @@ class CurrencyController extends Controller
 
     /**
      * Countries Dropdown (250+ countries)
-     * API: countries.dev
      */
     public function countries()
     {
@@ -142,19 +140,19 @@ class CurrencyController extends Controller
         $storeId = $this->getStoreId();
 
         $validated = $request->validate([
-            'code'                  => 'required|string|size:3',
-            'name'                  => 'required|string|max:100',
-            'symbol'                => 'nullable|string|max:10',
-            'symbol_location'       => 'in:left,right',
-            'decimal_token'         => 'nullable|string|size:1',
-            'thousands_token'       => 'nullable|string|size:1',
-            'decimal_places'        => 'integer|min:0|max:4',
-            'exchange_rate'         => 'nullable|numeric|min:0',
-            'is_transactional'      => 'boolean',
-            'auto_update'           => 'boolean',
-            'default_for_countries' => 'nullable|array',
-            'enabled'               => 'boolean',
-            'is_default'            => 'boolean', // optional
+            'code'                => 'required|string|size:3',
+            'name'                => 'required|string|max:100',
+            'symbol'              => 'nullable|string|max:10',
+            'symbolLocation'      => 'in:left,right',
+            'decimalToken'        => 'nullable|string|size:1',
+            'thousandsToken'      => 'nullable|string|size:1',
+            'decimalPlaces'       => 'integer|min:0|max:4',
+            'exchangeRate'        => 'nullable|numeric|min:0',
+            'isTransactional'     => 'boolean',
+            'autoUpdate'          => 'boolean',
+            'defaultForCountries' => 'nullable|array',
+            'enabled'             => 'boolean',
+            'isDefault'           => 'boolean',
         ]);
 
         $code = strtoupper($validated['code']);
@@ -167,20 +165,31 @@ class CurrencyController extends Controller
             ], 422);
         }
 
-        $isDefault = $request->boolean('is_default', false);
+        $isDefault = $request->boolean('isDefault', false);
 
-        // Agar is_default true hai to pehle wali default hata do
+        // Agar isDefault true hai to pehle wali hata do
         if ($isDefault) {
             Currency::where('store_id', $storeId)
                 ->where('is_default', true)
                 ->update(['is_default' => false]);
         }
 
-        $currency = Currency::create(array_merge($validated, [
-            'store_id'   => $storeId,
-            'code'       => $code,
-            'is_default' => $isDefault,
-        ]));
+        $currency = Currency::create([
+            'store_id'              => $storeId,
+            'code'                  => $code,
+            'name'                  => $validated['name'],
+            'symbol'                => $validated['symbol'] ?? null,
+            'symbol_location'       => $validated['symbolLocation'] ?? 'left',
+            'decimal_token'         => $validated['decimalToken'] ?? '.',
+            'thousands_token'       => $validated['thousandsToken'] ?? ',',
+            'decimal_places'        => $validated['decimalPlaces'] ?? 2,
+            'exchange_rate'         => $validated['exchangeRate'] ?? 1,
+            'is_transactional'      => $request->boolean('isTransactional', false),
+            'auto_update'           => $request->boolean('autoUpdate', true),
+            'default_for_countries' => $validated['defaultForCountries'] ?? null,
+            'enabled'               => $request->boolean('enabled', true),
+            'is_default'            => $isDefault,
+        ]);
 
         return response()->json([
             'status'  => true,
@@ -212,18 +221,19 @@ class CurrencyController extends Controller
         return response()->json([
             'status' => true,
             'data'   => [
-                'code'            => $default->code,
-                'name'            => $default->name,
-                'symbol'          => $default->symbol,
-                'symbol_location' => $default->symbol_location,
-                'decimal_token'   => $default->decimal_token,
-                'thousands_token' => $default->thousands_token,
-                'decimal_places'  => $default->decimal_places,
-                'exchange_rate'   => $default->exchange_rate,
-                'is_default'      => $default->is_default,
+                'code'           => $default->code,
+                'name'           => $default->name,
+                'symbol'         => $default->symbol,
+                'symbolLocation' => $default->symbol_location,
+                'decimalToken'   => $default->decimal_token,
+                'thousandsToken' => $default->thousands_token,
+                'decimalPlaces'  => $default->decimal_places,
+                'exchangeRate'   => $default->exchange_rate,
+                'isDefault'      => $default->is_default,
             ],
         ]);
     }
+
     /**
      * Update Currency
      */
@@ -236,20 +246,34 @@ class CurrencyController extends Controller
         }
 
         $validated = $request->validate([
-            'name'                  => 'sometimes|string|max:100',
-            'symbol'                => 'nullable|string|max:10',
-            'symbol_location'       => 'in:left,right',
-            'decimal_token'         => 'nullable|string|size:1',
-            'thousands_token'       => 'nullable|string|size:1',
-            'decimal_places'        => 'integer|min:0|max:4',
-            'exchange_rate'         => 'nullable|numeric|min:0',
-            'is_transactional'      => 'boolean',
-            'auto_update'           => 'boolean',
-            'default_for_countries' => 'nullable|array',
-            'enabled'               => 'boolean',
+            'name'                => 'sometimes|string|max:100',
+            'symbol'              => 'nullable|string|max:10',
+            'symbolLocation'      => 'in:left,right',
+            'decimalToken'        => 'nullable|string|size:1',
+            'thousandsToken'      => 'nullable|string|size:1',
+            'decimalPlaces'       => 'integer|min:0|max:4',
+            'exchangeRate'        => 'nullable|numeric|min:0',
+            'isTransactional'     => 'boolean',
+            'autoUpdate'          => 'boolean',
+            'defaultForCountries' => 'nullable|array',
+            'enabled'             => 'boolean',
         ]);
 
-        $currency->update($validated);
+        $data = [];
+
+        if (isset($validated['name'])) $data['name'] = $validated['name'];
+        if (isset($validated['symbol'])) $data['symbol'] = $validated['symbol'];
+        if (isset($validated['symbolLocation'])) $data['symbol_location'] = $validated['symbolLocation'];
+        if (isset($validated['decimalToken'])) $data['decimal_token'] = $validated['decimalToken'];
+        if (isset($validated['thousandsToken'])) $data['thousands_token'] = $validated['thousandsToken'];
+        if (isset($validated['decimalPlaces'])) $data['decimal_places'] = $validated['decimalPlaces'];
+        if (isset($validated['exchangeRate'])) $data['exchange_rate'] = $validated['exchangeRate'];
+        if ($request->has('isTransactional')) $data['is_transactional'] = $request->boolean('isTransactional');
+        if ($request->has('autoUpdate')) $data['auto_update'] = $request->boolean('autoUpdate');
+        if (isset($validated['defaultForCountries'])) $data['default_for_countries'] = $validated['defaultForCountries'];
+        if ($request->has('enabled')) $data['enabled'] = $request->boolean('enabled');
+
+        $currency->update($data);
 
         return response()->json([
             'status'  => true,
@@ -269,12 +293,10 @@ class CurrencyController extends Controller
             return response()->json(['status' => false, 'message' => 'Unauthorized'], 403);
         }
 
-        // Pehle wali default hatao
         Currency::where('store_id', $storeId)
             ->where('is_default', true)
             ->update(['is_default' => false]);
 
-        // Nayi default set karo
         $currency->update([
             'is_default'       => true,
             'is_transactional' => true,
@@ -315,7 +337,6 @@ class CurrencyController extends Controller
 
     /**
      * Get Current Exchange Rate
-     * Example: /api/currencies/current-rate?from=USD&to=AED
      */
     public function getCurrentRate(Request $request)
     {
