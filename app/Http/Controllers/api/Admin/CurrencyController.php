@@ -28,6 +28,34 @@ class CurrencyController extends Controller
     }
 
     /**
+     * Currency ko camelCase response mein convert karo
+     */
+    private function formatCurrency($currency)
+    {
+        if (!$currency) return null;
+
+        return [
+            'id'                  => $currency->id,
+            'storeId'             => $currency->store_id,
+            'code'                => $currency->code,
+            'name'                => $currency->name,
+            'symbol'              => $currency->symbol,
+            'symbolLocation'      => $currency->symbol_location,
+            'decimalToken'        => $currency->decimal_token,
+            'thousandsToken'      => $currency->thousands_token,
+            'decimalPlaces'       => $currency->decimal_places,
+            'exchangeRate'        => $currency->exchange_rate,
+            'isDefault'           => $currency->is_default,
+            'isTransactional'     => $currency->is_transactional,
+            'autoUpdate'          => $currency->auto_update,
+            'defaultForCountries' => $currency->default_for_countries,
+            'enabled'             => $currency->enabled,
+            'createdAt'           => $currency->created_at,
+            'updatedAt'           => $currency->updated_at,
+        ];
+    }
+
+    /**
      * Currencies List (Default + Additional)
      */
     public function index()
@@ -45,8 +73,8 @@ class CurrencyController extends Controller
         return response()->json([
             'status' => true,
             'data'   => [
-                'default'    => $default,
-                'additional' => $additional,
+                'default'    => $this->formatCurrency($default),
+                'additional' => $additional->map(fn($c) => $this->formatCurrency($c))->values(),
             ],
         ]);
     }
@@ -194,7 +222,7 @@ class CurrencyController extends Controller
         return response()->json([
             'status'  => true,
             'message' => 'Currency added successfully',
-            'data'    => $currency,
+            'data'    => $this->formatCurrency($currency),
         ], 201);
     }
 
@@ -235,7 +263,7 @@ class CurrencyController extends Controller
     }
 
     /**
-     * Update Currency
+     * Update Currency (sirf jo bhejo wahi update hoga)
      */
     public function update(Request $request, Currency $currency)
     {
@@ -278,7 +306,7 @@ class CurrencyController extends Controller
         return response()->json([
             'status'  => true,
             'message' => 'Currency updated successfully',
-            'data'    => $currency->fresh(),
+            'data'    => $this->formatCurrency($currency->fresh()),
         ]);
     }
 
@@ -305,7 +333,7 @@ class CurrencyController extends Controller
         return response()->json([
             'status'  => true,
             'message' => 'Currency set as default successfully',
-            'data'    => $currency->fresh(),
+            'data'    => $this->formatCurrency($currency->fresh()),
         ]);
     }
 
