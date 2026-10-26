@@ -3128,25 +3128,162 @@ class ProductController extends Controller
         }
         return $fields;
     }
+    // public function exportCSV(Request $request)
+    // {
+    //     try {
+    //         $storeId = current_store_id();
+
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Store not selected or token invalid.'
+    //             ], 400);
+    //         }
+
+    //         // Optional: product_ids array se specific products export karo
+    //         $productIds = $request->input('product_ids', []); // array of IDs
+
+    //         $query = Product::where('store_id', $storeId);
+
+    //         if (!empty($productIds) && is_array($productIds)) {
+    //             $productIds = array_filter(array_map('intval', $productIds)); // clean IDs
+    //             $query->whereIn('id', $productIds);
+    //         }
+
+    //         $total = $query->count();
+
+    //         if ($total === 0) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => empty($productIds)
+    //                     ? 'No products found to export.'
+    //                     : 'No products found for the given IDs.'
+    //             ], 404);
+    //         }
+
+    //         return response()->streamDownload(function () use ($storeId, $productIds) {
+    //             set_time_limit(0);
+    //             ini_set('memory_limit', '512M');
+    //             \DB::disableQueryLog();
+
+    //             $exporter = new \App\Exports\ProductExport($storeId);
+    //             $handle   = fopen('php://output', 'w');
+
+    //             fputcsv($handle, $exporter->headings());
+
+    //             $exportQuery = Product::query()
+    //                 ->select([
+    //                     'id',
+    //                     'store_id',
+    //                     'brand_id',
+    //                     'name',
+    //                     'sku',
+    //                     'price',
+    //                     'cost_price',
+    //                     'sale_price',
+    //                     'fixed_shipping_cost',
+    //                     'free_shipping',
+    //                     'allow_purchase',
+    //                     'visible_on_storefront',
+    //                     'track_inventory',
+    //                     'current_stock',
+    //                     'low_stock',
+    //                     'product_type',
+    //                     'item_type',
+    //                     'condition',
+    //                     'tax_class',
+    //                     'tax_provider_code',
+    //                     'dimensions',
+    //                     'custom_fields',
+    //                     'created_at',
+    //                     'updated_at',
+    //                 ])
+    //                 ->with([
+    //                     'brand:id,name',
+    //                     'categories:id,name,parent_id',
+    //                     'categories.parent:id,name,parent_id',
+    //                     'content:id,product_id,description,warranty,availability_text',
+    //                     'seo:id,product_id,page_title,product_url,meta_description,meta_keywords,redirect_old_url',
+    //                     'images:id,product_id,path,url,is_primary',
+    //                 ])
+    //                 ->where('store_id', $storeId)
+    //                 ->orderBy('id');
+
+    //             // Sirf selected IDs pe filter
+    //             if (!empty($productIds) && is_array($productIds)) {
+    //                 $exportQuery->whereIn('id', $productIds);
+    //             }
+
+    //             $exportQuery->chunkById(100, function ($products) use ($handle, $exporter) {
+    //                 foreach ($products as $product) {
+    //                     fputcsv($handle, $exporter->map($product));
+    //                 }
+
+    //                 unset($products);
+
+    //                 if (ob_get_level() > 0) {
+    //                     ob_flush();
+    //                 }
+    //                 flush();
+    //             });
+
+    //             fclose($handle);
+    //         }, 'products.csv', [
+    //             'Content-Type' => 'text/csv',
+    //             'total-rows' => $total,
+    //             'Access-Control-Expose-Headers' => 'total-rows',
+    //         ]);
+    //     } catch (\Throwable $e) {
+    //         \Log::error('Export CSV Error: ' . $e->getMessage(), [
+    //             'file' => $e->getFile(),
+    //             'line' => $e->getLine(),
+    //         ]);
+
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Export failed: ' . $e->getMessage(),
+    //             'line'    => $e->getLine(),
+    //             'file'    => $e->getFile(),
+    //         ], 500);
+    //     }
+    // }
+
     public function exportCSV(Request $request)
     {
+        $storeId = null;
+        $productIds = [];
+        $filePath = null;
+        $handle = null;
+
         try {
             $storeId = current_store_id();
 
             if (!$storeId) {
                 return response()->json([
-                    'status'  => false,
-                    'message' => 'Store not selected or token invalid.'
+                    'status' => false,
+                    'message' => 'Store not selected or token invalid.',
                 ], 400);
             }
 
-            // Optional: product_ids array se specific products export karo
-            $productIds = $request->input('product_ids', []); // array of IDs
+            $productIds = $request->input('product_ids', []);
+
+            if (!is_array($productIds)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'product_ids must be an array.',
+                ], 422);
+            }
+
+            $productIds = array_values(array_unique(
+                array_filter(
+                    array_map('intval', $productIds),
+                    fn ($id) => $id > 0
+                )
+            ));
 
             $query = Product::where('store_id', $storeId);
 
-            if (!empty($productIds) && is_array($productIds)) {
-                $productIds = array_filter(array_map('intval', $productIds)); // clean IDs
+            if (!empty($productIds)) {
                 $query->whereIn('id', $productIds);
             }
 
@@ -3154,99 +3291,137 @@ class ProductController extends Controller
 
             if ($total === 0) {
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => empty($productIds)
                         ? 'No products found to export.'
-                        : 'No products found for the given IDs.'
+                        : 'No products found for the given IDs.',
                 ], 404);
             }
 
-            return response()->streamDownload(function () use ($storeId, $productIds) {
-                set_time_limit(0);
-                ini_set('memory_limit', '512M');
-                \DB::disableQueryLog();
+            set_time_limit(0);
+            ini_set('memory_limit', '512M');
+            \DB::disableQueryLog();
 
-                $exporter = new \App\Exports\ProductExport($storeId);
-                $handle   = fopen('php://output', 'w');
+            // Generate the CSV while the tenant connection is active.
+            $filePath = tempnam(sys_get_temp_dir(), 'products_export_');
 
-                fputcsv($handle, $exporter->headings());
+            if ($filePath === false) {
+                throw new \RuntimeException(
+                    'Unable to create temporary export file.'
+                );
+            }
 
-                $exportQuery = Product::query()
-                    ->select([
-                        'id',
-                        'store_id',
-                        'brand_id',
-                        'name',
-                        'sku',
-                        'price',
-                        'cost_price',
-                        'sale_price',
-                        'fixed_shipping_cost',
-                        'free_shipping',
-                        'allow_purchase',
-                        'visible_on_storefront',
-                        'track_inventory',
-                        'current_stock',
-                        'low_stock',
-                        'product_type',
-                        'item_type',
-                        'condition',
-                        'tax_class',
-                        'tax_provider_code',
-                        'dimensions',
-                        'custom_fields',
-                        'created_at',
-                        'updated_at',
-                    ])
-                    ->with([
-                        'brand:id,name',
-                        'categories:id,name,parent_id',
-                        'categories.parent:id,name,parent_id',
-                        'content:id,product_id,description,warranty,availability_text',
-                        'seo:id,product_id,page_title,product_url,meta_description,meta_keywords,redirect_old_url',
-                        'images:id,product_id,path,url,is_primary',
-                    ])
-                    ->where('store_id', $storeId)
-                    ->orderBy('id');
+            $handle = fopen($filePath, 'wb');
 
-                // Sirf selected IDs pe filter
-                if (!empty($productIds) && is_array($productIds)) {
-                    $exportQuery->whereIn('id', $productIds);
+            if ($handle === false) {
+                throw new \RuntimeException(
+                    'Unable to open temporary export file.'
+                );
+            }
+
+            $exporter = new \App\Exports\ProductExport($storeId);
+
+            fputcsv($handle, $exporter->headings());
+
+            $exportQuery = Product::query()
+                ->select([
+                    'id',
+                    'store_id',
+                    'brand_id',
+                    'name',
+                    'sku',
+                    'price',
+                    'cost_price',
+                    'sale_price',
+                    'fixed_shipping_cost',
+                    'free_shipping',
+                    'allow_purchase',
+                    'visible_on_storefront',
+                    'track_inventory',
+                    'current_stock',
+                    'low_stock',
+                    'product_type',
+                    'item_type',
+                    'condition',
+                    'tax_class',
+                    'tax_provider_code',
+                    'dimensions',
+                    'custom_fields',
+                    'created_at',
+                    'updated_at',
+                ])
+                ->with([
+                    'brand:id,name',
+                    'categories:id,name,parent_id',
+                    'categories.parent:id,name,parent_id',
+                    'content:id,product_id,description,warranty,availability_text',
+                    'seo:id,product_id,page_title,product_url,meta_description,meta_keywords,redirect_old_url',
+                    'images:id,product_id,path,url,is_primary',
+                ])
+                ->where('store_id', $storeId)
+                ->orderBy('id');
+
+            if (!empty($productIds)) {
+                $exportQuery->whereIn('id', $productIds);
+            }
+
+            $exportQuery->chunkById(100, function ($products) use (
+                $handle,
+                $exporter
+            ) {
+                foreach ($products as $product) {
+                    fputcsv($handle, $exporter->map($product));
                 }
 
-                $exportQuery->chunkById(100, function ($products) use ($handle, $exporter) {
-                    foreach ($products as $product) {
-                        fputcsv($handle, $exporter->map($product));
-                    }
+                unset($products);
+            });
 
-                    unset($products);
+            if (!fclose($handle)) {
+                $handle = null;
 
-                    if (ob_get_level() > 0) {
-                        ob_flush();
-                    }
-                    flush();
-                });
+                throw new \RuntimeException(
+                    'Unable to finish writing the CSV file.'
+                );
+            }
 
-                fclose($handle);
-            }, 'products.csv', [
-                'Content-Type' => 'text/csv',
-                'total-rows' => $total,
-                'Access-Control-Expose-Headers' => 'total-rows',
-            ]);
+            $handle = null;
+
+            // All database queries have finished before this response returns.
+            return response()
+                ->download($filePath, 'products.csv', [
+                    'Content-Type' => 'text/csv; charset=UTF-8',
+                    'Cache-Control' => 'no-store, no-cache, must-revalidate',
+                    'Pragma' => 'no-cache',
+                    'X-Total-Rows' => (string) $total,
+                    'Access-Control-Expose-Headers' => 'X-Total-Rows',
+                ])
+                ->deleteFileAfterSend(true);
+
         } catch (\Throwable $e) {
-            \Log::error('Export CSV Error: ' . $e->getMessage(), [
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
+
+            if (is_string($filePath) && is_file($filePath)) {
+                @unlink($filePath);
+            }
+
+            \Log::error('Product CSV export failed', [
+                'store_id' => $storeId,
+                'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
 
+            report($e);
+
             return response()->json([
-                'status'  => false,
-                'message' => 'Export failed: ' . $e->getMessage(),
-                'line'    => $e->getLine(),
-                'file'    => $e->getFile(),
+                'status' => false,
+                'message' => 'Failed to export products.',
             ], 500);
         }
     }
+
     public function destroyProductCategories(Request $request)
     {
         try {
