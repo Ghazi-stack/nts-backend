@@ -190,6 +190,41 @@ class CurrencyController extends Controller
     }
 
     /**
+     * GET /currencies/default
+     * Default + Enabled currency ka data
+     */
+    public function getDefault()
+    {
+        $storeId = $this->getStoreId();
+
+        $default = Currency::where('store_id', $storeId)
+            ->where('is_default', true)
+            ->where('enabled', true)
+            ->first();
+
+        if (!$default) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'No default currency found.',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => true,
+            'data'   => [
+                'code'            => $default->code,
+                'name'            => $default->name,
+                'symbol'          => $default->symbol,
+                'symbol_location' => $default->symbol_location,
+                'decimal_token'   => $default->decimal_token,
+                'thousands_token' => $default->thousands_token,
+                'decimal_places'  => $default->decimal_places,
+                'exchange_rate'   => $default->exchange_rate,
+                'is_default'      => $default->is_default,
+            ],
+        ]);
+    }
+    /**
      * Update Currency
      */
     public function update(Request $request, Currency $currency)

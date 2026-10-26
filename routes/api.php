@@ -615,6 +615,8 @@ Route::prefix('dashboard')->middleware([
         // Actions
         Route::post('/{currency}/set-default', [CurrencyController::class, 'setAsDefault']);
 
+        Route::get('/default', [CurrencyController::class, 'getDefault']);
+
         // Get current rate
         Route::get('/current-rate', [CurrencyController::class, 'getCurrentRate']);
     });
