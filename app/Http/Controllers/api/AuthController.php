@@ -3748,6 +3748,16 @@ class AuthController extends Controller
                 ->where('user_id', $currentUser->id)
                 ->exists();
 
+                Log::info('Admin users authorization check', [
+                'current_user_id' => $currentUser->id,
+                'current_user_role' => $currentUser->userRole ?? null,
+                'store_id' => $storeId,
+                'has_permission_access' => $hasAccess,
+                'is_owner' => $isOwner,
+                'store_owner_id' => Store::on('central')
+                    ->where('id', $storeId)
+                    ->value('user_id'),
+            ]);
             if (!$hasAccess && !$isOwner) {
                 return response()->json([
                     'status'  => false,
