@@ -3714,13 +3714,97 @@ class AuthController extends Controller
     // }
 
     
+    // public function getAdminUsers(Request $request)
+    // {
+    //     try {
+    //         $central = DB::connection('central');
+    //         $storeId = current_store_id();
+
+    //         if (!$storeId) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Store not selected or token invalid.',
+    //             ], 400);
+    //         }
+
+    //         $currentUser = auth('sanctum')->user();
+
+    //         if (!$currentUser) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Unauthenticated.',
+    //             ], 401);
+    //         }
+
+    //         // Check current user's access in central.user_permissions.
+    //         $hasAccess = $central->table('user_permissions')
+    //             ->where('user_id', $currentUser->id)
+    //             ->where('store_id', $storeId)
+    //             ->exists();
+
+    //         // Check ownership in central.stores.
+    //         $isOwner = Store::on('central')
+    //             ->where('legacy_store_id', $storeId)
+    //             ->where('user_id', $currentUser->id)
+    //             ->exists();
+
+    //             // Log::info('Admin users authorization check', [
+    //             //     'current_user_id' => $currentUser->id,
+    //             //     'current_user_role' => $currentUser->userRole ?? null,
+    //             //     'store_id' => $storeId,
+    //             //     'has_permission_access' => $hasAccess,
+    //             //     'is_owner' => $isOwner,
+    //             //     'store_owner_id' => Store::on('central')
+    //             //         ->where('id', $storeId)
+    //             //         ->value('user_id'),
+    //             // ]);
+    //         if (!$hasAccess && !$isOwner) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'You do not have access to this store.',
+    //             ], 403);
+    //         }
+
+    //         // Get users assigned to this store in the central database.
+    //         $userIds = $central->table('store_user')
+    //             ->where('store_id', $storeId)
+    //             ->distinct()
+    //             ->pluck('user_id');
+
+    //         $users = CentralUser::on('central')
+    //             ->whereIn('id', $userIds)
+    //             ->whereIn('userRole', [3, 4, 5, 6])
+    //             ->where('id', '!=', $currentUser->id)
+    //             ->latest()
+    //             ->get();
+
+    //         return response()->json([
+    //             'status'  => true,
+    //             'message' => 'Admin users fetched successfully.',
+    //             'data'    => UserResource::collection($users),
+    //         ]);
+    //     } catch (\Throwable $e) {
+    //         Log::error('Failed to fetch admin users', [
+    //             'error' => $e->getMessage(),
+    //         ]);
+
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Failed to fetch admin users.',
+    //             'error'   => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
+    
     public function getAdminUsers(Request $request)
     {
         try {
             $central = DB::connection('central');
             $storeId = current_store_id();
+            $registryStore = current_store_registry();
 
-            if (!$storeId) {
+            if (!$storeId || !$registryStore) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'Store not selected or token invalid.',
@@ -3736,28 +3820,16 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            // Check current user's access in central.user_permissions.
+            // Check access using the legacy store ID.
             $hasAccess = $central->table('user_permissions')
                 ->where('user_id', $currentUser->id)
                 ->where('store_id', $storeId)
                 ->exists();
 
-            // Check ownership in central.stores.
-            $isOwner = Store::on('central')
-                ->where('legacy_store_id', $storeId)
-                ->where('user_id', $currentUser->id)
-                ->exists();
+            // Ownership is checked against the resolved registry record.
+            $isOwner = (int) $registryStore->user_id
+                === (int) $currentUser->id;
 
-                // Log::info('Admin users authorization check', [
-                //     'current_user_id' => $currentUser->id,
-                //     'current_user_role' => $currentUser->userRole ?? null,
-                //     'store_id' => $storeId,
-                //     'has_permission_access' => $hasAccess,
-                //     'is_owner' => $isOwner,
-                //     'store_owner_id' => Store::on('central')
-                //         ->where('id', $storeId)
-                //         ->value('user_id'),
-                // ]);
             if (!$hasAccess && !$isOwner) {
                 return response()->json([
                     'status'  => false,
@@ -3765,7 +3837,7 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            // Get users assigned to this store in the central database.
+            // Fetch staff assigned to this store by legacy store ID.
             $userIds = $central->table('store_user')
                 ->where('store_id', $storeId)
                 ->distinct()
@@ -3795,6 +3867,7 @@ class AuthController extends Controller
             ], 500);
         }
     }
+
 
     // public function getAdminUser($id)
     // {
