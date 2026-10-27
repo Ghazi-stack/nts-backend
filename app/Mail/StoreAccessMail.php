@@ -3,7 +3,6 @@
 namespace App\Mail;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Store;
 use App\Models\Logo;
@@ -28,29 +27,45 @@ class StoreAccessMail extends StoreMailable
         $this->userEmail = $userEmail;
         $this->resetLink = $resetLink;
 
-        $this->store = Store::find($storeId);
+        // Look up the central store using legacy_store_id.
+        $this->store = Store::on('central')
+            ->where('legacy_store_id', $storeId)
+            ->first();
+
+        // Fall back to the primary ID if no legacy ID match exists.
+        if (!$this->store) {
+            $this->store = Store::on('central')->find($storeId);
+        }
+
         $this->storeName = $this->store?->name ?? 'Store';
 
-        $logo = Logo::where('store_id', $storeId)->first();
-        $this->logoUrl = $logo ? $logo->logo_url : null;
+        // Do not query tenant logos until the correct tenant database
+        // connection has been configured.
+        $this->logoUrl = null;
 
-        $this->storePath = rtrim($this->store?->base_url ?? '#', '/');
-        $this->loginLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/login';
+        $this->storePath = rtrim(
+            $this->store?->base_url ?? '#',
+            '/'
+        );
+
+        $this->loginLink =
+            'https://admin-dashboard-nu-hazel-12.vercel.app/login';
     }
 
     public function build()
     {
-        return $this->setStoreSender($this->store)->subject('Store Access - ' . $this->storeName)
+        return $this->setStoreSender($this->store)
+            ->subject('Store Access - ' . $this->storeName)
             ->view('emails.store-access')
             ->with([
-                'userName'   => $this->userName,
-                'userEmail'  => $this->userEmail,
-                'resetLink'  => $this->resetLink,
-                'loginLink'  => $this->loginLink,
-                'logoUrl'    => $this->logoUrl,
-                'storePath'  => $this->storePath,
-                'store'      => $this->store,
-                'storeName'  => $this->storeName,
+                'userName'  => $this->userName,
+                'userEmail' => $this->userEmail,
+                'resetLink' => $this->resetLink,
+                'loginLink' => $this->loginLink,
+                'logoUrl'   => $this->logoUrl,
+                'storePath' => $this->storePath,
+                'store'     => $this->store,
+                'storeName' => $this->storeName,
             ]);
     }
 }

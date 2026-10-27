@@ -337,6 +337,16 @@ class AuthController extends Controller
                 'base_url' => $request->base_url,
             ]);
 
+
+            // The central stores table is the only store table.
+            // Reuse this record and set legacy_store_id to its own primary ID.
+            $central->table('stores')
+                ->where('id', $store->id)
+                ->update([
+                    'legacy_store_id' => $store->id,
+                    'updated_at'      => now(),
+                ]);
+                
             $registryStore = app(StoreRegistryService::class)
                 ->registerPendingStore($store, (int) $user->id);
 
