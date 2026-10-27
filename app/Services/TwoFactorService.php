@@ -45,53 +45,190 @@ class TwoFactorService
     //     return true;
     // }
 
-    public function sendEmailOtp(CentralUser $user, ?int $storeId = null): bool
-    {
-        $otp = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    // public function sendEmailOtp(CentralUser $user, ?int $storeId = null): bool
+    // {
+    //     $otp = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+    //     $user->update([
+    //         'two_factor_otp' => bcrypt($otp),
+    //         'two_factor_otp_expires_at' => now()->addMinutes(10),
+    //     ]);
+
+    //     // Preserve the existing store-specific email behavior.
+    //     $storeId = $storeId ?? ($user->store_id ?? null);
+
+    //     Mail::to($user->email)->send(
+    //         new TwoFactorOtpMail($otp, $user->name, $storeId)
+    //     );
+
+    //     return true;
+    // }
+
+    // public function verifyEmailOtp(CentralUser $user, string $otp): bool
+    // {
+    //     if (!$user->two_factor_otp_expires_at || now()->isAfter($user->two_factor_otp_expires_at)) {
+    //         return false;
+    //     }
+
+    //     if (!password_verify($otp, $user->two_factor_otp)) {
+    //         return false;
+    //     }
+
+    //     $user->update([
+    //         'two_factor_otp'            => null,
+    //         'two_factor_otp_expires_at' => null,
+    //     ]);
+
+    //     return true;
+    // }
+
+    // // ─────────────────────────────────────────────────────────────
+    // //  AUTHENTICATOR APP (Google Authenticator / Authy)
+    // // ─────────────────────────────────────────────────────────────
+
+    // public function generateAuthenticatorSecret(CentralUser $user): array
+    // {
+    //     $secret = $this->google2fa->generateSecretKey();
+
+    //     $user->update([
+    //         'two_factor_secret'    => encrypt($secret),
+    //         'two_factor_confirmed' => false,
+    //     ]);
+
+    //     $qrCodeUrl = $this->google2fa->getQRCodeUrl(
+    //         config('app.name'),
+    //         $user->email,
+    //         $secret
+    //     );
+
+    //     return [
+    //         'secret'      => $secret,
+    //         'qr_code_url' => $qrCodeUrl,
+    //     ];
+    // }
+
+    // public function confirmAuthenticatorSetup(CentralUser $user, string $code): bool
+    // {
+    //     if (!$user->two_factor_secret) {
+    //         return false;
+    //     }
+
+    //     $secret = decrypt($user->two_factor_secret);
+    //     $valid  = $this->google2fa->verifyKey($secret, $code);
+
+    //     if ($valid) {
+    //         $user->update(['two_factor_confirmed' => true]);
+    //     }
+
+    //     return $valid;
+    // }
+
+    // public function verifyAuthenticatorOtp(CentralUser $user, string $code): bool
+    // {
+    //     if (!$user->two_factor_secret || !$user->two_factor_confirmed) {
+    //         return false;
+    //     }
+
+    //     $secret = decrypt($user->two_factor_secret);
+
+    //     return $this->google2fa->verifyKey($secret, $code);
+    // }
+
+    // // ─────────────────────────────────────────────────────────────
+    // //  PENDING LOGIN TOKEN (Cache)
+    // // ─────────────────────────────────────────────────────────────
+
+    // public function storePendingLogin(CentralUser $user): string
+    // {
+    //     $token = Str::uuid()->toString();
+
+    //     Cache::put(
+    //         '2fa_pending_' . $token,
+    //         ['user_id' => $user->id],
+    //         now()->addMinutes(15)
+    //     );
+
+    //     return $token;
+    // }
+
+    // public function getUserFromPendingToken(string $token): ?CentralUser
+    // {
+    //     $data = Cache::get('2fa_pending_' . $token);
+
+    //     if (!$data) {
+    //         return null;
+    //     }
+
+    //     return CentralUser::find($data['user_id']);
+    // }
+
+    // public function clearPendingToken(string $token): void
+    // {
+    //     Cache::forget('2fa_pending_' . $token);
+    // }
+
+    public function sendEmailOtp(
+        CentralUser $user,
+        ?int $storeId = null
+    ): bool {
+        $otp = str_pad(
+            (string) random_int(0, 999999),
+            6,
+            '0',
+            STR_PAD_LEFT
+        );
 
         $user->update([
             'two_factor_otp' => bcrypt($otp),
             'two_factor_otp_expires_at' => now()->addMinutes(10),
         ]);
 
-        // Preserve the existing store-specific email behavior.
-        $storeId = $storeId ?? ($user->store_id ?? null);
-
         Mail::to($user->email)->send(
-            new TwoFactorOtpMail($otp, $user->name, $storeId)
+            new TwoFactorOtpMail(
+                $otp,
+                $user->name,
+                $storeId
+            )
         );
 
         return true;
     }
 
-    public function verifyEmailOtp(CentralUser $user, string $otp): bool
-    {
-        if (!$user->two_factor_otp_expires_at || now()->isAfter($user->two_factor_otp_expires_at)) {
+    public function verifyEmailOtp(
+        CentralUser $user,
+        string $otp
+    ): bool {
+        if (
+            !$user->two_factor_otp_expires_at ||
+            now()->isAfter($user->two_factor_otp_expires_at)
+        ) {
             return false;
         }
 
-        if (!password_verify($otp, $user->two_factor_otp)) {
+        if (
+            !$user->two_factor_otp ||
+            !password_verify($otp, $user->two_factor_otp)
+        ) {
             return false;
         }
 
         $user->update([
-            'two_factor_otp'            => null,
+            'two_factor_otp' => null,
             'two_factor_otp_expires_at' => null,
         ]);
 
         return true;
     }
 
-    // ─────────────────────────────────────────────────────────────
-    //  AUTHENTICATOR APP (Google Authenticator / Authy)
-    // ─────────────────────────────────────────────────────────────
+    // AUTHENTICATOR APP (Google Authenticator / Authy)
 
-    public function generateAuthenticatorSecret(CentralUser $user): array
-    {
+    public function generateAuthenticatorSecret(
+        CentralUser $user
+    ): array {
         $secret = $this->google2fa->generateSecretKey();
 
         $user->update([
-            'two_factor_secret'    => encrypt($secret),
+            'two_factor_secret' => encrypt($secret),
             'two_factor_confirmed' => false,
         ]);
 
@@ -102,44 +239,59 @@ class TwoFactorService
         );
 
         return [
-            'secret'      => $secret,
+            'secret' => $secret,
             'qr_code_url' => $qrCodeUrl,
         ];
     }
 
-    public function confirmAuthenticatorSetup(CentralUser $user, string $code): bool
-    {
+    public function confirmAuthenticatorSetup(
+        CentralUser $user,
+        string $code
+    ): bool {
         if (!$user->two_factor_secret) {
             return false;
         }
 
         $secret = decrypt($user->two_factor_secret);
-        $valid  = $this->google2fa->verifyKey($secret, $code);
+
+        $valid = $this->google2fa->verifyKey(
+            $secret,
+            $code
+        );
 
         if ($valid) {
-            $user->update(['two_factor_confirmed' => true]);
+            $user->update([
+                'two_factor_confirmed' => true,
+            ]);
         }
 
         return $valid;
     }
 
-    public function verifyAuthenticatorOtp(CentralUser $user, string $code): bool
-    {
-        if (!$user->two_factor_secret || !$user->two_factor_confirmed) {
+    public function verifyAuthenticatorOtp(
+        CentralUser $user,
+        string $code
+    ): bool {
+        if (
+            !$user->two_factor_secret ||
+            !$user->two_factor_confirmed
+        ) {
             return false;
         }
 
         $secret = decrypt($user->two_factor_secret);
 
-        return $this->google2fa->verifyKey($secret, $code);
+        return $this->google2fa->verifyKey(
+            $secret,
+            $code
+        );
     }
 
-    // ─────────────────────────────────────────────────────────────
-    //  PENDING LOGIN TOKEN (Cache)
-    // ─────────────────────────────────────────────────────────────
+    // PENDING LOGIN TOKEN (Cache)
 
-    public function storePendingLogin(CentralUser $user): string
-    {
+    public function storePendingLogin(
+        CentralUser $user
+    ): string {
         $token = Str::uuid()->toString();
 
         Cache::put(
@@ -151,8 +303,9 @@ class TwoFactorService
         return $token;
     }
 
-    public function getUserFromPendingToken(string $token): ?CentralUser
-    {
+    public function getUserFromPendingToken(
+        string $token
+    ): ?CentralUser {
         $data = Cache::get('2fa_pending_' . $token);
 
         if (!$data) {
@@ -162,8 +315,9 @@ class TwoFactorService
         return CentralUser::find($data['user_id']);
     }
 
-    public function clearPendingToken(string $token): void
-    {
+    public function clearPendingToken(
+        string $token
+    ): void {
         Cache::forget('2fa_pending_' . $token);
     }
 }

@@ -4,11 +4,9 @@ namespace App\Mail;
 
 use App\Models\Store;
 use Illuminate\Bus\Queueable;
-use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
-use App\Mail\StoreMailable;
 
 class TwoFactorOtpMail extends StoreMailable
 {
@@ -16,25 +14,31 @@ class TwoFactorOtpMail extends StoreMailable
 
     public string $otp;
     public string $userName;
-    public Store $store;
-    public int $storeId;
+    public ?Store $store;
+    public ?int $storeId;
 
     public function __construct(
         string $otp,
         string $userName,
-        int $storeId
+        ?int $storeId = null
     ) {
         $this->otp = $otp;
         $this->userName = $userName;
         $this->storeId = $storeId;
 
-        $this->store = Store::findOrFail($storeId);
+        $this->store = $storeId
+            ? Store::on('central')->find($storeId)
+            : null;
     }
 
     public function envelope(): Envelope
     {
+        $storeName = $this->store?->name;
+
         return new Envelope(
-            subject: 'Your Login Verification Code - ' . $this->store->name
+            subject: $storeName
+                ? 'Your Login Verification Code - ' . $storeName
+                : 'Your Login Verification Code'
         );
     }
 
@@ -52,6 +56,10 @@ class TwoFactorOtpMail extends StoreMailable
 
     public function build()
     {
-        return $this->setStoreSender($this->store);
+        if ($this->store) {
+            return $this->setStoreSender($this->store);
+        }
+
+        return $this;
     }
 }
