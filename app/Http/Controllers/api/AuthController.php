@@ -3761,7 +3761,7 @@ class AuthController extends Controller
                 ->distinct()
                 ->pluck('user_id');
 
-            $users = User::on('central')
+            $users = CentralUser::on('central')
                 ->whereIn('id', $userIds)
                 ->where('userRole', '!=', 2)
                 ->where('id', '!=', $currentUser->id)
@@ -3908,7 +3908,7 @@ class AuthController extends Controller
                 ], 404);
             }
 
-            $user = User::on('central')
+            $user = CentralUser::on('central')
                 ->where('userRole', '!=', 2)
                 ->findOrFail($id);
 
@@ -4111,7 +4111,7 @@ class AuthController extends Controller
             }
 
             // Find the staff account in central.users.
-            $user = User::on('central')
+            $user = CentralUser::on('central')
                 ->where('userRole', '!=', 2)
                 ->findOrFail($id);
 
@@ -4354,7 +4354,7 @@ class AuthController extends Controller
             }
 
             // Find the staff account in central.users.
-            $user = User::on('central')
+            $user = CentralUser::on('central')
                 ->where('userRole', '!=', 2)
                 ->findOrFail($id);
 
