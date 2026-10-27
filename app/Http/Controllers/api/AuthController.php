@@ -606,7 +606,19 @@ class AuthController extends Controller
                     ], 404);
                 }
 
-                $registryStoreId = (int) $registryStore->id;
+                // $registryStoreId = (int) $registryStore->id;
+                $registryStoreId = (int) (
+                    $registryStore->legacy_store_id ?? 0
+                );
+
+                if (!$registryStoreId) {
+                    $central->rollBack();
+
+                    return response()->json([
+                        'status'  => false,
+                        'message' => 'The store does not have a valid legacy_store_id.',
+                    ], 422);
+                }
             }
 
             /*
@@ -821,8 +833,21 @@ class AuthController extends Controller
             $registryStore = app(TenantProvisioningService::class)
                 ->provisionDatabase((int) $registryStore->id);
 
-            $registryStoreId = (int) $registryStore->id;
+            // $registryStoreId = (int) $registryStore->id;
 
+            $registryStoreId = (int) (
+                $registryStore->legacy_store_id ?? 0
+            );
+
+            if (!$registryStoreId) {
+                $central->rollBack();
+
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'The store does not have a valid legacy_store_id.',
+                ], 422);
+            }
+            
             // Associate the owner with the central registry store.
             $membershipExists = $central->table('store_user')
                 ->where('user_id', $user->id)
