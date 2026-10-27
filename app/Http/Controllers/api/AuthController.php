@@ -3755,15 +3755,15 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            // Get central users with permissions for this store.
-            $userIds = $central->table('user_permissions')
+            // Get users assigned to this store in the central database.
+            $userIds = $central->table('store_user')
                 ->where('store_id', $storeId)
                 ->distinct()
                 ->pluck('user_id');
 
             $users = CentralUser::on('central')
                 ->whereIn('id', $userIds)
-                ->where('userRole', '!=', 2)
+                ->whereIn('userRole', [3, 4, 5, 6])
                 ->where('id', '!=', $currentUser->id)
                 ->latest()
                 ->get();
