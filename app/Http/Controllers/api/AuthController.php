@@ -3729,13 +3729,20 @@ class AuthController extends Controller
 
             $currentUser = auth('sanctum')->user();
 
-            // Check current user's permissions in the central database.
+            if (!$currentUser) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Unauthenticated.',
+                ], 401);
+            }
+
+            // Check current user's access in central.user_permissions.
             $hasAccess = $central->table('user_permissions')
                 ->where('user_id', $currentUser->id)
                 ->where('store_id', $storeId)
                 ->exists();
 
-            // Check store ownership in the central database.
+            // Check ownership in central.stores.
             $isOwner = Store::on('central')
                 ->where('id', $storeId)
                 ->where('user_id', $currentUser->id)
@@ -3748,7 +3755,7 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            // Get users who have permissions for this store.
+            // Get central users with permissions for this store.
             $userIds = $central->table('user_permissions')
                 ->where('store_id', $storeId)
                 ->distinct()
@@ -3861,13 +3868,40 @@ class AuthController extends Controller
                 ], 400);
             }
 
-            // Check whether the requested user has permissions for this store.
+            $currentUser = auth('sanctum')->user();
+
+            if (!$currentUser) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Unauthenticated.',
+                ], 401);
+            }
+
+            // Authorize the caller for this store.
             $hasAccess = $central->table('user_permissions')
+                ->where('user_id', $currentUser->id)
+                ->where('store_id', $storeId)
+                ->exists();
+
+            $isOwner = Store::on('central')
+                ->where('id', $storeId)
+                ->where('user_id', $currentUser->id)
+                ->exists();
+
+            if (!$hasAccess && !$isOwner) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'You do not have access to this store.',
+                ], 403);
+            }
+
+            // Requested user must have access to this store.
+            $belongsToStore = $central->table('store_user')
                 ->where('user_id', $id)
                 ->where('store_id', $storeId)
                 ->exists();
 
-            if (!$hasAccess) {
+            if (!$belongsToStore) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'User not found in this store.',
@@ -3878,7 +3912,6 @@ class AuthController extends Controller
                 ->where('userRole', '!=', 2)
                 ->findOrFail($id);
 
-            // Fetch permissions explicitly from the central database.
             $userPermissions = Permission::on('central')
                 ->join(
                     'user_permissions',
@@ -4050,12 +4083,38 @@ class AuthController extends Controller
                 ], 400);
             }
 
-            // Find the user in central.users.
+            $currentUser = auth('sanctum')->user();
+
+            if (!$currentUser) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Unauthenticated.',
+                ], 401);
+            }
+
+            // Authorize the caller for this store.
+            $hasAccess = $central->table('user_permissions')
+                ->where('user_id', $currentUser->id)
+                ->where('store_id', $storeId)
+                ->exists();
+
+            $isOwner = Store::on('central')
+                ->where('id', $storeId)
+                ->where('user_id', $currentUser->id)
+                ->exists();
+
+            if (!$hasAccess && !$isOwner) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'You do not have access to this store.',
+                ], 403);
+            }
+
+            // Find the staff account in central.users.
             $user = User::on('central')
                 ->where('userRole', '!=', 2)
                 ->findOrFail($id);
 
-            // Confirm this user belongs to the selected store.
             $belongsToStore = $central->table('store_user')
                 ->where('user_id', $user->id)
                 ->where('store_id', $storeId)
@@ -4069,51 +4128,66 @@ class AuthController extends Controller
             }
 
             $request->validate([
-                'firstName'     => 'nullable|string|max:100',
-                'lastName'      => 'nullable|string|max:100',
-                'email'         => [
+                'firstName' => 'nullable|string|max:100',
+                'lastName'  => 'nullable|string|max:100',
+                'email'     => [
                     'nullable',
                     'email',
-                    \Illuminate\Validation\Rule::unique('central.users', 'email')
-                        ->ignore($user->id),
+                    \Illuminate\Validation\Rule::unique(
+                        'central.users',
+                        'email'
+                    )->ignore($user->id),
                 ],
-                // 'password' => 'nullable|string|min:6',
-                'permissions'   => 'nullable|array',
-                'permissions.*' => 'integer|distinct|exists:central.permissions,id',
+                'permissions'   => 'sometimes|array',
+                'permissions.*' => [
+                    'integer',
+                    'distinct',
+                    'exists:central.permissions,id',
+                ],
             ]);
 
-            if ($request->filled('firstName') || $request->filled('lastName')) {
-                $nameParts = preg_split('/\s+/', trim($user->name), 2);
+            $central->beginTransaction();
 
-                $firstName = $request->input(
-                    'firstName',
-                    $nameParts[0] ?? ''
-                );
+            try {
+                if (
+                    $request->filled('firstName') ||
+                    $request->filled('lastName')
+                ) {
+                    $nameParts = preg_split(
+                        '/\s+/',
+                        trim($user->name),
+                        2
+                    );
 
-                $lastName = $request->input(
-                    'lastName',
-                    $nameParts[1] ?? ''
-                );
+                    $firstName = $request->input(
+                        'firstName',
+                        $nameParts[0] ?? ''
+                    );
 
-                $user->name = trim($firstName . ' ' . $lastName);
-            }
+                    $lastName = $request->input(
+                        'lastName',
+                        $nameParts[1] ?? ''
+                    );
 
-            if ($request->filled('email')) {
-                $user->email = $request->email;
-            }
+                    $user->name = trim($firstName . ' ' . $lastName);
+                }
 
-            // Password updates remain unchanged from your original function.
-            $user->save();
+                if ($request->filled('email')) {
+                    $user->email = $request->email;
+                }
 
-            // Replace permissions for this store only.
-            if ($request->has('permissions')) {
-                $permissionIds = array_values(array_unique(
-                    array_map('intval', $request->input('permissions', []))
-                ));
+                // Save central.users.
+                $user->save();
 
-                $central->beginTransaction();
+                // Update permissions for this store only.
+                if ($request->has('permissions')) {
+                    $permissionIds = array_values(array_unique(
+                        array_map(
+                            'intval',
+                            $request->input('permissions', [])
+                        )
+                    ));
 
-                try {
                     $central->table('user_permissions')
                         ->where('user_id', $user->id)
                         ->where('store_id', $storeId)
@@ -4131,18 +4205,18 @@ class AuthController extends Controller
                         ];
                     }
 
-                    if (!empty($inserts)) {
-                        $central->table('user_permissions')->insert($inserts);
+                    if ($inserts) {
+                        $central->table('user_permissions')
+                            ->insert($inserts);
                     }
-
-                    $central->commit();
-                } catch (\Throwable $e) {
-                    $central->rollBack();
-                    throw $e;
                 }
+
+                $central->commit();
+            } catch (\Throwable $e) {
+                $central->rollBack();
+                throw $e;
             }
 
-            // Fetch the updated permissions from the central database.
             $userPermissions = Permission::on('central')
                 ->join(
                     'user_permissions',
@@ -4265,19 +4339,25 @@ class AuthController extends Controller
 
             $currentUser = auth('sanctum')->user();
 
-            if ($currentUser && (int) $currentUser->id === (int) $id) {
+            if (!$currentUser) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Unauthenticated.',
+                ], 401);
+            }
+
+            if ((int) $currentUser->id === (int) $id) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'You cannot delete your own account.',
                 ], 403);
             }
 
-            // Find the user in central.users.
+            // Find the staff account in central.users.
             $user = User::on('central')
                 ->where('userRole', '!=', 2)
                 ->findOrFail($id);
 
-            // Confirm the user belongs to the selected store.
             $belongsToStore = $central->table('store_user')
                 ->where('user_id', $user->id)
                 ->where('store_id', $storeId)
@@ -4290,28 +4370,45 @@ class AuthController extends Controller
                 ], 404);
             }
 
+            // Only owners or users with store permissions can manage users.
+            $hasAccess = $central->table('user_permissions')
+                ->where('user_id', $currentUser->id)
+                ->where('store_id', $storeId)
+                ->exists();
+
+            $isOwner = Store::on('central')
+                ->where('id', $storeId)
+                ->where('user_id', $currentUser->id)
+                ->exists();
+
+            if (!$hasAccess && !$isOwner) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'You do not have access to this store.',
+                ], 403);
+            }
+
             $central->beginTransaction();
 
             try {
-                // Delete this user's permissions for this store only.
+                // Remove permissions for this store only.
                 $central->table('user_permissions')
                     ->where('user_id', $user->id)
                     ->where('store_id', $storeId)
                     ->delete();
 
-                // Remove membership for this store only.
+                // Remove this store membership only.
                 $central->table('store_user')
                     ->where('user_id', $user->id)
                     ->where('store_id', $storeId)
                     ->delete();
 
-                // Check whether the user belongs to any other stores.
+                // Preserve the central account if it belongs to another store.
                 $hasOtherStores = $central->table('store_user')
                     ->where('user_id', $user->id)
                     ->exists();
 
                 if (!$hasOtherStores) {
-                    // No memberships remain, so remove the central user.
                     $user->tokens()->delete();
                     $user->delete();
                 }
