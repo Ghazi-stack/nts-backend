@@ -22,7 +22,7 @@ return new class extends Migration
             $table->string('payment_method');
             $table->string('shipping_method');
             $table->decimal('shipping_cost', 10, 2)->default(0);
-            $table->decimal('total_amount', 12, 2);
+            $table->decimal('total_amount', 18, 6);
             $table->text('comments')->nullable();
             $table->timestamps();
         });
