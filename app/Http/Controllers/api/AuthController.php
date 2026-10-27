@@ -335,6 +335,8 @@ class AuthController extends Controller
                 'name'     => $request->storeName,
                 'user_id'  => $user->id,
                 'base_url' => $request->base_url,
+                'store_hash'          => 'store-' . Str::lower(Str::random(12)),
+                'provisioning_status' => 'pending',
             ]);
 
 
