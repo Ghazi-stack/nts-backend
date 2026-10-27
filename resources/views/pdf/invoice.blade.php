@@ -233,6 +233,17 @@
         $paymentMethod = $paymentLabels[$rawPayment] ?? ucwords(str_replace('_', ' ', $rawPayment));
         @endphp
 
+        @php
+        $decimalPlaces = 2; // default
+        if ($order->currency_code) {
+        // Currency se decimal places lo (agar available ho)
+        $currency = \App\Models\Currency::where('store_id', $order->store_id)
+        ->where('code', $order->currency_code)
+        ->first();
+        $decimalPlaces = $currency->decimal_places ?? 2;
+        }
+        $decimalPlaces = min($decimalPlaces, 6); // max 6
+        @endphp
         <table class="two-column">
             <tr>
                 <td>
@@ -285,7 +296,7 @@
             </tr>
             <tr>
                 <td><strong>Payment Method:</strong></td>
-                <td>{{ $paymentMethod }} (${{ number_format($order->total_amount, 2) }})</td>
+                <td>{{ $paymentMethod }} ({{ $order->currency_symbol ?? '$' }}{{ number_format($order->total_amount, $decimalPlaces) }})</td>
                 <td><strong>Shipping Method:</strong></td>
                 @php
                 $shippingData = $shipping->shipping_data ?? null;
@@ -327,8 +338,8 @@
                     <td class="text-center">{{ $item->quantity }}</td>
                     <td>{{ $item->product->sku ?? 'N/A' }}</td>
                     <td>{{ $item->product->name ?? 'N/A' }}</td>
-                    <td class="text-right">${{ number_format($item->price, 2) }} USD</td>
-                    <td class="text-right">${{ number_format($lineTotal, 2) }} USD</td>
+                    <td class="text-right">{{ $order->currency_symbol ?? '$' }}{{ number_format($item->price, $decimalPlaces) }} {{ $order->currency_code ?? 'USD' }}</td>
+                    <td class="text-right">{{ $order->currency_symbol ?? '$' }}{{ number_format($lineTotal, $decimalPlaces) }} {{ $order->currency_code ?? 'USD' }}</td>
                 </tr>
                 @endforeach
             </tbody>
@@ -338,32 +349,32 @@
         <table class="totals-section">
             <tr>
                 <td class="label">Subtotal:</td>
-                <td class="value">${{ number_format($subtotal, 2) }} USD</td>
+                <td class="value">{{ $order->currency_symbol ?? '$' }}{{ number_format($subtotal, $decimalPlaces) }} {{ $order->currency_code ?? 'USD' }}</td>
             </tr>
             <tr>
                 <td class="label">Shipping:</td>
-                <td class="value">${{ number_format($order->shipping_cost ?? 0, 2) }} USD</td>
+                <td class="value">{{ $order->currency_symbol ?? '$' }}{{ number_format($order->shipping_cost ?? 0, $decimalPlaces) }} {{ $order->currency_code ?? 'USD' }}</td>
             </tr>
             @if((float) ($order->discountAmount ?? 0) > 0)
             <tr>
                 <td class="label">Coupon Discount:</td>
-                <td class="value">-${{ number_format((float) $order->discountAmount, 2) }} USD</td>
+                <td class="value">-{{ $order->currency_symbol ?? '$' }}{{ number_format((float) $order->discountAmount, $decimalPlaces) }} {{ $order->currency_code ?? 'USD' }}</td>
             </tr>
             @endif
 
             @if((float) ($order->manual_discount ?? 0) > 0)
             <tr>
                 <td class="label">Manual Discount:</td>
-                <td class="value">-${{ number_format((float) $order->manual_discount, 2) }} USD</td>
+                <td class="value">-{{ $order->currency_symbol ?? '$' }}{{ number_format((float) $order->manual_discount, $decimalPlaces) }} {{ $order->currency_code ?? 'USD' }}</td>
             </tr>
             @endif
             <tr>
                 <td class="label">Tax:</td>
-                <td class="value">$0.00 USD</td>
+                <td class="value">{{ $order->currency_symbol ?? '$' }}{{ number_format(0, $decimalPlaces) }} {{ $order->currency_code ?? 'USD' }}</td>
             </tr>
             <tr class="grand-total">
                 <td class="label">Grand total:</td>
-                <td class="value">${{ number_format($order->total_amount ?? 0, 2) }} USD</td>
+                <td class="value">{{ $order->currency_symbol ?? '$' }}{{ number_format($order->total_amount ?? 0, $decimalPlaces) }} {{ $order->currency_code ?? 'USD' }}</td>
             </tr>
         </table>
 
