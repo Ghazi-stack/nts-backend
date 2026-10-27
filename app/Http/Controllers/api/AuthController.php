@@ -214,12 +214,45 @@ class AuthController extends Controller
 
                 $central->commit();
 
+                // try {
+                //     $resetToken = app('auth.password.broker')->createToken($user);
+
+                //     $resetLink =
+                //         'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
+                //         . $resetToken
+                //         . '&email=' . urlencode($user->email);
+
+                //     Mail::to($user->email)->send(
+                //         new StoreAccessMail(
+                //             $user->name,
+                //             $user->email,
+                //             $resetLink,
+                //             $registryStoreId
+                //         )
+                //     );
+                // } catch (\Throwable $mailError) {
+                //     Log::error('CENTRAL STAFF ACCESS EMAIL FAILED', [
+                //         'error' => $mailError->getMessage(),
+                //         'email' => $user->email,
+                //     ]);
+                // }
+   
                 try {
-                    $resetToken = app('auth.password.broker')->createToken($user);
+                    // Generate a plain-text token for the reset link.
+                    $resetToken = \Illuminate\Support\Str::random(64);
+
+                    // Store the hashed token in the CENTRAL database.
+                    $central->table('password_reset_tokens')->updateOrInsert(
+                        ['email' => $user->email],
+                        [
+                            'token'      => \Illuminate\Support\Facades\Hash::make($resetToken),
+                            'created_at' => now(),
+                        ]
+                    );
 
                     $resetLink =
                         'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
-                        . $resetToken
+                        . urlencode($resetToken)
                         . '&email=' . urlencode($user->email);
 
                     Mail::to($user->email)->send(
@@ -236,6 +269,7 @@ class AuthController extends Controller
                         'email' => $user->email,
                     ]);
                 }
+
 
                 $userPermissions = Permission::on('central')
                     ->whereIn('id', $permissionIds)
@@ -3876,7 +3910,7 @@ class AuthController extends Controller
             ], 500);
         }
     }
-    
+
     public function forgotPassword(Request $request)
     {
         try {
@@ -3973,81 +4007,171 @@ class AuthController extends Controller
         }
     }
 
+    // public function adminResetPassword(Request $request)
+    // {
+    //     try {
+
+    //         $request->validate([
+    //             'email' => 'required|email',
+    //             'token' => 'required',
+    //             'password' => 'required|min:8|confirmed',
+    //         ]);
+
+    //         $reset = DB::table('password_reset_tokens')
+    //             ->where('email', $request->email)
+    //             ->first();
+
+    //         if (!$reset) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Invalid reset request.'
+    //             ], 400);
+    //         }
+
+    //         // Check Token
+    //         if (!Hash::check($request->token, $reset->token)) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Invalid or expired token.'
+    //             ], 400);
+    //         }
+
+    //         // Expire after 60 minutes
+    //         if (Carbon::parse($reset->created_at)->addMinutes(60)->isPast()) {
+
+    //             DB::table('password_reset_tokens')
+    //                 ->where('email', $request->email)
+    //                 ->delete();
+
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Reset link has expired.'
+    //             ], 400);
+    //         }
+
+    //         $user = User::where('email', $request->email)->first();
+
+    //         if (!$user) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'User not found.'
+    //             ], 404);
+    //         }
+
+    //         $user->update([
+    //             'password' => Hash::make($request->password)
+    //         ]);
+
+    //         DB::table('password_reset_tokens')
+    //             ->where('email', $request->email)
+    //             ->delete();
+
+    //         Mail::to($user->email)->send(
+    //             new PasswordResetSuccessMail($user)
+    //         );
+
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Password reset successfully.'
+    //         ]);
+    //     } catch (\Exception $e) {
+
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
+    
     public function adminResetPassword(Request $request)
     {
         try {
-
             $request->validate([
-                'email' => 'required|email',
-                'token' => 'required',
-                'password' => 'required|min:8|confirmed',
+                'email'                 => 'required|email',
+                'token'                 => 'required|string',
+                'password'              => 'required|min:8|confirmed',
             ]);
 
-            $reset = DB::table('password_reset_tokens')
+            $central = DB::connection('central');
+
+            $reset = $central->table('password_reset_tokens')
                 ->where('email', $request->email)
                 ->first();
 
             if (!$reset) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'Invalid reset request.'
+                    'status'  => false,
+                    'message' => 'Invalid reset request.',
                 ], 400);
             }
 
-            // Check Token
+            // Verify the token.
             if (!Hash::check($request->token, $reset->token)) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'Invalid or expired token.'
+                    'status'  => false,
+                    'message' => 'Invalid or expired token.',
                 ], 400);
             }
 
-            // Expire after 60 minutes
+            // Expire reset tokens after 60 minutes.
             if (Carbon::parse($reset->created_at)->addMinutes(60)->isPast()) {
-
-                DB::table('password_reset_tokens')
+                $central->table('password_reset_tokens')
                     ->where('email', $request->email)
                     ->delete();
 
                 return response()->json([
-                    'status' => false,
-                    'message' => 'Reset link has expired.'
+                    'status'  => false,
+                    'message' => 'Reset link has expired.',
                 ], 400);
             }
 
-            $user = User::where('email', $request->email)->first();
+            // Users are stored in the central database.
+            $user = User::on('central')
+                ->where('email', $request->email)
+                ->first();
 
             if (!$user) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'User not found.'
+                    'status'  => false,
+                    'message' => 'User not found.',
                 ], 404);
             }
 
-            $user->update([
-                'password' => Hash::make($request->password)
-            ]);
+            $user->password = Hash::make($request->password);
+            $user->save();
 
-            DB::table('password_reset_tokens')
+            $central->table('password_reset_tokens')
                 ->where('email', $request->email)
                 ->delete();
 
-            Mail::to($user->email)->send(
-                new PasswordResetSuccessMail($user)
-            );
+            try {
+                Mail::to($user->email)->send(
+                    new PasswordResetSuccessMail($user)
+                );
+            } catch (\Throwable $mailError) {
+                Log::error('Password reset success email failed', [
+                    'email' => $user->email,
+                    'error' => $mailError->getMessage(),
+                ]);
+            }
 
             return response()->json([
-                'status' => true,
-                'message' => 'Password reset successfully.'
+                'status'  => true,
+                'message' => 'Password reset successfully.',
             ]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            Log::error('Admin password reset failed', [
+                'error' => $e->getMessage(),
+            ]);
 
             return response()->json([
-                'status' => false,
-                'message' => $e->getMessage()
+                'status'  => false,
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
+
     public function resetPassword(Request $request)
     {
         try {
