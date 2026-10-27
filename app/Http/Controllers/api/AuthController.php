@@ -3744,7 +3744,7 @@ class AuthController extends Controller
 
             // Check ownership in central.stores.
             $isOwner = Store::on('central')
-                ->where('id', $storeId)
+                ->where('legacy_store_id', $storeId)
                 ->where('user_id', $currentUser->id)
                 ->exists();
 
@@ -3894,7 +3894,7 @@ class AuthController extends Controller
                 ->exists();
 
             $isOwner = Store::on('central')
-                ->where('id', $storeId)
+                ->where('legacy_store_id', $storeId)
                 ->where('user_id', $currentUser->id)
                 ->exists();
 
@@ -4109,7 +4109,7 @@ class AuthController extends Controller
                 ->exists();
 
             $isOwner = Store::on('central')
-                ->where('id', $storeId)
+                ->where('legacy_store_id', $storeId)
                 ->where('user_id', $currentUser->id)
                 ->exists();
 
@@ -4387,7 +4387,7 @@ class AuthController extends Controller
                 ->exists();
 
             $isOwner = Store::on('central')
-                ->where('id', $storeId)
+                ->where('legacy_store_id', $storeId)
                 ->where('user_id', $currentUser->id)
                 ->exists();
 
