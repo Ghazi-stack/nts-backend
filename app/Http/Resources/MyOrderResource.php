@@ -14,6 +14,9 @@ class MyOrderResource extends JsonResource
             'order_number' => $this->order_number,
             'status' => $this->status,
             'total_amount' => $this->total_amount,
+            'currencyCode'       => $this->currency_code,
+            'currencySymbol'     => $this->currency_symbol,
+            'exchangeRate'       => $this->exchange_rate,
             'created_at' => $this->created_at?->toDateTimeString(),
             'updated_at' => $this->updated_at?->toDateTimeString(),
 
