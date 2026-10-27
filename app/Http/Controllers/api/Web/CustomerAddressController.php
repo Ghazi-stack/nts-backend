@@ -109,7 +109,25 @@ class CustomerAddressController extends Controller
 
         return response()->json([
             'status' => true,
-            'data'   => $address
+            'data'   => [
+                'id'           => $address->id,
+                'storeId'      => $address->store_id,
+                'customerId'   => $address->customer_id,
+                'firstName'    => $address->first_name,
+                'lastName'     => $address->last_name,
+                'companyName'  => $address->company_name,
+                'phoneNumber'  => $address->phone_number,
+                'addressLine1' => $address->address_line_1,
+                'addressLine2' => $address->address_line_2,
+                'city'         => $address->city,
+                'state'        => $address->state,
+                'zip'          => $address->zip,
+                'country'      => $address->country,
+                'isDefault'    => (bool) $address->is_default,
+                'type'         => $address->type,
+                'createdAt'    => $address->created_at,
+                'updatedAt'    => $address->updated_at,
+            ]
         ]);
     }
 
@@ -210,173 +228,100 @@ class CustomerAddressController extends Controller
             'state'        => 'required|string|max:100',
             'zip'          => 'nullable|string|max:30',
             'country'      => 'required|string|max:100',
-            'is_default'   => 'nullable|boolean',
+            'isDefault'    => 'nullable|boolean',
             'type'         => 'nullable|in:Residential,Commercial',
-            'customer_id'  => 'nullable|integer',
+            'customerId'   => 'nullable|integer',
         ]);
 
         /*
-        |--------------------------------------------------------------------------
-        | Determine customer
-        |--------------------------------------------------------------------------
-        */
+    |--------------------------------------------------------------------------
+    | Determine customer
+    |--------------------------------------------------------------------------
+    */
         if ($user && (int) $user->userRole === 2) {
             $customerId = $user->customer_id ?: $user->id;
         } else {
-            $customerId = $validated['customer_id'] ?? null;
+            $customerId = $validated['customerId'] ?? null;
         }
 
         /*
-        |--------------------------------------------------------------------------
-        | Normalize values for duplicate checking
-        |--------------------------------------------------------------------------
-        |
-        | We compare every address field except is_default.
-        |
-        | trim() handles extra spaces.
-        | strtolower() makes comparison case-insensitive.
-        | NULL and empty string are treated as the same value.
-        |
-        */
-        $firstName = strtolower(trim($validated['firstName']));
-        $lastName = strtolower(trim($validated['lastName']));
-        $companyName = strtolower(trim($validated['companyName'] ?? ''));
-        $phoneNumber = strtolower(trim($validated['phoneNumber'] ?? ''));
+    |--------------------------------------------------------------------------
+    | Normalize values for duplicate checking
+    |--------------------------------------------------------------------------
+    */
+        $firstName    = strtolower(trim($validated['firstName']));
+        $lastName     = strtolower(trim($validated['lastName']));
+        $companyName  = strtolower(trim($validated['companyName'] ?? ''));
+        $phoneNumber  = strtolower(trim($validated['phoneNumber'] ?? ''));
         $addressLine1 = strtolower(trim($validated['addressLine1']));
         $addressLine2 = strtolower(trim($validated['addressLine2'] ?? ''));
-        $city = strtolower(trim($validated['city']));
-        $state = strtolower(trim($validated['state']));
-        $zip = strtolower(trim($validated['zip'] ?? ''));
-        $country = strtolower(trim($validated['country']));
-        $type = strtolower(trim($validated['type'] ?? 'Residential'));
+        $city         = strtolower(trim($validated['city']));
+        $state        = strtolower(trim($validated['state']));
+        $zip          = strtolower(trim($validated['zip'] ?? ''));
+        $country      = strtolower(trim($validated['country']));
+        $type         = strtolower(trim($validated['type'] ?? 'Residential'));
 
         /*
-        |--------------------------------------------------------------------------
-        | Check for duplicate address
-        |--------------------------------------------------------------------------
-        |
-        | Every field must match.
-        |
-        | If even ONE field is different, this query will not find the
-        | existing record and a new address will be created.
-        |
-        | is_default is intentionally excluded because changing the default
-        | status should not create another address.
-        |
-        */
+    |--------------------------------------------------------------------------
+    | Check for duplicate address
+    |--------------------------------------------------------------------------
+    */
         $duplicateAddress = CustomerAddress::query()
             ->where('store_id', $storeId)
             ->where('customer_id', $customerId)
-
-            ->whereRaw(
-                'LOWER(TRIM(COALESCE(first_name, ""))) = ?',
-                [$firstName]
-            )
-
-            ->whereRaw(
-                'LOWER(TRIM(COALESCE(last_name, ""))) = ?',
-                [$lastName]
-            )
-
-            ->whereRaw(
-                'LOWER(TRIM(COALESCE(company_name, ""))) = ?',
-                [$companyName]
-            )
-
-            ->whereRaw(
-                'LOWER(TRIM(COALESCE(phone_number, ""))) = ?',
-                [$phoneNumber]
-            )
-
-            ->whereRaw(
-                'LOWER(TRIM(COALESCE(address_line_1, ""))) = ?',
-                [$addressLine1]
-            )
-
-            ->whereRaw(
-                'LOWER(TRIM(COALESCE(address_line_2, ""))) = ?',
-                [$addressLine2]
-            )
-
-            ->whereRaw(
-                'LOWER(TRIM(COALESCE(city, ""))) = ?',
-                [$city]
-            )
-
-            ->whereRaw(
-                'LOWER(TRIM(COALESCE(state, ""))) = ?',
-                [$state]
-            )
-
-            ->whereRaw(
-                'LOWER(TRIM(COALESCE(zip, ""))) = ?',
-                [$zip]
-            )
-
-            ->whereRaw(
-                'LOWER(TRIM(COALESCE(country, ""))) = ?',
-                [$country]
-            )
-
-            ->whereRaw(
-                'LOWER(TRIM(COALESCE(type, ""))) = ?',
-                [$type]
-            )
-
+            ->whereRaw('LOWER(TRIM(COALESCE(first_name, ""))) = ?', [$firstName])
+            ->whereRaw('LOWER(TRIM(COALESCE(last_name, ""))) = ?', [$lastName])
+            ->whereRaw('LOWER(TRIM(COALESCE(company_name, ""))) = ?', [$companyName])
+            ->whereRaw('LOWER(TRIM(COALESCE(phone_number, ""))) = ?', [$phoneNumber])
+            ->whereRaw('LOWER(TRIM(COALESCE(address_line_1, ""))) = ?', [$addressLine1])
+            ->whereRaw('LOWER(TRIM(COALESCE(address_line_2, ""))) = ?', [$addressLine2])
+            ->whereRaw('LOWER(TRIM(COALESCE(city, ""))) = ?', [$city])
+            ->whereRaw('LOWER(TRIM(COALESCE(state, ""))) = ?', [$state])
+            ->whereRaw('LOWER(TRIM(COALESCE(zip, ""))) = ?', [$zip])
+            ->whereRaw('LOWER(TRIM(COALESCE(country, ""))) = ?', [$country])
+            ->whereRaw('LOWER(TRIM(COALESCE(type, ""))) = ?', [$type])
             ->first();
 
         /*
-        |--------------------------------------------------------------------------
-        | Duplicate found
-        |--------------------------------------------------------------------------
-        */
+    |--------------------------------------------------------------------------
+    | Duplicate found
+    |--------------------------------------------------------------------------
+    */
         if ($duplicateAddress) {
-
-            /*
-            | If the user is trying to make this existing address default,
-            | update the default status instead of creating another record.
-            */
-            if (!empty($validated['is_default'])) {
-
+            if (!empty($validated['isDefault'])) {
                 CustomerAddress::where('customer_id', $customerId)
                     ->where('store_id', $storeId)
                     ->where('id', '!=', $duplicateAddress->id)
-                    ->update([
-                        'is_default' => false
-                    ]);
+                    ->update(['is_default' => false]);
 
                 if (!$duplicateAddress->is_default) {
-                    $duplicateAddress->update([
-                        'is_default' => true
-                    ]);
+                    $duplicateAddress->update(['is_default' => true]);
                 }
             }
 
             return response()->json([
                 'status'  => true,
                 'message' => 'This address already exists.',
-                'data'    => $duplicateAddress->fresh()
+                'data'    => $this->formatAddress($duplicateAddress->fresh())
             ]);
         }
 
         /*
-        |--------------------------------------------------------------------------
-        | Default address handle for NEW address
-        |--------------------------------------------------------------------------
-        */
-        if (!empty($validated['is_default'])) {
+    |--------------------------------------------------------------------------
+    | Default address handle for NEW address
+    |--------------------------------------------------------------------------
+    */
+        if (!empty($validated['isDefault'])) {
             CustomerAddress::where('customer_id', $customerId)
                 ->where('store_id', $storeId)
-                ->update([
-                    'is_default' => false
-                ]);
+                ->update(['is_default' => false]);
         }
 
         /*
-        |--------------------------------------------------------------------------
-        | Create new address
-        |--------------------------------------------------------------------------
-        */
+    |--------------------------------------------------------------------------
+    | Create new address
+    |--------------------------------------------------------------------------
+    */
         $data = [
             'store_id'       => $storeId,
             'customer_id'    => $customerId,
@@ -390,22 +335,43 @@ class CustomerAddressController extends Controller
             'state'          => $validated['state'],
             'zip'            => $validated['zip'] ?? null,
             'country'        => $validated['country'],
-            'is_default'     => $validated['is_default'] ?? false,
+            'is_default'     => $validated['isDefault'] ?? false,
             'type'           => $validated['type'] ?? 'Residential',
         ];
 
         $address = CustomerAddress::create($data);
 
-        /*
-        |--------------------------------------------------------------------------
-        | Response
-        |--------------------------------------------------------------------------
-        */
         return response()->json([
             'status'  => true,
             'message' => 'Address created successfully.',
-            'data'    => $address
+            'data'    => $this->formatAddress($address)
         ]);
+    }
+
+    /**
+     * Convert address model to camelCase response
+     */
+    private function formatAddress($address): array
+    {
+        return [
+            'id'            => $address->id,
+            'storeId'       => $address->store_id,
+            'customerId'    => $address->customer_id,
+            'firstName'     => $address->first_name,
+            'lastName'      => $address->last_name,
+            'companyName'   => $address->company_name,
+            'phoneNumber'   => $address->phone_number,
+            'addressLine1'  => $address->address_line_1,
+            'addressLine2'  => $address->address_line_2,
+            'city'          => $address->city,
+            'state'         => $address->state,
+            'zip'           => $address->zip,
+            'country'       => $address->country,
+            'isDefault'     => (bool) $address->is_default,
+            'type'          => $address->type,
+            'createdAt'     => $address->created_at,
+            'updatedAt'     => $address->updated_at,
+        ];
     }
 
     /**
@@ -441,21 +407,36 @@ class CustomerAddressController extends Controller
         }
 
         $validated = $request->validate([
-            'first_name'     => 'sometimes|string|max:100',
-            'last_name'      => 'sometimes|string|max:100',
-            'company_name'   => 'sometimes|nullable|string|max:255',
-            'phone_number'   => 'sometimes|nullable|string|max:30',
-            'address_line_1' => 'sometimes|string|max:255',
-            'address_line_2' => 'sometimes|nullable|string|max:255',
-            'city'           => 'sometimes|string|max:100',
-            'state'          => 'sometimes|string|max:100',
-            'zip'            => 'sometimes|nullable|string|max:30',
-            'country'        => 'sometimes|string|max:100',
-            'is_default'     => 'sometimes|nullable|boolean',
-            'type'           => 'sometimes|nullable|in:Residential,Commercial',
+            'firstName'    => 'sometimes|string|max:100',
+            'lastName'     => 'sometimes|string|max:100',
+            'companyName'  => 'sometimes|nullable|string|max:255',
+            'phoneNumber'  => 'sometimes|nullable|string|max:30',
+            'addressLine1' => 'sometimes|string|max:255',
+            'addressLine2' => 'sometimes|nullable|string|max:255',
+            'city'         => 'sometimes|string|max:100',
+            'state'        => 'sometimes|string|max:100',
+            'zip'          => 'sometimes|nullable|string|max:30',
+            'country'      => 'sometimes|string|max:100',
+            'isDefault'    => 'sometimes|nullable|boolean',
+            'type'         => 'sometimes|nullable|in:Residential,Commercial',
         ]);
 
-        if (array_key_exists('is_default', $validated) && !empty($validated['is_default'])) {
+        // camelCase to snake_case for database
+        $data = [];
+        if (isset($validated['firstName']))    $data['first_name']     = $validated['firstName'];
+        if (isset($validated['lastName']))     $data['last_name']      = $validated['lastName'];
+        if (isset($validated['companyName']))  $data['company_name']   = $validated['companyName'];
+        if (isset($validated['phoneNumber']))  $data['phone_number']   = $validated['phoneNumber'];
+        if (isset($validated['addressLine1'])) $data['address_line_1'] = $validated['addressLine1'];
+        if (isset($validated['addressLine2'])) $data['address_line_2'] = $validated['addressLine2'];
+        if (isset($validated['city']))         $data['city']           = $validated['city'];
+        if (isset($validated['state']))        $data['state']          = $validated['state'];
+        if (isset($validated['zip']))          $data['zip']            = $validated['zip'];
+        if (isset($validated['country']))      $data['country']        = $validated['country'];
+        if (isset($validated['type']))         $data['type']           = $validated['type'];
+        if (isset($validated['isDefault']))    $data['is_default']     = $validated['isDefault'];
+
+        if (array_key_exists('isDefault', $validated) && !empty($validated['isDefault'])) {
             CustomerAddress::where('customer_id', $address->customer_id)
                 ->where('store_id', $storeId)
                 ->where('id', '!=', $address->id)
@@ -464,15 +445,32 @@ class CustomerAddressController extends Controller
                 ]);
         }
 
-        $address->update($validated);
+        $address->update($data);
 
         return response()->json([
             'status'  => true,
             'message' => 'Address updated successfully.',
-            'data'    => $address
+            'data'    => [
+                'id'           => $address->id,
+                'storeId'      => $address->store_id,
+                'customerId'   => $address->customer_id,
+                'firstName'    => $address->first_name,
+                'lastName'     => $address->last_name,
+                'companyName'  => $address->company_name,
+                'phoneNumber'  => $address->phone_number,
+                'addressLine1' => $address->address_line_1,
+                'addressLine2' => $address->address_line_2,
+                'city'         => $address->city,
+                'state'        => $address->state,
+                'zip'          => $address->zip,
+                'country'      => $address->country,
+                'isDefault'    => (bool) $address->is_default,
+                'type'         => $address->type,
+                'createdAt'    => $address->created_at,
+                'updatedAt'    => $address->updated_at,
+            ]
         ]);
     }
-
     /**
      * Delete Address
      */
