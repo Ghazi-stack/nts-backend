@@ -43,6 +43,482 @@ class AuthController extends Controller
 {
 
     
+    // public function registerOwner(Request $request)
+    // {
+    //     $central = DB::connection('central');
+
+    //     try {
+    //         $userRole = (int) $request->input('userRole');
+
+    //         // This endpoint handles owners and central staff, not customers.
+    //         if (!in_array($userRole, [1, 3, 4, 5, 6], true)) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Customer registration must use the customer registration endpoint.',
+    //             ], 422);
+    //         }
+
+    //         $validator = Validator::make($request->all(), [
+    //             'firstName'    => 'required|string|max:100',
+    //             'lastName'     => 'nullable|string|max:100',
+    //             'email'        => 'required|email',
+    //             'phoneNumber'  => 'nullable|string|max:20',
+    //             'password'     => $userRole === 1
+    //                 ? 'required|string|min:6'
+    //                 : 'nullable|string|min:6',
+    //             'companyName'  => 'nullable|string|max:255',
+    //             'addressLine1' => 'nullable|string|max:255',
+    //             'addressLine2' => 'nullable|string|max:255',
+    //             'suburb'       => 'nullable|string|max:255',
+    //             'country'      => 'nullable|string|max:100',
+    //             'state'        => 'nullable|string|max:100',
+    //             'zip'          => 'nullable|string|max:20',
+    //             'storeName'    => 'nullable|string|max:255',
+    //             'businessSize' => 'nullable|string|max:100',
+    //             'region'       => 'nullable|string|max:100',
+    //             'userRole'     => 'required|integer|in:1,3,4,5,6',
+    //             'base_url'     => 'nullable|string|max:255',
+    //             'permissions'  => $userRole === 1
+    //                 ? 'nullable|array'
+    //                 : 'required|array|min:1',
+    //             'permissions.*' => [
+    //                 'required',
+    //                 'integer',
+    //                 'distinct',
+    //                 'exists:central.permissions,id',
+    //             ],
+    //         ]);
+
+    //         if ($validator->fails()) {
+    //             return response()->json([
+    //                 'status'  => false,
+    //                 'message' => 'Validation errors',
+    //                 'errors'  => $validator->errors(),
+    //             ], 422);
+    //         }
+
+    //         /*
+    //         |--------------------------------------------------------------------------
+    //         | Resolve central store for roles 3–6
+    //         |--------------------------------------------------------------------------
+    //         */
+
+    //         $registryStore = null;
+    //         $registryStoreId = null;
+
+    //         if ($userRole !== 1) {
+    //             $storeHash = $request->header('x-store-hash')
+    //                 ?: $request->header('store_hash')
+    //                 ?: $request->header('storeHash');
+
+    //             if (!$storeHash) {
+    //                 return response()->json([
+    //                     'status'  => false,
+    //                     'message' => 'The x-store-hash header is required.',
+    //                 ], 400);
+    //             }
+
+    //             $registryStore = $central->table('stores')
+    //                 ->where('store_hash', $storeHash)
+    //                 ->where('provisioning_status', 'active')
+    //                 ->first();
+
+    //             if (!$registryStore) {
+    //                 return response()->json([
+    //                     'status'  => false,
+    //                     'message' => 'Store not found or not active.',
+    //                 ], 404);
+    //             }
+
+    //             $registryStoreId = (int) $registryStore->id;
+    //         }
+
+    //         /*
+    //         |--------------------------------------------------------------------------
+    //         | CENTRAL STAFF REGISTRATION: roles 3–6
+    //         |--------------------------------------------------------------------------
+    //         */
+
+    //         if ($userRole !== 1) {
+    //             $central->beginTransaction();
+
+    //             $existingUser = CentralUser::on('central')
+    //                 ->where('email', $request->email)
+    //                 ->first();
+
+    //             if ($existingUser && (int) $existingUser->userRole === 2) {
+    //                 $central->rollBack();
+
+    //                 return response()->json([
+    //                     'status'  => false,
+    //                     'message' => 'This email already belongs to a customer.',
+    //                 ], 422);
+    //             }
+
+    //             if ($existingUser) {
+    //                 $membershipExists = $central->table('store_user')
+    //                     ->where('user_id', $existingUser->id)
+    //                     ->where('store_id', $registryStoreId)
+    //                     ->exists();
+
+    //                 if ($membershipExists) {
+    //                     $central->rollBack();
+
+    //                     return response()->json([
+    //                         'status'  => false,
+    //                         'message' => 'This user already has access to this store.',
+    //                     ], 409);
+    //                 }
+
+    //                 $user = $existingUser;
+    //             } else {
+
+    //             Log::info('Staff registration database check', [
+    //                 'connection' => (new CentralUser())->setConnection('central')
+    //                     ->getConnection()->getName(),
+    //                 'database' => (new CentralUser())->setConnection('central')
+    //                     ->getConnection()->getDatabaseName(),
+    //                 'table' => (new CentralUser())->setConnection('central')
+    //                     ->getTable(),
+    //                 'email' => $request->email,
+    //             ]);
+    //                 // Use only fields confirmed to belong to central.users.
+    //                 $user = CentralUser::on('central')->create([
+    //                     'name'         => trim(
+    //                         $request->firstName . ' ' . ($request->lastName ?? '')
+    //                     ),
+    //                     'email'        => $request->email,
+    //                     'password'     => bcrypt(Str::random(32)),
+    //                     'userRole'     => $userRole,
+    //                     'phone_number' => $request->phoneNumber,
+    //                 ]);
+    //             }
+
+    //             // Store membership belongs in the central pivot table.
+    //             $central->table('store_user')->insert([
+    //                 'user_id'    => $user->id,
+    //                 'store_id'   => $registryStoreId,
+    //                 'created_at' => now(),
+    //                 'updated_at' => now(),
+    //             ]);
+
+    //             $permissionIds = array_values(array_unique(
+    //                 array_map('intval', $request->input('permissions', []))
+    //             ));
+
+    //             $permissionRows = [];
+
+    //             foreach ($permissionIds as $permissionId) {
+    //                 $permissionRows[] = [
+    //                     'user_id'       => $user->id,
+    //                     'permission_id' => $permissionId,
+    //                     'store_id'      => $registryStoreId,
+    //                     'created_at'    => now(),
+    //                     'updated_at'    => now(),
+    //                 ];
+    //             }
+
+    //             if ($permissionRows) {
+    //                 $central->table('user_permissions')->insert($permissionRows);
+    //             }
+
+    //             $central->commit();
+
+    //             // try {
+    //             //     $resetToken = app('auth.password.broker')->createToken($user);
+
+    //             //     $resetLink =
+    //             //         'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
+    //             //         . $resetToken
+    //             //         . '&email=' . urlencode($user->email);
+
+    //             //     Mail::to($user->email)->send(
+    //             //         new StoreAccessMail(
+    //             //             $user->name,
+    //             //             $user->email,
+    //             //             $resetLink,
+    //             //             $registryStoreId
+    //             //         )
+    //             //     );
+    //             // } catch (\Throwable $mailError) {
+    //             //     Log::error('CENTRAL STAFF ACCESS EMAIL FAILED', [
+    //             //         'error' => $mailError->getMessage(),
+    //             //         'email' => $user->email,
+    //             //     ]);
+    //             // }
+   
+    //             try {
+    //                 // Generate a plain-text token for the reset link.
+    //                 $resetToken = \Illuminate\Support\Str::random(64);
+
+    //                 // Store the hashed token in the CENTRAL database.
+    //                 $central->table('password_reset_tokens')->updateOrInsert(
+    //                     ['email' => $user->email],
+    //                     [
+    //                         'token'      => \Illuminate\Support\Facades\Hash::make($resetToken),
+    //                         'created_at' => now(),
+    //                     ]
+    //                 );
+
+    //                 $resetLink =
+    //                     'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
+    //                     . urlencode($resetToken)
+    //                     . '&email=' . urlencode($user->email);
+
+    //                 Mail::to($user->email)->send(
+    //                     new StoreAccessMail(
+    //                         $user->name,
+    //                         $user->email,
+    //                         $resetLink,
+    //                         $registryStoreId
+    //                     )
+    //                 );
+    //             } catch (\Throwable $mailError) {
+    //                 Log::error('CENTRAL STAFF ACCESS EMAIL FAILED', [
+    //                     'error' => $mailError->getMessage(),
+    //                     'email' => $user->email,
+    //                 ]);
+    //             }
+
+
+    //             $userPermissions = Permission::on('central')
+    //                 ->whereIn('id', $permissionIds)
+    //                 ->orderBy('group')
+    //                 ->orderBy('sort_order')
+    //                 ->get()
+    //                 ->groupBy('group')
+    //                 ->map(function ($items, $group) {
+    //                     return [
+    //                         'group' => $group,
+    //                         'permissions' => $items->map(function ($p) {
+    //                             return [
+    //                                 'id'    => $p->id,
+    //                                 'name'  => $p->name,
+    //                                 'label' => $p->label,
+    //                                 'slug'  => $p->slug,
+    //                             ];
+    //                         })->values(),
+    //                     ];
+    //                 })->values();
+
+    //             $token = $user->createToken('auth_token')->plainTextToken;
+
+    //             $publicStore = [
+    //                 'id'         => $registryStore->id,
+    //                 'name'       => $registryStore->name,
+    //                 'base_url'   => $registryStore->base_url ?? null,
+    //                 'created_at' => $registryStore->created_at,
+    //                 'updated_at' => $registryStore->updated_at,
+    //             ];
+
+    //             return response()->json([
+    //                 'status'      => true,
+    //                 'message'     => $existingUser
+    //                     ? 'Existing user added to store with permissions. Store access email sent.'
+    //                     : 'Staff user registered successfully. Store access email sent.',
+    //                 'token'       => $token,
+    //                 'expireAt'    => Carbon::now()->addDays(1)->format('Y-m-d H:i:s'),
+    //                 'user'        => new UserResource($user),
+    //                 'store'       => $publicStore,
+    //                 'stores'      => [$publicStore],
+    //                 'permissions' => $userPermissions,
+    //                 'isOwner'     => false,
+    //             ], 201);
+    //         }
+
+    //         /*
+    //         |--------------------------------------------------------------------------
+    //         | STORE OWNER REGISTRATION: role 1
+    //         |--------------------------------------------------------------------------
+    //         */
+
+    //         $central->beginTransaction();
+
+    //         $existingUser = User::on('central')
+    //             ->where('email', $request->email)
+    //             ->first();
+
+    //         if ($existingUser) {
+    //             if ((int) $existingUser->userRole !== 1) {
+    //                 $central->rollBack();
+
+    //                 return response()->json([
+    //                     'status'  => false,
+    //                     'message' => 'This email is already registered with another role.',
+    //                 ], 422);
+    //             }
+
+    //             if (!Hash::check($request->password, $existingUser->password)) {
+    //                 $central->rollBack();
+
+    //                 return response()->json([
+    //                     'status'  => false,
+    //                     'message' => 'Invalid password. For additional stores use the original registration password.',
+    //                 ], 401);
+    //             }
+
+    //             $user = $existingUser;
+    //         } else {
+    //             // No store_id or store-detail fields are written to central.users.
+    //             $user = User::on('central')->create([
+    //                 'name'         => trim(
+    //                     $request->firstName . ' ' . ($request->lastName ?? '')
+    //                 ),
+    //                 'email'        => $request->email,
+    //                 'password'     => bcrypt($request->password),
+    //                 'userRole'     => 1,
+    //                 'phone_number' => $request->phoneNumber,
+    //             ]);
+    //         }
+
+    //         /*
+    //         * Keep the original Store model behavior.
+    //         * StoreRegistryService remains responsible for registry registration.
+    //         */
+    //         $store = Store::create([
+    //             'name'     => $request->storeName,
+    //             'user_id'  => $user->id,
+    //             'base_url' => $request->base_url,
+    //             'store_hash'          => 'store-' . Str::lower(Str::random(12)),
+    //             'provisioning_status' => 'pending',
+    //         ]);
+
+
+    //         // The central stores table is the only store table.
+    //         // Reuse this record and set legacy_store_id to its own primary ID.
+    //         $central->table('stores')
+    //             ->where('id', $store->id)
+    //             ->update([
+    //                 'legacy_store_id' => $store->id,
+    //                 'updated_at'      => now(),
+    //             ]);
+                
+    //         $registryStore = app(StoreRegistryService::class)
+    //             ->registerPendingStore($store, (int) $user->id);
+
+    //         $registryStore = app(TenantProvisioningService::class)
+    //             ->provisionDatabase((int) $registryStore->id);
+
+    //         $registryStoreId = (int) $registryStore->id;
+
+    //         // Associate the owner with the central registry store.
+    //         $membershipExists = $central->table('store_user')
+    //             ->where('user_id', $user->id)
+    //             ->where('store_id', $registryStoreId)
+    //             ->exists();
+
+    //         if (!$membershipExists) {
+    //             $central->table('store_user')->insert([
+    //                 'user_id'    => $user->id,
+    //                 'store_id'   => $registryStoreId,
+    //                 'created_at' => now(),
+    //                 'updated_at' => now(),
+    //             ]);
+    //         }
+
+    //         // Assign all central permissions to the owner for this store.
+    //         $allPermissions = Permission::on('central')->get();
+
+    //         $permissionRows = [];
+
+    //         foreach ($allPermissions as $permission) {
+    //             $alreadyAssigned = $central->table('user_permissions')
+    //                 ->where('user_id', $user->id)
+    //                 ->where('permission_id', $permission->id)
+    //                 ->where('store_id', $registryStoreId)
+    //                 ->exists();
+
+    //             if (!$alreadyAssigned) {
+    //                 $permissionRows[] = [
+    //                     'user_id'       => $user->id,
+    //                     'permission_id' => $permission->id,
+    //                     'store_id'      => $registryStoreId,
+    //                     'created_at'    => now(),
+    //                     'updated_at'    => now(),
+    //                 ];
+    //             }
+    //         }
+
+    //         if ($permissionRows) {
+    //             $central->table('user_permissions')->insert($permissionRows);
+    //         }
+
+    //         $central->commit();
+
+    //         $userPermissions = $allPermissions
+    //             ->sortBy('sort_order')
+    //             ->groupBy('group')
+    //             ->map(function ($items, $group) {
+    //                 return [
+    //                     'group' => $group,
+    //                     'permissions' => $items->map(function ($p) {
+    //                         return [
+    //                             'id'    => $p->id,
+    //                             'name'  => $p->name,
+    //                             'label' => $p->label,
+    //                             'slug'  => $p->slug,
+    //                         ];
+    //                     })->values(),
+    //                 ];
+    //             })->values();
+
+    //         try {
+    //             Mail::to($user->email)->send(
+    //                 new UserRegistrationMail($user, $store->id)
+    //             );
+
+    //             $adminEmail = env(
+    //                 'MAIL_FROM_SB_ADMIN',
+    //                 'hkinza575@gmail.com'
+    //             );
+
+    //             Mail::to($adminEmail)->send(
+    //                 new UserRegistrationMail($user, $store->id)
+    //             );
+    //         } catch (\Throwable $mailError) {
+    //             Log::error('REGISTRATION EMAIL FAILED', [
+    //                 'error'      => $mailError->getMessage(),
+    //                 'user_email' => $user->email,
+    //             ]);
+    //         }
+
+    //         $token = $user->createToken('auth_token')->plainTextToken;
+    //         $expireAt = Carbon::now()->addDays(1)->format('Y-m-d H:i:s');
+
+    //         return response()->json([
+    //             'status'              => true,
+    //             'message'             => $existingUser
+    //                 ? 'New store created successfully for existing owner'
+    //                 : 'Store owner registered successfully',
+    //             'token'               => $token,
+    //             'expireAt'            => $expireAt,
+    //             'user'                => new UserResource($user),
+    //             'store'               => $store,
+    //             'permissions'         => $userPermissions,
+    //             'isOwner'             => true,
+    //             'store_hash'          => $registryStore->store_hash,
+    //             'provisioning_status' => $registryStore->provisioning_status,
+    //         ], 201);
+
+    //     } catch (\Throwable $e) {
+    //         if ($central->transactionLevel() > 0) {
+    //             $central->rollBack();
+    //         }
+
+    //         Log::error('Owner/staff registration failed', [
+    //             'error' => $e->getMessage(),
+    //             'line'  => $e->getLine(),
+    //         ]);
+
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Something went wrong during registration.',
+    //             'error'   => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
+    
     public function registerOwner(Request $request)
     {
         $central = DB::connection('central');
@@ -214,45 +690,13 @@ class AuthController extends Controller
 
                 $central->commit();
 
-                // try {
-                //     $resetToken = app('auth.password.broker')->createToken($user);
-
-                //     $resetLink =
-                //         'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
-                //         . $resetToken
-                //         . '&email=' . urlencode($user->email);
-
-                //     Mail::to($user->email)->send(
-                //         new StoreAccessMail(
-                //             $user->name,
-                //             $user->email,
-                //             $resetLink,
-                //             $registryStoreId
-                //         )
-                //     );
-                // } catch (\Throwable $mailError) {
-                //     Log::error('CENTRAL STAFF ACCESS EMAIL FAILED', [
-                //         'error' => $mailError->getMessage(),
-                //         'email' => $user->email,
-                //     ]);
-                // }
-   
+                
                 try {
-                    // Generate a plain-text token for the reset link.
-                    $resetToken = \Illuminate\Support\Str::random(64);
-
-                    // Store the hashed token in the CENTRAL database.
-                    $central->table('password_reset_tokens')->updateOrInsert(
-                        ['email' => $user->email],
-                        [
-                            'token'      => \Illuminate\Support\Facades\Hash::make($resetToken),
-                            'created_at' => now(),
-                        ]
-                    );
+                    $resetToken = app('auth.password.broker')->createToken($user);
 
                     $resetLink =
                         'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
-                        . urlencode($resetToken)
+                        . $resetToken
                         . '&email=' . urlencode($user->email);
 
                     Mail::to($user->email)->send(
@@ -369,20 +813,8 @@ class AuthController extends Controller
                 'name'     => $request->storeName,
                 'user_id'  => $user->id,
                 'base_url' => $request->base_url,
-                'store_hash'          => 'store-' . Str::lower(Str::random(12)),
-                'provisioning_status' => 'pending',
             ]);
 
-
-            // The central stores table is the only store table.
-            // Reuse this record and set legacy_store_id to its own primary ID.
-            $central->table('stores')
-                ->where('id', $store->id)
-                ->update([
-                    'legacy_store_id' => $store->id,
-                    'updated_at'      => now(),
-                ]);
-                
             $registryStore = app(StoreRegistryService::class)
                 ->registerPendingStore($store, (int) $user->id);
 
@@ -507,6 +939,7 @@ class AuthController extends Controller
             ], 500);
         }
     }
+
 
     
     // public function registerOwner(Request $request)
