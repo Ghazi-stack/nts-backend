@@ -27,6 +27,9 @@ class OrderResource extends JsonResource
             'userType'           => $this->user_type,
             'emailInvoice'       => $this->email_invoice,
             'totalAmount'        => $this->total_amount,
+            'currencyCode'       => $this->currency_code,
+            'currencySymbol'     => $this->currency_symbol,
+            'exchangeRate'       => $this->exchange_rate,
             'discountAmount'     => $this->discountAmount,
             'couponCode'         => $this->coupon_code,
             'manualDiscount' => $this->manual_discount !== null
