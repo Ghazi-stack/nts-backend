@@ -1169,7 +1169,7 @@ class OrderController extends Controller
 
             $calculatedCents = (int) round($calculatedTotal * 100);
 
-            if (abs($calculatedCents - $frontendAmount) > 1) {
+            if (abs($calculatedCents - $frontendAmount) > 0) {
                 return response()->json([
                     'status'     => false,
                     'message'    => 'Amount mismatch. Order cannot be placed.',
