@@ -1080,26 +1080,24 @@ class OrderController extends Controller
                 'zip'            => 'nullable|string|max:20',
                 'country'        => 'nullable|string|max:100',
                 'newsletter'     => 'nullable|boolean',
-
                 'paymentMethod'  => 'required|string|max:100',
-
                 'shippingMethod' => 'nullable|string|max:100',
                 'shippingCost'   => 'nullable|numeric',
                 'shippingData'   => 'nullable',
-
                 'comments'       => 'nullable|string|max:1000',
                 'discountAmount' => 'nullable|numeric',
                 'manualDiscount' => 'nullable|numeric',
                 'paymentIntentId' => 'required|string',
                 'couponCode'     => 'nullable|string|max:255',
                 'isMultiAddress' => 'required|boolean',
-
                 'ipAddress'                  => 'nullable|string|max:45',
                 'orderPlaceCountry'          => 'nullable|string|max:45',
                 'isSaveAddressForShipping'   => 'nullable|boolean',
                 'isSaveAddressForBilling'    => 'nullable|boolean',
                 'billingSame'                => 'nullable|boolean',
-
+                'amount'         => 'required|integer',
+                'currency'       => 'nullable|string|size:3',
+                'selectedCurrency' => 'nullable|array',
                 'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
                 'destinations.*.firstName'      => 'required|string|max:255',
                 'destinations.*.lastName'       => 'required|string|max:255',
@@ -1111,15 +1109,12 @@ class OrderController extends Controller
                 'destinations.*.state'          => 'required|string|max:100',
                 'destinations.*.zip'            => 'required|string|max:20',
                 'destinations.*.country'        => 'required|string|max:100',
-
                 'destinations.*.shippingMethod' => 'required',
                 'destinations.*.shippingCost'   => 'required|numeric',
                 'destinations.*.shippingData'   => 'nullable',
-
                 'destinations.*.products'       => 'required|array|min:1',
                 'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
                 'destinations.*.products.*.quantity'   => 'required|integer|min:1',
-
                 'products'       => 'required_if:isMultiAddress,false|array|min:1',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
@@ -1130,66 +1125,70 @@ class OrderController extends Controller
                 return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
             }
 
-            // $orderEmail = strtolower(trim($validated['email']));
+            // ===== AMOUNT VERIFICATION START =====
+            $currencyCode   = strtoupper($request->input('currency', 'USD'));
+            $currencySymbol = $request->input('selectedCurrency.symbol', '$');
+            $exchangeRate   = (float) $request->input('selectedCurrency.exchangeRate', 1);
+            $frontendAmount = (int) $request->input('amount', 0);
 
-            // $existingDraft = null;
-            // if (!empty($validated['orderId'])) {
-            //     $existingDraft = Order::where('id', $validated['orderId'])
-            //         ->where('store_id', $storeId)
-            //         ->first();
+            $discount = $validated['discountAmount'] ?? 0;
+            $manualDiscount = $validated['manualDiscount'] ?? 0;
+            $isMulti = $validated['isMultiAddress'];
 
-            //     if (!$existingDraft) {
-            //         return response()->json([
-            //             'status'  => false,
-            //             'message' => 'Order not found.',
-            //         ], 404);
-            //     }
-            // }
+            $calculatedTotal = 0;
+
+            if (!$isMulti) {
+                foreach ($validated['products'] as $item) {
+                    $product = Product::find($item['product_id']);
+                    if ($product) {
+                        $convertedPrice = $product->price * $exchangeRate;
+                        $calculatedTotal += $convertedPrice * $item['quantity'];
+                    }
+                }
+                $calculatedTotal += ($validated['shippingCost'] ?? 0);
+                $calculatedTotal -= ($discount + $manualDiscount);
+            } else {
+                foreach ($validated['destinations'] as $dest) {
+                    foreach ($dest['products'] as $item) {
+                        $product = Product::find($item['product_id']);
+                        if ($product) {
+                            $convertedPrice = $product->price * $exchangeRate;
+                            $calculatedTotal += $convertedPrice * $item['quantity'];
+                        }
+                    }
+                    $calculatedTotal += ($dest['shippingCost'] ?? 0);
+                }
+                $calculatedTotal -= ($discount + $manualDiscount);
+            }
+
+            $calculatedCents = (int) round($calculatedTotal * 100);
+
+            if (abs($calculatedCents - $frontendAmount) > 1) {
+                return response()->json([
+                    'status'     => false,
+                    'message'    => 'Amount mismatch. Order cannot be placed.',
+                    'calculated' => $calculatedCents,
+                    'received'   => $frontendAmount,
+                ], 422);
+            }
+            // ===== AMOUNT VERIFICATION END =====
 
             $orderEmail = strtolower(trim($validated['email']));
 
-            /*
-            |--------------------------------------------------------------------------
-            | Resolve authenticated user and current draft context
-            |--------------------------------------------------------------------------
-            |
-            | For normal checkout:
-            |   - no orderId
-            |   - existing behavior remains unchanged
-            |
-            | For draft checkout:
-            |   - orderId must belong to the currently active quoteToken
-            |   - user must be authenticated
-            |   - the draft must belong to that user
-            |
-            */
             $currentUser = $request->user('sanctum') ?? auth('sanctum')->user();
 
             if (!$currentUser && $request->bearerToken()) {
                 $sanctumToken = \Laravel\Sanctum\PersonalAccessToken::findToken(
                     $request->bearerToken()
                 );
-
                 $currentUser = $sanctumToken?->tokenable;
             }
 
             $currentQuoteToken = null;
             $existingDraft = null;
 
-            /*
-            |--------------------------------------------------------------------------
-            | Resolve current draft from persistent backend context
-            |--------------------------------------------------------------------------
-            |
-            | The frontend does NOT need to send orderId.
-            | The active quoteToken identifies the draft order.
-            |
-            */
-
             if ($currentUser) {
-
                 $sessionId = null;
-
                 $currentQuoteToken = $this->cartContext->getCurrentQuoteToken(
                     $storeId,
                     $currentUser,
@@ -1197,19 +1196,9 @@ class OrderController extends Controller
                 );
 
                 if ($currentQuoteToken) {
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Decode current quote token
-                    |--------------------------------------------------------------------------
-                    */
                     try {
-
-                        $quotePayload = $this->draftQuote->decode(
-                            $currentQuoteToken
-                        );
+                        $quotePayload = $this->draftQuote->decode($currentQuoteToken);
                     } catch (\Exception $e) {
-
                         return response()->json([
                             'status'  => false,
                             'message' => 'Current draft context is invalid or expired.',
@@ -1220,28 +1209,14 @@ class OrderController extends Controller
                     $tokenOrderId = (int) ($quotePayload['order_id'] ?? 0);
                     $tokenUserId  = (int) ($quotePayload['user_id'] ?? 0);
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Validate current draft ownership
-                    |--------------------------------------------------------------------------
-                    */
-                    if (
-                        $tokenStoreId !== (int) $storeId ||
-                        $tokenUserId !== (int) $currentUser->id
-                    ) {
+                    if ($tokenStoreId !== (int) $storeId || $tokenUserId !== (int) $currentUser->id) {
                         return response()->json([
                             'status'  => false,
                             'message' => 'Draft context does not belong to the authenticated user.',
                         ], 403);
                     }
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Load the current draft order directly from quoteToken
-                    |--------------------------------------------------------------------------
-                    */
                     if ($tokenOrderId > 0) {
-
                         $existingDraft = Order::query()
                             ->where('id', $tokenOrderId)
                             ->where('store_id', $storeId)
@@ -1257,13 +1232,7 @@ class OrderController extends Controller
                         }
                     }
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Make sure the active draft still has cart items
-                    |--------------------------------------------------------------------------
-                    */
                     if ($existingDraft) {
-
                         $hasActiveDraftItems = Cart::query()
                             ->where('store_id', $storeId)
                             ->where('user_id', $currentUser->id)
@@ -1272,13 +1241,7 @@ class OrderController extends Controller
                             ->exists();
 
                         if (!$hasActiveDraftItems) {
-
-                            $this->cartContext->setNormalCart(
-                                $storeId,
-                                $currentUser,
-                                null
-                            );
-
+                            $this->cartContext->setNormalCart($storeId, $currentUser, null);
                             return response()->json([
                                 'status'  => false,
                                 'message' => 'Draft cart is empty.',
@@ -1300,7 +1263,6 @@ class OrderController extends Controller
                         return (float) $row->price;
                     }
                 }
-
                 return (float) $fallbackPrice;
             };
 
@@ -1327,9 +1289,7 @@ class OrderController extends Controller
             Stripe::setApiKey(config('services.stripe.secret'));
 
             try {
-                $stripeIntent = PaymentIntent::retrieve(
-                    $validated['paymentIntentId']
-                );
+                $stripeIntent = PaymentIntent::retrieve($validated['paymentIntentId']);
             } catch (\Exception $stripeException) {
                 return response()->json([
                     'status'  => false,
@@ -1387,20 +1347,10 @@ class OrderController extends Controller
                 }
             }
 
-            // $user = $request->user('sanctum') ?? auth('sanctum')->user();
-
-            // if (!$user && $request->bearerToken()) {
-            //     $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
-            //     $user  = $token?->tokenable;
-            // }
-
             $user = $currentUser;
 
             if (!$user && $request->bearerToken()) {
-                $token = \Laravel\Sanctum\PersonalAccessToken::findToken(
-                    $request->bearerToken()
-                );
-
+                $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
                 $user = $token?->tokenable;
             }
 
@@ -1419,9 +1369,7 @@ class OrderController extends Controller
                             $q->orWhere('session_id', $sessionId);
                         }
                     })
-                    ->update([
-                        'user_used' => 1,
-                    ]);
+                    ->update(['user_used' => 1]);
             }
 
             if ($isGuest) {
@@ -1452,9 +1400,6 @@ class OrderController extends Controller
 
             $orders = [];
             $totalOrderAmount = 0;
-            $discount = $validated['discountAmount'] ?? 0;
-            $manualDiscount = $validated['manualDiscount'] ?? 0;
-            $isMulti = $validated['isMultiAddress'];
 
             $commonOrderFields = [
                 'ip_address'                    => $validated['ipAddress'] ?? $request->ip(),
@@ -1474,7 +1419,7 @@ class OrderController extends Controller
                 foreach ($validated['products'] as $item) {
                     $product = Product::find($item['product_id']);
                     if ($product) {
-                        $cartTotal += $resolvePrice($product->id, $product->price) * $item['quantity'];
+                        $cartTotal += $resolvePrice($product->id, $product->price) * $exchangeRate * $item['quantity'];
                     }
                 }
 
@@ -1510,6 +1455,9 @@ class OrderController extends Controller
                     'device_type'            => $validated['deviceType'] ?? null,
                     'user_type'              => $isGuest ? 'guest' : ($validated['userType'] ?? null),
                     'total_amount'           => $totalAmount,
+                    'currency_code'          => $currencyCode,
+                    'currency_symbol'        => $currencySymbol,
+                    'exchange_rate'          => $exchangeRate,
                     'discountAmount'         => $discount,
                     'manualDiscount'         => $manualDiscount,
                     'coupon_code'            => $validated['couponCode'] ?? null,
@@ -1535,9 +1483,8 @@ class OrderController extends Controller
                             'store_id'   => $storeId,
                             'product_id' => $product->id,
                             'quantity'   => $item['quantity'],
-                            'price'      => $resolvePrice($product->id, $product->price),
+                            'price'      => $resolvePrice($product->id, $product->price) * $exchangeRate,
                         ]);
-
                         $product->decrement('current_stock', $item['quantity']);
                     }
                 }
@@ -1552,7 +1499,7 @@ class OrderController extends Controller
                     foreach ($dest['products'] as $item) {
                         $product = Product::find($item['product_id']);
                         if ($product) {
-                            $cartTotal += $resolvePrice($product->id, $product->price) * $item['quantity'];
+                            $cartTotal += $resolvePrice($product->id, $product->price) * $exchangeRate * $item['quantity'];
                         }
                     }
 
@@ -1588,6 +1535,9 @@ class OrderController extends Controller
                         'device_type'            => $validated['deviceType'] ?? null,
                         'user_type'              => $isGuest ? 'guest' : ($validated['userType'] ?? null),
                         'total_amount'           => $totalAmount,
+                        'currency_code'          => $currencyCode,
+                        'currency_symbol'        => $currencySymbol,
+                        'exchange_rate'          => $exchangeRate,
                         'discountAmount'         => $discount,
                         'manualDiscount'         => $manualDiscount,
                         'coupon_code'            => $validated['couponCode'] ?? null,
@@ -1613,9 +1563,8 @@ class OrderController extends Controller
                                 'store_id'   => $storeId,
                                 'product_id' => $product->id,
                                 'quantity'   => $item['quantity'],
-                                'price'      => $resolvePrice($product->id, $product->price),
+                                'price'      => $resolvePrice($product->id, $product->price) * $exchangeRate,
                             ]);
-
                             $product->decrement('current_stock', $item['quantity']);
                         }
                     }
@@ -1788,7 +1737,7 @@ class OrderController extends Controller
                 ], 'dot');
 
                 OrderTimeline::addEvent($ord->id, $storeId, 'shipping_quote', 'Shipping quote persisted', [
-                    'shipping_cost'   => '$' . number_format($ord->shipping_cost, 2),
+                    'shipping_cost'   => $currencySymbol . number_format($ord->shipping_cost, 2),
                     'shipping_method' => $ord->billingInformation->shipping_method ?? null,
                 ], 'dot');
 
@@ -1796,7 +1745,7 @@ class OrderController extends Controller
 
                 OrderTimeline::addEvent($ord->id, $storeId, 'payment_authorized', 'Payment authorized', [
                     'source'         => ucwords(str_replace('_', ' ', $validated['paymentMethod'] ?? 'N/A')),
-                    'amount'         => '$' . number_format($ord->total_amount, 2),
+                    'amount'         => $currencySymbol . number_format($ord->total_amount, 2),
                     'payment_intent' => $validated['paymentIntentId'] ?? null,
                 ], 'payment');
             }
@@ -1820,37 +1769,6 @@ class OrderController extends Controller
                 ]);
             }
 
-            // try {
-            //     $cartUser = $request->user('sanctum') ?? auth('sanctum')->user();
-
-            //     if (!$cartUser && $request->bearerToken()) {
-            //         $token    = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
-            //         $cartUser = $token?->tokenable;
-            //     }
-
-            //     $cartSessionId = $request->header('X-Session-ID');
-
-            //     $cartQuery = \App\Models\Cart::query()->where('store_id', $storeId);
-
-            //     if ($cartUser) {
-            //         $cartQuery->where('user_id', $cartUser->id);
-            //     } elseif (!empty($cartSessionId)) {
-            //         $cartQuery->where('session_id', $cartSessionId);
-            //     } else {
-            //         $cartQuery = null;
-            //     }
-
-            //     if ($cartQuery) {
-            //         $cartQuery->delete();
-            //     }
-            // } catch (\Exception $cartEx) {
-            //     Log::warning('CART CLEAR AFTER ORDER FAILED', [
-            //         'error'     => $cartEx->getMessage(),
-            //         'store_id'  => $storeId,
-            //         'order_ids' => collect($orders)->pluck('id'),
-            //     ]);
-            // }
-
             try {
                 $cartUser = $request->user('sanctum') ?? auth('sanctum')->user();
 
@@ -1858,83 +1776,20 @@ class OrderController extends Controller
                     $token = \Laravel\Sanctum\PersonalAccessToken::findToken(
                         $request->bearerToken()
                     );
-
                     $cartUser = $token?->tokenable;
                 }
 
                 if ($cartUser) {
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Draft checkout
-                    |--------------------------------------------------------------------------
-                    | If this order was opened from a saved draft, remove ONLY that
-                    | draft's cart. Other saved drafts must remain untouched.
-                    */
-                    // if ($existingDraft) {
-                    //     $draftQuoteToken = $request->input('quoteToken')
-                    //         ?? $request->query('quoteToken');
-
-                    //     /*
-                    //     * If quoteToken wasn't sent by frontend, get the currently
-                    //     * active draft from the persistent user context.
-                    //     */
-                    //     if (!$draftQuoteToken) {
-                    //         $draftQuoteToken = $this->cartContext->getCurrentQuoteToken(
-                    //             $storeId,
-                    //             $cartUser->id
-                    //         );
-                    //     }
-
-                    //     if ($draftQuoteToken) {
-                    //         \App\Models\Cart::query()
-                    //             ->where('store_id', $storeId)
-                    //             ->where('user_id', $cartUser->id)
-                    //             ->where('quote_token', $draftQuoteToken)
-                    //             ->where('isdraftcart', 1)
-                    //             ->delete();
-
-                    //         /*
-                    //         * After successful checkout, the user is back on their
-                    //         * normal cart context.
-                    //         */
-                    //         $this->cartContext->setNormalCart(
-                    //             $storeId,
-                    //             $cartUser->id
-                    //         );
-                    //     }
-                    // }
-
                     if ($existingDraft) {
-                        /*
-                        |--------------------------------------------------------------------------
-                        | Draft checkout
-                        |--------------------------------------------------------------------------
-                        |
-                        | Use the quote token resolved from the persistent backend context.
-                        | Never use a quoteToken supplied by the frontend here.
-                        |
-                        */
                         $draftQuoteToken = $currentQuoteToken;
 
                         if ($draftQuoteToken) {
-
                             \App\Models\Cart::query()
                                 ->where('store_id', $storeId)
                                 ->where('user_id', $cartUser->id)
                                 ->where('quote_token', $draftQuoteToken)
                                 ->where('isdraftcart', 1)
                                 ->delete();
-
-                            /*
-                            |--------------------------------------------------------------------------
-                            | Draft has been successfully converted to an order.
-                            | Switch user back to normal cart context.
-                            |--------------------------------------------------------------------------
-                            */
-                            // $this->cartContext->setNormalCart(
-                            //     $storeId,
-                            //     $cartUser->id
-                            // );
 
                             $sessionId = $cartUser
                                 ? null
@@ -1947,13 +1802,6 @@ class OrderController extends Controller
                             );
                         }
                     } else {
-                        /*
-                        |--------------------------------------------------------------------------
-                        | Normal checkout
-                        |--------------------------------------------------------------------------
-                        | Preserve existing behavior, but only delete the normal cart.
-                        | Saved draft carts are never touched.
-                        */
                         \App\Models\Cart::query()
                             ->where('store_id', $storeId)
                             ->where('user_id', $cartUser->id)
@@ -1967,11 +1815,6 @@ class OrderController extends Controller
                             })
                             ->delete();
 
-                        // $this->cartContext->setNormalCart(
-                        //     $storeId,
-                        //     $cartUser->id
-                        // );
-
                         $sessionId = $cartUser
                             ? null
                             : $request->header('X-Session-ID');
@@ -1983,11 +1826,6 @@ class OrderController extends Controller
                         );
                     }
                 } else {
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Guest checkout
-                    |--------------------------------------------------------------------------
-                    */
                     $cartSessionId = $request->header('X-Session-ID');
 
                     if (!empty($cartSessionId)) {
@@ -2774,7 +2612,7 @@ class OrderController extends Controller
             $orderIds = array_values(array_unique(
                 array_filter(
                     array_map('intval', $orderIds),
-                    fn ($id) => $id > 0
+                    fn($id) => $id > 0
                 )
             ));
 
@@ -2865,7 +2703,6 @@ class OrderController extends Controller
                     'Access-Control-Expose-Headers' => 'X-Total-Rows',
                 ])
                 ->deleteFileAfterSend(true);
-
         } catch (\Throwable $e) {
             if (is_resource($handle)) {
                 fclose($handle);

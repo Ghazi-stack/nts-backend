@@ -20,7 +20,7 @@ class Order extends Model
     use HasFactory, SoftDeletes;
 
     protected $connection = 'tenant';
-    
+
     protected $fillable = [
         'store_id',
         'user_id',
@@ -42,6 +42,9 @@ class Order extends Model
         'shipping_method',
         'comments',
         'total_amount',
+        'currency_code',
+        'currency_symbol',
+        'exchange_rate',
         'discountAmount',
         'manual_discount',
         'coupon_code',
@@ -69,6 +72,7 @@ class Order extends Model
         'is_save_address_for_billing' => 'boolean',
         'billing_same' => 'boolean',
         'billing_address' => 'array',
+        'exchange_rate' => 'decimal:6',
     ];
     public function items()
     {
@@ -133,7 +137,7 @@ class Order extends Model
             ->where('id', $storeId)
             ->first();
     }
-    
+
     public function notes()
     {
         return $this->hasMany(OrderNote::class);

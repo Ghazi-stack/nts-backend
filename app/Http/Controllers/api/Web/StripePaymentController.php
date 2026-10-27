@@ -23,33 +23,56 @@ class StripePaymentController extends Controller
      */
     public function pay(Request $request)
     {
-        // \Log::info('Stripe Secret:', ['stripe_secret' => env('STRIPE_SECRET')]);
         $request->validate([
             'payment_method_id' => 'required|string',
-            'amount'         => 'required',
-            'products'         => 'required|array|min:1',
+            'amount'            => 'required|integer',
+            'currency'          => 'required|string|size:3',
+            'products'          => 'required|array|min:1',
             'products.*.product_id' => 'required|integer|exists:products,id',
             'products.*.quantity'   => 'required|integer|min:1',
+            'exchangeRate'      => 'nullable|numeric',
+            'shippingCost'      => 'nullable|numeric',
+            'discountAmount'    => 'nullable|numeric',
         ]);
 
         $user = auth('sanctum')->user();
         $cartItems = $request->products;
 
-        // $totalAmount = 0;
-        // foreach ($cartItems as $item) {
-        //     $product = Product::find($item['product_id']);
-        //     $totalAmount += $product->price * $item['quantity'];
-        // }
-        $currency = $request->input('currency', 'usd'); // default usd
+        $exchangeRate   = (float) $request->input('exchangeRate', 1);
+        $currency       = strtolower($request->input('currency', 'usd'));
+        $shippingCost   = (float) $request->input('shippingCost', 0);
+        $discount       = (float) $request->input('discountAmount', 0);
 
-        // 2️⃣ Generate order number
+        // Backend calculate
+        $calculatedTotal = 0;
+        foreach ($cartItems as $item) {
+            $product = Product::find($item['product_id']);
+            if ($product) {
+                $convertedPrice = $product->price * $exchangeRate;
+                $calculatedTotal += $convertedPrice * $item['quantity'];
+            }
+        }
+        $calculatedTotal += $shippingCost;
+        $calculatedTotal -= $discount;
+
+        $calculatedCents = (int) round($calculatedTotal * 100);
+
+        // Verify amount
+        if (abs($calculatedCents - $request->amount) > 1) {
+            return response()->json([
+                'status'     => false,
+                'message'    => 'Amount mismatch. Please refresh and try again.',
+                'calculated' => $calculatedCents,
+                'received'   => $request->amount,
+            ], 422);
+        }
+
         $orderNumber = 'ORD-' . strtoupper(Str::random(8));
 
         Stripe::setApiKey(config('services.stripe.secret'));
 
         try {
             DB::beginTransaction();
-
 
             $intent = PaymentIntent::create([
                 'amount' => $request->amount,
@@ -58,7 +81,7 @@ class StripePaymentController extends Controller
                 'confirmation_method' => 'manual',
                 'payment_method_types' => ['card'],
                 'confirm' => true,
-                'capture_method' => 'manual', // ← HOLD payment, don't capture yet
+                'capture_method' => 'manual',
                 'metadata' => [
                     'user_id' => $user?->id,
                     'order_number' => $orderNumber,
@@ -68,7 +91,6 @@ class StripePaymentController extends Controller
                 'idempotency_key' => uniqid('payment_', true)
             ]);
 
-            // 4️⃣ Handle 3D Secure / extra authentication
             if (in_array($intent->status, ['requires_action', 'requires_source_action'])) {
                 DB::commit();
                 return response()->json([
@@ -76,9 +98,7 @@ class StripePaymentController extends Controller
                     'payment_intent_client_secret' => $intent->client_secret
                 ]);
             }
-            // dd($intent);
 
-            // Payment hold successful → status should be 'requires_capture'
             if ($intent->status !== 'requires_capture') {
                 DB::rollBack();
                 return response()->json([
@@ -87,7 +107,6 @@ class StripePaymentController extends Controller
                 ], 400);
             }
 
-            // Extract risk data from the Charge
             $riskScore = null;
             $riskLevel = null;
 
@@ -99,32 +118,6 @@ class StripePaymentController extends Controller
                 $riskScore = $charge->outcome->risk_score ?? null;
                 $riskLevel = $charge->outcome->risk_level ?? null;
             }
-
-            // 5️⃣ Payment succeeded → create order
-            // $order = Order::create([
-            //     'user_id' => $user?->id,
-            //     'order_number' => $orderNumber,
-            //     'status' => 'paid',
-            //     'total_amount' => $totalAmount,
-            // ]);
-
-            // // 6️⃣ Create order items
-            // foreach ($cartItems as $item) {
-            //     $product = Product::find($item['product_id']);
-            //     $order->items()->create([
-            //         'product_id' => $product->id,
-            //         'quantity' => $item['quantity'],
-            //         'price' => $product->price,
-            //     ]);
-            // }
-
-            // // 7️⃣ Store payment record
-            // Payment::create([
-            //     'order_id' => $order->id,
-            //     'stripe_session_id' => $intent->id,
-            //     'amount' => $totalAmount,
-            //     'payment_status' => 'completed',
-            // ]);
 
             DB::commit();
 
@@ -239,10 +232,10 @@ class StripePaymentController extends Controller
                     'payment_status' => 'completed',
                 ]);
 
-                
+
                 $storeId = current_store_id();
                 event(new \App\Events\RealtimeStatsUpdated((int) $storeId));
-                
+
                 OrderTimeline::addEvent($payment->order_id, $storeId, 'payment_captured', 'Capture request successfully processed for the order #' . ($payment->order->order_number ?? $payment->order_id), [
                     'source'         => 'Credit Card (via Stripe)',
                     'payment_intent' => $intentId,
@@ -375,7 +368,6 @@ class StripePaymentController extends Controller
                 $sigHeader,
                 $endpointSecret
             );
-
         } catch (\UnexpectedValueException $e) {
 
             \Log::error('Stripe webhook invalid payload', [
@@ -385,7 +377,6 @@ class StripePaymentController extends Controller
             return response()->json([
                 'error' => 'Invalid payload',
             ], 400);
-
         } catch (\Stripe\Exception\SignatureVerificationException $e) {
 
             \Log::error('Stripe webhook signature verification failed', [
@@ -438,9 +429,7 @@ class StripePaymentController extends Controller
             |--------------------------------------------------------------------------
             | PAYMENT CAPTURED
             |--------------------------------------------------------------------------
-            */
-
-            elseif ($event->type === 'payment_intent.succeeded') {
+            */ elseif ($event->type === 'payment_intent.succeeded') {
 
                 $intent = $event->data->object;
 
@@ -510,7 +499,6 @@ class StripePaymentController extends Controller
                                     ],
                                     'dot'
                                 );
-
                             } catch (\Throwable $timelineException) {
 
                                 \Log::warning(
@@ -530,9 +518,7 @@ class StripePaymentController extends Controller
             |--------------------------------------------------------------------------
             | PAYMENT CANCELED
             |--------------------------------------------------------------------------
-            */
-
-            elseif ($event->type === 'payment_intent.canceled') {
+            */ elseif ($event->type === 'payment_intent.canceled') {
 
                 $intent = $event->data->object;
 
@@ -571,9 +557,7 @@ class StripePaymentController extends Controller
             |--------------------------------------------------------------------------
             | PAYMENT FAILED
             |--------------------------------------------------------------------------
-            */
-
-            elseif ($event->type === 'payment_intent.payment_failed') {
+            */ elseif ($event->type === 'payment_intent.payment_failed') {
 
                 $intent = $event->data->object;
 
@@ -598,7 +582,6 @@ class StripePaymentController extends Controller
                     }
                 }
             }
-
         } catch (\Throwable $e) {
 
             \Log::error(
@@ -822,7 +805,7 @@ class StripePaymentController extends Controller
                  * Ideally replace this with a stable cart/session key.
                  */
                 'idempotency_key' =>
-                    'express_checkout_' .
+                'express_checkout_' .
                     $storeId . '_' .
                     sha1(json_encode([
                         'products' => $validated['products'],
@@ -836,7 +819,7 @@ class StripePaymentController extends Controller
                 'status' => true,
 
                 'message' =>
-                    'Express Checkout PaymentIntent created.',
+                'Express Checkout PaymentIntent created.',
 
                 'data' => [
                     'payment_intent_id' => $intent->id,
@@ -852,7 +835,6 @@ class StripePaymentController extends Controller
                     'status' => $intent->status,
                 ],
             ]);
-
         } catch (\Stripe\Exception\ApiErrorException $e) {
 
             Log::error(
@@ -866,7 +848,6 @@ class StripePaymentController extends Controller
                 'status' => false,
                 'message' => $e->getMessage(),
             ], 500);
-
         } catch (\Throwable $e) {
 
             Log::error(
@@ -1073,7 +1054,6 @@ class StripePaymentController extends Controller
                     'status' => $updatedIntent->status,
                 ],
             ]);
-
         } catch (\Stripe\Exception\ApiErrorException $e) {
 
             \Log::error(
@@ -1087,7 +1067,6 @@ class StripePaymentController extends Controller
                 'status' => false,
                 'message' => 'Unable to update payment amount.',
             ], 422);
-
         } catch (\Throwable $e) {
 
             \Log::error(
@@ -1103,5 +1082,4 @@ class StripePaymentController extends Controller
             ], 500);
         }
     }
-    
 }
