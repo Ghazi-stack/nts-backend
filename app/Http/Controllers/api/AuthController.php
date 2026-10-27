@@ -692,7 +692,7 @@ class AuthController extends Controller
 
                 
                 try {
-                    $resetToken = app('auth.password.broker')->createToken($user);
+                    $resetToken = Password::broker('central_users')->createToken($user);
 
                     $resetLink =
                         'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
