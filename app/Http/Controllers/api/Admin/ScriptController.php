@@ -31,8 +31,11 @@ class ScriptController extends Controller
         $data = [
             'id'            => $script->id,
             'storeId'       => $script->store_id,
+            'scriptName'    => $script->script_name,
             'scriptType'    => $script->script_type,
             'scriptContent' => $script->script_content,
+            'location'      => $script->location,
+            'placement'     => $script->placement,
             'createdAt'     => $script->created_at,
             'updatedAt'     => $script->updated_at,
         ];
