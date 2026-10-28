@@ -852,6 +852,7 @@ Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class
 
     Route::prefix('orders')->controller(OrderController::class)->group(function () {
         Route::post('/place-order', 'store');
+        Route::post('/order-calculate', 'calculate');
         Route::get('/order-detail', 'detail');
         Route::post('/track-order', 'trackOrder');
         Route::post('/add-notes/{orderId}', 'addOrderNote');

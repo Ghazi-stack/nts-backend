@@ -1915,6 +1915,112 @@ class OrderController extends Controller
         }
     }
 
+    public function calculate(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'shippingCost'   => 'nullable|numeric',
+                'discountAmount' => 'nullable|numeric',
+                'manualDiscount' => 'nullable|numeric',
+                'isMultiAddress' => 'required|boolean',
+                'selectedCurrency' => 'required|array',
+                'selectedCurrency.exchangeRate' => 'required|numeric',
+                'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
+                'destinations.*.shippingCost'   => 'required|numeric',
+                'destinations.*.products'       => 'required|array|min:1',
+                'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
+                'destinations.*.products.*.quantity'   => 'required|integer|min:1',
+                'products'       => 'required_if:isMultiAddress,false|array|min:1',
+                'products.*.product_id' => 'required|integer|exists:products,id',
+                'products.*.quantity'   => 'required|integer|min:1',
+            ]);
+
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
+            }
+
+            $exchangeRate   = (float) $request->input('selectedCurrency.exchangeRate', 1);
+            $discount       = $validated['discountAmount'] ?? 0;
+            $manualDiscount = $validated['manualDiscount'] ?? 0;
+            $isMulti        = $validated['isMultiAddress'];
+
+            $calculatedTotal = 0;
+            $items = [];
+
+            if (!$isMulti) {
+                foreach ($validated['products'] as $item) {
+                    $product = Product::where('store_id', $storeId)->find($item['product_id']);
+                    if ($product) {
+                        $convertedPrice = round($product->price * $exchangeRate, 6);
+                        $lineTotal = $convertedPrice * $item['quantity'];
+                        $calculatedTotal += $lineTotal;
+
+                        $items[] = [
+                            'productId'      => $product->id,
+                            'name'           => $product->name,
+                            'sku'            => $product->sku,
+                            'basePrice'      => $product->price,
+                            'convertedPrice' => $convertedPrice,
+                            'quantity'       => $item['quantity'],
+                            'lineTotal'      => $lineTotal,
+                        ];
+                    }
+                }
+                $calculatedTotal += ($validated['shippingCost'] ?? 0);
+                $calculatedTotal -= ($discount + $manualDiscount);
+            } else {
+                foreach ($validated['destinations'] as $dest) {
+                    foreach ($dest['products'] as $item) {
+                        $product = Product::where('store_id', $storeId)->find($item['product_id']);
+                        if ($product) {
+                            $convertedPrice = round($product->price * $exchangeRate, 6);
+                            $lineTotal = $convertedPrice * $item['quantity'];
+                            $calculatedTotal += $lineTotal;
+
+                            $items[] = [
+                                'productId'      => $product->id,
+                                'name'           => $product->name,
+                                'sku'            => $product->sku,
+                                'basePrice'      => $product->price,
+                                'convertedPrice' => $convertedPrice,
+                                'quantity'       => $item['quantity'],
+                                'lineTotal'      => $lineTotal,
+                            ];
+                        }
+                    }
+                    $calculatedTotal += ($dest['shippingCost'] ?? 0);
+                }
+                $calculatedTotal -= ($discount + $manualDiscount);
+            }
+
+            if ($calculatedTotal < 0) {
+                $calculatedTotal = 0;
+            }
+
+            $amountInCents = (int) round($calculatedTotal * 100);
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'amount'         => $amountInCents,
+                    'amountDecimal'  => round($calculatedTotal, 2),
+                    'exchangeRate'   => $exchangeRate,
+                    'discount'       => $discount,
+                    'manualDiscount' => $manualDiscount,
+                    'shippingCost'   => $validated['shippingCost'] ?? 0,
+                    'items'          => $items,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Calculation failed',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // public function getCustomerOrderDiscounts(Request $request)
     // {
     //     try {
