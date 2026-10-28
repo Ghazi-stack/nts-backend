@@ -24,9 +24,17 @@ class OrderPlacedMail extends StoreMailable
         $this->order = $order;
         $this->customer = $customer;
 
-        $sid = $storeId ?? ($order->store_id ?? 10);
+        $sid = $storeId ?? ($order->store_id ?? null);
 
-        $this->store = Store::find($sid);
+        if (!$sid) {
+            throw new \Exception('Store ID not provided.');
+        }
+
+        $this->store = Store::where('legacy_store_id', $sid)->first();
+
+        if (!$this->store) {
+            throw new \Exception("Store not found for legacy_store_id: {$sid}");
+        }
 
         $logo = Logo::where('store_id', $sid)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;
