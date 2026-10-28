@@ -23,9 +23,9 @@ class ShipmentReadyMail extends StoreMailable
     {
         $this->shipment = $shipment;
 
-        $sid = $storeId ?? ($shipment->order->store_id ?? 10);
+        $sid = $storeId ?? ($shipment->order->store_id ?? null);
 
-        $this->store = Store::find($sid);
+        $this->store = $this->findStoreByLegacyId($sid);
 
         $logo = Logo::where('store_id', $sid)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;

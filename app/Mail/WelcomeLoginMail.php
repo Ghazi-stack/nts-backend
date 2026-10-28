@@ -26,7 +26,7 @@ class WelcomeLoginMail extends StoreMailable
         $this->userEmail = $userEmail;
         $this->resetLink = $resetLink;
 
-        $this->store = Store::find($storeId);
+        $this->store = $this->findStoreByLegacyId($storeId);
 
         $logo = Logo::where('store_id', $storeId)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;

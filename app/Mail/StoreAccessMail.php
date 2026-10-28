@@ -28,9 +28,7 @@ class StoreAccessMail extends StoreMailable
         $this->resetLink = $resetLink;
 
         // Look up the central store using legacy_store_id.
-        $this->store = Store::on('central')
-            ->where('legacy_store_id', $storeId)
-            ->first();
+        $this->store = $this->findStoreByLegacyId((int) $storeId);
 
         // Fall back to the primary ID if no legacy ID match exists.
         if (!$this->store) {

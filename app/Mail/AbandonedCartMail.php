@@ -35,7 +35,7 @@ class AbandonedCartMail extends StoreMailable
         $this->emailType = $emailType;
         $this->checkoutLink = $checkoutLink;
 
-        $this->store = Store::findOrFail($storeId);
+        $this->store = $this->findStoreByLegacyId($storeId);
 
         $logo = Logo::where('store_id', $storeId)->first();
         $this->logoUrl = $logo?->logo_url;

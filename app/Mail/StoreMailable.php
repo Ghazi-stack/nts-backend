@@ -14,4 +14,11 @@ abstract class StoreMailable extends Mailable
             $store?->name ?: config('mail.from.name')
         );
     }
+
+    protected function findStoreByLegacyId(int $legacyStoreId): Store
+    {
+        return Store::on('central')
+            ->where('legacy_store_id', $legacyStoreId)
+            ->firstOrFail();
+    }
 }

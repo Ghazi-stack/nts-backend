@@ -23,9 +23,9 @@ class ContactRequestMail extends StoreMailable
     {
         $this->contactRequest = $contactRequest;
 
-        $storeId = $contactRequest->store_id ?? 10;
+        $storeId = $contactRequest->store_id ?? null;
 
-        $this->store = Store::find($storeId);
+        $this->store = $this->findStoreByLegacyId($storeId);
 
         $logo = Logo::where('store_id', $storeId)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;

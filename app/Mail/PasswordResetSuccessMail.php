@@ -23,9 +23,9 @@ class PasswordResetSuccessMail extends StoreMailable
     {
         $this->user = $user;
 
-        $storeId = $user->store_id ?? 10;
+        $storeId = $user->store_id ?? null;
 
-        $this->store = Store::find($storeId);
+        $this->store = $this->findStoreByLegacyId($storeId);
 
         $logo = Logo::where('store_id', $storeId)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;

@@ -26,7 +26,7 @@ class GuestAccountMail extends StoreMailable
         $this->userEmail = $userEmail;
         $this->registerLink = $registerLink;
 
-        $this->store = Store::find($storeId);
+        $this->store = $this->findStoreByLegacyId($storeId);
 
         $logo = Logo::where('store_id', $storeId)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;

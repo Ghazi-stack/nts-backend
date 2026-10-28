@@ -27,8 +27,8 @@ class TwoFactorOtpMail extends StoreMailable
         $this->storeId = $storeId;
 
         $this->store = $storeId
-            ? Store::on('central')->find($storeId)
-            : null;
+        ? $this->findStoreByLegacyId($storeId)
+        : null;
     }
 
     public function envelope(): Envelope
