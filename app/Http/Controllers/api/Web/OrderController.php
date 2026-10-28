@@ -1858,6 +1858,65 @@ class OrderController extends Controller
                 ]);
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | Clear checkout form data after successful order placement
+            |--------------------------------------------------------------------------
+            */
+            try {
+                $checkoutUser = $currentUser;
+                $checkoutSessionId = $request->header('X-Session-ID');
+
+                $checkoutQuery = CheckoutFormData::query()
+                    ->where('store_id', $storeId);
+
+                if ($checkoutUser) {
+                    $checkoutQuery->where('user_id', $checkoutUser->id);
+                } elseif (!empty($checkoutSessionId)) {
+                    $checkoutQuery
+                        ->whereNull('user_id')
+                        ->where('session_id', $checkoutSessionId);
+                } else {
+                    // Do not delete guest checkout records without a session ID.
+                    $checkoutQuery = null;
+                }
+
+                if ($checkoutQuery) {
+                    $checkoutQuery->where(function ($query) use (
+                        $existingDraft,
+                        $currentQuoteToken
+                    ) {
+                        // Normal checkout data
+                        $query->where(function ($normalQuery) {
+                            $normalQuery
+                                ->whereNull('quote_token')
+                                ->orWhere('quote_token', '');
+                        });
+
+                        // Checkout data for the draft converted into an order
+                        if ($existingDraft && $currentQuoteToken) {
+                            $query->orWhere('quote_token', $currentQuoteToken);
+                        }
+                    });
+
+                    $deletedCount = $checkoutQuery->delete();
+
+                    Log::info('Checkout form data cleared after order placement', [
+                        'store_id' => $storeId,
+                        'user_id' => $checkoutUser?->id,
+                        'session_id' => $checkoutSessionId,
+                        'deleted_count' => $deletedCount,
+                        'order_ids' => collect($orders)->pluck('id')->all(),
+                    ]);
+                }
+            } catch (\Throwable $checkoutEx) {
+                Log::error('Failed to clear checkout form data after order placement', [
+                    'store_id' => $storeId,
+                    'user_id' => $currentUser?->id,
+                    'error' => $checkoutEx->getMessage(),
+                ]);
+            }
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Order placed successfully.',
