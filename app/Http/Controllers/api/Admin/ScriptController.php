@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Script;
 use Illuminate\Http\Request;
 use Exception;
+use Illuminate\Support\Str;
 
 class ScriptController extends Controller
 {
@@ -35,12 +36,53 @@ class ScriptController extends Controller
         return $script;
     }
 
+    /**
+     * Convert array keys from camelCase → snake_case (recursive)
+     */
+    private function camelToSnake(array $data): array
+    {
+        $result = [];
+        foreach ($data as $key => $value) {
+            $snakeKey = is_string($key) ? Str::snake($key) : $key;
+            $result[$snakeKey] = is_array($value) ? $this->camelToSnake($value) : $value;
+        }
+        return $result;
+    }
+
+    /**
+     * Convert array keys from snake_case → camelCase (recursive)
+     */
+    private function snakeToCamel(array $data): array
+    {
+        $result = [];
+        foreach ($data as $key => $value) {
+            $camelKey = is_string($key) ? Str::camel($key) : $key;
+            $result[$camelKey] = is_array($value) ? $this->snakeToCamel($value) : $value;
+        }
+        return $result;
+    }
+
+    /**
+     * Convert Model / array to camelCase array for response
+     */
+    private function toCamel($item)
+    {
+        if ($item instanceof \Illuminate\Database\Eloquent\Model) {
+            return $this->snakeToCamel($item->toArray());
+        }
+        if (is_array($item)) {
+            return $this->snakeToCamel($item);
+        }
+        return $item;
+    }
+
     public function store(Request $request)
     {
         try {
             $storeId = $this->getStoreId();
 
-            $data = $request->all();
+            // Convert incoming camelCase payload → snake_case
+            $data = $this->camelToSnake($request->all());
 
             // ✅ force store_id from header
             $data['store_id'] = $storeId;
@@ -57,7 +99,7 @@ class ScriptController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Script added successfully',
-                'data' => $script
+                'data' => $this->toCamel($script)
             ], 201);
         } catch (Exception $e) {
             return response()->json([
@@ -80,6 +122,11 @@ class ScriptController extends Controller
             // ✅ Format script_content for url type scripts
             $scripts->transform(function ($script) {
                 return $this->formatScriptOutput($script);
+            });
+
+            // Convert each script to camelCase
+            $scripts = $scripts->map(function ($script) {
+                return $this->toCamel($script);
             });
 
             return response()->json([
@@ -116,7 +163,7 @@ class ScriptController extends Controller
 
             return response()->json([
                 'status' => true,
-                'data' => $script
+                'data' => $this->toCamel($script)
             ]);
         } catch (Exception $e) {
             return response()->json([
@@ -143,7 +190,8 @@ class ScriptController extends Controller
                 ], 404);
             }
 
-            $data = $request->all();
+            // Convert incoming camelCase payload → snake_case
+            $data = $this->camelToSnake($request->all());
 
             // ❌ store_id overwrite prevent
             unset($data['store_id']);
@@ -160,7 +208,7 @@ class ScriptController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Script updated successfully',
-                'data' => $script
+                'data' => $this->toCamel($script)
             ]);
         } catch (Exception $e) {
             return response()->json([
