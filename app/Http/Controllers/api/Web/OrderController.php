@@ -1151,8 +1151,13 @@ class OrderController extends Controller
                         $calculatedTotal += $convertedPrice * $item['quantity'];
                     }
                 }
-                $calculatedTotal += ($validated['shippingCost'] ?? 0);
-                $calculatedTotal -= ($discount + $manualDiscount);
+                // Shipping convert
+                $convertedShipping = ($validated['shippingCost'] ?? 0) * $exchangeRate;
+                $calculatedTotal += $convertedShipping;
+
+                // Discount convert
+                $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
+                $calculatedTotal -= $convertedDiscount;
             } else {
                 foreach ($validated['destinations'] as $dest) {
                     foreach ($dest['products'] as $item) {
@@ -1162,9 +1167,13 @@ class OrderController extends Controller
                             $calculatedTotal += $convertedPrice * $item['quantity'];
                         }
                     }
-                    $calculatedTotal += ($dest['shippingCost'] ?? 0);
+                    // Shipping convert
+                    $convertedShipping = ($dest['shippingCost'] ?? 0) * $exchangeRate;
+                    $calculatedTotal += $convertedShipping;
                 }
-                $calculatedTotal -= ($discount + $manualDiscount);
+                // Discount convert
+                $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
+                $calculatedTotal -= $convertedDiscount;
             }
 
             $calculatedCents = (int) round($calculatedTotal * 100);
@@ -1425,7 +1434,6 @@ class OrderController extends Controller
             ];
 
             if (!$isMulti) {
-                // Frontend amount use karo
                 $totalAmount = $totalAmountFromPayload;
 
                 $billing = BillingInformation::create([
@@ -1498,7 +1506,6 @@ class OrderController extends Controller
                 $destIndex = 0;
 
                 foreach ($validated['destinations'] as $dest) {
-                    // Frontend amount use karo
                     $totalAmount = $totalAmountFromPayload;
 
                     $billing = BillingInformation::create([
@@ -1967,8 +1974,14 @@ class OrderController extends Controller
                         ];
                     }
                 }
-                $calculatedTotal += ($validated['shippingCost'] ?? 0);
-                $calculatedTotal -= ($discount + $manualDiscount);
+
+                // Shipping convert
+                $convertedShipping = ($validated['shippingCost'] ?? 0) * $exchangeRate;
+                $calculatedTotal += $convertedShipping;
+
+                // Discount convert
+                $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
+                $calculatedTotal -= $convertedDiscount;
             } else {
                 foreach ($validated['destinations'] as $dest) {
                     foreach ($dest['products'] as $item) {
@@ -1989,9 +2002,15 @@ class OrderController extends Controller
                             ];
                         }
                     }
-                    $calculatedTotal += ($dest['shippingCost'] ?? 0);
+
+                    // Shipping convert
+                    $convertedShipping = ($dest['shippingCost'] ?? 0) * $exchangeRate;
+                    $calculatedTotal += $convertedShipping;
                 }
-                $calculatedTotal -= ($discount + $manualDiscount);
+
+                // Discount convert
+                $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
+                $calculatedTotal -= $convertedDiscount;
             }
 
             if ($calculatedTotal < 0) {
@@ -2003,13 +2022,15 @@ class OrderController extends Controller
             return response()->json([
                 'status' => true,
                 'data'   => [
-                    'amount'         => $amountInCents,
-                    'amountDecimal'  => round($calculatedTotal, 2),
-                    'exchangeRate'   => $exchangeRate,
-                    'discount'       => $discount,
-                    'manualDiscount' => $manualDiscount,
-                    'shippingCost'   => $validated['shippingCost'] ?? 0,
-                    'items'          => $items,
+                    'amount'              => $amountInCents,
+                    'amountDecimal'       => round($calculatedTotal, 2),
+                    'exchangeRate'        => $exchangeRate,
+                    'discount'            => $discount,
+                    'convertedDiscount'   => round(($discount + $manualDiscount) * $exchangeRate, 2),
+                    'manualDiscount'      => $manualDiscount,
+                    'shippingCost'        => $validated['shippingCost'] ?? 0,
+                    'convertedShipping'   => round(($validated['shippingCost'] ?? 0) * $exchangeRate, 2),
+                    'items'               => $items,
                 ],
             ]);
         } catch (\Exception $e) {
