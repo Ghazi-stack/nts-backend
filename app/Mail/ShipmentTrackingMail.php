@@ -25,9 +25,9 @@ class ShipmentTrackingMail extends StoreMailable
         $this->order = $order;
         $this->shipment = $shipment;
 
-        $storeId = $order->store_id ?? 10;
+        $storeId = $order->store_id ?? null;
 
-        $this->store = Store::find($storeId);
+        $this->store = $this->findStoreByLegacyId($storeId);
 
         $logo = Logo::where('store_id', $storeId)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;

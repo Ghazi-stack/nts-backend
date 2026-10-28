@@ -479,8 +479,6 @@ Route::prefix('dashboard')->middleware([
         Route::get('/export', [CustomerController::class, 'exportCSV']);
     });
 
-
-
     Route::prefix('customer-address')->middleware(['store.hash', 'tenant.dashboard'])->controller(CustomerAddressController::class)->group(function () {
         Route::post('/store', 'store');
         Route::put('/update/{id}', 'update');
@@ -751,6 +749,12 @@ Route::prefix('dashboard')->middleware([
     ])->group(function () {
         Route::get('/subscribers/export', [NewsletterController::class, 'exportSubscribers']);
         Route::delete('/subscribers/delete-all', [NewsletterController::class, 'deleteAllSubscribers']);
+    });
+
+    // ── Checkout Shipping Rates (Dashboard) ──
+    Route::prefix('checkout')->controller(CheckoutShippingController::class)->middleware(['store.hash', 'tenant.dashboard'])->group(function () {
+        Route::get('/get-shipping-rates', 'getRates');
+        Route::post('/get-shipping-rates', 'getRates');
     });
 });
 

@@ -27,7 +27,8 @@ class AbandonedCartEmail extends StoreMailable
         public int    $storeId
     ) {
         // Store record
-        $this->store     = Store::find($storeId);
+        // $this->store     = Store::find($storeId);
+        $this->store = $this->findStoreByLegacyId($storeId);
 
         // Logo
         $logo            = Logo::where('store_id', $storeId)->first();

@@ -24,7 +24,7 @@ class ResetPasswordMail extends StoreMailable
         $this->token = $token;
         $this->storeId = $storeId;
 
-        $this->store = Store::findOrFail($storeId);
+        $this->store = $this->findStoreByLegacyId($storeId);
     }
 
     public function build()

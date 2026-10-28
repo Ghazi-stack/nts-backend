@@ -22,7 +22,7 @@ class MagicLinkMail extends StoreMailable
     {
         $this->user = $user;
         $this->loginUrl = $loginUrl;
-        $this->store = Store::find($storeId);
+        $this->store = $this->findStoreByLegacyId($storeId);
 
         $logo = Logo::where('store_id', $storeId)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;

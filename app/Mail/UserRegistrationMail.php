@@ -23,7 +23,7 @@ class UserRegistrationMail extends StoreMailable
     {
         $this->user = $user;
 
-        $this->store = Store::find($storeId);
+        $this->store = $this->findStoreByLegacyId($storeId);
 
         // Logo from logos table
         $logo = Logo::where('store_id', $storeId)->first();

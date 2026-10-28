@@ -40,9 +40,13 @@ class TransactionalTemplatedMail extends StoreMailable
             $this->mailer($this->headerBag['mailer']);
         }
 
+        // $store = $this->storeId
+        //     ? Store::find($this->storeId)
+        //     : null;
+
         $store = $this->storeId
-            ? Store::find($this->storeId)
-            : null;
+        ? $this->findStoreByLegacyId($this->storeId)
+        : null;
 
         $fromEmail = $this->headerBag['from_email']
             ?? config('mail.from.address');

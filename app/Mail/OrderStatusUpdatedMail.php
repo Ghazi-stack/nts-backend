@@ -26,9 +26,9 @@ class OrderStatusUpdatedMail extends StoreMailable
         $this->newStatus = $newStatus;
         $this->shipment = $shipment;
 
-        $sid = $storeId ?? ($order->store_id ?? 10);
+        $sid = $storeId ?? ($order->store_id ?? null);
 
-        $this->store = Store::find($sid);
+        $this->store = $this->findStoreByLegacyId($sid);
 
         $logo = Logo::where('store_id', $sid)->first();
         $this->logoUrl = $logo ? $logo->logo_url : null;

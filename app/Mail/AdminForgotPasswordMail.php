@@ -27,7 +27,7 @@ class AdminForgotPasswordMail extends StoreMailable
         $this->userEmail = $userEmail;
         $this->resetLink = $resetLink;
 
-        $this->store = Store::find($storeId);
+        $this->store = $this->findStoreByLegacyId($storeId);
         $this->storeName = $this->store?->name ?? 'Store';
 
         $logo = Logo::where('store_id', $storeId)->first();

@@ -26,10 +26,10 @@ class BulkInquiryMail extends StoreMailable
     {
         $this->bulkInquiry = $bulkInquiry;
 
-        $storeId = $bulkInquiry->store_id ?? 10;
+        $storeId = $bulkInquiry->store_id ?? null;
 
         // Store record get karo
-        $this->store = Store::find($storeId);
+        $this->store = $this->findStoreByLegacyId($storeId);
 
         // Logo
         $logo = Logo::where('store_id', $storeId)->first();

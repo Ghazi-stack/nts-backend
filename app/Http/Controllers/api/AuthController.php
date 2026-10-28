@@ -847,7 +847,7 @@ class AuthController extends Controller
                     'message' => 'The store does not have a valid legacy_store_id.',
                 ], 422);
             }
-            
+
             // Associate the owner with the central registry store.
             $membershipExists = $central->table('store_user')
                 ->where('user_id', $user->id)
@@ -4549,11 +4549,45 @@ class AuthController extends Controller
         }
     }
 
+    // public function forgotPassword(Request $request)
+    // {
+    //     try {
+    //         $validator = Validator::make($request->all(), [
+    //             'email' => 'required|email|exists:users,email',
+    //         ]);
+
+    //         if ($validator->fails()) {
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'errors' => $validator->errors(),
+    //             ], 422);
+    //         }
+
+    //         DB::table('password_reset_tokens')->where('email', $request->email)->delete();
+
+    //         $status = Password::sendResetLink(
+    //             $request->only('email')
+    //         );
+
+    //         return response()->json([
+    //             'status' => $status === Password::RESET_LINK_SENT,
+    //             'message' => 'Reset link sent to your email.',
+    //         ]);
+    //     } catch (Exception $e) {
+    //         Log::error('Forgot password failed: ' . $e->getMessage());
+
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Something went wrong while sending the reset link.',
+    //         ], 500);
+    //     }
+    // }
+
     public function forgotPassword(Request $request)
     {
         try {
             $validator = Validator::make($request->all(), [
-                'email' => 'required|email|exists:users,email',
+                'email' => 'required|email',
             ]);
 
             if ($validator->fails()) {
@@ -4563,18 +4597,60 @@ class AuthController extends Controller
                 ], 422);
             }
 
-            DB::table('password_reset_tokens')->where('email', $request->email)->delete();
+            // Resolve the store from the x-store-hash middleware.
+            $storeId = current_store_id();
 
-            $status = Password::sendResetLink(
-                $request->only('email')
-            );
+            if (!$storeId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Store not selected.',
+                ], 400);
+            }
+
+            $email = strtolower(trim($request->input('email')));
+
+            // Find the customer in the current tenant only.
+            $user = User::query()
+                ->whereRaw('LOWER(email) = ?', [$email])
+                ->where('store_id', $storeId)
+                ->where('userRole', 2)
+                ->first();
+
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Unable to process the password reset request.',
+                ], 422);
+            }
+
+            // Use the configured password broker.
+            $broker = Password::broker();
+
+            // Prevent repeated reset emails during the throttle period.
+            $repository = $broker->getRepository();
+
+            if ($repository->recentlyCreatedToken($user)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Please wait before requesting another reset link.',
+                ], 429);
+            }
+
+            // Create a token for this exact, tenant-scoped user.
+            $token = $broker->createToken($user);
+
+            // Sends CustomResetPasswordNotification via User model.
+            $user->sendPasswordResetNotification($token);
 
             return response()->json([
-                'status' => $status === Password::RESET_LINK_SENT,
+                'status' => true,
                 'message' => 'Reset link sent to your email.',
             ]);
-        } catch (Exception $e) {
-            Log::error('Forgot password failed: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('Forgot password failed', [
+                'error' => $e->getMessage(),
+                'store_id' => current_store_id(),
+            ]);
 
             return response()->json([
                 'status' => false,
