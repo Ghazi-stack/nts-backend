@@ -3414,6 +3414,11 @@ class OrderController extends Controller
                 'orderPlaceCountry' => 'nullable|string|max:45',
                 'emailInvoice' => 'nullable|boolean',
 
+                'selectedCurrency' => 'nullable|array',
+                'selectedCurrency.code' => 'nullable|string|size:3',
+                'selectedCurrency.symbol' => 'nullable|string|max:10',
+                'selectedCurrency.exchangeRate' => 'nullable|numeric',
+
                 'billingAddress' => 'nullable|array',
                 'billingAddress.firstName'    => 'nullable|string',
                 'billingAddress.lastName'     => 'nullable|string',
@@ -3515,6 +3520,11 @@ class OrderController extends Controller
 
             $user = auth('sanctum')->user();
 
+            // Currency data
+            $currencyCode   = strtoupper($request->input('selectedCurrency.code', 'USD'));
+            $currencySymbol = $request->input('selectedCurrency.symbol', '$');
+            $exchangeRate   = (float) $request->input('selectedCurrency.exchangeRate', 1);
+
             $customer = Customer::where('store_id', $storeId)
                 ->findOrFail($validated['customerId']);
             $customerUser = $customer->user;
@@ -3584,14 +3594,15 @@ class OrderController extends Controller
             $discount         = (float) ($validated['discountAmount'] ?? 0);
             $manualDiscount   = (float) ($validated['manualDiscount'] ?? $request->input('manualDiscount', 0));
 
-            $products = collect($validated['products'])->map(function ($item) use ($storeId) {
+            $products = collect($validated['products'])->map(function ($item) use ($storeId, $exchangeRate) {
                 $productId = $item['product_id'] ?? $item['productId'];
                 $hasPrice  = array_key_exists('price', $item) && $item['price'] !== null && $item['price'] !== '';
 
                 if ($hasPrice) {
                     $price = (float) $item['price'];
                 } else {
-                    $price = (float) Product::where('store_id', $storeId)->findOrFail($productId)->price;
+                    $basePrice = (float) Product::where('store_id', $storeId)->findOrFail($productId)->price;
+                    $price = $basePrice * $exchangeRate;
                 }
 
                 return [
@@ -3627,7 +3638,7 @@ class OrderController extends Controller
 
                 $intent = \Stripe\PaymentIntent::create([
                     'amount'               => (int) round($totalAmount * 100),
-                    'currency'             => 'usd',
+                    'currency'             => strtolower($currencyCode),
                     'payment_method'       => $paymentMethodId,
                     'confirmation_method'  => 'manual',
                     'payment_method_types' => ['card'],
@@ -3785,6 +3796,9 @@ class OrderController extends Controller
                 'comments'                     => $comments,
                 'staff_notes'                  => $staffNotes,
                 'total_amount'                 => $totalAmount,
+                'currency_code'                => $currencyCode,
+                'currency_symbol'              => $currencySymbol,
+                'exchange_rate'                => $exchangeRate,
                 'discountAmount'               => $discount,
                 'manual_discount'              => $manualDiscount,
                 'coupon_code'                  => $validated['couponCode'] ?? null,
@@ -3854,17 +3868,7 @@ class OrderController extends Controller
                     $quoteToken = substr($quoteUrl, strpos($quoteUrl, 'quoteToken=') + 11);
                 }
 
-                /*
-                |--------------------------------------------------------------------------
-                | Attach current draft token to the coupon usage
-                |--------------------------------------------------------------------------
-                |
-                | The frontend does NOT send draft_token.
-                | The backend has just generated the quote token, so attach it here.
-                |
-                */
                 if ($quoteToken) {
-
                     $couponEmail = strtolower(
                         trim(
                             $formAddress['email']
@@ -3882,11 +3886,6 @@ class OrderController extends Controller
                         ->where('user_used', 0)
                         ->whereNull('draft_token');
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Match the coupon to the customer email
-                    |--------------------------------------------------------------------------
-                    */
                     if ($couponEmail) {
                         $couponQuery->whereRaw(
                             'LOWER(email) = ?',
@@ -3894,11 +3893,6 @@ class OrderController extends Controller
                         );
                     }
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | If a coupon code was supplied, match that too
-                    |--------------------------------------------------------------------------
-                    */
                     if (!empty($validated['couponCode'])) {
                         $couponQuery->where(
                             'coupon_code',
@@ -3906,20 +3900,10 @@ class OrderController extends Controller
                         );
                     }
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Get the latest unused draft coupon
-                    |--------------------------------------------------------------------------
-                    */
                     $couponUsage = $couponQuery
                         ->orderBy('id', 'desc')
                         ->first();
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Attach the generated draft token
-                    |--------------------------------------------------------------------------
-                    */
                     if ($couponUsage) {
                         $couponUsage->update([
                             'draft_token' => $quoteToken,
@@ -4065,7 +4049,7 @@ class OrderController extends Controller
             ], 'dot');
 
             OrderTimeline::addEvent($order->id, $storeId, 'shipping_quote', 'Shipping quote persisted', [
-                'shipping_cost'   => '$' . number_format((float) $order->shipping_cost, 2),
+                'shipping_cost'   => $currencySymbol . number_format((float) $order->shipping_cost, 2),
                 'shipping_method' => $order->billingInformation->shipping_method ?? $shippingProvider,
             ], 'dot');
 
@@ -4074,7 +4058,7 @@ class OrderController extends Controller
             if ($intent) {
                 OrderTimeline::addEvent($order->id, $storeId, 'payment_authorized', 'Payment authorized', [
                     'source'         => $displayPaymentMethod,
-                    'amount'         => '$' . number_format((float) $order->total_amount, 2),
+                    'amount'         => $currencySymbol . number_format((float) $order->total_amount, 2),
                     'payment_intent' => $intent->id,
                 ], 'payment');
             }
