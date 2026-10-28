@@ -1169,7 +1169,8 @@ class OrderController extends Controller
 
             $calculatedCents = (int) round($calculatedTotal * 100);
 
-            if (abs($calculatedCents - $frontendAmount) > 0) {
+            // 1 cent tolerance for rounding
+            if (abs($calculatedCents - $frontendAmount) > 1) {
                 return response()->json([
                     'status'     => false,
                     'message'    => 'Amount mismatch. Order cannot be placed.',
@@ -1177,6 +1178,9 @@ class OrderController extends Controller
                     'received'   => $frontendAmount,
                 ], 422);
             }
+
+            // Frontend amount use karo save ke liye
+            $totalAmountFromPayload = $frontendAmount / 100;
             // ===== AMOUNT VERIFICATION END =====
 
             $orderEmail = strtolower(trim($validated['email']));
@@ -1421,15 +1425,8 @@ class OrderController extends Controller
             ];
 
             if (!$isMulti) {
-                $cartTotal = 0;
-                foreach ($validated['products'] as $item) {
-                    $product = Product::find($item['product_id']);
-                    if ($product) {
-                        $cartTotal += $resolvePrice($product->id, $product->price) * $exchangeRate * $item['quantity'];
-                    }
-                }
-
-                $totalAmount = $cartTotal + $validated['shippingCost'] - $discount - $manualDiscount;
+                // Frontend amount use karo
+                $totalAmount = $totalAmountFromPayload;
 
                 $billing = BillingInformation::create([
                     'store_id'        => $storeId,
@@ -1501,15 +1498,8 @@ class OrderController extends Controller
                 $destIndex = 0;
 
                 foreach ($validated['destinations'] as $dest) {
-                    $cartTotal = 0;
-                    foreach ($dest['products'] as $item) {
-                        $product = Product::find($item['product_id']);
-                        if ($product) {
-                            $cartTotal += $resolvePrice($product->id, $product->price) * $exchangeRate * $item['quantity'];
-                        }
-                    }
-
-                    $totalAmount = $cartTotal + $dest['shippingCost'] - $discount - $manualDiscount;
+                    // Frontend amount use karo
+                    $totalAmount = $totalAmountFromPayload;
 
                     $billing = BillingInformation::create([
                         'store_id'        => $storeId,
@@ -1858,11 +1848,6 @@ class OrderController extends Controller
                 ]);
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | Clear checkout form data after successful order placement
-            |--------------------------------------------------------------------------
-            */
             try {
                 $checkoutUser = $currentUser;
                 $checkoutSessionId = $request->header('X-Session-ID');
@@ -1877,7 +1862,6 @@ class OrderController extends Controller
                         ->whereNull('user_id')
                         ->where('session_id', $checkoutSessionId);
                 } else {
-                    // Do not delete guest checkout records without a session ID.
                     $checkoutQuery = null;
                 }
 
@@ -1886,14 +1870,12 @@ class OrderController extends Controller
                         $existingDraft,
                         $currentQuoteToken
                     ) {
-                        // Normal checkout data
                         $query->where(function ($normalQuery) {
                             $normalQuery
                                 ->whereNull('quote_token')
                                 ->orWhere('quote_token', '');
                         });
 
-                        // Checkout data for the draft converted into an order
                         if ($existingDraft && $currentQuoteToken) {
                             $query->orWhere('quote_token', $currentQuoteToken);
                         }
