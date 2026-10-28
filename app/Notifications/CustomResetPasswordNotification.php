@@ -50,7 +50,12 @@ class CustomResetPasswordNotification extends Notification
             . '/auth/reset-password?token=' . urlencode($this->token)
             . '&email=' . urlencode($notifiable->email);
 
+        
         return (new MailMessage)
+            ->from(
+                config('mail.from.address'),
+                $store->name ?: config('mail.from.name')
+            )
             ->subject('Change your password for ' . $store->name)
             ->view('emails.reset_password', [
                 'resetUrl'  => $resetUrl,
@@ -58,5 +63,6 @@ class CustomResetPasswordNotification extends Notification
                 'logoUrl'   => $logo?->logo_url,
                 'storePath' => $storePath,
             ]);
+
     }
 }
