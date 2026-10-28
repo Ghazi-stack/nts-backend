@@ -9,6 +9,7 @@ use Exception;
 
 class ScriptController extends Controller
 {
+
     private function getStoreId()
     {
         $storeId = current_store_id();
@@ -24,28 +25,14 @@ class ScriptController extends Controller
     }
 
     /**
-     * Convert script model to camelCase response
+     * Format script_content as <script src="..."></script> when script_type is "url"
      */
-    private function formatScript($script)
+    private function formatScriptOutput($script)
     {
-        $data = [
-            'id'            => $script->id,
-            'storeId'       => $script->store_id,
-            'scriptName'    => $script->script_name,
-            'scriptType'    => $script->script_type,
-            'scriptContent' => $script->script_content,
-            'location'      => $script->location,
-            'placement'     => $script->placement,
-            'createdAt'     => $script->created_at,
-            'updatedAt'     => $script->updated_at,
-        ];
-
-        // Format scriptContent as <script src="..."></script> when scriptType is "url"
         if ($script->script_type === 'url' && !empty($script->script_content)) {
-            $data['scriptContent'] = '<script src="' . $script->script_content . '"></script>';
+            $script->script_content = '<script src="' . $script->script_content . '"></script>';
         }
-
-        return $data;
+        return $script;
     }
 
     public function store(Request $request)
@@ -55,34 +42,28 @@ class ScriptController extends Controller
 
             $data = $request->all();
 
-            // Map camelCase to snake_case for database
-            $dbData = [
-                'store_id'       => $storeId,
-                'script_type'    => $data['scriptType'] ?? null,
-                'script_content' => null,
-            ];
+            // ✅ force store_id from header
+            $data['store_id'] = $storeId;
 
-            // Map frontend field names
-            if (isset($data['scriptType']) && $data['scriptType'] === 'url' && !empty($data['scriptUrl'])) {
-                $dbData['script_content'] = $data['scriptUrl'];
-            } elseif (!empty($data['scriptContents'])) {
-                $dbData['script_content'] = $data['scriptContents'];
-            } elseif (!empty($data['scriptContent'])) {
-                $dbData['script_content'] = $data['scriptContent'];
+            // ✅ Map frontend field names to database field
+            if (isset($data['script_type']) && $data['script_type'] === 'url' && !empty($data['script_url'])) {
+                $data['script_content'] = $data['script_url'];
+            } elseif (!empty($data['script_contents'])) {
+                $data['script_content'] = $data['script_contents'];
             }
 
-            $script = Script::create($dbData);
+            $script = Script::create($data);
 
             return response()->json([
-                'status'  => true,
+                'status' => true,
                 'message' => 'Script added successfully',
-                'data'    => $this->formatScript($script)
+                'data' => $script
             ], 201);
         } catch (Exception $e) {
             return response()->json([
-                'status'  => false,
+                'status' => false,
                 'message' => 'Something went wrong',
-                'error'   => $e->getMessage()
+                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -96,19 +77,20 @@ class ScriptController extends Controller
                 ->orderBy('id', 'desc')
                 ->get();
 
-            $formatted = $scripts->map(function ($script) {
-                return $this->formatScript($script);
+            // ✅ Format script_content for url type scripts
+            $scripts->transform(function ($script) {
+                return $this->formatScriptOutput($script);
             });
 
             return response()->json([
                 'status' => true,
-                'script' => $formatted
+                'script' => $scripts
             ]);
         } catch (Exception $e) {
             return response()->json([
-                'status'  => false,
+                'status' => false,
                 'message' => 'Something went wrong',
-                'error'   => $e->getMessage()
+                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -124,20 +106,23 @@ class ScriptController extends Controller
 
             if (!$script) {
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => 'Record not found'
                 ], 404);
             }
 
+            // ✅ Format script_content for url type
+            $this->formatScriptOutput($script);
+
             return response()->json([
                 'status' => true,
-                'data'   => $this->formatScript($script)
+                'data' => $script
             ]);
         } catch (Exception $e) {
             return response()->json([
-                'status'  => false,
+                'status' => false,
                 'message' => 'Something went wrong',
-                'error'   => $e->getMessage()
+                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -153,40 +138,35 @@ class ScriptController extends Controller
 
             if (!$script) {
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => 'Record not found'
                 ], 404);
             }
 
             $data = $request->all();
 
-            // Map camelCase to snake_case for database
-            $dbData = [];
+            // ❌ store_id overwrite prevent
+            unset($data['store_id']);
 
-            if (isset($data['scriptType'])) {
-                $dbData['script_type'] = $data['scriptType'];
+            // ✅ Map frontend field names to database field
+            if (isset($data['script_type']) && $data['script_type'] === 'url' && !empty($data['script_url'])) {
+                $data['script_content'] = $data['script_url'];
+            } elseif (!empty($data['script_contents'])) {
+                $data['script_content'] = $data['script_contents'];
             }
 
-            if (isset($data['scriptType']) && $data['scriptType'] === 'url' && !empty($data['scriptUrl'])) {
-                $dbData['script_content'] = $data['scriptUrl'];
-            } elseif (!empty($data['scriptContents'])) {
-                $dbData['script_content'] = $data['scriptContents'];
-            } elseif (!empty($data['scriptContent'])) {
-                $dbData['script_content'] = $data['scriptContent'];
-            }
-
-            $script->update($dbData);
+            $script->update($data);
 
             return response()->json([
-                'status'  => true,
+                'status' => true,
                 'message' => 'Script updated successfully',
-                'data'    => $this->formatScript($script->fresh())
+                'data' => $script
             ]);
         } catch (Exception $e) {
             return response()->json([
-                'status'  => false,
+                'status' => false,
                 'message' => 'Something went wrong',
-                'error'   => $e->getMessage()
+                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -202,7 +182,7 @@ class ScriptController extends Controller
 
             if (!$script) {
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => 'Record not found'
                 ], 404);
             }
@@ -210,14 +190,14 @@ class ScriptController extends Controller
             $script->delete();
 
             return response()->json([
-                'status'  => true,
+                'status' => true,
                 'message' => 'Script deleted successfully'
             ]);
         } catch (Exception $e) {
             return response()->json([
-                'status'  => false,
+                'status' => false,
                 'message' => 'Something went wrong',
-                'error'   => $e->getMessage()
+                'error' => $e->getMessage()
             ], 500);
         }
     }
