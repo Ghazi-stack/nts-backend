@@ -23,28 +23,39 @@ class CustomResetPasswordNotification extends Notification
 
     public function toMail($notifiable)
     {
-        $storeId = $notifiable->store_id ?? 10;
+        // Use the customer's legacy store ID.
+        $storeId = $notifiable->store_id ?? current_store_id();
 
-        $store = Store::find($storeId);
+        if (!$storeId) {
+            throw new \Exception('Legacy store ID not found.');
+        }
 
-        $logo = Logo::where('store_id', $storeId)->first();
+        // Always resolve the store from the central registry.
+        $store = Store::on('central')
+            ->where('legacy_store_id', $storeId)
+            ->first();
 
         if (!$store || empty($store->base_url)) {
-            throw new \Exception('Store URL not found.');
+            throw new \Exception(
+                "Store not found for legacy_store_id: {$storeId}"
+            );
         }
+
+        // Use the same legacy ID for the tenant logo.
+        $logo = Logo::where('store_id', $storeId)->first();
 
         $storePath = rtrim($store->base_url, '/');
 
-        $resetUrl = $storePath .
-            '/auth/reset-password?token=' . $this->token .
-            '&email=' . urlencode($notifiable->email);
+        $resetUrl = $storePath
+            . '/auth/reset-password?token=' . urlencode($this->token)
+            . '&email=' . urlencode($notifiable->email);
 
         return (new MailMessage)
-            ->subject('Change your password for ' . ($store?->name ?? 'Our Store'))
+            ->subject('Change your password for ' . $store->name)
             ->view('emails.reset_password', [
                 'resetUrl'  => $resetUrl,
                 'store'     => $store,
-                'logoUrl'   => $logo ? $logo->logo_url : null,
+                'logoUrl'   => $logo?->logo_url,
                 'storePath' => $storePath,
             ]);
     }
