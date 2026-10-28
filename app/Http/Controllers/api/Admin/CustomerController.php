@@ -539,7 +539,9 @@ class CustomerController extends Controller
                 ]);
 
                 try {
-                    $store = Store::find($storeId);
+                    $store = Store::on('central')
+                    ->where('legacy_store_id', $storeId)
+                    ->first();
                     $frontendUrl = rtrim($store?->base_url ?? '#', '/');
 
                     $resetToken = \Illuminate\Support\Facades\Password::broker()->createToken($storeUser);
