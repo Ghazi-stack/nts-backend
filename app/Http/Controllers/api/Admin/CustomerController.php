@@ -406,7 +406,7 @@ class CustomerController extends Controller
     public function store(Request $request)
     {
         try {
-            $storeId = $request->header('storeId', $request->input('storeId')) ?: current_store_id();
+            $storeId = current_store_id();
 
             if (!$storeId) {
                 return response()->json([
@@ -579,7 +579,7 @@ class CustomerController extends Controller
     public function checkEmail(Request $request)
     {
         try {
-            $storeId = $request->header('storeId', $request->input('storeId')) ?: current_store_id();
+            $storeId = current_store_id();
 
             if (!$storeId) {
                 return response()->json([
