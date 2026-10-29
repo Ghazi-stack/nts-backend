@@ -2018,12 +2018,13 @@ class OrderController extends Controller
             if (!$isMulti) {
                 $totalWeight = 0;
                 $itemCount = 0;
+                $baseOrderTotal = 0;
 
                 foreach ($validated['products'] as $item) {
                     $product = Product::where('store_id', $storeId)->find($item['product_id']);
                     if ($product) {
                         $convertedPrice = round($product->price * $exchangeRate, 6);
-                        $lineTotal = $convertedPrice * $item['quantity'];
+                        $lineTotal = round($convertedPrice * $item['quantity'], 6);
                         $calculatedTotal += $lineTotal;
 
                         $items[] = [
@@ -2036,7 +2037,13 @@ class OrderController extends Controller
                             'lineTotal'      => $lineTotal,
                         ];
 
-                        // Weight calculation
+                        $salePrice = $product->getAttribute('sale_price');
+                        $normalPrice = $product->getAttribute('price');
+                        $unitPrice = $salePrice !== null
+                            ? (float) $salePrice
+                            : (float) ($normalPrice ?? 0);
+                        $baseOrderTotal += $unitPrice * $item['quantity'];
+
                         $productWeight = (float) ($product->getAttribute('weight') ?? 0);
                         $dimensions = $product->dimensions;
 
@@ -2062,12 +2069,11 @@ class OrderController extends Controller
                     $packageInfo = [
                         'total_weight'  => round($totalWeight, 2),
                         'weight_unit'   => 'LB',
-                        'order_total'   => round($calculatedTotal / $exchangeRate, 2),
+                        'order_total'   => round($baseOrderTotal, 2),
                         'item_count'    => $itemCount,
-                        'package_value' => round($calculatedTotal / $exchangeRate, 2),
+                        'package_value' => round($baseOrderTotal, 2),
                     ];
 
-                    // Correct namespace
                     $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
 
                     $ratesResponse = $shippingRateService->getCheckoutShippingRates(
@@ -2095,14 +2101,17 @@ class OrderController extends Controller
                     }
 
                     if ($matchedRate) {
-                        $shippingCost = (float) $matchedRate['total_charge'];
+                        $rateCharge = (float) $matchedRate['total_charge'];
+                        $shippingCost = $exchangeRate > 0
+                            ? round($rateCharge / $exchangeRate, 6)
+                            : $rateCharge;
                     }
                 }
 
-                $convertedShipping = $shippingCost * $exchangeRate;
+                $convertedShipping = round($shippingCost * $exchangeRate, 6);
                 $calculatedTotal += $convertedShipping;
 
-                $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
+                $convertedDiscount = round(($discount + $manualDiscount) * $exchangeRate, 6);
                 $calculatedTotal -= $convertedDiscount;
             } else {
                 // Multi-address
@@ -2111,7 +2120,7 @@ class OrderController extends Controller
                         $product = Product::where('store_id', $storeId)->find($item['product_id']);
                         if ($product) {
                             $convertedPrice = round($product->price * $exchangeRate, 6);
-                            $lineTotal = $convertedPrice * $item['quantity'];
+                            $lineTotal = round($convertedPrice * $item['quantity'], 6);
                             $calculatedTotal += $lineTotal;
 
                             $items[] = [
@@ -2126,11 +2135,11 @@ class OrderController extends Controller
                         }
                     }
 
-                    $convertedShipping = ($dest['shippingCost'] ?? 0) * $exchangeRate;
+                    $convertedShipping = round(($dest['shippingCost'] ?? 0) * $exchangeRate, 6);
                     $calculatedTotal += $convertedShipping;
                 }
 
-                $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
+                $convertedDiscount = round(($discount + $manualDiscount) * $exchangeRate, 6);
                 $calculatedTotal -= $convertedDiscount;
             }
 
@@ -2144,13 +2153,13 @@ class OrderController extends Controller
                 'status' => true,
                 'data'   => [
                     'amount'              => $amountInCents,
-                    'amountDecimal'       => round($calculatedTotal, 2),
+                    'amountDecimal'       => round($calculatedTotal, 6),
                     'currency'            => $currencyData,
                     'coupon'              => $couponData,
                     'manualDiscount'      => $manualDiscount,
-                    'convertedDiscount'   => round(($discount + $manualDiscount) * $exchangeRate, 2),
-                    'shippingCost'        => $shippingCost,
-                    'convertedShipping'   => round($shippingCost * $exchangeRate, 2),
+                    'convertedDiscount'   => round(($discount + $manualDiscount) * $exchangeRate, 6),
+                    'shippingCost'        => round($shippingCost, 6),
+                    'convertedShipping'   => round($shippingCost * $exchangeRate, 6),
                     'matchedRate'         => $matchedRate,
                     'items'               => $items,
                 ],
