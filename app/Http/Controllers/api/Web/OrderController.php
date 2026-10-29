@@ -1937,7 +1937,6 @@ class OrderController extends Controller
                 'coupon.id'        => 'required_with:coupon|integer',
                 'coupon.couponCode' => 'required_with:coupon|string',
 
-                // NEW: method_id + optional service_type + destination
                 'method_id'        => 'nullable|integer',
                 'service_type'     => 'nullable|string',
                 'destination'      => 'required_with:method_id|array',
@@ -2037,17 +2036,21 @@ class OrderController extends Controller
                             'lineTotal'      => $lineTotal,
                         ];
 
-                        // Weight calculation (same logic as getRates)
+                        // Weight calculation
                         $productWeight = (float) ($product->getAttribute('weight') ?? 0);
                         $dimensions = $product->dimensions;
+
                         if (is_string($dimensions)) {
                             $decoded = json_decode($dimensions, true);
                             $dimensions = (json_last_error() === JSON_ERROR_NONE) ? $decoded : [];
                         }
-                        if (!is_array($dimensions)) $dimensions = [];
-                        $dimensionWeight = (float) ($dimensions['weight'] ?? 0);
+                        if (!is_array($dimensions)) {
+                            $dimensions = [];
+                        }
 
+                        $dimensionWeight = (float) ($dimensions['weight'] ?? 0);
                         $weightUsed = $productWeight > 0 ? $productWeight : $dimensionWeight;
+
                         $totalWeight += $weightUsed * $item['quantity'];
                         $itemCount += $item['quantity'];
                     }
@@ -2055,15 +2058,19 @@ class OrderController extends Controller
 
                 // ===== METHOD_ID MATCHING =====
                 if (!empty($validated['method_id']) && !empty($validated['destination'])) {
+
                     $packageInfo = [
                         'total_weight'  => round($totalWeight, 2),
                         'weight_unit'   => 'LB',
-                        'order_total'   => round($calculatedTotal / $exchangeRate, 2), // base currency approx
+                        'order_total'   => round($calculatedTotal / $exchangeRate, 2),
                         'item_count'    => $itemCount,
                         'package_value' => round($calculatedTotal / $exchangeRate, 2),
                     ];
 
-                    $ratesResponse = $this->shippingRateService->getCheckoutShippingRates(
+                    // Correct namespace
+                    $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
+
+                    $ratesResponse = $shippingRateService->getCheckoutShippingRates(
                         $validated['destination'],
                         $packageInfo,
                         $storeId,
@@ -2075,7 +2082,6 @@ class OrderController extends Controller
 
                     foreach ($rates as $rate) {
                         if ((int) $rate['method_id'] === (int) $validated['method_id']) {
-                            // service_type optional match (FedEx ke liye zaroori)
                             if (!empty($validated['service_type'])) {
                                 if (($rate['service_type'] ?? '') === $validated['service_type']) {
                                     $matchedRate = $rate;
@@ -2099,7 +2105,7 @@ class OrderController extends Controller
                 $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
                 $calculatedTotal -= $convertedDiscount;
             } else {
-                // Multi-address logic (unchanged for now - aap destinations mein bhi method_id add kar sakte ho)
+                // Multi-address
                 foreach ($validated['destinations'] as $dest) {
                     foreach ($dest['products'] as $item) {
                         $product = Product::where('store_id', $storeId)->find($item['product_id']);
@@ -2145,7 +2151,7 @@ class OrderController extends Controller
                     'convertedDiscount'   => round(($discount + $manualDiscount) * $exchangeRate, 2),
                     'shippingCost'        => $shippingCost,
                     'convertedShipping'   => round($shippingCost * $exchangeRate, 2),
-                    'matchedRate'         => $matchedRate,   // <-- yahan matched rate object aayega
+                    'matchedRate'         => $matchedRate,
                     'items'               => $items,
                 ],
             ]);
@@ -2157,7 +2163,6 @@ class OrderController extends Controller
             ], 500);
         }
     }
-
     // public function calculate(Request $request)
     // {
     //     try {
