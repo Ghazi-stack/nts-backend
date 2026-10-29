@@ -1977,7 +1977,7 @@ class OrderController extends Controller
                 'code'         => $currency->code,
                 'name'         => $currency->name,
                 'symbol'       => $currency->symbol,
-                'exchangeRate' => number_format($exchangeRate, 6, '.', ''), // 6 decimal
+                'exchangeRate' => number_format($exchangeRate, 6, '.', ''),
             ];
 
             // ===== COUPON FETCH =====
@@ -2108,7 +2108,10 @@ class OrderController extends Controller
                 $convertedShipping = round($shippingCost * $exchangeRate, 6);
                 $calculatedTotal += $convertedShipping;
 
-                $convertedDiscount = round(($discount + $manualDiscount) * $exchangeRate, 6);
+                $convertedCouponDiscount = round($discount * $exchangeRate, 6);
+                $convertedManualDiscount = round($manualDiscount * $exchangeRate, 6);
+                $convertedDiscount       = round($convertedCouponDiscount + $convertedManualDiscount, 6);
+
                 $calculatedTotal -= $convertedDiscount;
             } else {
                 foreach ($validated['destinations'] as $dest) {
@@ -2135,7 +2138,10 @@ class OrderController extends Controller
                     $calculatedTotal += $convertedShipping;
                 }
 
-                $convertedDiscount = round(($discount + $manualDiscount) * $exchangeRate, 6);
+                $convertedCouponDiscount = round($discount * $exchangeRate, 6);
+                $convertedManualDiscount = round($manualDiscount * $exchangeRate, 6);
+                $convertedDiscount       = round($convertedCouponDiscount + $convertedManualDiscount, 6);
+
                 $calculatedTotal -= $convertedDiscount;
             }
 
@@ -2148,16 +2154,18 @@ class OrderController extends Controller
             return response()->json([
                 'status' => true,
                 'data'   => [
-                    'amount'              => $amountInCents,
-                    'amountDecimal'       => round($calculatedTotal, 6),
-                    'currency'            => $currencyData,
-                    'coupon'              => $couponData,
-                    'manualDiscount'      => $manualDiscount,
-                    'convertedDiscount'   => round(($discount + $manualDiscount) * $exchangeRate, 6),
-                    'shippingCost'        => round($shippingCost, 6),
-                    'convertedShipping'   => round($shippingCost * $exchangeRate, 6),
-                    'matchedRate'         => $matchedRate,
-                    'items'               => $items,
+                    'amount'                    => $amountInCents,
+                    'amountDecimal'             => round($calculatedTotal, 6),
+                    'currency'                  => $currencyData,
+                    'coupon'                    => $couponData,
+                    'manualDiscount'            => $manualDiscount,
+                    'convertedCouponDiscount'   => $convertedCouponDiscount ?? 0,
+                    'convertedManualDiscount'   => $convertedManualDiscount ?? 0,
+                    'convertedDiscount'         => $convertedDiscount ?? 0,
+                    'shippingCost'              => round($shippingCost, 6),
+                    'convertedShipping'         => round($shippingCost * $exchangeRate, 6),
+                    'matchedRate'               => $matchedRate,
+                    'items'                     => $items,
                 ],
             ]);
         } catch (\Exception $e) {
