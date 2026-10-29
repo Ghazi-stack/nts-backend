@@ -1926,22 +1926,32 @@ class OrderController extends Controller
     {
         try {
             $validated = $request->validate([
-                'shippingCost'   => 'nullable|numeric',
-                'discountAmount' => 'nullable|numeric',
-                'manualDiscount' => 'nullable|numeric',
-                'isMultiAddress' => 'required|boolean',
+                'shippingCost'     => 'nullable|numeric',
+                'discountAmount'   => 'nullable|numeric',
+                'manualDiscount'   => 'nullable|numeric',
+                'isMultiAddress'   => 'required|boolean',
                 'selectedCurrency' => 'required|array',
                 'selectedCurrency.id' => 'required|integer',
                 'selectedCurrency.exchangeRate' => 'required|numeric',
                 'coupon'           => 'nullable|array',
                 'coupon.id'        => 'required_with:coupon|integer',
                 'coupon.couponCode' => 'required_with:coupon|string',
-                'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
+
+                // NEW: method_id + optional service_type + destination
+                'method_id'        => 'nullable|integer',
+                'service_type'     => 'nullable|string',
+                'destination'      => 'required_with:method_id|array',
+                'destination.country_code' => 'required_with:destination|string|size:2',
+                'destination.state'        => 'nullable|string|max:255',
+                'destination.city'         => 'nullable|string|max:255',
+                'destination.postal_code'  => 'nullable|string|max:50',
+
+                'destinations'     => 'required_if:isMultiAddress,true|array|min:1',
                 'destinations.*.shippingCost'   => 'required|numeric',
                 'destinations.*.products'       => 'required|array|min:1',
                 'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
                 'destinations.*.products.*.quantity'   => 'required|integer|min:1',
-                'products'       => 'required_if:isMultiAddress,false|array|min:1',
+                'products'         => 'required_if:isMultiAddress,false|array|min:1',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
             ]);
@@ -1953,8 +1963,6 @@ class OrderController extends Controller
 
             // ===== CURRENCY FETCH =====
             $currencyId = $request->input('selectedCurrency.id');
-            $payloadRate = (float) $request->input('selectedCurrency.exchangeRate');
-
             $currency = \App\Models\Currency::where('store_id', $storeId)
                 ->where('id', $currencyId)
                 ->where('enabled', true)
@@ -1965,7 +1973,6 @@ class OrderController extends Controller
             }
 
             $exchangeRate = (float) $currency->exchange_rate;
-
             $currencyData = [
                 'id'           => $currency->id,
                 'code'         => $currency->code,
@@ -1973,7 +1980,6 @@ class OrderController extends Controller
                 'symbol'       => $currency->symbol,
                 'exchangeRate' => $exchangeRate,
             ];
-            // ===== CURRENCY END =====
 
             // ===== COUPON FETCH =====
             $discount = 0;
@@ -1994,22 +2000,26 @@ class OrderController extends Controller
                 }
 
                 $discount = (float) $coupon->discountAmount;
-
                 $couponData = [
                     'id'             => $coupon->id,
                     'couponCode'     => $coupon->couponCode,
                     'discountAmount' => $discount,
                 ];
             }
-            // ===== COUPON END =====
 
             $manualDiscount = $validated['manualDiscount'] ?? 0;
             $isMulti        = $validated['isMultiAddress'];
 
             $calculatedTotal = 0;
             $items = [];
+            $matchedRate = null;
+            $shippingCost = $validated['shippingCost'] ?? 0;
 
+            // ===== SINGLE ADDRESS =====
             if (!$isMulti) {
+                $totalWeight = 0;
+                $itemCount = 0;
+
                 foreach ($validated['products'] as $item) {
                     $product = Product::where('store_id', $storeId)->find($item['product_id']);
                     if ($product) {
@@ -2026,17 +2036,70 @@ class OrderController extends Controller
                             'quantity'       => $item['quantity'],
                             'lineTotal'      => $lineTotal,
                         ];
+
+                        // Weight calculation (same logic as getRates)
+                        $productWeight = (float) ($product->getAttribute('weight') ?? 0);
+                        $dimensions = $product->dimensions;
+                        if (is_string($dimensions)) {
+                            $decoded = json_decode($dimensions, true);
+                            $dimensions = (json_last_error() === JSON_ERROR_NONE) ? $decoded : [];
+                        }
+                        if (!is_array($dimensions)) $dimensions = [];
+                        $dimensionWeight = (float) ($dimensions['weight'] ?? 0);
+
+                        $weightUsed = $productWeight > 0 ? $productWeight : $dimensionWeight;
+                        $totalWeight += $weightUsed * $item['quantity'];
+                        $itemCount += $item['quantity'];
                     }
                 }
 
-                // Shipping convert
-                $convertedShipping = ($validated['shippingCost'] ?? 0) * $exchangeRate;
+                // ===== METHOD_ID MATCHING =====
+                if (!empty($validated['method_id']) && !empty($validated['destination'])) {
+                    $packageInfo = [
+                        'total_weight'  => round($totalWeight, 2),
+                        'weight_unit'   => 'LB',
+                        'order_total'   => round($calculatedTotal / $exchangeRate, 2), // base currency approx
+                        'item_count'    => $itemCount,
+                        'package_value' => round($calculatedTotal / $exchangeRate, 2),
+                    ];
+
+                    $ratesResponse = $this->shippingRateService->getCheckoutShippingRates(
+                        $validated['destination'],
+                        $packageInfo,
+                        $storeId,
+                        null,
+                        $currency->code
+                    );
+
+                    $rates = $ratesResponse['rates'] ?? [];
+
+                    foreach ($rates as $rate) {
+                        if ((int) $rate['method_id'] === (int) $validated['method_id']) {
+                            // service_type optional match (FedEx ke liye zaroori)
+                            if (!empty($validated['service_type'])) {
+                                if (($rate['service_type'] ?? '') === $validated['service_type']) {
+                                    $matchedRate = $rate;
+                                    break;
+                                }
+                            } else {
+                                $matchedRate = $rate;
+                                break;
+                            }
+                        }
+                    }
+
+                    if ($matchedRate) {
+                        $shippingCost = (float) $matchedRate['total_charge'];
+                    }
+                }
+
+                $convertedShipping = $shippingCost * $exchangeRate;
                 $calculatedTotal += $convertedShipping;
 
-                // Discount convert
                 $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
                 $calculatedTotal -= $convertedDiscount;
             } else {
+                // Multi-address logic (unchanged for now - aap destinations mein bhi method_id add kar sakte ho)
                 foreach ($validated['destinations'] as $dest) {
                     foreach ($dest['products'] as $item) {
                         $product = Product::where('store_id', $storeId)->find($item['product_id']);
@@ -2057,12 +2120,10 @@ class OrderController extends Controller
                         }
                     }
 
-                    // Shipping convert
                     $convertedShipping = ($dest['shippingCost'] ?? 0) * $exchangeRate;
                     $calculatedTotal += $convertedShipping;
                 }
 
-                // Discount convert
                 $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
                 $calculatedTotal -= $convertedDiscount;
             }
@@ -2082,8 +2143,9 @@ class OrderController extends Controller
                     'coupon'              => $couponData,
                     'manualDiscount'      => $manualDiscount,
                     'convertedDiscount'   => round(($discount + $manualDiscount) * $exchangeRate, 2),
-                    'shippingCost'        => $validated['shippingCost'] ?? 0,
-                    'convertedShipping'   => round(($validated['shippingCost'] ?? 0) * $exchangeRate, 2),
+                    'shippingCost'        => $shippingCost,
+                    'convertedShipping'   => round($shippingCost * $exchangeRate, 2),
+                    'matchedRate'         => $matchedRate,   // <-- yahan matched rate object aayega
                     'items'               => $items,
                 ],
             ]);
@@ -2095,6 +2157,180 @@ class OrderController extends Controller
             ], 500);
         }
     }
+
+    // public function calculate(Request $request)
+    // {
+    //     try {
+    //         $validated = $request->validate([
+    //             'shippingCost'   => 'nullable|numeric',
+    //             'discountAmount' => 'nullable|numeric',
+    //             'manualDiscount' => 'nullable|numeric',
+    //             'isMultiAddress' => 'required|boolean',
+    //             'selectedCurrency' => 'required|array',
+    //             'selectedCurrency.id' => 'required|integer',
+    //             'selectedCurrency.exchangeRate' => 'required|numeric',
+    //             'coupon'           => 'nullable|array',
+    //             'coupon.id'        => 'required_with:coupon|integer',
+    //             'coupon.couponCode' => 'required_with:coupon|string',
+    //             'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
+    //             'destinations.*.shippingCost'   => 'required|numeric',
+    //             'destinations.*.products'       => 'required|array|min:1',
+    //             'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
+    //             'destinations.*.products.*.quantity'   => 'required|integer|min:1',
+    //             'products'       => 'required_if:isMultiAddress,false|array|min:1',
+    //             'products.*.product_id' => 'required|integer|exists:products,id',
+    //             'products.*.quantity'   => 'required|integer|min:1',
+    //         ]);
+
+    //         $storeId = current_store_id();
+    //         if (!$storeId) {
+    //             return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
+    //         }
+
+    //         // ===== CURRENCY FETCH =====
+    //         $currencyId = $request->input('selectedCurrency.id');
+    //         $payloadRate = (float) $request->input('selectedCurrency.exchangeRate');
+
+    //         $currency = \App\Models\Currency::where('store_id', $storeId)
+    //             ->where('id', $currencyId)
+    //             ->where('enabled', true)
+    //             ->first();
+
+    //         if (!$currency) {
+    //             return response()->json(['status' => false, 'message' => 'Currency not found'], 404);
+    //         }
+
+    //         $exchangeRate = (float) $currency->exchange_rate;
+
+    //         $currencyData = [
+    //             'id'           => $currency->id,
+    //             'code'         => $currency->code,
+    //             'name'         => $currency->name,
+    //             'symbol'       => $currency->symbol,
+    //             'exchangeRate' => $exchangeRate,
+    //         ];
+    //         // ===== CURRENCY END =====
+
+    //         // ===== COUPON FETCH =====
+    //         $discount = 0;
+    //         $couponData = null;
+
+    //         if (!empty($validated['coupon'])) {
+    //             $couponId = $validated['coupon']['id'];
+    //             $couponCode = $validated['coupon']['couponCode'];
+
+    //             $coupon = \App\Models\CouponCode::where('store_id', $storeId)
+    //                 ->where('id', $couponId)
+    //                 ->where('couponCode', $couponCode)
+    //                 ->where('enabled', true)
+    //                 ->first();
+
+    //             if (!$coupon) {
+    //                 return response()->json(['status' => false, 'message' => 'Invalid coupon'], 404);
+    //             }
+
+    //             $discount = (float) $coupon->discountAmount;
+
+    //             $couponData = [
+    //                 'id'             => $coupon->id,
+    //                 'couponCode'     => $coupon->couponCode,
+    //                 'discountAmount' => $discount,
+    //             ];
+    //         }
+    //         // ===== COUPON END =====
+
+    //         $manualDiscount = $validated['manualDiscount'] ?? 0;
+    //         $isMulti        = $validated['isMultiAddress'];
+
+    //         $calculatedTotal = 0;
+    //         $items = [];
+
+    //         if (!$isMulti) {
+    //             foreach ($validated['products'] as $item) {
+    //                 $product = Product::where('store_id', $storeId)->find($item['product_id']);
+    //                 if ($product) {
+    //                     $convertedPrice = round($product->price * $exchangeRate, 6);
+    //                     $lineTotal = $convertedPrice * $item['quantity'];
+    //                     $calculatedTotal += $lineTotal;
+
+    //                     $items[] = [
+    //                         'productId'      => $product->id,
+    //                         'name'           => $product->name,
+    //                         'sku'            => $product->sku,
+    //                         'basePrice'      => $product->price,
+    //                         'convertedPrice' => $convertedPrice,
+    //                         'quantity'       => $item['quantity'],
+    //                         'lineTotal'      => $lineTotal,
+    //                     ];
+    //                 }
+    //             }
+
+    //             // Shipping convert
+    //             $convertedShipping = ($validated['shippingCost'] ?? 0) * $exchangeRate;
+    //             $calculatedTotal += $convertedShipping;
+
+    //             // Discount convert
+    //             $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
+    //             $calculatedTotal -= $convertedDiscount;
+    //         } else {
+    //             foreach ($validated['destinations'] as $dest) {
+    //                 foreach ($dest['products'] as $item) {
+    //                     $product = Product::where('store_id', $storeId)->find($item['product_id']);
+    //                     if ($product) {
+    //                         $convertedPrice = round($product->price * $exchangeRate, 6);
+    //                         $lineTotal = $convertedPrice * $item['quantity'];
+    //                         $calculatedTotal += $lineTotal;
+
+    //                         $items[] = [
+    //                             'productId'      => $product->id,
+    //                             'name'           => $product->name,
+    //                             'sku'            => $product->sku,
+    //                             'basePrice'      => $product->price,
+    //                             'convertedPrice' => $convertedPrice,
+    //                             'quantity'       => $item['quantity'],
+    //                             'lineTotal'      => $lineTotal,
+    //                         ];
+    //                     }
+    //                 }
+
+    //                 // Shipping convert
+    //                 $convertedShipping = ($dest['shippingCost'] ?? 0) * $exchangeRate;
+    //                 $calculatedTotal += $convertedShipping;
+    //             }
+
+    //             // Discount convert
+    //             $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
+    //             $calculatedTotal -= $convertedDiscount;
+    //         }
+
+    //         if ($calculatedTotal < 0) {
+    //             $calculatedTotal = 0;
+    //         }
+
+    //         $amountInCents = (int) round($calculatedTotal * 100);
+
+    //         return response()->json([
+    //             'status' => true,
+    //             'data'   => [
+    //                 'amount'              => $amountInCents,
+    //                 'amountDecimal'       => round($calculatedTotal, 2),
+    //                 'currency'            => $currencyData,
+    //                 'coupon'              => $couponData,
+    //                 'manualDiscount'      => $manualDiscount,
+    //                 'convertedDiscount'   => round(($discount + $manualDiscount) * $exchangeRate, 2),
+    //                 'shippingCost'        => $validated['shippingCost'] ?? 0,
+    //                 'convertedShipping'   => round(($validated['shippingCost'] ?? 0) * $exchangeRate, 2),
+    //                 'items'               => $items,
+    //             ],
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Calculation failed',
+    //             'error'   => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
 
     // public function getCustomerOrderDiscounts(Request $request)
     // {
