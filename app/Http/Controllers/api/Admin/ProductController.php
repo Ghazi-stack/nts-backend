@@ -2570,7 +2570,7 @@ class ProductController extends Controller
             $cacheKey = "last_week_products_store_{$storeId}_page_{$page}_per_{$perPage}";
 
             $products = Cache::remember($cacheKey, 10, function () use ($storeId, $perPage) {
-                return Product::where('store_id', $storeId)
+                return Product::where('store_id', $storeId)->where('visible_on_storefront', 1)
                     ->where(function ($q) {
                         $q->where('created_at', '>=', Carbon::now()->subWeek())
                             ->orWhere('updated_at', '>=', Carbon::now()->subWeek());
