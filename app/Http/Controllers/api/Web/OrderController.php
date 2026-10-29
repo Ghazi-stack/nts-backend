@@ -2071,7 +2071,7 @@ class OrderController extends Controller
                         'weight_unit'   => 'LB',
                         'order_total'   => round($baseOrderTotal, 2),
                         'item_count'    => $itemCount,
-                        'package_value' => round($baseOrderTotal, 2),
+                        'package_value' => 0,   // ← 0 set kiya hai
                     ];
 
                     $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
@@ -2101,18 +2101,17 @@ class OrderController extends Controller
                     }
 
                     if ($matchedRate) {
-                        // As-is from rate (no division)
-                        $shippingCost = (float) $matchedRate['total_charge'];
+                        $shippingCost = (float) $matchedRate['total_charge']; // as-is
                     }
                 }
 
-                // Only convertedShipping is multiplied
                 $convertedShipping = round($shippingCost * $exchangeRate, 6);
                 $calculatedTotal += $convertedShipping;
 
                 $convertedDiscount = round(($discount + $manualDiscount) * $exchangeRate, 6);
                 $calculatedTotal -= $convertedDiscount;
             } else {
+                // Multi-address
                 foreach ($validated['destinations'] as $dest) {
                     foreach ($dest['products'] as $item) {
                         $product = Product::where('store_id', $storeId)->find($item['product_id']);
