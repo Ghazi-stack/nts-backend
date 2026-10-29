@@ -1977,7 +1977,7 @@ class OrderController extends Controller
                 'code'         => $currency->code,
                 'name'         => $currency->name,
                 'symbol'       => $currency->symbol,
-                'exchangeRate' => $exchangeRate,
+                'exchangeRate' => number_format($exchangeRate, 6, '.', ''), // 6 decimal
             ];
 
             // ===== COUPON FETCH =====
@@ -2071,7 +2071,7 @@ class OrderController extends Controller
                         'weight_unit'   => 'LB',
                         'order_total'   => round($baseOrderTotal, 2),
                         'item_count'    => $itemCount,
-                        'package_value' => round($baseOrderTotal, 2),
+                        'package_value' => 0,
                     ];
 
                     $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
@@ -2101,10 +2101,7 @@ class OrderController extends Controller
                     }
 
                     if ($matchedRate) {
-                        $rateCharge = (float) $matchedRate['total_charge'];
-                        $shippingCost = $exchangeRate > 0
-                            ? round($rateCharge / $exchangeRate, 6)
-                            : $rateCharge;
+                        $shippingCost = (float) $matchedRate['total_charge'];
                     }
                 }
 
@@ -2114,7 +2111,6 @@ class OrderController extends Controller
                 $convertedDiscount = round(($discount + $manualDiscount) * $exchangeRate, 6);
                 $calculatedTotal -= $convertedDiscount;
             } else {
-                // Multi-address
                 foreach ($validated['destinations'] as $dest) {
                     foreach ($dest['products'] as $item) {
                         $product = Product::where('store_id', $storeId)->find($item['product_id']);
