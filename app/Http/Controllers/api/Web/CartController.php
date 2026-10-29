@@ -841,6 +841,7 @@ class CartController extends Controller
 
             $product = Product::query()
                 ->where('store_id', $storeId)
+                ->where('visible_on_storefront', 1)
                 ->where('sku', $validated['sku'])
                 ->first();
 
