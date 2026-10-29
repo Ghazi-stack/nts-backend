@@ -2072,8 +2072,7 @@ class OrderController extends Controller
                         'package_value' => round($orderTotal, 2),
                     ];
 
-                    $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
-
+                    // Get rates from service
                     $ratesResponse = $shippingRateService->getCheckoutShippingRates(
                         $validated['destination'],
                         $packageInfo,
@@ -2082,9 +2081,10 @@ class OrderController extends Controller
                         $currencyCode
                     );
 
-                    // Nested: rates.rates
-                    $ratesArray = $ratesResponse['rates']['rates'] ?? $ratesResponse['rates'] ?? [];
+                    // Rates array nikaalo
+                    $ratesArray = $ratesResponse['rates'] ?? [];
 
+                    // Filter by method_id + method_type
                     $matchedRate = null;
                     foreach ($ratesArray as $rate) {
                         if (($rate['method_id'] ?? null) == $methodId && ($rate['method_type'] ?? null) == $methodType) {
@@ -2097,14 +2097,6 @@ class OrderController extends Controller
                         return response()->json([
                             'status'  => false,
                             'message' => 'Shipping method not available for this destination',
-                            'debug'   => [
-                                'requested' => ['method_id' => $methodId, 'method_type' => $methodType],
-                                'available' => collect($ratesArray)->map(fn($r) => [
-                                    'method_id'   => $r['method_id'] ?? null,
-                                    'method_type' => $r['method_type'] ?? null,
-                                    'display_name' => $r['display_name'] ?? null,
-                                ]),
-                            ],
                         ], 422);
                     }
 
