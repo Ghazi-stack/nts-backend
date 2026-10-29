@@ -2071,7 +2071,7 @@ class OrderController extends Controller
                         'weight_unit'   => 'LB',
                         'order_total'   => round($baseOrderTotal, 2),
                         'item_count'    => $itemCount,
-                        'package_value' => 0,   // ← 0 set kiya hai
+                        'package_value' => round($baseOrderTotal, 2),
                     ];
 
                     $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
@@ -2101,7 +2101,10 @@ class OrderController extends Controller
                     }
 
                     if ($matchedRate) {
-                        $shippingCost = (float) $matchedRate['total_charge']; // as-is
+                        $rateCharge = (float) $matchedRate['total_charge'];
+                        $shippingCost = $exchangeRate > 0
+                            ? round($rateCharge / $exchangeRate, 6)
+                            : $rateCharge;
                     }
                 }
 
