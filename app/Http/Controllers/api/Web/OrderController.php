@@ -2048,6 +2048,24 @@ class OrderController extends Controller
 
                 // ===== SHIPPING RATES FETCH & MATCH =====
                 if (!empty($validated['shipping'])) {
+                    $methodId = $validated['shipping']['method_id'];
+                    $methodType = $validated['shipping']['method_type'];
+
+                    // DB se shipping method verify karo (store_id check)
+                    $shippingMethod = \App\Models\ShippingMethod::where('store_id', $storeId)
+                        ->where('id', $methodId)
+                        ->where('method_type', $methodType)
+                        ->where('is_active', true)
+                        ->first();
+
+                    if (!$shippingMethod) {
+                        return response()->json([
+                            'status'  => false,
+                            'message' => 'Shipping method not found or inactive for this store',
+                        ], 404);
+                    }
+
+                    // Package calculate
                     $totalWeight = 0;
                     $itemCount = 0;
                     $orderTotal = 0;
@@ -2070,6 +2088,8 @@ class OrderController extends Controller
                         'package_value' => round($orderTotal, 2),
                     ];
 
+                    $shippingRateService = app(\App\Services\ShippingRateService::class);
+
                     $allRates = $shippingRateService->getCheckoutShippingRates(
                         $validated['destination'],
                         $packageInfo,
@@ -2078,15 +2098,24 @@ class OrderController extends Controller
                         $currencyCode
                     );
 
-                    $matchedRate = collect($allRates)->first(function ($rate) use ($validated) {
-                        return ($rate['method_id'] ?? null) == $validated['shipping']['method_id']
-                            && ($rate['method_type'] ?? null) == $validated['shipping']['method_type'];
+                    // Match by method_id + method_type
+                    $matchedRate = collect($allRates)->first(function ($rate) use ($methodId, $methodType) {
+                        return ($rate['method_id'] ?? null) == $methodId
+                            && ($rate['method_type'] ?? null) == $methodType;
                     });
 
                     if (!$matchedRate) {
                         return response()->json([
                             'status'  => false,
-                            'message' => 'Shipping method not found in available rates',
+                            'message' => 'Shipping method not available for this destination',
+                            'debug'   => [
+                                'requested' => ['method_id' => $methodId, 'method_type' => $methodType],
+                                'available' => collect($allRates)->map(fn($r) => [
+                                    'method_id'   => $r['method_id'] ?? null,
+                                    'method_type' => $r['method_type'] ?? null,
+                                    'display_name' => $r['display_name'] ?? null,
+                                ]),
+                            ],
                         ], 422);
                     }
 
