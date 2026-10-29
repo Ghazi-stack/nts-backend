@@ -1186,6 +1186,9 @@ class OrderController extends Controller
             $shippingMethod = $validated['shippingMethod'] ?? null;
             $shippingDataToSave = $validated['shippingData'] ?? null;
 
+            // Converted discount (coupon only)
+            $convertedDiscount = round($discount * $exchangeRate, 6);
+
             // ===== AMOUNT VERIFICATION =====
             if (!$isMulti) {
                 $totalWeight = 0;
@@ -1257,11 +1260,9 @@ class OrderController extends Controller
                     }
                 }
 
-                // ShippingCost already in selected currency → directly add
                 $calculatedTotal += $shippingCost;
-
-                $convertedDiscount = round(($discount + $manualDiscount) * $exchangeRate, 6);
                 $calculatedTotal -= $convertedDiscount;
+                $calculatedTotal -= round($manualDiscount * $exchangeRate, 6);
             } else {
                 foreach ($validated['destinations'] as $dest) {
                     foreach ($dest['products'] as $item) {
@@ -1273,8 +1274,8 @@ class OrderController extends Controller
                     }
                     $calculatedTotal += ($dest['shippingCost'] ?? 0);
                 }
-                $convertedDiscount = round(($discount + $manualDiscount) * $exchangeRate, 6);
                 $calculatedTotal -= $convertedDiscount;
+                $calculatedTotal -= round($manualDiscount * $exchangeRate, 6);
             }
 
             if ($calculatedTotal < 0) $calculatedTotal = 0;
@@ -1293,7 +1294,7 @@ class OrderController extends Controller
             $totalAmountFromPayload = $frontendAmount / 100;
             // ===== AMOUNT VERIFICATION END =====
 
-            // ===== BAQI PURA ORIGINAL FLOW (customer, order, Stripe, email, cart clear) =====
+            // ===== BAQI PURA ORIGINAL FLOW =====
 
             $orderEmail = strtolower(trim($validated['email']));
             $currentUser = $request->user('sanctum') ?? auth('sanctum')->user();
@@ -1509,7 +1510,7 @@ class OrderController extends Controller
                     'currency_code'          => $currencyCode,
                     'currency_symbol'        => $currencySymbol,
                     'exchange_rate'          => $exchangeRate,
-                    'discountAmount'         => $discount,
+                    'discountAmount'         => $convertedDiscount,   // converted coupon amount
                     'manualDiscount'         => $manualDiscount,
                     'coupon_code'            => $couponCode,
                     'is_multi_address'       => false,
@@ -1578,7 +1579,7 @@ class OrderController extends Controller
                         'currency_code'          => $currencyCode,
                         'currency_symbol'        => $currencySymbol,
                         'exchange_rate'          => $exchangeRate,
-                        'discountAmount'         => $discount,
+                        'discountAmount'         => $convertedDiscount,   // converted coupon amount
                         'manualDiscount'         => $manualDiscount,
                         'coupon_code'            => $couponCode,
                         'is_multi_address'       => true,
@@ -1717,7 +1718,7 @@ class OrderController extends Controller
                 'order_id'          => $orders[0]->id,
                 'stripe_session_id' => $validated['paymentIntentId'],
                 'amount'            => $totalOrderAmount,
-                'discountAmount'    => $discount,
+                'discountAmount'    => $convertedDiscount,
                 'payment_status'    => 'authorized',
             ], $riskData));
 
