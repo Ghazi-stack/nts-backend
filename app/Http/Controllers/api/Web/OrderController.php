@@ -1925,37 +1925,128 @@ class OrderController extends Controller
     public function calculate(Request $request)
     {
         try {
+            // ===================== VALIDATION =====================
             $validated = $request->validate([
-                'shippingCost'   => 'nullable|numeric',
-                'discountAmount' => 'nullable|numeric',
-                'manualDiscount' => 'nullable|numeric',
-                'isMultiAddress' => 'required|boolean',
+                // Shipping method select kiya (method_id + method_type)
+                'shipping'         => 'nullable|array',
+                'shipping.method_id'   => 'required_with:shipping|integer',
+                'shipping.method_type' => 'required_with:shipping|string',
+
+                // Customer ka address (shipping rate calculate karne ke liye)
+                'destination'      => 'required_with:shipping|array',
+                'destination.country_code' => 'required_with:shipping|string|size:2',
+                'destination.state'        => 'nullable|string|max:255',
+                'destination.city'         => 'nullable|string|max:255',
+                'destination.postal_code'  => 'nullable|string|max:50',
+
+                // Coupon object (id + couponCode)
+                'coupon'           => 'nullable|array',
+                'coupon.id'        => 'required_with:coupon|integer',
+                'coupon.couponCode' => 'required_with:coupon|string',
+
+                'manualDiscount'   => 'nullable|numeric',
+                'isMultiAddress'   => 'required|boolean',
+
+                // Currency object (id + exchangeRate)
                 'selectedCurrency' => 'required|array',
+                'selectedCurrency.id' => 'required|integer',
                 'selectedCurrency.exchangeRate' => 'required|numeric',
-                'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
-                'destinations.*.shippingCost'   => 'required|numeric',
+
+                // Multi address destinations
+                'destinations'     => 'required_if:isMultiAddress,true|array|min:1',
+                'destinations.*.shipping'       => 'nullable|array',
+                'destinations.*.shipping.method_id'   => 'required_with:destinations.*.shipping|integer',
+                'destinations.*.shipping.method_type' => 'required_with:destinations.*.shipping|string',
+                'destinations.*.destination'    => 'required_with:destinations.*.shipping|array',
+                'destinations.*.destination.country_code' => 'required_with:destinations.*.shipping|string|size:2',
                 'destinations.*.products'       => 'required|array|min:1',
                 'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
                 'destinations.*.products.*.quantity'   => 'required|integer|min:1',
-                'products'       => 'required_if:isMultiAddress,false|array|min:1',
+
+                // Single address products
+                'products'         => 'required_if:isMultiAddress,false|array|min:1',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
             ]);
 
+            // ===================== STORE ID =====================
             $storeId = current_store_id();
             if (!$storeId) {
                 return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
             }
 
-            $exchangeRate   = (float) $request->input('selectedCurrency.exchangeRate', 1);
-            $discount       = $validated['discountAmount'] ?? 0;
+            // ===================== CURRENCY VERIFY =====================
+            // Payload se currency id aur rate lo
+            $currencyId = $request->input('selectedCurrency.id');
+            $payloadRate = (float) $request->input('selectedCurrency.exchangeRate');
+
+            // DB se currency fetch karo
+            $currency = \App\Models\Currency::where('store_id', $storeId)
+                ->where('id', $currencyId)
+                ->where('enabled', true)
+                ->first();
+
+            if (!$currency) {
+                return response()->json(['status' => false, 'message' => 'Currency not found'], 404);
+            }
+
+            // Rate match check (tolerance for floating point)
+            if (abs((float) $currency->exchange_rate - $payloadRate) > 0.000001) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Exchange rate mismatch',
+                    'dbRate'  => $currency->exchange_rate,
+                    'sentRate' => $payloadRate,
+                ], 422);
+            }
+
+            // Verified rate use karo
+            $exchangeRate = (float) $currency->exchange_rate;
+            $currencyCode = $currency->code;
+            // ===================== CURRENCY VERIFY END =====================
+
+            // ===================== COUPON VERIFY =====================
+            $discount = 0;
+            $couponData = null;
+
+            if (!empty($validated['coupon'])) {
+                $couponId = $validated['coupon']['id'];
+                $couponCode = $validated['coupon']['couponCode'];
+
+                // DB se coupon fetch karo
+                $coupon = \App\Models\CouponCode::where('store_id', $storeId)
+                    ->where('id', $couponId)
+                    ->where('couponCode', $couponCode)
+                    ->where('enabled', true)
+                    ->first();
+
+                if (!$coupon) {
+                    return response()->json(['status' => false, 'message' => 'Invalid coupon'], 404);
+                }
+
+                // DB se discount amount lo
+                $discount = (float) $coupon->discountAmount;
+                $couponData = [
+                    'id'             => $coupon->id,
+                    'couponCode'     => $coupon->couponCode,
+                    'discountAmount' => $discount,
+                    'discountType'   => $coupon->discountType,
+                ];
+            }
+            // ===================== COUPON VERIFY END =====================
+
             $manualDiscount = $validated['manualDiscount'] ?? 0;
-            $isMulti        = $validated['isMultiAddress'];
+            $isMulti = $validated['isMultiAddress'];
 
             $calculatedTotal = 0;
             $items = [];
+            $shippingCost = 0;
+            $shippingData = null;
+            $allRates = [];
 
+            // ===================== SINGLE ADDRESS =====================
             if (!$isMulti) {
+                // Products loop - price convert karo
                 foreach ($validated['products'] as $item) {
                     $product = Product::where('store_id', $storeId)->find($item['product_id']);
                     if ($product) {
@@ -1975,15 +2066,48 @@ class OrderController extends Controller
                     }
                 }
 
-                // Shipping convert
-                $convertedShipping = ($validated['shippingCost'] ?? 0) * $exchangeRate;
+                // ===================== SHIPPING RATES FETCH & MATCH =====================
+                if (!empty($validated['shipping'])) {
+                    // getRates() call karo with destination
+                    $ratesResponse = $this->getRates(new Request([
+                        'destination' => $validated['destination'],
+                        'currency'    => $currencyCode,
+                    ]));
+
+                    $ratesData = $ratesResponse->getData(true);
+                    $allRates = $ratesData['data']['rates'] ?? [];
+
+                    // method_id + method_type se match karo
+                    $matchedRate = collect($allRates)->first(function ($rate) use ($validated) {
+                        return ($rate['method_id'] ?? null) == $validated['shipping']['method_id']
+                            && ($rate['method_type'] ?? null) == $validated['shipping']['method_type'];
+                    });
+
+                    if (!$matchedRate) {
+                        return response()->json([
+                            'status'  => false,
+                            'message' => 'Shipping method not found in available rates',
+                        ], 422);
+                    }
+
+                    // Matched rate se cost lo
+                    $shippingCost = (float) ($matchedRate['total_charge'] ?? 0);
+                    $shippingData = $matchedRate;
+                }
+                // ===================== SHIPPING END =====================
+
+                // Shipping convert karo
+                $convertedShipping = $shippingCost * $exchangeRate;
                 $calculatedTotal += $convertedShipping;
 
-                // Discount convert
+                // Discount convert karo
                 $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
                 $calculatedTotal -= $convertedDiscount;
-            } else {
+            }
+            // ===================== MULTI ADDRESS =====================
+            else {
                 foreach ($validated['destinations'] as $dest) {
+                    // Products loop
                     foreach ($dest['products'] as $item) {
                         $product = Product::where('store_id', $storeId)->find($item['product_id']);
                         if ($product) {
@@ -2003,9 +2127,36 @@ class OrderController extends Controller
                         }
                     }
 
-                    // Shipping convert
-                    $convertedShipping = ($dest['shippingCost'] ?? 0) * $exchangeRate;
-                    $calculatedTotal += $convertedShipping;
+                    // ===================== SHIPPING RATES FETCH & MATCH =====================
+                    if (!empty($dest['shipping'])) {
+                        $ratesResponse = $this->getRates(new Request([
+                            'destination' => $dest['destination'],
+                            'currency'    => $currencyCode,
+                        ]));
+
+                        $ratesData = $ratesResponse->getData(true);
+                        $destRates = $ratesData['data']['rates'] ?? [];
+                        $allRates = array_merge($allRates, $destRates);
+
+                        // Match karo
+                        $matchedRate = collect($destRates)->first(function ($rate) use ($dest) {
+                            return ($rate['method_id'] ?? null) == $dest['shipping']['method_id']
+                                && ($rate['method_type'] ?? null) == $dest['shipping']['method_type'];
+                        });
+
+                        if (!$matchedRate) {
+                            return response()->json([
+                                'status'  => false,
+                                'message' => 'Shipping method not found for destination',
+                            ], 422);
+                        }
+
+                        $destShippingCost = (float) ($matchedRate['total_charge'] ?? 0);
+                        $shippingCost += $destShippingCost;
+                        $convertedShipping = $destShippingCost * $exchangeRate;
+                        $calculatedTotal += $convertedShipping;
+                    }
+                    // ===================== SHIPPING END =====================
                 }
 
                 // Discount convert
@@ -2013,24 +2164,34 @@ class OrderController extends Controller
                 $calculatedTotal -= $convertedDiscount;
             }
 
+            // Negative total prevent
             if ($calculatedTotal < 0) {
                 $calculatedTotal = 0;
             }
 
+            // Cents mein convert (Stripe ke liye)
             $amountInCents = (int) round($calculatedTotal * 100);
 
+            // ===================== RESPONSE =====================
             return response()->json([
                 'status' => true,
                 'data'   => [
-                    'amount'              => $amountInCents,
-                    'amountDecimal'       => round($calculatedTotal, 2),
-                    'exchangeRate'        => $exchangeRate,
-                    'discount'            => $discount,
-                    'convertedDiscount'   => round(($discount + $manualDiscount) * $exchangeRate, 2),
-                    'manualDiscount'      => $manualDiscount,
-                    'shippingCost'        => $validated['shippingCost'] ?? 0,
-                    'convertedShipping'   => round(($validated['shippingCost'] ?? 0) * $exchangeRate, 2),
-                    'items'               => $items,
+                    'amount'            => $amountInCents,
+                    'amountDecimal'     => round($calculatedTotal, 2),
+                    'currency'          => [
+                        'id'           => $currency->id,
+                        'code'         => $currency->code,
+                        'symbol'       => $currency->symbol,
+                        'exchangeRate' => $exchangeRate,
+                    ],
+                    'coupon'            => $couponData,
+                    'manualDiscount'    => $manualDiscount,
+                    'convertedDiscount' => round(($discount + $manualDiscount) * $exchangeRate, 2),
+                    'shipping'          => $shippingData,
+                    'shippingCost'      => $shippingCost,
+                    'convertedShipping' => round($shippingCost * $exchangeRate, 2),
+                    'rates'             => $allRates,
+                    'items'             => $items,
                 ],
             ]);
         } catch (\Exception $e) {
