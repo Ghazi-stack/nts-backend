@@ -137,12 +137,7 @@ class ShippingRateService
                 'dimension_unit'           => $packageInfo['dimension_unit'] ?? 'IN',
                 'package_value'            => $packageInfo['package_value'] ?? $packageInfo['order_total'] ?? null,
             ];
-            // Log before FedEx call
-            Log::info('FEDEX SHIPMENT DATA', [
-                'total_weight' => $shipmentData['total_weight'] ?? null,
-                'weight_unit' => $shipmentData['weight_unit'] ?? null,
-                'shipment_data' => $shipmentData,
-            ]);
+            
 
             $fedexResult = $this->fedexRateService->getRates($fedexConfig, $shipmentData, $currency);
 
