@@ -1926,32 +1926,22 @@ class OrderController extends Controller
     {
         try {
             $validated = $request->validate([
-                'shipping'         => 'nullable|array',
-                'shipping.method_id'   => 'required_with:shipping|integer',
-                'shipping.method_type' => 'required_with:shipping|string',
-                'destination'      => 'required_with:shipping|array',
-                'destination.country_code' => 'required_with:shipping|string|size:2',
-                'destination.state'        => 'nullable|string|max:255',
-                'destination.city'         => 'nullable|string|max:255',
-                'destination.postal_code'  => 'nullable|string|max:50',
-                'coupon'           => 'nullable|array',
-                'coupon.id'        => 'required_with:coupon|integer',
-                'coupon.couponCode' => 'required_with:coupon|string',
-                'manualDiscount'   => 'nullable|numeric',
-                'isMultiAddress'   => 'required|boolean',
+                'shippingCost'   => 'nullable|numeric',
+                'discountAmount' => 'nullable|numeric',
+                'manualDiscount' => 'nullable|numeric',
+                'isMultiAddress' => 'required|boolean',
                 'selectedCurrency' => 'required|array',
                 'selectedCurrency.id' => 'required|integer',
                 'selectedCurrency.exchangeRate' => 'required|numeric',
-                'destinations'     => 'required_if:isMultiAddress,true|array|min:1',
-                'destinations.*.shipping'       => 'nullable|array',
-                'destinations.*.shipping.method_id'   => 'required_with:destinations.*.shipping|integer',
-                'destinations.*.shipping.method_type' => 'required_with:destinations.*.shipping|string',
-                'destinations.*.destination'    => 'required_with:destinations.*.shipping|array',
-                'destinations.*.destination.country_code' => 'required_with:destinations.*.shipping|string|size:2',
+                'coupon'           => 'nullable|array',
+                'coupon.id'        => 'required_with:coupon|integer',
+                'coupon.couponCode' => 'required_with:coupon|string',
+                'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
+                'destinations.*.shippingCost'   => 'required|numeric',
                 'destinations.*.products'       => 'required|array|min:1',
                 'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
                 'destinations.*.products.*.quantity'   => 'required|integer|min:1',
-                'products'         => 'required_if:isMultiAddress,false|array|min:1',
+                'products'       => 'required_if:isMultiAddress,false|array|min:1',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
             ]);
@@ -1961,7 +1951,7 @@ class OrderController extends Controller
                 return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
             }
 
-            // ===== CURRENCY FETCH & VERIFY =====
+            // ===== CURRENCY FETCH =====
             $currencyId = $request->input('selectedCurrency.id');
             $payloadRate = (float) $request->input('selectedCurrency.exchangeRate');
 
@@ -1974,31 +1964,18 @@ class OrderController extends Controller
                 return response()->json(['status' => false, 'message' => 'Currency not found'], 404);
             }
 
-            if (abs((float) $currency->exchange_rate - $payloadRate) > 0.000001) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Exchange rate mismatch',
-                    'dbRate'  => $currency->exchange_rate,
-                    'sentRate' => $payloadRate,
-                ], 422);
-            }
-
             $exchangeRate = (float) $currency->exchange_rate;
-            $currencyCode = $currency->code;
 
             $currencyData = [
                 'id'           => $currency->id,
                 'code'         => $currency->code,
                 'name'         => $currency->name,
                 'symbol'       => $currency->symbol,
-                'symbolLocation' => $currency->symbol_location,
                 'exchangeRate' => $exchangeRate,
-                'decimalPlaces' => $currency->decimal_places,
-                'isDefault'    => $currency->is_default,
             ];
             // ===== CURRENCY END =====
 
-            // ===== COUPON FETCH & VERIFY =====
+            // ===== COUPON FETCH =====
             $discount = 0;
             $couponData = null;
 
@@ -2022,22 +1999,15 @@ class OrderController extends Controller
                     'id'             => $coupon->id,
                     'couponCode'     => $coupon->couponCode,
                     'discountAmount' => $discount,
-                    'discountType'   => $coupon->discountType,
-                    'enabled'        => $coupon->enabled,
                 ];
             }
             // ===== COUPON END =====
 
             $manualDiscount = $validated['manualDiscount'] ?? 0;
-            $isMulti = $validated['isMultiAddress'];
+            $isMulti        = $validated['isMultiAddress'];
 
             $calculatedTotal = 0;
             $items = [];
-            $shippingCost = 0;
-            $shippingData = null;
-            $shippingResponse = null;
-
-            $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
 
             if (!$isMulti) {
                 foreach ($validated['products'] as $item) {
@@ -2059,67 +2029,11 @@ class OrderController extends Controller
                     }
                 }
 
-                // ===== SHIPPING =====
-                if (!empty($validated['shipping'])) {
-                    $methodId = $validated['shipping']['method_id'];
-                    $methodType = $validated['shipping']['method_type'];
-
-                    $totalWeight = 0;
-                    $itemCount = 0;
-                    $orderTotal = 0;
-
-                    foreach ($validated['products'] as $item) {
-                        $product = Product::where('store_id', $storeId)->find($item['product_id']);
-                        if ($product) {
-                            $weight = (float) ($product->weight ?? 0);
-                            $totalWeight += $weight * $item['quantity'];
-                            $itemCount += $item['quantity'];
-                            $orderTotal += $product->price * $item['quantity'];
-                        }
-                    }
-
-                    $packageInfo = [
-                        'total_weight'  => round($totalWeight, 2),
-                        'weight_unit'   => 'LB',
-                        'order_total'   => round($orderTotal, 2),
-                        'item_count'    => $itemCount,
-                        'package_value' => round($orderTotal, 2),
-                    ];
-
-                    $shippingResponse = $shippingRateService->getCheckoutShippingRates(
-                        $validated['destination'],
-                        $packageInfo,
-                        $storeId,
-                        null,
-                        $currencyCode
-                    );
-
-                    $ratesArray = $shippingResponse['rates'] ?? [];
-
-                    $matchedRate = null;
-                    foreach ($ratesArray as $rate) {
-                        if (($rate['method_id'] ?? null) == $methodId && ($rate['method_type'] ?? null) == $methodType) {
-                            $matchedRate = $rate;
-                            break;
-                        }
-                    }
-
-                    if (!$matchedRate) {
-                        return response()->json([
-                            'status'  => false,
-                            'message' => 'Shipping method not available',
-                            'shippingResponse' => $shippingResponse,
-                        ], 422);
-                    }
-
-                    $shippingCost = (float) ($matchedRate['total_charge'] ?? 0);
-                    $shippingData = $matchedRate;
-                }
-                // ===== SHIPPING END =====
-
-                $convertedShipping = $shippingCost * $exchangeRate;
+                // Shipping convert
+                $convertedShipping = ($validated['shippingCost'] ?? 0) * $exchangeRate;
                 $calculatedTotal += $convertedShipping;
 
+                // Discount convert
                 $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
                 $calculatedTotal -= $convertedDiscount;
             } else {
@@ -2143,65 +2057,12 @@ class OrderController extends Controller
                         }
                     }
 
-                    if (!empty($dest['shipping'])) {
-                        $methodId = $dest['shipping']['method_id'];
-                        $methodType = $dest['shipping']['method_type'];
-
-                        $totalWeight = 0;
-                        $itemCount = 0;
-                        $orderTotal = 0;
-
-                        foreach ($dest['products'] as $item) {
-                            $product = Product::where('store_id', $storeId)->find($item['product_id']);
-                            if ($product) {
-                                $weight = (float) ($product->weight ?? 0);
-                                $totalWeight += $weight * $item['quantity'];
-                                $itemCount += $item['quantity'];
-                                $orderTotal += $product->price * $item['quantity'];
-                            }
-                        }
-
-                        $packageInfo = [
-                            'total_weight'  => round($totalWeight, 2),
-                            'weight_unit'   => 'LB',
-                            'order_total'   => round($orderTotal, 2),
-                            'item_count'    => $itemCount,
-                            'package_value' => round($orderTotal, 2),
-                        ];
-
-                        $destShippingResponse = $shippingRateService->getCheckoutShippingRates(
-                            $dest['destination'],
-                            $packageInfo,
-                            $storeId,
-                            null,
-                            $currencyCode
-                        );
-
-                        $ratesArray = $destShippingResponse['rates'] ?? [];
-
-                        $matchedRate = null;
-                        foreach ($ratesArray as $rate) {
-                            if (($rate['method_id'] ?? null) == $methodId && ($rate['method_type'] ?? null) == $methodType) {
-                                $matchedRate = $rate;
-                                break;
-                            }
-                        }
-
-                        if (!$matchedRate) {
-                            return response()->json([
-                                'status'  => false,
-                                'message' => 'Shipping method not found for destination',
-                                'shippingResponse' => $destShippingResponse,
-                            ], 422);
-                        }
-
-                        $destShippingCost = (float) ($matchedRate['total_charge'] ?? 0);
-                        $shippingCost += $destShippingCost;
-                        $convertedShipping = $destShippingCost * $exchangeRate;
-                        $calculatedTotal += $convertedShipping;
-                    }
+                    // Shipping convert
+                    $convertedShipping = ($dest['shippingCost'] ?? 0) * $exchangeRate;
+                    $calculatedTotal += $convertedShipping;
                 }
 
+                // Discount convert
                 $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
                 $calculatedTotal -= $convertedDiscount;
             }
@@ -2215,17 +2076,15 @@ class OrderController extends Controller
             return response()->json([
                 'status' => true,
                 'data'   => [
-                    'amount'            => $amountInCents,
-                    'amountDecimal'     => round($calculatedTotal, 2),
-                    'currency'          => $currencyData,
-                    'coupon'            => $couponData,
-                    'manualDiscount'    => $manualDiscount,
-                    'convertedDiscount' => round(($discount + $manualDiscount) * $exchangeRate, 2),
-                    'shipping'          => $shippingData,
-                    'shippingCost'      => $shippingCost,
-                    'convertedShipping' => round($shippingCost * $exchangeRate, 2),
-                    'shippingResponse'  => $shippingResponse,
-                    'items'             => $items,
+                    'amount'              => $amountInCents,
+                    'amountDecimal'       => round($calculatedTotal, 2),
+                    'currency'            => $currencyData,
+                    'coupon'              => $couponData,
+                    'manualDiscount'      => $manualDiscount,
+                    'convertedDiscount'   => round(($discount + $manualDiscount) * $exchangeRate, 2),
+                    'shippingCost'        => $validated['shippingCost'] ?? 0,
+                    'convertedShipping'   => round(($validated['shippingCost'] ?? 0) * $exchangeRate, 2),
+                    'items'               => $items,
                 ],
             ]);
         } catch (\Exception $e) {
