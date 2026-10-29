@@ -1065,11 +1065,9 @@ class OrderController extends Controller
     //     }
     // }
 
-
     public function store(Request $request)
     {
         try {
-
             $validated = $request->validate([
                 'orderId'        => 'nullable|integer|exists:orders,id',
                 'userType'       => 'nullable|string|max:100',
@@ -1094,16 +1092,29 @@ class OrderController extends Controller
                 'discountAmount' => 'nullable|numeric',
                 'manualDiscount' => 'nullable|numeric',
                 'paymentIntentId' => 'required|string',
-                'couponCode'     => 'nullable|string|max:255',
+                'coupon'         => 'nullable|array',
+                'coupon.id'      => 'required_with:coupon|integer',
+                'coupon.couponCode' => 'required_with:coupon|string',
                 'isMultiAddress' => 'required|boolean',
-                'ipAddress'                  => 'nullable|string|max:45',
-                'orderPlaceCountry'          => 'nullable|string|max:45',
-                'isSaveAddressForShipping'   => 'nullable|boolean',
-                'isSaveAddressForBilling'    => 'nullable|boolean',
-                'billingSame'                => 'nullable|boolean',
+                'ipAddress'      => 'nullable|string|max:45',
+                'orderPlaceCountry' => 'nullable|string|max:45',
+                'isSaveAddressForShipping' => 'nullable|boolean',
+                'isSaveAddressForBilling'  => 'nullable|boolean',
+                'billingSame'    => 'nullable|boolean',
                 'amount'         => 'required|integer',
                 'currency'       => 'nullable|string|size:3',
-                'selectedCurrency' => 'nullable|array',
+                'selectedCurrency' => 'required|array',
+                'selectedCurrency.id' => 'required|integer',
+                'selectedCurrency.exchangeRate' => 'required|numeric',
+
+                'method_id'      => 'nullable|integer',
+                'service_type'   => 'nullable|string',
+                'destination'    => 'required_with:method_id|array',
+                'destination.country_code' => 'required_with:destination|string|size:2',
+                'destination.state'        => 'nullable|string|max:255',
+                'destination.city'         => 'nullable|string|max:255',
+                'destination.postal_code'  => 'nullable|string|max:50',
+
                 'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
                 'destinations.*.firstName'      => 'required|string|max:255',
                 'destinations.*.lastName'       => 'required|string|max:255',
@@ -1131,54 +1142,145 @@ class OrderController extends Controller
                 return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
             }
 
-            // ===== AMOUNT VERIFICATION START =====
-            $currencyCode   = strtoupper($request->input('currency', 'USD'));
-            $currencySymbol = $request->input('selectedCurrency.symbol', '$');
-            $exchangeRate   = (float) $request->input('selectedCurrency.exchangeRate', 1);
-            $frontendAmount = (int) $request->input('amount', 0);
+            // ===== CURRENCY FETCH =====
+            $currencyId = $request->input('selectedCurrency.id');
+            $currency = \App\Models\Currency::where('store_id', $storeId)
+                ->where('id', $currencyId)
+                ->where('enabled', true)
+                ->first();
 
-            $discount = $validated['discountAmount'] ?? 0;
+            if (!$currency) {
+                return response()->json(['status' => false, 'message' => 'Currency not found'], 404);
+            }
+
+            $exchangeRate = (float) $currency->exchange_rate;
+            $currencyCode = $currency->code;
+            $currencySymbol = $currency->symbol;
+
+            // ===== COUPON FETCH =====
+            $discount = 0;
+            $couponCode = null;
+
+            if (!empty($validated['coupon'])) {
+                $coupon = \App\Models\CouponCode::where('store_id', $storeId)
+                    ->where('id', $validated['coupon']['id'])
+                    ->where('couponCode', $validated['coupon']['couponCode'])
+                    ->where('enabled', true)
+                    ->first();
+
+                if (!$coupon) {
+                    return response()->json(['status' => false, 'message' => 'Invalid coupon'], 404);
+                }
+
+                $discount = (float) $coupon->discountAmount;
+                $couponCode = $coupon->couponCode;
+            }
+
             $manualDiscount = $validated['manualDiscount'] ?? 0;
             $isMulti = $validated['isMultiAddress'];
+            $frontendAmount = (int) $request->input('amount', 0);
 
             $calculatedTotal = 0;
+            $matchedRate = null;
+            $shippingCost = $validated['shippingCost'] ?? 0;
+            $shippingMethod = $validated['shippingMethod'] ?? null;
+            $shippingDataToSave = $validated['shippingData'] ?? null;
 
+            // ===== AMOUNT VERIFICATION =====
             if (!$isMulti) {
+                $totalWeight = 0;
+                $itemCount = 0;
+                $baseOrderTotal = 0;
+
                 foreach ($validated['products'] as $item) {
-                    $product = Product::find($item['product_id']);
+                    $product = Product::where('store_id', $storeId)->find($item['product_id']);
                     if ($product) {
-                        $convertedPrice = $product->price * $exchangeRate;
+                        $convertedPrice = round($product->price * $exchangeRate, 6);
                         $calculatedTotal += $convertedPrice * $item['quantity'];
+
+                        $salePrice = $product->getAttribute('sale_price');
+                        $normalPrice = $product->getAttribute('price');
+                        $unitPrice = $salePrice !== null ? (float) $salePrice : (float) ($normalPrice ?? 0);
+                        $baseOrderTotal += $unitPrice * $item['quantity'];
+
+                        $productWeight = (float) ($product->getAttribute('weight') ?? 0);
+                        $dimensions = $product->dimensions;
+                        if (is_string($dimensions)) {
+                            $decoded = json_decode($dimensions, true);
+                            $dimensions = (json_last_error() === JSON_ERROR_NONE) ? $decoded : [];
+                        }
+                        if (!is_array($dimensions)) $dimensions = [];
+                        $dimensionWeight = (float) ($dimensions['weight'] ?? 0);
+                        $weightUsed = $productWeight > 0 ? $productWeight : $dimensionWeight;
+                        $totalWeight += $weightUsed * $item['quantity'];
+                        $itemCount += $item['quantity'];
                     }
                 }
-                // Shipping convert
-                $convertedShipping = ($validated['shippingCost'] ?? 0) * $exchangeRate;
-                $calculatedTotal += $convertedShipping;
 
-                // Discount convert
-                $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
+                if (!empty($validated['method_id']) && !empty($validated['destination'])) {
+                    $packageInfo = [
+                        'total_weight'  => round($totalWeight, 2),
+                        'weight_unit'   => 'LB',
+                        'order_total'   => round($baseOrderTotal, 2),
+                        'item_count'    => $itemCount,
+                        'package_value' => 0,
+                    ];
+
+                    $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
+                    $ratesResponse = $shippingRateService->getCheckoutShippingRates(
+                        $validated['destination'],
+                        $packageInfo,
+                        $storeId,
+                        null,
+                        $currency->code
+                    );
+
+                    $rates = $ratesResponse['rates'] ?? [];
+                    foreach ($rates as $rate) {
+                        if ((int) $rate['method_id'] === (int) $validated['method_id']) {
+                            if (!empty($validated['service_type'])) {
+                                if (($rate['service_type'] ?? '') === $validated['service_type']) {
+                                    $matchedRate = $rate;
+                                    break;
+                                }
+                            } else {
+                                $matchedRate = $rate;
+                                break;
+                            }
+                        }
+                    }
+
+                    if ($matchedRate) {
+                        $shippingCost = (float) $matchedRate['total_charge'];
+                        $shippingMethod = $matchedRate['service_type'] ?? $shippingMethod;
+                        $shippingDataToSave = $matchedRate['display_name'] ?? $shippingMethod;
+                    }
+                }
+
+                // ShippingCost already in selected currency → directly add
+                $calculatedTotal += $shippingCost;
+
+                $convertedDiscount = round(($discount + $manualDiscount) * $exchangeRate, 6);
                 $calculatedTotal -= $convertedDiscount;
             } else {
                 foreach ($validated['destinations'] as $dest) {
                     foreach ($dest['products'] as $item) {
-                        $product = Product::find($item['product_id']);
+                        $product = Product::where('store_id', $storeId)->find($item['product_id']);
                         if ($product) {
-                            $convertedPrice = $product->price * $exchangeRate;
+                            $convertedPrice = round($product->price * $exchangeRate, 6);
                             $calculatedTotal += $convertedPrice * $item['quantity'];
                         }
                     }
-                    // Shipping convert
-                    $convertedShipping = ($dest['shippingCost'] ?? 0) * $exchangeRate;
-                    $calculatedTotal += $convertedShipping;
+                    $calculatedTotal += ($dest['shippingCost'] ?? 0);
                 }
-                // Discount convert
-                $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
+                $convertedDiscount = round(($discount + $manualDiscount) * $exchangeRate, 6);
                 $calculatedTotal -= $convertedDiscount;
             }
 
+            if ($calculatedTotal < 0) $calculatedTotal = 0;
+
             $calculatedCents = (int) round($calculatedTotal * 100);
 
-            // 1 cent tolerance for rounding
             if (abs($calculatedCents - $frontendAmount) > 1) {
                 return response()->json([
                     'status'     => false,
@@ -1188,18 +1290,16 @@ class OrderController extends Controller
                 ], 422);
             }
 
-            // Frontend amount use karo save ke liye
             $totalAmountFromPayload = $frontendAmount / 100;
             // ===== AMOUNT VERIFICATION END =====
 
-            $orderEmail = strtolower(trim($validated['email']));
+            // ===== BAQI PURA ORIGINAL FLOW (customer, order, Stripe, email, cart clear) =====
 
+            $orderEmail = strtolower(trim($validated['email']));
             $currentUser = $request->user('sanctum') ?? auth('sanctum')->user();
 
             if (!$currentUser && $request->bearerToken()) {
-                $sanctumToken = \Laravel\Sanctum\PersonalAccessToken::findToken(
-                    $request->bearerToken()
-                );
+                $sanctumToken = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
                 $currentUser = $sanctumToken?->tokenable;
             }
 
@@ -1208,20 +1308,13 @@ class OrderController extends Controller
 
             if ($currentUser) {
                 $sessionId = null;
-                $currentQuoteToken = $this->cartContext->getCurrentQuoteToken(
-                    $storeId,
-                    $currentUser,
-                    $sessionId
-                );
+                $currentQuoteToken = $this->cartContext->getCurrentQuoteToken($storeId, $currentUser, $sessionId);
 
                 if ($currentQuoteToken) {
                     try {
                         $quotePayload = $this->draftQuote->decode($currentQuoteToken);
                     } catch (\Exception $e) {
-                        return response()->json([
-                            'status'  => false,
-                            'message' => 'Current draft context is invalid or expired.',
-                        ], 401);
+                        return response()->json(['status' => false, 'message' => 'Current draft context is invalid or expired.'], 401);
                     }
 
                     $tokenStoreId = (int) ($quotePayload['store_id'] ?? 0);
@@ -1229,10 +1322,7 @@ class OrderController extends Controller
                     $tokenUserId  = (int) ($quotePayload['user_id'] ?? 0);
 
                     if ($tokenStoreId !== (int) $storeId || $tokenUserId !== (int) $currentUser->id) {
-                        return response()->json([
-                            'status'  => false,
-                            'message' => 'Draft context does not belong to the authenticated user.',
-                        ], 403);
+                        return response()->json(['status' => false, 'message' => 'Draft context does not belong to the authenticated user.'], 403);
                     }
 
                     if ($tokenOrderId > 0) {
@@ -1244,10 +1334,7 @@ class OrderController extends Controller
                             ->first();
 
                         if (!$existingDraft) {
-                            return response()->json([
-                                'status'  => false,
-                                'message' => 'Draft order not found.',
-                            ], 404);
+                            return response()->json(['status' => false, 'message' => 'Draft order not found.'], 404);
                         }
                     }
 
@@ -1261,10 +1348,7 @@ class OrderController extends Controller
 
                         if (!$hasActiveDraftItems) {
                             $this->cartContext->setNormalCart($storeId, $currentUser, null);
-                            return response()->json([
-                                'status'  => false,
-                                'message' => 'Draft cart is empty.',
-                            ], 404);
+                            return response()->json(['status' => false, 'message' => 'Draft cart is empty.'], 404);
                         }
                     }
                 }
@@ -1277,51 +1361,29 @@ class OrderController extends Controller
                         ->where('product_id', $productId)
                         ->latest('id')
                         ->first();
-
-                    if ($row) {
-                        return (float) $row->price;
-                    }
+                    if ($row) return (float) $row->price;
                 }
                 return (float) $fallbackPrice;
             };
 
             $existingPayment = Payment::where('stripe_session_id', $validated['paymentIntentId'])->first();
-
             if ($existingPayment) {
                 if ($existingPayment->payment_status === 'completed') {
-                    $order = Order::with('items.product.images', 'billingInformation', 'customer')
-                        ->find($existingPayment->order_id);
-
-                    return response()->json([
-                        'status'  => true,
-                        'message' => 'Order already placed successfully.',
-                        'data'    => new OrderResource($order),
-                    ]);
-                } else {
-                    return response()->json([
-                        'status'  => false,
-                        'message' => 'This payment is already being processed.'
-                    ], 409);
+                    $order = Order::with('items.product.images', 'billingInformation', 'customer')->find($existingPayment->order_id);
+                    return response()->json(['status' => true, 'message' => 'Order already placed successfully.', 'data' => new OrderResource($order)]);
                 }
+                return response()->json(['status' => false, 'message' => 'This payment is already being processed.'], 409);
             }
 
             Stripe::setApiKey(config('services.stripe.secret'));
-
             try {
                 $stripeIntent = PaymentIntent::retrieve($validated['paymentIntentId']);
             } catch (\Exception $stripeException) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Unable to verify payment with Stripe.',
-                ], 422);
+                return response()->json(['status' => false, 'message' => 'Unable to verify payment with Stripe.'], 422);
             }
 
             if ($stripeIntent->status !== 'requires_capture') {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Payment has not been authorized.',
-                    'payment_status' => $stripeIntent->status,
-                ], 422);
+                return response()->json(['status' => false, 'message' => 'Payment has not been authorized.', 'payment_status' => $stripeIntent->status], 422);
             }
 
             $user = auth('sanctum')->user();
@@ -1332,18 +1394,13 @@ class OrderController extends Controller
                 $customer = $user->customer;
             } else {
                 $user = User::where('email', $validated['email'])->where('userRole', 2)->where('store_id', $storeId)->first();
-                if (!$user) {
-                    $isGuest = true;
-                }
+                if (!$user) $isGuest = true;
             }
 
-            if ($user && !$customer) {
-                $customer = $user->customer;
-            }
+            if ($user && !$customer) $customer = $user->customer;
 
             if (!$customer) {
                 $primary = $validated['isMultiAddress'] ? $validated['destinations'][0] : $validated;
-
                 $customer = Customer::create([
                     'store_id'       => $storeId,
                     'first_name'     => $primary['firstName'] ?? '',
@@ -1359,7 +1416,6 @@ class OrderController extends Controller
                     'country'        => $primary['country'] ?? null,
                     'user_type'      => $isGuest ? 'guest' : null,
                 ]);
-
                 if ($user) {
                     $user->customer_id = $customer->id;
                     $user->save();
@@ -1367,7 +1423,6 @@ class OrderController extends Controller
             }
 
             $user = $currentUser;
-
             if (!$user && $request->bearerToken()) {
                 $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
                 $user = $token?->tokenable;
@@ -1381,12 +1436,8 @@ class OrderController extends Controller
                 CouponUsage::where('store_id', $storeId)
                     ->whereRaw('LOWER(email) = ?', [$orderEmail])
                     ->where(function ($q) use ($userId, $sessionId) {
-                        if ($userId) {
-                            $q->orWhere('user_id', $userId);
-                        }
-                        if ($sessionId) {
-                            $q->orWhere('session_id', $sessionId);
-                        }
+                        if ($userId) $q->orWhere('user_id', $userId);
+                        if ($sessionId) $q->orWhere('session_id', $sessionId);
                     })
                     ->update(['user_used' => 1]);
             }
@@ -1396,20 +1447,9 @@ class OrderController extends Controller
                     $store = Store::find($storeId);
                     $frontendUrl = rtrim($store?->base_url ?? '#', '/');
                     $registerLink = $frontendUrl . '/auth/signup';
-
-                    Mail::to($validated['email'])->send(
-                        new \App\Mail\GuestAccountMail(
-                            $customer->first_name,
-                            $validated['email'],
-                            $registerLink,
-                            $storeId
-                        )
-                    );
+                    Mail::to($validated['email'])->send(new \App\Mail\GuestAccountMail($customer->first_name, $validated['email'], $registerLink, $storeId));
                 } catch (\Exception $mailEx) {
-                    Log::error('GUEST ACCOUNT EMAIL FAILED', [
-                        'error' => $mailEx->getMessage(),
-                        'email' => $validated['email'],
-                    ]);
+                    Log::error('GUEST ACCOUNT EMAIL FAILED', ['error' => $mailEx->getMessage(), 'email' => $validated['email']]);
                 }
             }
 
@@ -1451,8 +1491,8 @@ class OrderController extends Controller
                     'zip'             => $validated['zip'] ?? null,
                     'country'         => $validated['country'] ?? null,
                     'payment_method'  => $validated['paymentMethod'],
-                    'shipping_method' => $validated['shippingMethod'],
-                    'shipping_data'   => $validated['shippingData'] ?? null,
+                    'shipping_method' => $shippingMethod,
+                    'shipping_data'   => $shippingDataToSave,
                 ]);
 
                 $orderPayload = array_merge([
@@ -1461,7 +1501,7 @@ class OrderController extends Controller
                     'customer_id'            => $customer->id,
                     'billing_information_id' => $billing->id,
                     'status'                 => 'Awaiting Payment',
-                    'shipping_cost'          => $validated['shippingCost'],
+                    'shipping_cost'          => $shippingCost,
                     'comments'               => $validated['comments'] ?? null,
                     'device_type'            => $validated['deviceType'] ?? null,
                     'user_type'              => $isGuest ? 'guest' : ($validated['userType'] ?? null),
@@ -1471,7 +1511,7 @@ class OrderController extends Controller
                     'exchange_rate'          => $exchangeRate,
                     'discountAmount'         => $discount,
                     'manualDiscount'         => $manualDiscount,
-                    'coupon_code'            => $validated['couponCode'] ?? null,
+                    'coupon_code'            => $couponCode,
                     'is_multi_address'       => false,
                     'newsletter'             => $validated['newsletter'] ?? false,
                 ], $commonOrderFields);
@@ -1481,9 +1521,7 @@ class OrderController extends Controller
                     $existingDraft->update(array_merge($orderPayload, $draftConvertFields));
                     $order = $existingDraft->fresh();
                 } else {
-                    $order = Order::create(array_merge($orderPayload, [
-                        'order_number' => '',
-                    ]));
+                    $order = Order::create(array_merge($orderPayload, ['order_number' => '']));
                     $order->update(['order_number' => $order->id]);
                 }
 
@@ -1504,7 +1542,6 @@ class OrderController extends Controller
                 $totalOrderAmount = $totalAmount;
             } else {
                 $destIndex = 0;
-
                 foreach ($validated['destinations'] as $dest) {
                     $totalAmount = $totalAmountFromPayload;
 
@@ -1543,7 +1580,7 @@ class OrderController extends Controller
                         'exchange_rate'          => $exchangeRate,
                         'discountAmount'         => $discount,
                         'manualDiscount'         => $manualDiscount,
-                        'coupon_code'            => $validated['couponCode'] ?? null,
+                        'coupon_code'            => $couponCode,
                         'is_multi_address'       => true,
                         'newsletter'             => $validated['newsletter'] ?? false,
                     ], $commonOrderFields);
@@ -1553,9 +1590,7 @@ class OrderController extends Controller
                         $existingDraft->update(array_merge($orderPayload, $draftConvertFields));
                         $order = $existingDraft->fresh();
                     } else {
-                        $order = Order::create(array_merge($orderPayload, [
-                            'order_number' => '',
-                        ]));
+                        $order = Order::create(array_merge($orderPayload, ['order_number' => '']));
                         $order->update(['order_number' => $order->id]);
                     }
 
@@ -1578,14 +1613,13 @@ class OrderController extends Controller
                 }
             }
 
+            // Stripe billing details
             $stripeBillingDetails = null;
             try {
                 \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
                 $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId']);
-
                 if ($stripeIntent->payment_method) {
                     $paymentMethod = \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method);
-
                     if ($paymentMethod->billing_details) {
                         $bd = $paymentMethod->billing_details;
                         $stripeBillingDetails = [
@@ -1611,27 +1645,24 @@ class OrderController extends Controller
                 }
             }
 
+            // Saved addresses
             $shippingData = null;
-
             if ($validated['isSaveAddressForShipping'] ?? false) {
-                $shippingData = $isMulti
-                    ? $validated['destinations'][0]
-                    : [
-                        'firstName'    => $validated['firstName'] ?? null,
-                        'lastName'     => $validated['lastName'] ?? null,
-                        'companyName'  => $validated['companyName'] ?? null,
-                        'phone'        => $validated['phone'] ?? null,
-                        'addressLine1' => $validated['addressLine1'] ?? null,
-                        'addressLine2' => $validated['addressLine2'] ?? null,
-                        'city'         => $validated['city'] ?? null,
-                        'state'        => $validated['state'] ?? null,
-                        'zip'          => $validated['zip'] ?? null,
-                        'country'      => $validated['country'] ?? null,
-                    ];
+                $shippingData = $isMulti ? $validated['destinations'][0] : [
+                    'firstName'    => $validated['firstName'] ?? null,
+                    'lastName'     => $validated['lastName'] ?? null,
+                    'companyName'  => $validated['companyName'] ?? null,
+                    'phone'        => $validated['phone'] ?? null,
+                    'addressLine1' => $validated['addressLine1'] ?? null,
+                    'addressLine2' => $validated['addressLine2'] ?? null,
+                    'city'         => $validated['city'] ?? null,
+                    'state'        => $validated['state'] ?? null,
+                    'zip'          => $validated['zip'] ?? null,
+                    'country'      => $validated['country'] ?? null,
+                ];
             }
 
             $billingData = null;
-
             if ($validated['isSaveAddressForBilling'] ?? false) {
                 $billingData = $stripeBillingDetails ?? [
                     'name'         => ($validated['firstName'] ?? '') . ' ' . ($validated['lastName'] ?? ''),
@@ -1656,67 +1687,30 @@ class OrderController extends Controller
                 ]);
             }
 
-            $riskData = [
-                'risk_score' => null,
-                'risk_level' => 'normal',
-            ];
-
+            // Risk data
+            $riskData = ['risk_score' => null, 'risk_level' => 'normal'];
             try {
                 \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-
-                $freshIntent = \Stripe\PaymentIntent::retrieve(
-                    $validated['paymentIntentId'],
-                    ['expand' => [
-                        'latest_charge',
-                        'latest_charge.outcome',
-                        'latest_charge.review',
-                        'review',
-                    ]]
-                );
-
+                $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']]);
                 if (empty($freshIntent->latest_charge)) {
                     usleep(800000);
-                    $freshIntent = \Stripe\PaymentIntent::retrieve(
-                        $validated['paymentIntentId'],
-                        ['expand' => [
-                            'latest_charge',
-                            'latest_charge.outcome',
-                            'latest_charge.review',
-                            'review',
-                        ]]
-                    );
+                    $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']]);
                 }
-
                 $charge = null;
                 if (!empty($freshIntent->latest_charge)) {
                     $charge = is_string($freshIntent->latest_charge)
-                        ? \Stripe\Charge::retrieve(
-                            $freshIntent->latest_charge,
-                            ['expand' => ['outcome', 'review']]
-                        )
+                        ? \Stripe\Charge::retrieve($freshIntent->latest_charge, ['expand' => ['outcome', 'review']])
                         : $freshIntent->latest_charge;
                 }
-
                 $score = null;
                 $level = null;
-
                 if ($charge && !empty($charge->outcome)) {
-                    $score = isset($charge->outcome->risk_score)
-                        ? (int) $charge->outcome->risk_score
-                        : null;
+                    $score = isset($charge->outcome->risk_score) ? (int) $charge->outcome->risk_score : null;
                     $level = $charge->outcome->risk_level ?? null;
                 }
-
-                $riskData = [
-                    'risk_score' => $score,
-                    'risk_level' => $level ?: 'normal',
-                ];
+                $riskData = ['risk_score' => $score, 'risk_level' => $level ?: 'normal'];
             } catch (\Exception $e) {
                 \Log::warning('Could not fetch Stripe risk data: ' . $e->getMessage());
-                $riskData = [
-                    'risk_score' => null,
-                    'risk_level' => 'normal',
-                ];
             }
 
             Payment::create(array_merge([
@@ -1729,23 +1723,13 @@ class OrderController extends Controller
 
             foreach ($orders as $ord) {
                 $ord->load('billingInformation');
-
-                OrderTimeline::addEvent($ord->id, $storeId, 'order_created', 'Order created', [
-                    'status' => $ord->status,
-                ], 'dot');
-
-                OrderTimeline::addEvent($ord->id, $storeId, 'status_changed', 'Order status changed', [
-                    'previous_status' => 'Incomplete',
-                    'new_status'      => $ord->status,
-                ], 'dot');
-
+                OrderTimeline::addEvent($ord->id, $storeId, 'order_created', 'Order created', ['status' => $ord->status], 'dot');
+                OrderTimeline::addEvent($ord->id, $storeId, 'status_changed', 'Order status changed', ['previous_status' => 'Incomplete', 'new_status' => $ord->status], 'dot');
                 OrderTimeline::addEvent($ord->id, $storeId, 'shipping_quote', 'Shipping quote persisted', [
                     'shipping_cost'   => $currencySymbol . number_format($ord->shipping_cost, 2),
                     'shipping_method' => $ord->billingInformation->shipping_method ?? null,
                 ], 'dot');
-
                 OrderTimeline::addEvent($ord->id, $storeId, 'order_confirmed', 'Order confirmed', [], 'dot');
-
                 OrderTimeline::addEvent($ord->id, $storeId, 'payment_authorized', 'Payment authorized', [
                     'source'         => ucwords(str_replace('_', ' ', $validated['paymentMethod'] ?? 'N/A')),
                     'amount'         => $currencySymbol . number_format($ord->total_amount, 2),
@@ -1760,32 +1744,24 @@ class OrderController extends Controller
             try {
                 foreach ($orders as $ord) {
                     $ord->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
-
                     Mail::to($validated['email'])->send(new OrderPlacedMail($ord, $customer, $storeId));
-
                     $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
                     Mail::to($adminEmail)->send(new OrderPlacedMail($ord, $customer, $storeId));
                 }
             } catch (\Exception $mailError) {
-                Log::error('ORDER EMAIL FAILED', [
-                    'error' => $mailError->getMessage(),
-                ]);
+                Log::error('ORDER EMAIL FAILED', ['error' => $mailError->getMessage()]);
             }
 
+            // Cart clear
             try {
                 $cartUser = $request->user('sanctum') ?? auth('sanctum')->user();
-
                 if (!$cartUser && $request->bearerToken()) {
-                    $token = \Laravel\Sanctum\PersonalAccessToken::findToken(
-                        $request->bearerToken()
-                    );
+                    $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
                     $cartUser = $token?->tokenable;
                 }
-
                 if ($cartUser) {
                     if ($existingDraft) {
                         $draftQuoteToken = $currentQuoteToken;
-
                         if ($draftQuoteToken) {
                             \App\Models\Cart::query()
                                 ->where('store_id', $storeId)
@@ -1793,103 +1769,69 @@ class OrderController extends Controller
                                 ->where('quote_token', $draftQuoteToken)
                                 ->where('isdraftcart', 1)
                                 ->delete();
-
-                            $sessionId = $cartUser
-                                ? null
-                                : $request->header('X-Session-ID');
-
-                            $this->cartContext->setNormalCart(
-                                $storeId,
-                                $cartUser,
-                                $sessionId
-                            );
+                            $sessionId = $cartUser ? null : $request->header('X-Session-ID');
+                            $this->cartContext->setNormalCart($storeId, $cartUser, $sessionId);
                         }
                     } else {
                         \App\Models\Cart::query()
                             ->where('store_id', $storeId)
                             ->where('user_id', $cartUser->id)
                             ->where(function ($q) {
-                                $q->whereNull('quote_token')
-                                    ->orWhere('quote_token', '');
+                                $q->whereNull('quote_token')->orWhere('quote_token', '');
                             })
                             ->where(function ($q) {
-                                $q->where('isdraftcart', 0)
-                                    ->orWhereNull('isdraftcart');
+                                $q->where('isdraftcart', 0)->orWhereNull('isdraftcart');
                             })
                             ->delete();
-
-                        $sessionId = $cartUser
-                            ? null
-                            : $request->header('X-Session-ID');
-
-                        $this->cartContext->setNormalCart(
-                            $storeId,
-                            $cartUser,
-                            $sessionId
-                        );
+                        $sessionId = $cartUser ? null : $request->header('X-Session-ID');
+                        $this->cartContext->setNormalCart($storeId, $cartUser, $sessionId);
                     }
                 } else {
                     $cartSessionId = $request->header('X-Session-ID');
-
                     if (!empty($cartSessionId)) {
                         \App\Models\Cart::query()
                             ->where('store_id', $storeId)
                             ->where('session_id', $cartSessionId)
                             ->whereNull('user_id')
                             ->where(function ($q) {
-                                $q->whereNull('quote_token')
-                                    ->orWhere('quote_token', '');
+                                $q->whereNull('quote_token')->orWhere('quote_token', '');
                             })
                             ->where(function ($q) {
-                                $q->where('isdraftcart', 0)
-                                    ->orWhereNull('isdraftcart');
+                                $q->where('isdraftcart', 0)->orWhereNull('isdraftcart');
                             })
                             ->delete();
                     }
                 }
             } catch (\Exception $cartEx) {
                 Log::warning('CART CLEAR AFTER ORDER FAILED', [
-                    'error'     => $cartEx->getMessage(),
-                    'store_id'  => $storeId,
+                    'error' => $cartEx->getMessage(),
+                    'store_id' => $storeId,
                     'order_ids' => collect($orders)->pluck('id'),
                 ]);
             }
 
+            // Checkout form clear
             try {
                 $checkoutUser = $currentUser;
                 $checkoutSessionId = $request->header('X-Session-ID');
-
-                $checkoutQuery = CheckoutFormData::query()
-                    ->where('store_id', $storeId);
-
+                $checkoutQuery = CheckoutFormData::query()->where('store_id', $storeId);
                 if ($checkoutUser) {
                     $checkoutQuery->where('user_id', $checkoutUser->id);
                 } elseif (!empty($checkoutSessionId)) {
-                    $checkoutQuery
-                        ->whereNull('user_id')
-                        ->where('session_id', $checkoutSessionId);
+                    $checkoutQuery->whereNull('user_id')->where('session_id', $checkoutSessionId);
                 } else {
                     $checkoutQuery = null;
                 }
-
                 if ($checkoutQuery) {
-                    $checkoutQuery->where(function ($query) use (
-                        $existingDraft,
-                        $currentQuoteToken
-                    ) {
+                    $checkoutQuery->where(function ($query) use ($existingDraft, $currentQuoteToken) {
                         $query->where(function ($normalQuery) {
-                            $normalQuery
-                                ->whereNull('quote_token')
-                                ->orWhere('quote_token', '');
+                            $normalQuery->whereNull('quote_token')->orWhere('quote_token', '');
                         });
-
                         if ($existingDraft && $currentQuoteToken) {
                             $query->orWhere('quote_token', $currentQuoteToken);
                         }
                     });
-
                     $deletedCount = $checkoutQuery->delete();
-
                     Log::info('Checkout form data cleared after order placement', [
                         'store_id' => $storeId,
                         'user_id' => $checkoutUser?->id,
