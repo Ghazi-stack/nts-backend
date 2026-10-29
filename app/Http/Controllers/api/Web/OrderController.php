@@ -2088,7 +2088,7 @@ class OrderController extends Controller
                         'package_value' => round($orderTotal, 2),
                     ];
 
-                    $shippingRateService = app(\App\Services\ShippingRateService::class);
+                    $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
 
                     $allRates = $shippingRateService->getCheckoutShippingRates(
                         $validated['destination'],
