@@ -2022,7 +2022,7 @@ class OrderController extends Controller
             $items = [];
             $shippingCost = 0;
             $shippingData = null;
-            $allRates = [];
+            $shippingResponse = null;
 
             $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
 
@@ -2051,20 +2051,6 @@ class OrderController extends Controller
                     $methodId = $validated['shipping']['method_id'];
                     $methodType = $validated['shipping']['method_type'];
 
-                    // DB se shipping method verify karo (store_id check)
-                    $shippingMethod = \App\Models\ShippingMethod::where('store_id', $storeId)
-                        ->where('id', $methodId)
-                        ->where('method_type', $methodType)
-                        ->where('is_active', true)
-                        ->first();
-
-                    if (!$shippingMethod) {
-                        return response()->json([
-                            'status'  => false,
-                            'message' => 'Shipping method not found or inactive for this store',
-                        ], 404);
-                    }
-
                     // Package calculate
                     $totalWeight = 0;
                     $itemCount = 0;
@@ -2088,9 +2074,8 @@ class OrderController extends Controller
                         'package_value' => round($orderTotal, 2),
                     ];
 
-                    $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
-
-                    $allRates = $shippingRateService->getCheckoutShippingRates(
+                    // Full response lo
+                    $shippingResponse = $shippingRateService->getCheckoutShippingRates(
                         $validated['destination'],
                         $packageInfo,
                         $storeId,
@@ -2098,105 +2083,23 @@ class OrderController extends Controller
                         $currencyCode
                     );
 
-                    // Match by method_id + method_type
-                    $matchedRate = collect($allRates)->first(function ($rate) use ($methodId, $methodType) {
-                        return ($rate['method_id'] ?? null) == $methodId
-                            && ($rate['method_type'] ?? null) == $methodType;
-                    });
+                    // Rates array nikaalo
+                    $ratesArray = $shippingResponse['rates'] ?? [];
 
-                    if (!$matchedRate) {
-                        return response()->json([
-                            'status'  => false,
-                            'message' => 'Shipping method not available for this destination',
-                            'debug'   => [
-                                'requested' => ['method_id' => $methodId, 'method_type' => $methodType],
-                                'available' => collect($allRates)->map(fn($r) => [
-                                    'method_id'   => $r['method_id'] ?? null,
-                                    'method_type' => $r['method_type'] ?? null,
-                                    'display_name' => $r['display_name'] ?? null,
-                                ]),
-                            ],
-                        ], 422);
-                    }
-
-                    $shippingCost = (float) ($matchedRate['total_charge'] ?? 0);
-                    $shippingData = $matchedRate;
-                }
-                // ===== SHIPPING RATES FETCH & MATCH =====
-                if (!empty($validated['shipping'])) {
-                    $methodId = $validated['shipping']['method_id'];
-                    $methodType = $validated['shipping']['method_type'];
-
-                    // DB se shipping method verify
-                    $shippingMethod = \App\Models\ShippingMethod::where('store_id', $storeId)
-                        ->where('id', $methodId)
-                        ->where('method_type', $methodType)
-                        ->where('is_active', true)
-                        ->first();
-
-                    if (!$shippingMethod) {
-                        return response()->json([
-                            'status'  => false,
-                            'message' => 'Shipping method not found or inactive for this store',
-                        ], 404);
-                    }
-
-                    // Package calculate
-                    $totalWeight = 0;
-                    $itemCount = 0;
-                    $orderTotal = 0;
-
-                    foreach ($validated['products'] as $item) {
-                        $product = Product::where('store_id', $storeId)->find($item['product_id']);
-                        if ($product) {
-                            $weight = (float) ($product->weight ?? 0);
-                            $totalWeight += $weight * $item['quantity'];
-                            $itemCount += $item['quantity'];
-                            $orderTotal += $product->price * $item['quantity'];
+                    // Match karo
+                    $matchedRate = null;
+                    foreach ($ratesArray as $rate) {
+                        if (($rate['method_id'] ?? null) == $methodId && ($rate['method_type'] ?? null) == $methodType) {
+                            $matchedRate = $rate;
+                            break;
                         }
                     }
 
-                    $packageInfo = [
-                        'total_weight'  => round($totalWeight, 2),
-                        'weight_unit'   => 'LB',
-                        'order_total'   => round($orderTotal, 2),
-                        'item_count'    => $itemCount,
-                        'package_value' => round($orderTotal, 2),
-                    ];
-
-                    $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
-
-                    // Response object hai, rates nested hain
-                    $ratesResponse = $shippingRateService->getCheckoutShippingRates(
-                        $validated['destination'],
-                        $packageInfo,
-                        $storeId,
-                        null,
-                        $currencyCode
-                    );
-
-                    // rates array nikaalo
-                    $allRates = $ratesResponse['rates'] ?? [];
-
-                    // Match by method_id + method_type
-                    $matchedRate = collect($allRates)->first(function ($rate) use ($methodId, $methodType) {
-                        return ($rate['method_id'] ?? null) == $methodId
-                            && ($rate['method_type'] ?? null) == $methodType;
-                    });
-
                     if (!$matchedRate) {
                         return response()->json([
                             'status'  => false,
                             'message' => 'Shipping method not available for this destination',
-                            'debug'   => [
-                                'requested' => ['method_id' => $methodId, 'method_type' => $methodType],
-                                'available' => collect($allRates)->map(fn($r) => [
-                                    'method_id'   => $r['method_id'] ?? null,
-                                    'method_type' => $r['method_type'] ?? null,
-                                    'display_name' => $r['display_name'] ?? null,
-                                    'total_charge' => $r['total_charge'] ?? null,
-                                ]),
-                            ],
+                            'shippingResponse' => $shippingResponse,
                         ], 422);
                     }
 
@@ -2205,6 +2108,92 @@ class OrderController extends Controller
                 }
                 // ===== SHIPPING END =====
 
+                $convertedShipping = $shippingCost * $exchangeRate;
+                $calculatedTotal += $convertedShipping;
+
+                $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
+                $calculatedTotal -= $convertedDiscount;
+            } else {
+                foreach ($validated['destinations'] as $dest) {
+                    foreach ($dest['products'] as $item) {
+                        $product = Product::where('store_id', $storeId)->find($item['product_id']);
+                        if ($product) {
+                            $convertedPrice = round($product->price * $exchangeRate, 6);
+                            $lineTotal = $convertedPrice * $item['quantity'];
+                            $calculatedTotal += $lineTotal;
+
+                            $items[] = [
+                                'productId'      => $product->id,
+                                'name'           => $product->name,
+                                'sku'            => $product->sku,
+                                'basePrice'      => $product->price,
+                                'convertedPrice' => $convertedPrice,
+                                'quantity'       => $item['quantity'],
+                                'lineTotal'      => $lineTotal,
+                            ];
+                        }
+                    }
+
+                    // ===== SHIPPING RATES FETCH & MATCH =====
+                    if (!empty($dest['shipping'])) {
+                        $methodId = $dest['shipping']['method_id'];
+                        $methodType = $dest['shipping']['method_type'];
+
+                        $totalWeight = 0;
+                        $itemCount = 0;
+                        $orderTotal = 0;
+
+                        foreach ($dest['products'] as $item) {
+                            $product = Product::where('store_id', $storeId)->find($item['product_id']);
+                            if ($product) {
+                                $weight = (float) ($product->weight ?? 0);
+                                $totalWeight += $weight * $item['quantity'];
+                                $itemCount += $item['quantity'];
+                                $orderTotal += $product->price * $item['quantity'];
+                            }
+                        }
+
+                        $packageInfo = [
+                            'total_weight'  => round($totalWeight, 2),
+                            'weight_unit'   => 'LB',
+                            'order_total'   => round($orderTotal, 2),
+                            'item_count'    => $itemCount,
+                            'package_value' => round($orderTotal, 2),
+                        ];
+
+                        $destShippingResponse = $shippingRateService->getCheckoutShippingRates(
+                            $dest['destination'],
+                            $packageInfo,
+                            $storeId,
+                            null,
+                            $currencyCode
+                        );
+
+                        $ratesArray = $destShippingResponse['rates'] ?? [];
+
+                        $matchedRate = null;
+                        foreach ($ratesArray as $rate) {
+                            if (($rate['method_id'] ?? null) == $methodId && ($rate['method_type'] ?? null) == $methodType) {
+                                $matchedRate = $rate;
+                                break;
+                            }
+                        }
+
+                        if (!$matchedRate) {
+                            return response()->json([
+                                'status'  => false,
+                                'message' => 'Shipping method not found for destination',
+                                'shippingResponse' => $destShippingResponse,
+                            ], 422);
+                        }
+
+                        $destShippingCost = (float) ($matchedRate['total_charge'] ?? 0);
+                        $shippingCost += $destShippingCost;
+                        $convertedShipping = $destShippingCost * $exchangeRate;
+                        $calculatedTotal += $convertedShipping;
+                    }
+                    // ===== SHIPPING END =====
+                }
 
                 $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
                 $calculatedTotal -= $convertedDiscount;
@@ -2233,7 +2222,7 @@ class OrderController extends Controller
                     'shipping'          => $shippingData,
                     'shippingCost'      => $shippingCost,
                     'convertedShipping' => round($shippingCost * $exchangeRate, 2),
-                    'rates'             => $allRates,
+                    'shippingResponse'  => $shippingResponse,
                     'items'             => $items,
                 ],
             ]);
@@ -2245,6 +2234,7 @@ class OrderController extends Controller
             ], 500);
         }
     }
+
     // public function getCustomerOrderDiscounts(Request $request)
     // {
     //     try {
