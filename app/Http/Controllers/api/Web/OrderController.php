@@ -2101,20 +2101,18 @@ class OrderController extends Controller
                     }
 
                     if ($matchedRate) {
-                        $rateCharge = (float) $matchedRate['total_charge'];
-                        $shippingCost = $exchangeRate > 0
-                            ? round($rateCharge / $exchangeRate, 6)
-                            : $rateCharge;
+                        // As-is from rate (no division)
+                        $shippingCost = (float) $matchedRate['total_charge'];
                     }
                 }
 
+                // Only convertedShipping is multiplied
                 $convertedShipping = round($shippingCost * $exchangeRate, 6);
                 $calculatedTotal += $convertedShipping;
 
                 $convertedDiscount = round(($discount + $manualDiscount) * $exchangeRate, 6);
                 $calculatedTotal -= $convertedDiscount;
             } else {
-                // Multi-address
                 foreach ($validated['destinations'] as $dest) {
                     foreach ($dest['products'] as $item) {
                         $product = Product::where('store_id', $storeId)->find($item['product_id']);
