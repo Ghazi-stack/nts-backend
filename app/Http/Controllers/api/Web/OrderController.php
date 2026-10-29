@@ -2022,7 +2022,7 @@ class OrderController extends Controller
             $shippingCost = 0;
             $shippingData = null;
 
-            $shippingRateService = app(\App\Services\ShippingRateService::class);
+            $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
 
             if (!$isMulti) {
                 foreach ($validated['products'] as $item) {
