@@ -2122,87 +2122,89 @@ class OrderController extends Controller
                     $shippingCost = (float) ($matchedRate['total_charge'] ?? 0);
                     $shippingData = $matchedRate;
                 }
-                // ===== SHIPPING END =====
+                // ===== SHIPPING RATES FETCH & MATCH =====
+                if (!empty($validated['shipping'])) {
+                    $methodId = $validated['shipping']['method_id'];
+                    $methodType = $validated['shipping']['method_type'];
 
-                $convertedShipping = $shippingCost * $exchangeRate;
-                $calculatedTotal += $convertedShipping;
+                    // DB se shipping method verify
+                    $shippingMethod = \App\Models\ShippingMethod::where('store_id', $storeId)
+                        ->where('id', $methodId)
+                        ->where('method_type', $methodType)
+                        ->where('is_active', true)
+                        ->first();
 
-                $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
-                $calculatedTotal -= $convertedDiscount;
-            } else {
-                foreach ($validated['destinations'] as $dest) {
-                    foreach ($dest['products'] as $item) {
+                    if (!$shippingMethod) {
+                        return response()->json([
+                            'status'  => false,
+                            'message' => 'Shipping method not found or inactive for this store',
+                        ], 404);
+                    }
+
+                    // Package calculate
+                    $totalWeight = 0;
+                    $itemCount = 0;
+                    $orderTotal = 0;
+
+                    foreach ($validated['products'] as $item) {
                         $product = Product::where('store_id', $storeId)->find($item['product_id']);
                         if ($product) {
-                            $convertedPrice = round($product->price * $exchangeRate, 6);
-                            $lineTotal = $convertedPrice * $item['quantity'];
-                            $calculatedTotal += $lineTotal;
-
-                            $items[] = [
-                                'productId'      => $product->id,
-                                'name'           => $product->name,
-                                'sku'            => $product->sku,
-                                'basePrice'      => $product->price,
-                                'convertedPrice' => $convertedPrice,
-                                'quantity'       => $item['quantity'],
-                                'lineTotal'      => $lineTotal,
-                            ];
+                            $weight = (float) ($product->weight ?? 0);
+                            $totalWeight += $weight * $item['quantity'];
+                            $itemCount += $item['quantity'];
+                            $orderTotal += $product->price * $item['quantity'];
                         }
                     }
 
-                    // ===== SHIPPING RATES FETCH & MATCH =====
-                    if (!empty($dest['shipping'])) {
-                        $totalWeight = 0;
-                        $itemCount = 0;
-                        $orderTotal = 0;
+                    $packageInfo = [
+                        'total_weight'  => round($totalWeight, 2),
+                        'weight_unit'   => 'LB',
+                        'order_total'   => round($orderTotal, 2),
+                        'item_count'    => $itemCount,
+                        'package_value' => round($orderTotal, 2),
+                    ];
 
-                        foreach ($dest['products'] as $item) {
-                            $product = Product::where('store_id', $storeId)->find($item['product_id']);
-                            if ($product) {
-                                $weight = (float) ($product->weight ?? 0);
-                                $totalWeight += $weight * $item['quantity'];
-                                $itemCount += $item['quantity'];
-                                $orderTotal += $product->price * $item['quantity'];
-                            }
-                        }
+                    $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
 
-                        $packageInfo = [
-                            'total_weight'  => round($totalWeight, 2),
-                            'weight_unit'   => 'LB',
-                            'order_total'   => round($orderTotal, 2),
-                            'item_count'    => $itemCount,
-                            'package_value' => round($orderTotal, 2),
-                        ];
+                    // Response object hai, rates nested hain
+                    $ratesResponse = $shippingRateService->getCheckoutShippingRates(
+                        $validated['destination'],
+                        $packageInfo,
+                        $storeId,
+                        null,
+                        $currencyCode
+                    );
 
-                        $destRates = $shippingRateService->getCheckoutShippingRates(
-                            $dest['destination'],
-                            $packageInfo,
-                            $storeId,
-                            null,
-                            $currencyCode
-                        );
+                    // rates array nikaalo
+                    $allRates = $ratesResponse['rates'] ?? [];
 
-                        $allRates = array_merge($allRates, $destRates);
+                    // Match by method_id + method_type
+                    $matchedRate = collect($allRates)->first(function ($rate) use ($methodId, $methodType) {
+                        return ($rate['method_id'] ?? null) == $methodId
+                            && ($rate['method_type'] ?? null) == $methodType;
+                    });
 
-                        $matchedRate = collect($destRates)->first(function ($rate) use ($dest) {
-                            return ($rate['method_id'] ?? null) == $dest['shipping']['method_id']
-                                && ($rate['method_type'] ?? null) == $dest['shipping']['method_type'];
-                        });
-
-                        if (!$matchedRate) {
-                            return response()->json([
-                                'status'  => false,
-                                'message' => 'Shipping method not found for destination',
-                            ], 422);
-                        }
-
-                        $destShippingCost = (float) ($matchedRate['total_charge'] ?? 0);
-                        $shippingCost += $destShippingCost;
-                        $convertedShipping = $destShippingCost * $exchangeRate;
-                        $calculatedTotal += $convertedShipping;
+                    if (!$matchedRate) {
+                        return response()->json([
+                            'status'  => false,
+                            'message' => 'Shipping method not available for this destination',
+                            'debug'   => [
+                                'requested' => ['method_id' => $methodId, 'method_type' => $methodType],
+                                'available' => collect($allRates)->map(fn($r) => [
+                                    'method_id'   => $r['method_id'] ?? null,
+                                    'method_type' => $r['method_type'] ?? null,
+                                    'display_name' => $r['display_name'] ?? null,
+                                    'total_charge' => $r['total_charge'] ?? null,
+                                ]),
+                            ],
+                        ], 422);
                     }
-                    // ===== SHIPPING END =====
+
+                    $shippingCost = (float) ($matchedRate['total_charge'] ?? 0);
+                    $shippingData = $matchedRate;
                 }
+                // ===== SHIPPING END =====
+
 
                 $convertedDiscount = ($discount + $manualDiscount) * $exchangeRate;
                 $calculatedTotal -= $convertedDiscount;
