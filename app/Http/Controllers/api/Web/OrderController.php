@@ -2105,8 +2105,8 @@ class OrderController extends Controller
                     }
                 }
 
-                // $convertedShipping = round($shippingCost * $exchangeRate, 6);
-                // $calculatedTotal += $convertedShipping;
+                // ShippingCost already selected currency mein hai → directly add
+                $calculatedTotal += $shippingCost;
 
                 $convertedCouponDiscount = round($discount * $exchangeRate, 6);
                 $convertedManualDiscount = round($manualDiscount * $exchangeRate, 6);
@@ -2134,8 +2134,8 @@ class OrderController extends Controller
                         }
                     }
 
-                    // $convertedShipping = round(($dest['shippingCost'] ?? 0) * $exchangeRate, 6);
-                    // $calculatedTotal += $convertedShipping;
+                    // Directly add shippingCost
+                    $calculatedTotal += ($dest['shippingCost'] ?? 0);
                 }
 
                 $convertedCouponDiscount = round($discount * $exchangeRate, 6);
@@ -2162,7 +2162,6 @@ class OrderController extends Controller
                     'convertedCouponDiscount'   => $convertedCouponDiscount ?? 0,
                     'convertedManualDiscount'   => $convertedManualDiscount ?? 0,
                     'convertedDiscount'         => $convertedDiscount ?? 0,
-                    // 'convertedShipping'         => round($shippingCost * $exchangeRate, 6),
                     'shippingCost'              => round($shippingCost, 6),
                     'matchedRate'               => $matchedRate,
                     'items'                     => $items,
