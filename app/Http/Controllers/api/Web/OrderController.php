@@ -2048,14 +2048,14 @@ class OrderController extends Controller
                     }
                 }
 
-                // ShippingCost already selected currency mein hai → directly add
+                // ShippingCost already in selected currency → directly add
                 $calculatedTotal += $shippingCost;
 
+                // Only coupon is converted. manualDiscount is NOT converted
                 $convertedCouponDiscount = round($discount * $exchangeRate, 6);
-                $convertedManualDiscount = round($manualDiscount * $exchangeRate, 6);
-                $convertedDiscount       = round($convertedCouponDiscount + $convertedManualDiscount, 6);
+                $calculatedTotal -= $convertedCouponDiscount;
+                $calculatedTotal -= $manualDiscount;   // raw value, no conversion
 
-                $calculatedTotal -= $convertedDiscount;
             } else {
                 foreach ($validated['destinations'] as $dest) {
                     foreach ($dest['products'] as $item) {
@@ -2077,15 +2077,12 @@ class OrderController extends Controller
                         }
                     }
 
-                    // Directly add shippingCost
                     $calculatedTotal += ($dest['shippingCost'] ?? 0);
                 }
 
                 $convertedCouponDiscount = round($discount * $exchangeRate, 6);
-                $convertedManualDiscount = round($manualDiscount * $exchangeRate, 6);
-                $convertedDiscount       = round($convertedCouponDiscount + $convertedManualDiscount, 6);
-
-                $calculatedTotal -= $convertedDiscount;
+                $calculatedTotal -= $convertedCouponDiscount;
+                $calculatedTotal -= $manualDiscount;   // raw value, no conversion
             }
 
             if ($calculatedTotal < 0) {
@@ -2097,17 +2094,15 @@ class OrderController extends Controller
             return response()->json([
                 'status' => true,
                 'data'   => [
-                    'amount'                    => $amountInCents,
-                    'amountDecimal'             => round($calculatedTotal, 6),
-                    'currency'                  => $currencyData,
-                    'coupon'                    => $couponData,
-                    'manualDiscount'            => $manualDiscount,
-                    'convertedCouponDiscount'   => $convertedCouponDiscount ?? 0,
-                    'convertedManualDiscount'   => $convertedManualDiscount ?? 0,
-                    'convertedDiscount'         => $convertedDiscount ?? 0,
-                    'shippingCost'              => round($shippingCost, 6),
-                    'matchedRate'               => $matchedRate,
-                    'items'                     => $items,
+                    'amount'                  => $amountInCents,
+                    'amountDecimal'           => round($calculatedTotal, 6),
+                    'currency'                => $currencyData,
+                    'coupon'                  => $couponData,
+                    'manualDiscount'          => $manualDiscount,                    // exact payload value
+                    'convertedCouponDiscount' => $convertedCouponDiscount ?? 0,
+                    'shippingCost'            => round($shippingCost, 6),
+                    'matchedRate'             => $matchedRate,
+                    'items'                   => $items,
                 ],
             ]);
         } catch (\Exception $e) {
