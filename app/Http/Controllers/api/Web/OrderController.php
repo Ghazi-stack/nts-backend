@@ -3818,7 +3818,7 @@ class OrderController extends Controller
 
             $convertedDiscount = round($discount * $exchangeRate, 6);
             $manualDiscount = (float) ($validated['manualDiscount'] ?? $request->input('manualDiscount', 0));
-            $convertedManualDiscount = round($manualDiscount * $exchangeRate, 6);
+            $convertedManualDiscount = $manualDiscount;
 
             $customer = Customer::where('store_id', $storeId)->findOrFail($validated['customerId']);
             $customerUser = $customer->user;
@@ -3951,7 +3951,7 @@ class OrderController extends Controller
                 $shippingData = $shippingMethod['data'] ?? $shippingMethod['display_name'] ?? $shippingMethod['method'] ?? $shippingProvider;
             }
 
-            $totalAmount = $cartTotal + $shippingCost - $convertedDiscount - $convertedManualDiscount;
+            $totalAmount = $cartTotal + $shippingCost - $convertedDiscount - $manualDiscount;
             if ($totalAmount < 0) $totalAmount = 0;
 
             // Amount verification
@@ -4102,7 +4102,7 @@ class OrderController extends Controller
                 'currency_symbol'              => $currencySymbol,
                 'exchange_rate'                => $exchangeRate,
                 'discountAmount'               => $convertedDiscount,
-                'manual_discount'              => $convertedManualDiscount,
+                'manual_discount'              => $manualDiscount,
                 'coupon_code'                  => $couponCode,
                 'is_multi_address'             => false,
                 'user_type'                    => $validated['userType'] ?? null,
@@ -4270,7 +4270,7 @@ class OrderController extends Controller
                     'customer_id'     => $customer->id,
                     'order_id'        => $order->id,
                     'product_id'      => $item['product_id'] ?? null,
-                    'discount_amount' => $convertedManualDiscount,
+                    'discount_amount' => $manualDiscount,
                     'total_amount'    => $totalAmount,
                 ]);
             }
