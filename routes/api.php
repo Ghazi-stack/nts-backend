@@ -580,11 +580,7 @@ Route::prefix('dashboard')->middleware([
     // Route::get('/url-settings/{entity}', [UrlSettingController::class, 'show']);
 
     Route::prefix('url-settings')
-        ->middleware([
-            'store.hash',
-            'tenant.dashboard',
-            'permission:settings',
-        ])
+        ->middleware(['store.hash', 'tenant.dashboard', 'permission:settings'])
         ->controller(UrlSettingController::class)
         ->group(function () {
             Route::post('/product', 'updateProduct');
@@ -592,11 +588,15 @@ Route::prefix('dashboard')->middleware([
             Route::post('/webpage', 'updateWebpage');
             Route::get('/{entity}', 'show');
 
-            // Bulk Update + Redirects
+            // Bulk Update
             Route::post('/product/bulk-update', 'bulkUpdateProductUrls');
-            Route::get('/product/bulk-update/progress/{progressKey}', 'bulkUpdateProgress');
             Route::post('/category/bulk-update', 'bulkUpdateCategoryUrls');
             Route::post('/webpage/bulk-update', 'bulkUpdateWebpageUrls');
+
+            // Progress (common)
+            Route::get('/product/bulk-update/progress/{progressKey}', 'bulkUpdateProgress');
+            Route::get('/category/bulk-update/progress/{progressKey}', 'bulkUpdateProgress');
+            Route::get('/webpage/bulk-update/progress/{progressKey}', 'bulkUpdateProgress');
         });
 
     Route::prefix('currencies')->middleware([
