@@ -245,40 +245,21 @@ class LocalizationService
         $data['decimal_places'] = (int) $data['decimal_places'];
     }
 
+    
     /**
      * Validate date and timezone data.
      */
     protected function validateDateTimezone(array $data): void
     {
-        $allowedFormats = [
-            'M jS Y',
-            'M j Y',
-            'F j, Y',
-            'm/d/Y',
-            'd/m/Y',
-            'Y-m-d',
-        ];
-
-        $allowedExtendedFormats = [
-            'M jS Y @ g:i A',
-            'M j Y @ g:i A',
-            'F j, Y @ g:i A',
-            'm/d/Y g:i A',
-            'd/m/Y H:i',
-            'Y-m-d H:i',
-        ];
-
         if (
-            !isset($data['timezone']) ||
+            empty($data['timezone']) ||
             !in_array(
                 $data['timezone'],
                 DateTimeZone::listIdentifiers(DateTimeZone::ALL_WITH_BC),
                 true
-            )
+            ) && $data['timezone'] !== 'UTC'
         ) {
-            if (($data['timezone'] ?? null) !== 'UTC') {
-                throw new InvalidArgumentException('Invalid timezone.');
-            }
+            throw new InvalidArgumentException('Invalid timezone.');
         }
 
         if (
@@ -291,25 +272,25 @@ class LocalizationService
         }
 
         if (
-            !in_array($data['date_format'] ?? null, $allowedFormats, true)
+            !isset($data['date_format']) ||
+            !is_string($data['date_format']) ||
+            trim($data['date_format']) === '' ||
+            strlen($data['date_format']) > 100
         ) {
             throw new InvalidArgumentException('Invalid date format.');
         }
 
         if (
-            !in_array(
-                $data['extended_date_time_format'] ?? null,
-                $allowedExtendedFormats,
-                true
-            )
+            !isset($data['extended_date_time_format']) ||
+            !is_string($data['extended_date_time_format']) ||
+            trim($data['extended_date_time_format']) === '' ||
+            strlen($data['extended_date_time_format']) > 150
         ) {
             throw new InvalidArgumentException(
                 'Invalid extended date and time format.'
             );
         }
     }
-
-    
     
     /**
      * Get standard physical dimensions for a country.

@@ -8,10 +8,31 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use InvalidArgumentException;
 use Throwable;
+use Illuminate\Support\Str;
 
 class LocalizationController extends Controller
 {
     protected LocalizationService $localizationService;
+
+    /**
+     * Recursively convert response array keys to camelCase.
+     */
+    private function toCamelCase(array $data): array
+    {
+        $result = [];
+
+        foreach ($data as $key => $value) {
+            $newKey = is_string($key)
+                ? Str::camel($key)
+                : $key;
+
+            $result[$newKey] = is_array($value)
+                ? $this->toCamelCase($value)
+                : $value;
+        }
+
+        return $result;
+    }
 
     public function __construct(LocalizationService $localizationService)
     {
@@ -29,38 +50,37 @@ class LocalizationController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Localization settings retrieved successfully.',
-                'data' => [
+                'data' => $this->toCamelCase([
                     'country' => $settings->country,
                     'physical_dimensions' => $settings->physical_dimensions,
                     'date_timezone' => $settings->date_timezone,
-                ],
+                ]),
             ]);
         } catch (Throwable $e) {
             return $this->errorResponse($e);
         }
     }
-
     
     public function update(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'country' => 'required|array',
-            'country.default_country' => 'required|string|max:100',
-            'country.country_code' => 'required|string|size:2|alpha',
+            'country' => 'required|array:defaultCountry,countryCode',
+            'country.defaultCountry' => 'required|string|max:100',
+            'country.countryCode' => 'required|string|size:2|alpha',
 
-            'physical_dimensions' => 'required|array',
-            'physical_dimensions.weight_unit' => 'required|in:oz,lbs,g,kg,tonnes',
-            'physical_dimensions.length_unit' => 'required|in:in,cm',
-            'physical_dimensions.thousands_token' => 'required|string|size:1',
-            'physical_dimensions.decimal_token' => 'required|string|size:1|different:physical_dimensions.thousands_token',
-            'physical_dimensions.decimal_places' => 'required|integer|between:0,4',
-            'physical_dimensions.factoring_dimension' => 'required|in:product_depth,product_width,product_height',
+            'physicalDimensions' => 'required|array:weightUnit,lengthUnit,thousandsToken,decimalToken,decimalPlaces,factoringDimension',
+            'physicalDimensions.weightUnit' => 'required|in:oz,lbs,g,kg,tonnes',
+            'physicalDimensions.lengthUnit' => 'required|in:in,cm',
+            'physicalDimensions.thousandsToken' => 'required|string|size:1',
+            'physicalDimensions.decimalToken' => 'required|string|size:1|different:physicalDimensions.thousandsToken',
+            'physicalDimensions.decimalPlaces' => 'required|integer|between:0,4',
+            'physicalDimensions.factoringDimension' => 'required|in:product_depth,product_width,product_height',
 
-            'date_timezone' => 'required|array',
-            'date_timezone.timezone' => 'required|timezone',
-            'date_timezone.dst_enabled' => 'required|boolean',
-            'date_timezone.date_format' => 'required|string',
-            'date_timezone.extended_date_time_format' => 'required|string',
+            'dateTimezone' => 'required|array:timezone,dstEnabled,dateFormat,extendedDateTimeFormat',
+            'dateTimezone.timezone' => 'required|timezone',
+            'dateTimezone.dstEnabled' => 'required|boolean',
+            'dateTimezone.dateFormat' => 'required|string',
+            'dateTimezone.extendedDateTimeFormat' => 'required|string',
         ]);
 
         if ($validator->fails()) {
@@ -72,23 +92,50 @@ class LocalizationController extends Controller
         }
 
         try {
+            $input = $validator->validated();
+
+            // Convert camelCase request fields to snake_case
+            // for the existing service and database structure.
+            $validated = [
+                'country' => [
+                    'default_country' => $input['country']['defaultCountry'],
+                    'country_code' => strtoupper($input['country']['countryCode']),
+                ],
+
+                'physical_dimensions' => [
+                    'weight_unit' => $input['physicalDimensions']['weightUnit'],
+                    'length_unit' => $input['physicalDimensions']['lengthUnit'],
+                    'thousands_token' => $input['physicalDimensions']['thousandsToken'],
+                    'decimal_token' => $input['physicalDimensions']['decimalToken'],
+                    'decimal_places' => (int) $input['physicalDimensions']['decimalPlaces'],
+                    'factoring_dimension' => $input['physicalDimensions']['factoringDimension'],
+                ],
+
+                'date_timezone' => [
+                    'timezone' => $input['dateTimezone']['timezone'],
+                    'dst_enabled' => (bool) $input['dateTimezone']['dstEnabled'],
+                    'date_format' => $input['dateTimezone']['dateFormat'],
+                    'extended_date_time_format' => $input['dateTimezone']['extendedDateTimeFormat'],
+                ],
+            ];
+
             $settings = $this->localizationService->updateAllSettings(
-                $validator->validated()
+                $validated
             );
 
             return $this->successResponse(
                 'Localization settings updated successfully.',
                 $settings
             );
+
         } catch (Throwable $e) {
             return $this->errorResponse($e);
         }
     }
-
     
     public function standardPhysicalDimensions(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $validator = Validator::make($request->query(), [
             'country' => 'required|string|size:2|alpha',
         ]);
 
@@ -109,7 +156,7 @@ class LocalizationController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Standard physical dimensions retrieved successfully.',
-                'data' => $data,
+                'data' => $this->toCamelCase($data),
             ]);
         } catch (Throwable $e) {
             return $this->errorResponse($e);
@@ -119,7 +166,7 @@ class LocalizationController extends Controller
     
     public function standardDateTimezone(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $validator = Validator::make($request->query(), [
             'country' => 'required|string|size:2|alpha',
         ]);
 
@@ -140,7 +187,7 @@ class LocalizationController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Standard date and timezone formats retrieved successfully.',
-                'data' => $data,
+                'data' => $this->toCamelCase($data),
             ]);
         } catch (Throwable $e) {
             return $this->errorResponse($e);
@@ -157,11 +204,11 @@ class LocalizationController extends Controller
         return response()->json([
             'success' => true,
             'message' => $message,
-            'data' => [
+            'data' => $this->toCamelCase([
                 'country' => $settings->country,
                 'physical_dimensions' => $settings->physical_dimensions,
                 'date_timezone' => $settings->date_timezone,
-            ],
+            ]),
         ]);
     }
 
@@ -179,6 +226,7 @@ class LocalizationController extends Controller
             'message' => $status === 422
                 ? $e->getMessage()
                 : 'Unable to process localization settings.',
+            'errors' => (object) [],
         ], $status);
     }
 }
