@@ -8,6 +8,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use App\Models\Product;
 use App\Models\ProductSeo;
 use App\Models\Redirect;
@@ -24,16 +25,25 @@ class BulkCreateProductRedirects implements ShouldQueue
     protected $storeId;
     protected $progressKey;
     protected $setting;
+    protected $tenantDatabase;
 
-    public function __construct($storeId, $progressKey, $setting)
+    public function __construct($storeId, $progressKey, $setting, $tenantDatabase = null)
     {
         $this->storeId = $storeId;
         $this->progressKey = $progressKey;
         $this->setting = (object) $setting;
+        $this->tenantDatabase = $tenantDatabase;
     }
 
     public function handle()
     {
+        // Tenant database connect karo
+        if ($this->tenantDatabase) {
+            config(['database.connections.tenant.database' => $this->tenantDatabase]);
+            DB::purge('tenant');
+            DB::reconnect('tenant');
+        }
+
         $created = 0;
         $processed = 0;
         $total = Cache::get($this->progressKey)['total'] ?? 0;
@@ -45,58 +55,71 @@ class BulkCreateProductRedirects implements ShouldQueue
             'status'  => 'processing',
         ], 7200);
 
-        Product::where('store_id', $this->storeId)
-            ->orderBy('id')
-            ->chunkById(200, function ($products) use (&$created, &$processed, $total) {
+        try {
+            Product::on('tenant')
+                ->where('store_id', $this->storeId)
+                ->orderBy('id')
+                ->chunkById(200, function ($products) use (&$created, &$processed, $total) {
 
-                foreach ($products as $product) {
-                    $seo = ProductSeo::where('product_id', $product->id)
-                        ->where('store_id', $this->storeId)
-                        ->first();
+                    foreach ($products as $product) {
+                        $seo = ProductSeo::on('tenant')
+                            ->where('product_id', $product->id)
+                            ->where('store_id', $this->storeId)
+                            ->first();
 
-                    if (!$seo || empty($seo->product_url)) {
+                        if (!$seo || empty($seo->product_url)) {
+                            $processed++;
+                            continue;
+                        }
+
+                        $oldUrl = $seo->product_url;
+                        $newUrl = $this->generateProductUrl($product);
+
+                        if (rtrim($oldUrl, '/') === rtrim($newUrl, '/')) {
+                            $processed++;
+                            continue;
+                        }
+
+                        Redirect::on('tenant')->updateOrCreate(
+                            ['store_id' => $this->storeId, 'old_url' => $oldUrl],
+                            [
+                                'product_id'  => $product->id,
+                                'entity_type' => 'product',
+                                'new_url'     => $newUrl,
+                                'is_active'   => true,
+                            ]
+                        );
+
+                        $created++;
                         $processed++;
-                        continue;
                     }
 
-                    $oldUrl = $seo->product_url;
-                    $newUrl = $this->generateProductUrl($product);
+                    Cache::put($this->progressKey, [
+                        'current' => $processed,
+                        'total'   => $total,
+                        'created' => $created,
+                        'status'  => 'processing',
+                    ], 7200);
+                });
 
-                    if (rtrim($oldUrl, '/') === rtrim($newUrl, '/')) {
-                        $processed++;
-                        continue;
-                    }
+            Cache::put($this->progressKey, [
+                'current' => $processed,
+                'total'   => $total,
+                'created' => $created,
+                'status'  => 'completed',
+            ], 7200);
+        } catch (\Throwable $e) {
+            Cache::put($this->progressKey, [
+                'current' => $processed,
+                'total'   => $total,
+                'created' => $created,
+                'status'  => 'failed',
+                'error'   => $e->getMessage(),
+            ], 7200);
 
-                    Redirect::updateOrCreate(
-                        ['store_id' => $this->storeId, 'old_url' => $oldUrl],
-                        [
-                            'product_id'  => $product->id,
-                            'entity_type' => 'product',
-                            'new_url'     => $newUrl,
-                            'is_active'   => true,
-                        ]
-                    );
-
-                    $created++;
-                    $processed++;
-                }
-
-                Cache::put($this->progressKey, [
-                    'current' => $processed,
-                    'total'   => $total,
-                    'created' => $created,
-                    'status'  => 'processing',
-                ], 7200);
-
-                unset($products);
-            });
-
-        Cache::put($this->progressKey, [
-            'current' => $processed,
-            'total'   => $total,
-            'created' => $created,
-            'status'  => 'completed',
-        ], 7200);
+            \Log::error('BulkCreateProductRedirects failed: ' . $e->getMessage());
+            throw $e;
+        }
     }
 
     private function generateProductUrl($product): string
@@ -108,7 +131,7 @@ class BulkCreateProductRedirects implements ShouldQueue
 
         $categorySlug = 'uncategorized';
         if ($product->category_id) {
-            $category = Category::find($product->category_id);
+            $category = Category::on('tenant')->find($product->category_id);
             if ($category) {
                 $categorySlug = $category->slug ?? Str::slug($category->name);
             }

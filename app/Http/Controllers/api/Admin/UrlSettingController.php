@@ -184,6 +184,9 @@ class UrlSettingController extends Controller
 
         $progressKey = 'url_redirect_' . Str::uuid();
 
+        // Tenant database name le lo
+        $tenantDatabase = config('database.connections.tenant.database');
+
         Cache::put($progressKey, [
             'current' => 0,
             'total' => $total,
@@ -191,8 +194,12 @@ class UrlSettingController extends Controller
             'status' => 'queued',
         ], 7200);
 
-        dispatch(new BulkCreateProductRedirects($storeId, $progressKey, $setting->toArray()))
-            ->onQueue('imports');
+        dispatch(new BulkCreateProductRedirects(
+            $storeId,
+            $progressKey,
+            $setting->toArray(),
+            $tenantDatabase
+        ))->onQueue('imports');
 
         return response()->json([
             'status' => true,
