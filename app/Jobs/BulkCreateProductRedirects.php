@@ -55,71 +55,60 @@ class BulkCreateProductRedirects implements ShouldQueue
             'status'  => 'processing',
         ], 7200);
 
-        try {
-            Product::on('tenant')
-                ->where('store_id', $this->storeId)
-                ->orderBy('id')
-                ->chunkById(200, function ($products) use (&$created, &$processed, $total) {
+        Product::on('tenant')
+            ->where('store_id', $this->storeId)
+            ->orderBy('id')
+            ->chunkById(200, function ($products) use (&$created, &$processed, $total) {
 
-                    foreach ($products as $product) {
-                        $seo = ProductSeo::on('tenant')
-                            ->where('product_id', $product->id)
-                            ->where('store_id', $this->storeId)
-                            ->first();
+                foreach ($products as $product) {
+                    $seo = ProductSeo::on('tenant')
+                        ->where('product_id', $product->id)
+                        ->where('store_id', $this->storeId)
+                        ->first();
 
-                        if (!$seo || empty($seo->product_url)) {
-                            $processed++;
-                            continue;
-                        }
-
-                        $oldUrl = $seo->product_url;
-                        $newUrl = $this->generateProductUrl($product);
-
-                        if (rtrim($oldUrl, '/') === rtrim($newUrl, '/')) {
-                            $processed++;
-                            continue;
-                        }
-
-                        Redirect::on('tenant')->updateOrCreate(
-                            ['store_id' => $this->storeId, 'old_url' => $oldUrl],
-                            [
-                                'product_id'  => $product->id,
-                                'entity_type' => 'product',
-                                'new_url'     => $newUrl,
-                                'is_active'   => true,
-                            ]
-                        );
-
-                        $created++;
+                    if (!$seo || empty($seo->product_url)) {
                         $processed++;
+                        continue;
                     }
 
-                    Cache::put($this->progressKey, [
-                        'current' => $processed,
-                        'total'   => $total,
-                        'created' => $created,
-                        'status'  => 'processing',
-                    ], 7200);
-                });
+                    $oldUrl = $seo->product_url;
+                    $newUrl = $this->generateProductUrl($product);
 
-            Cache::put($this->progressKey, [
-                'current' => $processed,
-                'total'   => $total,
-                'created' => $created,
-                'status'  => 'completed',
-            ], 7200);
-        } catch (\Throwable $e) {
-            Cache::put($this->progressKey, [
-                'current' => $processed,
-                'total'   => $total,
-                'created' => $created,
-                'status'  => 'failed',
-                'error'   => $e->getMessage(),
-            ], 7200);
+                    if (rtrim($oldUrl, '/') === rtrim($newUrl, '/')) {
+                        $processed++;
+                        continue;
+                    }
 
-            \Log::error('BulkCreateProductRedirects failed: ' . $e->getMessage());
-            throw $e;
-        }
+                    Redirect::on('tenant')->updateOrCreate(
+                        ['store_id' => $this->storeId, 'old_url' => $oldUrl],
+                        [
+                            'product_id'  => $product->id,
+                            'entity_type' => 'product',
+                            'new_url'     => $newUrl,
+                            'is_active'   => true,
+                        ]
+                    );
+
+                    $created++;
+                    $processed++;
+                }
+
+                // Progress update (har chunk ke baad)
+                Cache::put($this->progressKey, [
+                    'current' => $processed,
+                    'total'   => $total,
+                    'created' => $created,
+                    'status'  => 'processing',
+                ], 7200);
+            });
+
+        // Final
+        Cache::put($this->progressKey, [
+            'current' => $processed,
+            'total'   => $total,
+            'created' => $created,
+            'status'  => 'completed',
+        ], 7200);
     }
 
     private function generateProductUrl($product): string
