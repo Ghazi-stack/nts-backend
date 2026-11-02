@@ -194,12 +194,14 @@ class UrlSettingController extends Controller
             'status' => 'queued',
         ], 7200);
 
-        dispatch(new BulkCreateProductRedirects(
+        // Temporary: Synchronous test
+        $job = new BulkCreateProductRedirects(
             $storeId,
             $progressKey,
             $setting->toArray(),
-            $tenantDatabase
-        ))->onQueue('imports');
+            config('database.connections.tenant.database')
+        );
+        $job->handle();
 
         return response()->json([
             'status' => true,
