@@ -1057,69 +1057,59 @@ Route::prefix('web')
     });
 
 // category current Url
-Route::get('/check-redirect', function (\Illuminate\Http\Request $request) {
-    $path = $request->query('path');
-    $storeId = $request->query('store_id');
+Route::prefix('web')
+    ->middleware(['store.hash', 'tenant.database'])
+    ->group(function () {
+        Route::get('/check-redirect', function (\Illuminate\Http\Request $request) {
+            $path = $request->query('path');
+            $storeId = current_store_id();
 
-    if (!$path || !$storeId) {
-        return response()->json(['redirect' => null]);
-    }
+            if (!$path || !$storeId) {
+                return response()->json(['redirect' => null]);
+            }
 
-    // Tenant database connect
-    $tenantDb = \DB::connection('central')
-        ->table('stores')
-        ->where('id', $storeId)
-        ->value('db_name'); // column name adjust karo
+            $clean = rtrim($path, '/');
 
-    if (!$tenantDb) {
-        return response()->json(['redirect' => null]);
-    }
+            // 1. Redirects table check (Category + Web Page + Product)
+            $redirect = \App\Models\Redirect::where('store_id', $storeId)
+                ->where('is_active', true)
+                ->where(function ($q) use ($path, $clean) {
+                    $q->where('old_url', $path)
+                        ->orWhere('old_url', $clean)
+                        ->orWhere('old_url', $clean . '/');
+                })
+                ->first();
 
-    config(['database.connections.tenant.database' => $tenantDb]);
-    \DB::purge('tenant');
-    \DB::reconnect('tenant');
+            if ($redirect && !empty($redirect->new_url)) {
+                return response()->json([
+                    'redirect'    => $redirect->new_url,
+                    'entity_type' => $redirect->entity_type,
+                ]);
+            }
 
-    $clean = rtrim($path, '/');
+            // 2. Product ke liye product_seo fallback
+            $seo = \App\Models\ProductSeo::where('store_id', $storeId)
+                ->where(function ($q) use ($path, $clean) {
+                    $q->where('product_url', $path)
+                        ->orWhere('product_url', $clean)
+                        ->orWhere('product_url', $clean . '/');
+                })
+                ->first();
 
-    // 1. Pehle redirects table check karo (category/webpage ke liye)
-    $redirect = \App\Models\Redirect::on('tenant')
-        ->where('store_id', $storeId)
-        ->where('is_active', true)
-        ->where(function ($q) use ($path, $clean) {
-            $q->where('old_url', $path)
-                ->orWhere('old_url', $clean)
-                ->orWhere('old_url', $clean . '/');
-        })
-        ->first();
+            if ($seo) {
+                $redirect = \App\Models\Redirect::where('store_id', $storeId)
+                    ->where('old_url', $seo->product_url)
+                    ->where('is_active', true)
+                    ->first();
 
-    if ($redirect && !empty($redirect->new_url)) {
-        return response()->json(['redirect' => $redirect->new_url]);
-    }
+                if ($redirect && !empty($redirect->new_url) && $redirect->new_url !== $seo->product_url) {
+                    return response()->json(['redirect' => $redirect->new_url]);
+                }
+            }
 
-    // 2. Product ke liye product_seo check
-    $seo = \App\Models\ProductSeo::on('tenant')
-        ->where('store_id', $storeId)
-        ->where(function ($q) use ($path, $clean) {
-            $q->where('product_url', $path)
-                ->orWhere('product_url', $clean)
-                ->orWhere('product_url', $clean . '/');
-        })
-        ->first();
-
-    if ($seo) {
-        $redirect = \App\Models\Redirect::on('tenant')
-            ->where('store_id', $storeId)
-            ->where('old_url', $seo->product_url)
-            ->where('is_active', true)
-            ->first();
-
-        if ($redirect && !empty($redirect->new_url) && $redirect->new_url !== $seo->product_url) {
-            return response()->json(['redirect' => $redirect->new_url]);
-        }
-    }
-
-    return response()->json(['redirect' => null]);
-});
+            return response()->json(['redirect' => null]);
+        });
+    });
 
 // WebPage current Url
 Route::get('/check-redirect', function (\Illuminate\Http\Request $request) {
