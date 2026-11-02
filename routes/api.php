@@ -1027,7 +1027,22 @@ Route::get('/check-redirect', function (\Illuminate\Http\Request $request) {
         return response()->json(['redirect' => null]);
     }
 
-    $seo = \App\Models\ProductSeo::where('store_id', $storeId)
+    // Tenant database connect karo
+    $tenantDb = \DB::connection('central')
+        ->table('stores')
+        ->where('id', $storeId)
+        ->value('database_name');
+
+    if (!$tenantDb) {
+        return response()->json(['redirect' => null]);
+    }
+
+    config(['database.connections.tenant.database' => $tenantDb]);
+    \DB::purge('tenant');
+    \DB::reconnect('tenant');
+
+    $seo = \App\Models\ProductSeo::on('tenant')
+        ->where('store_id', $storeId)
         ->where(function ($q) use ($path) {
             $clean = rtrim($path, '/');
             $q->where('product_url', $path)
@@ -1037,7 +1052,8 @@ Route::get('/check-redirect', function (\Illuminate\Http\Request $request) {
         ->first();
 
     if ($seo) {
-        $redirect = \App\Models\Redirect::where('store_id', $storeId)
+        $redirect = \App\Models\Redirect::on('tenant')
+            ->where('store_id', $storeId)
             ->where('old_url', $seo->product_url)
             ->where('is_active', true)
             ->first();
