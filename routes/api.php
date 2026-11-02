@@ -180,12 +180,12 @@ Route::prefix('dashboard')->middleware([
 
         Route::put('/', [LocalizationController::class, 'update']);
 
-        Route::post('/standard-physical-dimensions', [
+        Route::get('/standard-physical-dimensions', [
             LocalizationController::class,
             'standardPhysicalDimensions'
         ]);
 
-        Route::post('/standard-date-timezone', [
+        Route::get('/standard-date-timezone', [
             LocalizationController::class,
             'standardDateTimezone'
         ]);
