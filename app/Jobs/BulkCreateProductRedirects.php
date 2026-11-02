@@ -37,7 +37,6 @@ class BulkCreateProductRedirects implements ShouldQueue
 
     public function handle()
     {
-        // Tenant database connect karo
         if ($this->tenantDatabase) {
             config(['database.connections.tenant.database' => $this->tenantDatabase]);
             DB::purge('tenant');
@@ -46,9 +45,10 @@ class BulkCreateProductRedirects implements ShouldQueue
 
         $created = 0;
         $processed = 0;
-        $total = Cache::get($this->progressKey)['total'] ?? 0;
+        $progressKey = $this->progressKey;
+        $total = Cache::get($progressKey)['total'] ?? 0;
 
-        Cache::put($this->progressKey, [
+        Cache::put($progressKey, [
             'current' => 0,
             'total'   => $total,
             'created' => 0,
@@ -58,7 +58,7 @@ class BulkCreateProductRedirects implements ShouldQueue
         Product::on('tenant')
             ->where('store_id', $this->storeId)
             ->orderBy('id')
-            ->chunkById(200, function ($products) use (&$created, &$processed, $total) {
+            ->chunkById(100, function ($products) use (&$created, &$processed, $total, $progressKey) {
 
                 foreach ($products as $product) {
                     $seo = ProductSeo::on('tenant')
@@ -93,8 +93,8 @@ class BulkCreateProductRedirects implements ShouldQueue
                     $processed++;
                 }
 
-                // Progress update (har chunk ke baad)
-                Cache::put($this->progressKey, [
+                // Progress update har chunk ke baad
+                Cache::put($progressKey, [
                     'current' => $processed,
                     'total'   => $total,
                     'created' => $created,
@@ -102,8 +102,7 @@ class BulkCreateProductRedirects implements ShouldQueue
                 ], 7200);
             });
 
-        // Final
-        Cache::put($this->progressKey, [
+        Cache::put($progressKey, [
             'current' => $processed,
             'total'   => $total,
             'created' => $created,
