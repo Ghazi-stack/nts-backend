@@ -1019,6 +1019,8 @@ Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class
 
 //     Route::post('/clear-cache', [SitemapController::class, 'clearCache']);
 // });
+
+// Product current Url
 Route::prefix('web')
     ->middleware(['store.hash', 'tenant.database'])
     ->group(function () {
@@ -1053,6 +1055,118 @@ Route::prefix('web')
             return response()->json(['redirect' => null]);
         });
     });
+
+// category current Url
+Route::get('/check-redirect', function (\Illuminate\Http\Request $request) {
+    $path = $request->query('path');
+    $storeId = $request->query('store_id');
+
+    if (!$path || !$storeId) {
+        return response()->json(['redirect' => null]);
+    }
+
+    // Tenant database connect
+    $tenantDb = \DB::connection('central')
+        ->table('stores')
+        ->where('id', $storeId)
+        ->value('db_name'); // column name adjust karo
+
+    if (!$tenantDb) {
+        return response()->json(['redirect' => null]);
+    }
+
+    config(['database.connections.tenant.database' => $tenantDb]);
+    \DB::purge('tenant');
+    \DB::reconnect('tenant');
+
+    $clean = rtrim($path, '/');
+
+    // 1. Pehle redirects table check karo (category/webpage ke liye)
+    $redirect = \App\Models\Redirect::on('tenant')
+        ->where('store_id', $storeId)
+        ->where('is_active', true)
+        ->where(function ($q) use ($path, $clean) {
+            $q->where('old_url', $path)
+                ->orWhere('old_url', $clean)
+                ->orWhere('old_url', $clean . '/');
+        })
+        ->first();
+
+    if ($redirect && !empty($redirect->new_url)) {
+        return response()->json(['redirect' => $redirect->new_url]);
+    }
+
+    // 2. Product ke liye product_seo check
+    $seo = \App\Models\ProductSeo::on('tenant')
+        ->where('store_id', $storeId)
+        ->where(function ($q) use ($path, $clean) {
+            $q->where('product_url', $path)
+                ->orWhere('product_url', $clean)
+                ->orWhere('product_url', $clean . '/');
+        })
+        ->first();
+
+    if ($seo) {
+        $redirect = \App\Models\Redirect::on('tenant')
+            ->where('store_id', $storeId)
+            ->where('old_url', $seo->product_url)
+            ->where('is_active', true)
+            ->first();
+
+        if ($redirect && !empty($redirect->new_url) && $redirect->new_url !== $seo->product_url) {
+            return response()->json(['redirect' => $redirect->new_url]);
+        }
+    }
+
+    return response()->json(['redirect' => null]);
+});
+
+// WebPage current Url
+Route::get('/check-redirect', function (\Illuminate\Http\Request $request) {
+    $path = $request->query('path');
+    $storeId = $request->query('store_id');
+
+    if (!$path || !$storeId) {
+        return response()->json(['redirect' => null]);
+    }
+
+    // Tenant database connect
+    $tenantDb = \DB::connection('central')
+        ->table('stores')
+        ->where('id', $storeId)
+        ->value('db_name'); // column name adjust karo
+
+    if (!$tenantDb) {
+        return response()->json(['redirect' => null]);
+    }
+
+    config(['database.connections.tenant.database' => $tenantDb]);
+    \DB::purge('tenant');
+    \DB::reconnect('tenant');
+
+    $clean = rtrim($path, '/');
+
+    // Redirects table check (Product, Category, Web Page sab ke liye)
+    $redirect = \App\Models\Redirect::on('tenant')
+        ->where('store_id', $storeId)
+        ->where('is_active', true)
+        ->where(function ($q) use ($path, $clean) {
+            $q->where('old_url', $path)
+                ->orWhere('old_url', $clean)
+                ->orWhere('old_url', $clean . '/');
+        })
+        ->first();
+
+    if ($redirect && !empty($redirect->new_url)) {
+        return response()->json([
+            'redirect'    => $redirect->new_url,
+            'entity_type' => $redirect->entity_type,
+        ]);
+    }
+
+    return response()->json(['redirect' => null]);
+});
+
 
 Route::prefix('sitemap')
     ->middleware(['store.hash', 'tenant.database'])
