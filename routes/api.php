@@ -83,15 +83,15 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 //     Route::middleware('auth:sanctum')->post('/logout', 'logout');
 // });
 
-    // Customer registration: resolve store and connect tenant
-    Route::post('/dashboard/user/register', [
-        AuthController::class,
-        'registerOwner',
-    ]);
+// Customer registration: resolve store and connect tenant
+Route::post('/dashboard/user/register', [
+    AuthController::class,
+    'registerOwner',
+]);
 
 Route::prefix('user')->controller(AuthController::class)->group(function () {
 
-    
+
     // Customer registration: resolve store and connect tenant
     Route::post('/register', 'register')
         ->middleware(['store.hash', 'tenant.database']);
@@ -1019,52 +1019,40 @@ Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class
 
 //     Route::post('/clear-cache', [SitemapController::class, 'clearCache']);
 // });
-Route::get('/check-redirect', function (\Illuminate\Http\Request $request) {
-    $path = $request->query('path');
-    $storeId = $request->query('store_id');
+Route::prefix('web')
+    ->middleware(['store.hash', 'tenant.database'])
+    ->group(function () {
+        Route::get('/check-redirect', function (\Illuminate\Http\Request $request) {
+            $path = $request->query('path');
+            $storeId = current_store_id();
 
-    if (!$path || !$storeId) {
-        return response()->json(['redirect' => null]);
-    }
+            if (!$path || !$storeId) {
+                return response()->json(['redirect' => null]);
+            }
 
-    // Tenant database connect karo
-    $tenantDb = \DB::connection('central')
-        ->table('stores')
-        ->where('id', $storeId)
-        ->value('database_name');
+            $seo = \App\Models\ProductSeo::where('store_id', $storeId)
+                ->where(function ($q) use ($path) {
+                    $clean = rtrim($path, '/');
+                    $q->where('product_url', $path)
+                        ->orWhere('product_url', $clean)
+                        ->orWhere('product_url', $clean . '/');
+                })
+                ->first();
 
-    if (!$tenantDb) {
-        return response()->json(['redirect' => null]);
-    }
+            if ($seo) {
+                $redirect = \App\Models\Redirect::where('store_id', $storeId)
+                    ->where('old_url', $seo->product_url)
+                    ->where('is_active', true)
+                    ->first();
 
-    config(['database.connections.tenant.database' => $tenantDb]);
-    \DB::purge('tenant');
-    \DB::reconnect('tenant');
+                if ($redirect && !empty($redirect->new_url) && $redirect->new_url !== $seo->product_url) {
+                    return response()->json(['redirect' => $redirect->new_url]);
+                }
+            }
 
-    $seo = \App\Models\ProductSeo::on('tenant')
-        ->where('store_id', $storeId)
-        ->where(function ($q) use ($path) {
-            $clean = rtrim($path, '/');
-            $q->where('product_url', $path)
-                ->orWhere('product_url', $clean)
-                ->orWhere('product_url', $clean . '/');
-        })
-        ->first();
-
-    if ($seo) {
-        $redirect = \App\Models\Redirect::on('tenant')
-            ->where('store_id', $storeId)
-            ->where('old_url', $seo->product_url)
-            ->where('is_active', true)
-            ->first();
-
-        if ($redirect && !empty($redirect->new_url) && $redirect->new_url !== $seo->product_url) {
-            return response()->json(['redirect' => $redirect->new_url]);
-        }
-    }
-
-    return response()->json(['redirect' => null]);
-});
+            return response()->json(['redirect' => null]);
+        });
+    });
 
 Route::prefix('sitemap')
     ->middleware(['store.hash', 'tenant.database'])
