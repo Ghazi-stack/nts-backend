@@ -30,7 +30,8 @@ use App\Http\Controllers\api\Admin\{
     StaffLogController,
     StoreSettingController,
     UrlSettingController,
-    StoreProfileController
+    StoreProfileController,
+    LocalizationController
 };
 use App\Http\Controllers\api\Web\{
     CartController,
@@ -171,6 +172,25 @@ Route::prefix('dashboard')->middleware([
     'tenant.database',
     'auth:sanctum'
 ])->group(function () {
+
+    // Settings -> Localization
+    Route::prefix('settings/localization')->group(function () {
+
+        Route::get('/', [LocalizationController::class, 'index']);
+
+        Route::put('/', [LocalizationController::class, 'update']);
+
+        Route::post('/standard-physical-dimensions', [
+            LocalizationController::class,
+            'standardPhysicalDimensions'
+        ]);
+
+        Route::post('/standard-date-timezone', [
+            LocalizationController::class,
+            'standardDateTimezone'
+        ]);
+
+    });
 
     // Profile (no permission needed — own profile)
     Route::prefix('profile')->controller(AuthController::class)->group(function () {
@@ -1179,15 +1199,15 @@ Route::prefix('sitemap')
             ->middleware('auth:sanctum');
     });
 
-Route::get('/test-s3', function () {
-    $path = 'debug/tests.txt';
+// Route::get('/test-s3', function () {
+//     $path = 'debug/tests.txt';
 
-    return [
-        'put_result' => Storage::disk('s3')->put($path, 'S3 DEBUG FILE'),
-        'exists' => Storage::disk('s3')->exists($path),
-        'url' => Storage::disk('s3')->url($path),
-    ];
-});
+//     return [
+//         'put_result' => Storage::disk('s3')->put($path, 'S3 DEBUG FILE'),
+//         'exists' => Storage::disk('s3')->exists($path),
+//         'url' => Storage::disk('s3')->url($path),
+//     ];
+// });
 
 // Route::post('/test/fedex/rates', [FedExTestController::class, 'rates']);
 
