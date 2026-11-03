@@ -31,7 +31,8 @@ use App\Http\Controllers\api\Admin\{
     StoreSettingController,
     UrlSettingController,
     StoreProfileController,
-    OrderNotificationController
+    OrderNotificationController,
+    ReturnSettingController
 };
 use App\Http\Controllers\api\Web\{
     CartController,
@@ -652,6 +653,12 @@ Route::prefix('dashboard')->middleware([
         Route::get('/settings', 'getSettings');
         Route::post('/settings', 'saveSettings');
         Route::post('/test-notification', 'testNotification');
+    });
+
+    // Returns Settings Routes (naya)
+    Route::prefix('order-returns')->middleware(['store.hash', 'tenant.dashboard'])->controller(ReturnSettingController::class)->group(function () {
+        Route::get('/settings', 'getSettings');
+        Route::post('/settings', 'saveSettings');
     });
 
     Route::middleware([
