@@ -32,7 +32,8 @@ use App\Http\Controllers\api\Admin\{
     UrlSettingController,
     StoreProfileController,
     OrderNotificationController,
-    ReturnSettingController
+    ReturnSettingController,
+    OrderStatusController
 };
 use App\Http\Controllers\api\Web\{
     CartController,
@@ -659,6 +660,12 @@ Route::prefix('dashboard')->middleware([
     Route::prefix('order-returns')->middleware(['store.hash', 'tenant.dashboard'])->controller(ReturnSettingController::class)->group(function () {
         Route::get('/settings', 'getSettings');
         Route::post('/settings', 'saveSettings');
+    });
+
+    Route::prefix('order-statuses')->middleware(['store.hash', 'tenant.dashboard'])->controller(OrderStatusController::class)->group(function () {
+        Route::get('/', 'index');
+        Route::post('/', 'save');
+        Route::post('/restore/{key}', 'restore');
     });
 
     Route::middleware([
