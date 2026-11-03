@@ -33,7 +33,8 @@ use App\Http\Controllers\api\Admin\{
     StoreProfileController,
     OrderNotificationController,
     ReturnSettingController,
-    OrderStatusController
+    OrderStatusController,
+    LocalizationController
 };
 use App\Http\Controllers\api\Web\{
     CartController,
@@ -174,6 +175,25 @@ Route::prefix('dashboard')->middleware([
     'tenant.database',
     'auth:sanctum'
 ])->group(function () {
+
+    // Settings -> Localization
+    Route::prefix('settings/localization')->group(function () {
+
+        Route::get('/', [LocalizationController::class, 'index']);
+
+        Route::put('/', [LocalizationController::class, 'update']);
+
+        Route::get('/standard-physical-dimensions', [
+            LocalizationController::class,
+            'standardPhysicalDimensions'
+        ]);
+
+        Route::get('/standard-date-timezone', [
+            LocalizationController::class,
+            'standardDateTimezone'
+        ]);
+
+    });
 
     // Profile (no permission needed — own profile)
     Route::prefix('profile')->controller(AuthController::class)->group(function () {
