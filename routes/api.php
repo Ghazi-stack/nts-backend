@@ -30,8 +30,7 @@ use App\Http\Controllers\api\Admin\{
     StaffLogController,
     StoreSettingController,
     UrlSettingController,
-    StoreProfileController,
-    LocalizationController
+    StoreProfileController
 };
 use App\Http\Controllers\api\Web\{
     CartController,
@@ -172,25 +171,6 @@ Route::prefix('dashboard')->middleware([
     'tenant.database',
     'auth:sanctum'
 ])->group(function () {
-
-    // Settings -> Localization
-    Route::prefix('settings/localization')->group(function () {
-
-        Route::get('/', [LocalizationController::class, 'index']);
-
-        Route::put('/', [LocalizationController::class, 'update']);
-
-        Route::get('/standard-physical-dimensions', [
-            LocalizationController::class,
-            'standardPhysicalDimensions'
-        ]);
-
-        Route::get('/standard-date-timezone', [
-            LocalizationController::class,
-            'standardDateTimezone'
-        ]);
-
-    });
 
     // Profile (no permission needed — own profile)
     Route::prefix('profile')->controller(AuthController::class)->group(function () {
@@ -666,17 +646,11 @@ Route::prefix('dashboard')->middleware([
         Route::get('/analytics-products', 'productIndex');
     });
 
-    //Order Notification Route
+    // Order Notification Routes
     Route::prefix('order-notifications')->middleware(['store.hash', 'tenant.dashboard'])->controller(OrderNotificationController::class)->group(function () {
         Route::get('/settings', 'getSettings');
         Route::post('/settings', 'saveSettings');
         Route::post('/test-notification', 'testNotification');
-    });
-
-        Route::get('/products/{id}/details', 'showSearchProductDetails');
-        Route::get('/analytics-customers', 'analyticsCustomers');
-        Route::get('/analytics-orders', 'orderIndex');
-        Route::get('/analytics-products', 'productIndex');
     });
 
     Route::middleware([
@@ -1212,15 +1186,15 @@ Route::prefix('sitemap')
             ->middleware('auth:sanctum');
     });
 
-// Route::get('/test-s3', function () {
-//     $path = 'debug/tests.txt';
+Route::get('/test-s3', function () {
+    $path = 'debug/tests.txt';
 
-//     return [
-//         'put_result' => Storage::disk('s3')->put($path, 'S3 DEBUG FILE'),
-//         'exists' => Storage::disk('s3')->exists($path),
-//         'url' => Storage::disk('s3')->url($path),
-//     ];
-// });
+    return [
+        'put_result' => Storage::disk('s3')->put($path, 'S3 DEBUG FILE'),
+        'exists' => Storage::disk('s3')->exists($path),
+        'url' => Storage::disk('s3')->url($path),
+    ];
+});
 
 // Route::post('/test/fedex/rates', [FedExTestController::class, 'rates']);
 
