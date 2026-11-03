@@ -1,0 +1,47 @@
+[
+  {
+    "country": "AQ",
+    "field": "timezone",
+    "message": "National capital not found in GeoNames PPLC records."
+  },
+  {
+    "country": "BV",
+    "field": "timezone",
+    "message": "National capital not found in GeoNames PPLC records."
+  },
+  {
+    "country": "EH",
+    "field": "timezone",
+    "message": "National capital not found in GeoNames PPLC records."
+  },
+  {
+    "country": "HM",
+    "field": "timezone",
+    "message": "National capital not found in GeoNames PPLC records."
+  },
+  {
+    "country": "IO",
+    "field": "timezone",
+    "message": "National capital not found in GeoNames PPLC records."
+  },
+  {
+    "country": "IL",
+    "field": "timezone",
+    "message": "National capital not found in GeoNames PPLC records."
+  },
+  {
+    "country": "PS",
+    "field": "timezone",
+    "message": "National capital not found in GeoNames PPLC records."
+  },
+  {
+    "country": "TK",
+    "field": "timezone",
+    "message": "National capital not found in GeoNames PPLC records."
+  },
+  {
+    "country": "UM",
+    "field": "timezone",
+    "message": "National capital not found in GeoNames PPLC records."
+  }
+]
