@@ -646,6 +646,19 @@ Route::prefix('dashboard')->middleware([
         Route::get('/analytics-products', 'productIndex');
     });
 
+    //Order Notification Route
+    Route::prefix('order-notifications')->middleware(['store.hash', 'tenant.dashboard'])->controller(OrderNotificationController::class)->group(function () {
+        Route::get('/settings', 'getSettings');
+        Route::post('/settings', 'saveSettings');
+        Route::post('/test-notification', 'testNotification');
+    });
+
+        Route::get('/products/{id}/details', 'showSearchProductDetails');
+        Route::get('/analytics-customers', 'analyticsCustomers');
+        Route::get('/analytics-orders', 'orderIndex');
+        Route::get('/analytics-products', 'productIndex');
+    });
+
     Route::middleware([
         'store.hash',
         'tenant.dashboard',
@@ -1124,7 +1137,7 @@ Route::get('/check-redirect', function (\Illuminate\Http\Request $request) {
     $tenantDb = \DB::connection('central')
         ->table('stores')
         ->where('id', $storeId)
-        ->value('db_name'); // column name adjust karo
+        ->value('db_name');
 
     if (!$tenantDb) {
         return response()->json(['redirect' => null]);
@@ -1136,7 +1149,7 @@ Route::get('/check-redirect', function (\Illuminate\Http\Request $request) {
 
     $clean = rtrim($path, '/');
 
-    // Redirects table check (Product, Category, Web Page sab ke liye)
+    // Redirects table check (Product, Category, Web Page)
     $redirect = \App\Models\Redirect::on('tenant')
         ->where('store_id', $storeId)
         ->where('is_active', true)
