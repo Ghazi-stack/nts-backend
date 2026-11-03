@@ -30,7 +30,8 @@ use App\Http\Controllers\api\Admin\{
     StaffLogController,
     StoreSettingController,
     UrlSettingController,
-    StoreProfileController
+    StoreProfileController,
+    OrderNotificationController
 };
 use App\Http\Controllers\api\Web\{
     CartController,
