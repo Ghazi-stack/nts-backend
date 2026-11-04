@@ -50,32 +50,32 @@ class ReturnSettingController extends Controller
             }
 
             $request->validate([
-                'returns_enabled'               => 'nullable|boolean',
-                'return_instructions'           => 'nullable|string',
-                'return_reasons'                => 'nullable|array',
-                'return_reasons.*'              => 'nullable|string|max:255',
-                'return_actions'                => 'nullable|array',
-                'return_actions.*'              => 'nullable|string|max:255',
-                'use_default_reasons_actions'   => 'nullable|boolean',
-                'allow_store_credits'           => 'nullable|boolean',
-                'notify_new_return'             => 'nullable|boolean',
-                'notify_customer_confirmation'  => 'nullable|boolean',
-                'notify_status_change'          => 'nullable|boolean',
+                'returnsEnabled'               => 'nullable|boolean',
+                'returnInstructions'           => 'nullable|string',
+                'returnReasons'                => 'nullable|array',
+                'returnReasons.*'              => 'nullable|string|max:255',
+                'returnActions'                => 'nullable|array',
+                'returnActions.*'              => 'nullable|string|max:255',
+                'useDefaultReasonsActions'     => 'nullable|boolean',
+                'allowStoreCredits'            => 'nullable|boolean',
+                'notifyNewReturn'              => 'nullable|boolean',
+                'notifyCustomerConfirmation'   => 'nullable|boolean',
+                'notifyStatusChange'           => 'nullable|boolean',
             ]);
 
             $data = [
-                'returns_enabled'               => $request->boolean('returns_enabled'),
-                'return_instructions'           => $request->return_instructions,
-                'return_reasons'                => $request->return_reasons,
-                'return_actions'                => $request->return_actions,
-                'use_default_reasons_actions'   => $request->boolean('use_default_reasons_actions'),
-                'allow_store_credits'           => $request->boolean('allow_store_credits'),
-                'notify_new_return'             => $request->boolean('notify_new_return'),
-                'notify_customer_confirmation'  => $request->boolean('notify_customer_confirmation'),
-                'notify_status_change'          => $request->boolean('notify_status_change'),
+                'returns_enabled'               => $request->boolean('returnsEnabled'),
+                'return_instructions'           => $request->returnInstructions,
+                'return_reasons'                => $request->returnReasons,
+                'return_actions'                => $request->returnActions,
+                'use_default_reasons_actions'   => $request->boolean('useDefaultReasonsActions'),
+                'allow_store_credits'           => $request->boolean('allowStoreCredits'),
+                'notify_new_return'             => $request->boolean('notifyNewReturn'),
+                'notify_customer_confirmation'  => $request->boolean('notifyCustomerConfirmation'),
+                'notify_status_change'          => $request->boolean('notifyStatusChange'),
             ];
 
-            // Sirf wohi fields save karo jo request mein aayi hain (baaki null rahegi)
+            // Sirf wohi fields save karo jo request mein aayi hain
             $data = array_filter($data, fn($value) => !is_null($value), ARRAY_FILTER_USE_BOTH);
 
             $setting = ReturnSetting::updateOrCreate(

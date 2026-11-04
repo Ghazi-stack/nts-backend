@@ -11,18 +11,18 @@ class ReturnSettingResource extends JsonResource
     {
         return [
             'id'                            => $this->id,
-            'store_id'                      => $this->store_id,
-            'returns_enabled'               => (bool) $this->returns_enabled,
-            'return_instructions'           => $this->return_instructions,
-            'return_reasons'                => $this->return_reasons ?? [],
-            'return_actions'                => $this->return_actions ?? [],
-            'use_default_reasons_actions'   => (bool) $this->use_default_reasons_actions,
-            'allow_store_credits'           => (bool) $this->allow_store_credits,
-            'notify_new_return'             => (bool) $this->notify_new_return,
-            'notify_customer_confirmation'  => (bool) $this->notify_customer_confirmation,
-            'notify_status_change'          => (bool) $this->notify_status_change,
-            'created_at'                    => $this->created_at,
-            'updated_at'                    => $this->updated_at,
+            'storeId'                       => $this->store_id,
+            'returnsEnabled'                => (bool) $this->returns_enabled,
+            'returnInstructions'            => $this->return_instructions,
+            'returnReasons'                 => $this->return_reasons ?? [],
+            'returnActions'                 => $this->return_actions ?? [],
+            'useDefaultReasonsActions'      => (bool) $this->use_default_reasons_actions,
+            'allowStoreCredits'             => (bool) $this->allow_store_credits,
+            'notifyNewReturn'               => (bool) $this->notify_new_return,
+            'notifyCustomerConfirmation'    => (bool) $this->notify_customer_confirmation,
+            'notifyStatusChange'            => (bool) $this->notify_status_change,
+            'createdAt'                     => $this->created_at,
+            'updatedAt'                     => $this->updated_at,
         ];
     }
 }
