@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\api\Admin\CommentSettingController;
 use App\Http\Controllers\api\Admin\PermissionController;
 use App\Http\Controllers\api\Web\VisitorSessionController;
 use Illuminate\Http\Request;
@@ -691,6 +692,12 @@ Route::prefix('dashboard')->middleware([
 
     // inventory Settings Routes (naya)
     Route::prefix('inventory')->middleware(['store.hash', 'tenant.dashboard'])->controller(InventorySettingController::class)->group(function () {
+        Route::get('/settings', 'getSettings');
+        Route::post('/settings', 'saveSettings');
+    });
+
+    // comments Settings Routes (naya)
+    Route::prefix('comments')->middleware(['store.hash', 'tenant.dashboard'])->controller(CommentSettingController::class)->group(function () {
         Route::get('/settings', 'getSettings');
         Route::post('/settings', 'saveSettings');
     });
