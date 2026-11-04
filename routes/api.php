@@ -36,7 +36,8 @@ use App\Http\Controllers\api\Admin\{
     OrderNotificationController,
     ReturnSettingController,
     OrderStatusController,
-    LocalizationController
+    LocalizationController,
+    PromotionSettingController
 };
 use App\Http\Controllers\api\Web\{
     CartController,
@@ -702,6 +703,13 @@ Route::prefix('dashboard')->middleware([
         Route::post('/settings', 'saveSettings');
     });
 
+    // promotions Settings Routes (naya)
+    Route::prefix('promotions')->middleware(['store.hash', 'tenant.dashboard'])->controller(PromotionSettingController::class)->group(function () {
+        Route::get('/settings', 'getSettings');
+        Route::post('/settings', 'saveSettings');
+    });
+
+    
     Route::middleware([
         'store.hash',
         'tenant.dashboard',
