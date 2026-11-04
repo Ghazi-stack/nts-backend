@@ -26,6 +26,7 @@ use App\Http\Controllers\api\Admin\{
     ScriptController,
     CouponCodeController,
     CurrencyController,
+    InventorySettingController,
     RealtimeController,
     StaffLogController,
     StoreSettingController,
@@ -192,7 +193,6 @@ Route::prefix('dashboard')->middleware([
             LocalizationController::class,
             'standardDateTimezone'
         ]);
-
     });
 
     // Profile (no permission needed — own profile)
@@ -682,10 +682,17 @@ Route::prefix('dashboard')->middleware([
         Route::post('/settings', 'saveSettings');
     });
 
+    // order statuses Settings Routes (naya)
     Route::prefix('order-statuses')->middleware(['store.hash', 'tenant.dashboard'])->controller(OrderStatusController::class)->group(function () {
         Route::get('/', 'index');
         Route::post('/', 'save');
         Route::post('/restore/{key}', 'restore');
+    });
+
+    // inventory Settings Routes (naya)
+    Route::prefix('inventory')->middleware(['store.hash', 'tenant.dashboard'])->controller(InventorySettingController::class)->group(function () {
+        Route::get('/settings', 'getSettings');
+        Route::post('/settings', 'saveSettings');
     });
 
     Route::middleware([
