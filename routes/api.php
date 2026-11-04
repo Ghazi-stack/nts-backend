@@ -709,7 +709,11 @@ Route::prefix('dashboard')->middleware([
         Route::post('/settings', 'saveSettings');
     });
 
-    
+    // redirects Settings Routes (naya)
+    Route::prefix('redirects')->middleware(['store.hash', 'tenant.dashboard'])->controller(UrlSettingController::class)->group(function () {
+        Route::get('/setting', 'redirectsSettingGetData');
+    });
+
     Route::middleware([
         'store.hash',
         'tenant.dashboard',

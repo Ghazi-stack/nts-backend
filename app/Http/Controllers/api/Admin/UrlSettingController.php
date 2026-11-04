@@ -14,6 +14,7 @@ use App\Models\Product;
 use App\Models\Category;
 use App\Models\WebPage;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -323,5 +324,68 @@ class UrlSettingController extends Controller
         ]);
 
         return response()->json($progress);
+    }
+
+    //redirects setting api
+    public function redirectsSettingGetData(Request $request)
+    {
+        try {
+            $storeId = current_store_id();
+            if (!$storeId) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Store not selected or token invalid.',
+                ], 400);
+            }
+
+            $perPage = $request->query('perPage', 50);
+            $search  = trim((string) $request->query('search', ''));
+
+            $query = Redirect::where('store_id', $storeId);
+
+            if ($search !== '') {
+                $query->where(function ($q) use ($search) {
+                    $q->where('old_url', 'like', "%{$search}%")
+                      ->orWhere('new_url', 'like', "%{$search}%")
+                      ->orWhere('entity_type', 'like', "%{$search}%");
+                });
+            }
+
+            $total = $query->count();
+
+            $redirects = $query->latest()
+                ->paginate($perPage);
+
+            $data = $redirects->getCollection()->map(function ($redirect) {
+                return [
+                    'id'          => $redirect->id,
+                    'storeId'     => $redirect->store_id,
+                    'productId'   => $redirect->product_id,
+                    'entityType'  => $redirect->entity_type,
+                    'oldUrl'      => $redirect->old_url,
+                    'newUrl'      => $redirect->new_url,
+                    'isActive'    => (bool) $redirect->is_active,
+                    'createdAt'   => $redirect->created_at,
+                    'updatedAt'   => $redirect->updated_at,
+                ];
+            });
+
+            return response()->json([
+                'status'     => true,
+                'message'    => 'Redirects retrieved successfully',
+                'total'      => $total,
+                'count'      => $redirects->count(),
+                'perPage'    => $redirects->perPage(),
+                'currentPage'=> $redirects->currentPage(),
+                'totalPages' => $redirects->lastPage(),
+                'data'       => $data,
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Error fetching redirects: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to retrieve redirects',
+            ], 500);
+        }
     }
 }
