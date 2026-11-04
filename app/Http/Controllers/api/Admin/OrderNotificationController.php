@@ -32,7 +32,6 @@ class OrderNotificationController extends Controller
 
     /**
      * Get settings for current store
-     * Agar pehle se nahi hai to empty/default return karega
      */
     public function getSettings()
     {
@@ -48,10 +47,10 @@ class OrderNotificationController extends Controller
             $setting = OrderNotificationSetting::where('store_id', $storeId)->first();
 
             return response()->json([
-                'status'  => true,
-                'message' => 'Order notification settings retrieved successfully',
-                'data'    => $setting ? new OrderNotificationSettingResource($setting) : null,
-                'allowed_statuses' => $this->allowedStatuses, // frontend ke liye list
+                'status'           => true,
+                'message'          => 'Order notification settings retrieved successfully',
+                'data'             => $setting ? new OrderNotificationSettingResource($setting) : null,
+                'allowedStatuses'  => $this->allowedStatuses,
             ], 200);
         } catch (\Exception $e) {
             Log::error('Error fetching order notification settings: ' . $e->getMessage());
@@ -64,7 +63,6 @@ class OrderNotificationController extends Controller
 
     /**
      * Create ya Update (Upsert)
-     * Pehli dafa create hoga, baad mein update
      */
     public function saveSettings(Request $request)
     {
@@ -78,16 +76,16 @@ class OrderNotificationController extends Controller
             }
 
             $request->validate([
-                'email_address'      => 'required|email|max:255',
-                'email_enabled'      => 'nullable|boolean',
-                'notify_on_statuses' => 'nullable|array',
-                'notify_on_statuses.*' => 'string|in:' . implode(',', $this->allowedStatuses),
+                'emailAddress'      => 'required|email|max:255',
+                'emailEnabled'      => 'nullable|boolean',
+                'notifyOnStatuses'  => 'nullable|array',
+                'notifyOnStatuses.*' => 'string|in:' . implode(',', $this->allowedStatuses),
             ]);
 
             $data = [
-                'email_address'      => $request->email_address,
-                'email_enabled'      => $request->boolean('email_enabled', true),
-                'notify_on_statuses' => $request->notify_on_statuses ?? [],
+                'email_address'      => $request->emailAddress,
+                'email_enabled'      => $request->boolean('emailEnabled', true),
+                'notify_on_statuses' => $request->notifyOnStatuses ?? [],
             ];
 
             $setting = OrderNotificationSetting::updateOrCreate(
@@ -118,7 +116,7 @@ class OrderNotificationController extends Controller
     }
 
     /**
-     * Test Notification Method (BigCommerce jaisa)
+     * Test Notification Method
      */
     public function testNotification()
     {

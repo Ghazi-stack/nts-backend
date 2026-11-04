@@ -10,13 +10,13 @@ class OrderNotificationSettingResource extends JsonResource
     public function toArray($request)
     {
         return [
-            'id'                 => $this->id,
-            'store_id'           => $this->store_id,
-            'email_address'      => $this->email_address,
-            'email_enabled'      => (bool) $this->email_enabled,
-            'notify_on_statuses' => $this->notify_on_statuses ?? [],
-            'created_at'         => $this->created_at,
-            'updated_at'         => $this->updated_at,
+            'id'                => $this->id,
+            'storeId'           => $this->store_id,
+            'emailAddress'      => $this->email_address,
+            'emailEnabled'      => (bool) $this->email_enabled,
+            'notifyOnStatuses'  => $this->notify_on_statuses ?? [],
+            'createdAt'         => $this->created_at,
+            'updatedAt'         => $this->updated_at,
         ];
     }
 }
