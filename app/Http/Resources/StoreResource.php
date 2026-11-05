@@ -15,7 +15,7 @@ class StoreResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->id,
+            'id' => $this->legacy_store_id ?? $this->id,
             'user_id' => $this->user_id,
             'name' => $this->name,
             'baseUrl' => $this->base_url,
