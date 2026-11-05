@@ -23,41 +23,163 @@ class StripePaymentController extends Controller
      */
     public function pay(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'payment_method_id' => 'required|string',
-            'amount'            => 'required|integer',
-            'currency'          => 'required|string|size:3',
-            'products'          => 'required|array|min:1',
+            'amount'            => 'required|integer', // cents
+
+            'selectedCurrency' => 'required|array',
+            'selectedCurrency.id' => 'required|integer',
+            'selectedCurrency.exchangeRate' => 'required|numeric',
+
+            'coupon'           => 'nullable|array',
+            'coupon.id'        => 'required_with:coupon|integer',
+            'coupon.couponCode' => 'required_with:coupon|string',
+
+            'method_id'        => 'nullable|integer',
+            'service_type'     => 'nullable|string',
+            'destination'      => 'required_with:method_id|array',
+            'destination.country_code' => 'required_with:destination|string|size:2',
+            'destination.state'        => 'nullable|string|max:255',
+            'destination.city'         => 'nullable|string|max:255',
+            'destination.postal_code'  => 'nullable|string|max:50',
+
+            'products'         => 'required|array|min:1',
             'products.*.product_id' => 'required|integer|exists:products,id',
             'products.*.quantity'   => 'required|integer|min:1',
-            'exchangeRate'      => 'nullable|numeric',
-            'shippingCost'      => 'nullable|numeric',
-            'discountAmount'    => 'nullable|numeric',
+
+            'manualDiscount'   => 'nullable|numeric',
+            'shippingCost'     => 'nullable|numeric',
         ]);
 
         $user = auth('sanctum')->user();
-        $cartItems = $request->products;
+        $storeId = current_store_id();
 
-        $exchangeRate   = (float) $request->input('exchangeRate', 1);
-        $currency       = strtolower($request->input('currency', 'usd'));
-        $shippingCost   = (float) $request->input('shippingCost', 0);
-        $discount       = (float) $request->input('discountAmount', 0);
+        if (!$storeId) {
+            return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
+        }
 
-        // Backend calculate
+        // ===== CURRENCY =====
+        $currencyId = $request->input('selectedCurrency.id');
+        $currency = \App\Models\Currency::where('store_id', $storeId)
+            ->where('id', $currencyId)
+            ->where('enabled', true)
+            ->first();
+
+        if (!$currency) {
+            return response()->json(['status' => false, 'message' => 'Currency not found'], 404);
+        }
+
+        $exchangeRate = (float) $currency->exchange_rate;
+        $currencyCode = strtolower($currency->code);
+
+        // ===== COUPON =====
+        $discount = 0;
+        if (!empty($validated['coupon'])) {
+            $coupon = \App\Models\CouponCode::where('store_id', $storeId)
+                ->where('id', $validated['coupon']['id'])
+                ->where('couponCode', $validated['coupon']['couponCode'])
+                ->where('enabled', true)
+                ->first();
+
+            if (!$coupon) {
+                return response()->json(['status' => false, 'message' => 'Invalid coupon'], 404);
+            }
+            $discount = (float) $coupon->discountAmount;
+        }
+
+        $manualDiscount = $validated['manualDiscount'] ?? 0;
         $calculatedTotal = 0;
-        foreach ($cartItems as $item) {
-            $product = Product::find($item['product_id']);
+        $shippingCost = $validated['shippingCost'] ?? 0;
+        $matchedRate = null;
+
+        // ===== PRODUCTS CALCULATION (same as calculate) =====
+        $totalWeight = 0;
+        $itemCount = 0;
+        $baseOrderTotal = 0;
+
+        foreach ($validated['products'] as $item) {
+            $product = Product::where('store_id', $storeId)->find($item['product_id']);
             if ($product) {
-                $convertedPrice = $product->price * $exchangeRate;
-                $calculatedTotal += $convertedPrice * $item['quantity'];
+                $convertedPrice = round($product->price * $exchangeRate, 6);
+                $lineTotal = round($convertedPrice * $item['quantity'], 6);
+                $calculatedTotal += $lineTotal;
+
+                $salePrice = $product->getAttribute('sale_price');
+                $normalPrice = $product->getAttribute('price');
+                $unitPrice = $salePrice !== null ? (float) $salePrice : (float) ($normalPrice ?? 0);
+                $baseOrderTotal += $unitPrice * $item['quantity'];
+
+                $productWeight = (float) ($product->getAttribute('weight') ?? 0);
+                $dimensions = $product->dimensions;
+
+                if (is_string($dimensions)) {
+                    $decoded = json_decode($dimensions, true);
+                    $dimensions = (json_last_error() === JSON_ERROR_NONE) ? $decoded : [];
+                }
+                if (!is_array($dimensions)) $dimensions = [];
+
+                $dimensionWeight = (float) ($dimensions['weight'] ?? 0);
+                $weightUsed = $productWeight > 0 ? $productWeight : $dimensionWeight;
+
+                $totalWeight += $weightUsed * $item['quantity'];
+                $itemCount += $item['quantity'];
             }
         }
+
+        // ===== SHIPPING RATE MATCHING (same as calculate) =====
+        if (!empty($validated['method_id']) && !empty($validated['destination'])) {
+            $packageInfo = [
+                'total_weight'  => round($totalWeight, 2),
+                'weight_unit'   => 'LB',
+                'order_total'   => round($baseOrderTotal, 2),
+                'item_count'    => $itemCount,
+                'package_value' => 0,
+            ];
+
+            $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
+
+            $ratesResponse = $shippingRateService->getCheckoutShippingRates(
+                $validated['destination'],
+                $packageInfo,
+                $storeId,
+                null,
+                $currency->code
+            );
+
+            $rates = $ratesResponse['rates'] ?? [];
+
+            foreach ($rates as $rate) {
+                if ((int) $rate['method_id'] === (int) $validated['method_id']) {
+                    if (!empty($validated['service_type'])) {
+                        if (($rate['service_type'] ?? '') === $validated['service_type']) {
+                            $matchedRate = $rate;
+                            break;
+                        }
+                    } else {
+                        $matchedRate = $rate;
+                        break;
+                    }
+                }
+            }
+
+            if ($matchedRate) {
+                $shippingCost = (float) $matchedRate['total_charge'];
+            }
+        }
+
+        // ===== FINAL TOTAL (same formula as calculate) =====
         $calculatedTotal += $shippingCost;
-        $calculatedTotal -= $discount;
+        $convertedCouponDiscount = round($discount * $exchangeRate, 6);
+        $calculatedTotal -= $convertedCouponDiscount;
+        $calculatedTotal -= $manualDiscount;
+
+        if ($calculatedTotal < 0) {
+            $calculatedTotal = 0;
+        }
 
         $calculatedCents = (int) round($calculatedTotal * 100);
 
-        // Verify amount
+        // ===== AMOUNT VERIFICATION =====
         if (abs($calculatedCents - $request->amount) > 1) {
             return response()->json([
                 'status'     => false,
@@ -76,16 +198,18 @@ class StripePaymentController extends Controller
 
             $intent = PaymentIntent::create([
                 'amount' => $request->amount,
-                'currency' => $currency,
+                'currency' => $currencyCode,
                 'payment_method' => $request->payment_method_id,
                 'confirmation_method' => 'manual',
                 'payment_method_types' => ['card'],
                 'confirm' => true,
                 'capture_method' => 'manual',
                 'metadata' => [
-                    'user_id' => $user?->id,
+                    'user_id'      => $user?->id,
                     'order_number' => $orderNumber,
-                    'products' => json_encode($cartItems),
+                    'products'     => json_encode($validated['products']),
+                    'currency_id'  => $currency->id,
+                    'coupon_id'    => $validated['coupon']['id'] ?? null,
                 ],
             ], [
                 'idempotency_key' => uniqid('payment_', true)
@@ -122,13 +246,14 @@ class StripePaymentController extends Controller
             DB::commit();
 
             return response()->json([
-                'status' => 'authorized',
-                'message' => 'Payment authorized (on hold). Capture pending.',
-                'amount' => $intent->amount,
-                'payment_intent_id' => $intent->id,
-                'payment_status' => $intent->status,
-                'risk_score' => $riskScore,
-                'risk_level' => $riskLevel,
+                'status'             => 'authorized',
+                'message'            => 'Payment authorized (on hold). Capture pending.',
+                'amount'             => $intent->amount,
+                'payment_intent_id'  => $intent->id,
+                'payment_status'     => $intent->status,
+                'risk_score'         => $riskScore,
+                'risk_level'         => $riskLevel,
+                'order_number'       => $orderNumber,
             ]);
         } catch (\Stripe\Exception\CardException $e) {
             DB::rollBack();
