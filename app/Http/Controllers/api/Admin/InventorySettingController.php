@@ -55,7 +55,7 @@ class InventorySettingController extends Controller
                 'message' => 'Inventory settings retrieved successfully',
                 'data'    => $setting ? new InventorySettingResource($setting) : null,
                 'options' => [
-                    'productNoLongerSold' => $this->productNoLongerSold,
+                    'productNoLongerSold' => $this->productNoLonger,
                     'optionNoLongerSold'  => $this->optionNoLongerSold,
                     'updateStockLevels'   => $this->updateStockLevels,
                     'stockLevelDisplay'   => $this->stockLevelDisplay,
