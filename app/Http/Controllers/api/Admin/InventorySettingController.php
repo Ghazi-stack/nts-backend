@@ -7,6 +7,7 @@ use App\Models\InventorySetting;
 use App\Http\Resources\InventorySettingResource;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class InventorySettingController extends Controller
@@ -81,12 +82,12 @@ class InventorySettingController extends Controller
             }
 
             $request->validate([
-                'productNoLongerSold'             => 'nullable|in:' . implode(',', $this->productNoLonger),
-                'optionNoLongerSold'              => 'nullable|in:' . implode(',', $this->optionNoLongerSold),
-                'updateStockLevels'               => 'nullable|in:' . implode(',', $this->updateStockLevels),
+                'productNoLongerSold'             => ['nullable', Rule::in($this->productNoLonger)],
+                'optionNoLongerSold'              => ['nullable', Rule::in($this->optionNoLongerSold)],
+                'updateStockLevels'               => ['nullable', Rule::in($this->updateStockLevels)],
                 'autoAdjustStockOnRefundCancel'   => 'nullable|boolean',
 
-                'stockLevelDisplay'               => 'nullable|in:' . implode(',', $this->stockLevelDisplay),
+                'stockLevelDisplay'               => ['nullable', Rule::in($this->stockLevelDisplay)],
                 'outOfStockMessage'               => 'nullable|string|max:255',
                 'showOosOnListing'                => 'nullable|boolean',
 
