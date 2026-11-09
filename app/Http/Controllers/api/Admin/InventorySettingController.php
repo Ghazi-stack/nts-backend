@@ -12,7 +12,7 @@ use Illuminate\Validation\ValidationException;
 class InventorySettingController extends Controller
 {
     // Exact values from screenshots
-    private array $productNoLongerSold = [
+    private array $productNoLonger = [
         'Hide the product',
         'Hide the product, but leave the product page accessible',
         'Redirect to category page',
@@ -81,7 +81,7 @@ class InventorySettingController extends Controller
             }
 
             $request->validate([
-                'productNoLongerSold'             => 'nullable|in:' . implode(',', $this->productNoLongerSold),
+                'productNoLongerSold'             => 'nullable|in:' . implode(',', $this->productNoLonger),
                 'optionNoLongerSold'              => 'nullable|in:' . implode(',', $this->optionNoLongerSold),
                 'updateStockLevels'               => 'nullable|in:' . implode(',', $this->updateStockLevels),
                 'autoAdjustStockOnRefundCancel'   => 'nullable|boolean',
