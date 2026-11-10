@@ -24,10 +24,32 @@ class ReturnSettingController extends Controller
 
             $setting = ReturnSetting::where('store_id', $storeId)->first();
 
+            // Default data agar table mein record nahi hai
+            $defaultData = [
+                'returnsEnabled'              => true,
+                'returnInstructions'          => 'Please contact support before returning.',
+                'returnReasons'               => [
+                    'Received wrong product',
+                    'Wrong product ordered',
+                    'Not satisfied with the product',
+                    'There was a problem with the product',
+                ],
+                'returnActions'               => [
+                    'Repair',
+                    'Replacement',
+                    'Store credit',
+                ],
+                'useDefaultReasonsActions'    => true,
+                'allowStoreCredits'           => true,
+                'notifyNewReturn'             => true,
+                'notifyCustomerConfirmation'  => true,
+                'notifyStatusChange'          => true,
+            ];
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Return settings retrieved successfully',
-                'data'    => $setting ? new ReturnSettingResource($setting) : null,
+                'data'    => $setting ? new ReturnSettingResource($setting) : $defaultData,
             ], 200);
         } catch (\Exception $e) {
             Log::error('Error fetching return settings: ' . $e->getMessage());
@@ -37,7 +59,6 @@ class ReturnSettingController extends Controller
             ], 500);
         }
     }
-
     public function saveSettings(Request $request)
     {
         try {
