@@ -156,31 +156,38 @@ class StaffLogController extends Controller
         if ($log->type === 'Shipping quote') {
             $logData = $log->log_data ?? [];
             $allRates = $logData['carrier_quotes'] ?? [];
+            $matchedRate = $logData['matched_rate'] ?? null;
 
             $data['request'] = $logData['request'] ?? null;
 
-            // Sirf is module wala rate nikaalo
-            $moduleName = $log->module;
-            $matchedQuotes = collect($allRates)->filter(function ($rate) use ($moduleName) {
-                $display = $rate['display_name'] ?? '';
-                // FedEx case — saare FedEx rates
-                if ($moduleName === 'FedEx (fedex)' && !empty($rate['is_fedex'])) {
-                    return true;
-                }
-                // Baaki methods — exact match
-                return $display === $moduleName;
-            })->values()->all();
+            // Sirf matched / selected rate dikhao (kam data)
+            $carrierQuotes = [];
 
-            if (empty($matchedQuotes) && !empty($allRates)) {
-                $matchedQuotes = [$allRates[0]];
+            if ($matchedRate) {
+                $carrierQuotes = [$matchedRate];
+            } else {
+                // Fallback — module ke hisaab se filter
+                $moduleName = $log->module;
+                $carrierQuotes = collect($allRates)->filter(function ($rate) use ($moduleName) {
+                    $display = $rate['display_name'] ?? '';
+                    if ($moduleName === 'FedEx (fedex)' && !empty($rate['is_fedex'])) {
+                        return true;
+                    }
+                    return $display === $moduleName;
+                })->values()->all();
+
+                if (empty($carrierQuotes) && !empty($allRates)) {
+                    $carrierQuotes = [$allRates[0]];
+                }
             }
 
-            $data['carrier_quotes'] = $matchedQuotes;
+            $data['carrier_quotes'] = $carrierQuotes;
 
             // Settings — FedEx ke liye list, baaki empty
+            $moduleName = $log->module;
             if ($moduleName === 'FedEx (fedex)') {
                 $data['settings'] = [
-                    'deliveryServices' => collect($matchedQuotes)
+                    'deliveryServices' => collect($carrierQuotes)
                         ->pluck('service_type')
                         ->filter()
                         ->unique()
