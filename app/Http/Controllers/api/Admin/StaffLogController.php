@@ -152,29 +152,43 @@ class StaffLogController extends Controller
             'date'     => $log->logged_at?->format('jS M Y @ h:i A'),
         ];
 
-        // Shipping quote — full request + carrier quotes
+        // Shipping — jo table mein save hua wahi
         if ($log->type === 'Shipping quote') {
-            $requestData = $log->log_data['request'] ?? [];
+            $logData = $log->log_data ?? [];
 
-            $data['request'] = [
-                'date'        => $requestData['date'] ?? null,
-                'customer'    => $requestData['customer'] ?? null,
-                'email'       => $requestData['email'] ?? null,
-                'destination' => $requestData['destination'] ?? null,
-                'cart_items'  => $requestData['cart_items'] ?? [],
-                'weight'      => $requestData['weight'] ?? null,
-                'weight_unit' => $requestData['weight_unit'] ?? 'LBS',
+            $data['request'] = $logData['request'] ?? null;
+
+            // Carrier quotes bilkul wahi jo rates API se aaye the
+            $data['carrier_quotes'] = collect($logData['carrier_quotes'] ?? [])->map(function ($rate) {
+                return [
+                    'display_name'  => $rate['display_name'] ?? null,
+                    'service_type'  => $rate['service_type'] ?? null,
+                    'total_charge'  => $rate['total_charge'] ?? 0,
+                    'currency'      => $rate['currency'] ?? null,
+                    'transit_days'  => $rate['transit_days'] ?? null,
+                    'delivery_date' => $rate['delivery_date'] ?? null,
+                    'is_fedex'      => $rate['is_fedex'] ?? false,
+                    'method_id'     => $rate['method_id'] ?? null,
+                    'method_type'   => $rate['method_type'] ?? null,
+                ];
+            })->values()->all();
+
+            $data['settings'] = [
+                'deliveryServices' => collect($logData['carrier_quotes'] ?? [])
+                    ->pluck('service_type')
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all(),
             ];
-
-            $data['carrier_quotes'] = $log->log_data['carrier_quotes'] ?? [];
         }
 
-        // Payment gateway — sirf message / transaction
+        // Payment — table se hi
         if ($log->type === 'Payment gateway') {
             $payment = $log->log_data ?? [];
 
             if ($log->severity === 'success') {
-                $data['detail'] = 'Transaction ID: ' . ($payment['transaction_id'] ?? '') . ', Status: ' . ($payment['status'] ?? 'authorized');
+                $data['detail'] = 'Transaction ID: ' . ($payment['transaction_id'] ?? '') . ', Status: ' . ($payment['status'] ?? '');
             }
 
             if ($log->severity === 'notice') {
