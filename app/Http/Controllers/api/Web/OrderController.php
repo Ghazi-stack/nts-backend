@@ -1185,6 +1185,8 @@ class OrderController extends Controller
             $shippingCost = $validated['shippingCost'] ?? 0;
             $shippingMethod = $validated['shippingMethod'] ?? null;
             $shippingDataToSave = $validated['shippingData'] ?? null;
+            $ratesResponse = null;
+            $packageInfo = null;
 
             // Converted discount (coupon only)
             $convertedDiscount = round($discount * $exchangeRate, 6);
@@ -1510,7 +1512,7 @@ class OrderController extends Controller
                     'currency_code'          => $currencyCode,
                     'currency_symbol'        => $currencySymbol,
                     'exchange_rate'          => $exchangeRate,
-                    'discountAmount'         => $convertedDiscount,   // converted coupon amount
+                    'discountAmount'         => $convertedDiscount,
                     'manualDiscount'         => $manualDiscount,
                     'coupon_code'            => $couponCode,
                     'is_multi_address'       => false,
@@ -1579,7 +1581,7 @@ class OrderController extends Controller
                         'currency_code'          => $currencyCode,
                         'currency_symbol'        => $currencySymbol,
                         'exchange_rate'          => $exchangeRate,
-                        'discountAmount'         => $convertedDiscount,   // converted coupon amount
+                        'discountAmount'         => $convertedDiscount,
                         'manualDiscount'         => $manualDiscount,
                         'coupon_code'            => $couponCode,
                         'is_multi_address'       => true,
@@ -1737,6 +1739,116 @@ class OrderController extends Controller
                     'payment_intent' => $validated['paymentIntentId'] ?? null,
                 ], 'payment');
             }
+
+            // ===================== SYSTEM LOGS START =====================
+            try {
+                $customerType = $isGuest ? 'guest' : 'registered';
+                $email = $validated['email'] ?? null;
+                $orderIdForLog = $orders[0]->id ?? null;
+
+                // Shipping Quote Log — EK hi record (saara data andar)
+                if (!$isMulti && !empty($ratesResponse['rates'] ?? [])) {
+                    $destination = [
+                        'streetAddress1' => $validated['addressLine1'] ?? '',
+                        'streetAddress2' => $validated['addressLine2'] ?? '',
+                        'city'           => $validated['city'] ?? '',
+                        'postcode'       => $validated['zip'] ?? '',
+                        'stateName'      => $validated['state'] ?? '',
+                        'stateIso2'      => $validated['state'] ?? '',
+                        'countryIso2'    => $validated['country'] ?? 'US',
+                        'addressType'    => 'residential',
+                        'customAddressFields' => [],
+                    ];
+
+                    $cartItemsForLog = [];
+                    foreach ($validated['products'] as $item) {
+                        $product = Product::find($item['product_id']);
+                        if ($product) {
+                            $cartItemsForLog[] = [
+                                'name'       => $product->name ?? '',
+                                'sku'        => $product->sku ?? null,
+                                'quantity'   => $item['quantity'],
+                                'weight'     => $product->weight ?? 0,
+                                'dimensions' => $product->dimensions,
+                            ];
+                        }
+                    }
+
+                    $rates = $ratesResponse['rates'];
+                    $moduleName = $matchedRate['display_name']
+                        ?? $matchedRate['service_name']
+                        ?? ($rates[0]['display_name'] ?? 'Shipping');
+
+                    \App\Models\SystemLog::create([
+                        'store_id'      => $storeId,
+                        'order_id'      => $orderIdForLog,
+                        'customer_id'   => $customer->id ?? null,
+                        'user_id'       => $user?->id,
+                        'severity'      => 'success',
+                        'type'          => 'Shipping quote',
+                        'module'        => $moduleName,
+                        'summary'       => 'Successfully retrieved shipping quote',
+                        'customer_type' => $customerType,
+                        'email'         => $email,
+                        'logged_at'     => now(),
+                        'log_data'      => [
+                            'request' => [
+                                'date'        => now()->format('jS M Y @ h:i A'),
+                                'customer'    => $customerType === 'guest' ? 'guest' : trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
+                                'email'       => $email,
+                                'destination' => $destination,
+                                'cart_items'  => $cartItemsForLog,
+                                'weight'      => $packageInfo['total_weight'] ?? null,
+                                'weight_unit' => 'LBS',
+                            ],
+                            'carrier_quotes' => $rates,
+                            'matched_rate'   => $matchedRate,
+                        ],
+                    ]);
+                }
+
+                // Payment Logs (2 records)
+                $commonPayment = [
+                    'store_id'      => $storeId,
+                    'order_id'      => $orderIdForLog,
+                    'customer_id'   => $customer->id ?? null,
+                    'user_id'       => $user?->id,
+                    'type'          => 'Payment gateway',
+                    'module'        => 'Credit Card (via Stripe)',
+                    'customer_type' => $customerType,
+                    'email'         => $email,
+                    'logged_at'     => now(),
+                ];
+
+                \App\Models\SystemLog::create(array_merge($commonPayment, [
+                    'severity' => 'success',
+                    'summary'  => 'Payment with Credit Card (via Stripe) has been processed successfully for Order ID: ' . $orderIdForLog,
+                    'log_data' => [
+                        'transaction_id' => $validated['paymentIntentId'] ?? null,
+                        'status'         => 'authorized',
+                        'amount'         => $totalOrderAmount,
+                        'currency'       => $currencyCode,
+                        'payment_method' => $validated['paymentMethod'] ?? 'card',
+                        'message'        => 'Payment processed successfully',
+                    ],
+                ]));
+
+                \App\Models\SystemLog::create(array_merge($commonPayment, [
+                    'severity' => 'notice',
+                    'summary'  => 'Payment with Credit Card (via Stripe) is on an additional step for Order ID: ' . $orderIdForLog,
+                    'log_data' => [
+                        'transaction_id' => $validated['paymentIntentId'] ?? null,
+                        'status'         => 'requires_capture',
+                        'amount'         => $totalOrderAmount,
+                        'currency'       => $currencyCode,
+                        'message'        => 'Additional payment step required',
+                        'payment_method' => $validated['paymentMethod'] ?? 'card',
+                    ],
+                ]));
+            } catch (\Throwable $logEx) {
+                \Log::warning('System log failed', ['error' => $logEx->getMessage()]);
+            }
+            // ===================== SYSTEM LOGS END =====================
 
             foreach ($orders as $order) {
                 $order->load('items.product.images', 'billingInformation', 'customer');

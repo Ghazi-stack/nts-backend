@@ -226,6 +226,10 @@ Route::prefix('dashboard')->middleware([
 
     Route::get('/staff-logs', [StaffLogController::class, 'index'])
         ->middleware(['store.hash', 'tenant.dashboard']);
+    Route::get('/system-logs', [StaffLogController::class, 'systemLogs'])
+        ->middleware(['store.hash', 'tenant.dashboard']);
+    Route::get('/system-logs/{id}', [StaffLogController::class, 'systemLogShow'])
+        ->middleware(['store.hash', 'tenant.dashboard']);
 
     // Route::get('/admin-users', [AuthController::class, 'getAdminUsers']);
     // Route::get('/admin-users/{id}', [AuthController::class, 'getAdminUser']);
