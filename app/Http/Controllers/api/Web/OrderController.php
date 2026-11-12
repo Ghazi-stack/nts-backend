@@ -52,6 +52,7 @@ use Stripe\Stripe;
 use Stripe\PaymentIntent;
 use App\Services\DraftQuoteService;
 use App\Services\CartContextService;
+use App\Services\OrderNumberGenerator;
 
 class OrderController extends Controller
 {
@@ -1065,6 +1066,806 @@ class OrderController extends Controller
     //     }
     // }
 
+    // public function store(Request $request)
+    // {
+    //     try {
+    //         $validated = $request->validate([
+    //             'orderId'        => 'nullable|integer|exists:orders,id',
+    //             'userType'       => 'nullable|string|max:100',
+    //             'deviceType'     => 'nullable|string|max:1000',
+    //             'firstName'      => 'required_if:isMultiAddress,false|string|max:255',
+    //             'lastName'       => 'required_if:isMultiAddress,false|string|max:255',
+    //             'companyName'    => 'nullable|string|max:255',
+    //             'email'          => 'required|email',
+    //             'phone'          => 'nullable|string|max:20',
+    //             'addressLine1'   => 'required_if:isMultiAddress,false|string|max:255',
+    //             'addressLine2'   => 'nullable|string|max:255',
+    //             'city'           => 'nullable|string|max:100',
+    //             'state'          => 'nullable|string|max:100',
+    //             'zip'            => 'nullable|string|max:20',
+    //             'country'        => 'nullable|string|max:100',
+    //             'newsletter'     => 'nullable|boolean',
+    //             'paymentMethod'  => 'required|string|max:100',
+    //             'shippingMethod' => 'nullable|string|max:100',
+    //             'shippingCost'   => 'nullable|numeric',
+    //             'shippingData'   => 'nullable',
+    //             'comments'       => 'nullable|string|max:1000',
+    //             'discountAmount' => 'nullable|numeric',
+    //             'manualDiscount' => 'nullable|numeric',
+    //             'paymentIntentId' => 'required|string',
+    //             'coupon'         => 'nullable|array',
+    //             'coupon.id'      => 'required_with:coupon|integer',
+    //             'coupon.couponCode' => 'required_with:coupon|string',
+    //             'isMultiAddress' => 'required|boolean',
+    //             'ipAddress'      => 'nullable|string|max:45',
+    //             'orderPlaceCountry' => 'nullable|string|max:45',
+    //             'isSaveAddressForShipping' => 'nullable|boolean',
+    //             'isSaveAddressForBilling'  => 'nullable|boolean',
+    //             'billingSame'    => 'nullable|boolean',
+    //             'amount'         => 'required|integer',
+    //             'currency'       => 'nullable|string|size:3',
+    //             'selectedCurrency' => 'required|array',
+    //             'selectedCurrency.id' => 'required|integer',
+    //             'selectedCurrency.exchangeRate' => 'required|numeric',
+
+    //             'method_id'      => 'nullable|integer',
+    //             'service_type'   => 'nullable|string',
+    //             'destination'    => 'required_with:method_id|array',
+    //             'destination.country_code' => 'required_with:destination|string|size:2',
+    //             'destination.state'        => 'nullable|string|max:255',
+    //             'destination.city'         => 'nullable|string|max:255',
+    //             'destination.postal_code'  => 'nullable|string|max:50',
+
+    //             'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
+    //             'destinations.*.firstName'      => 'required|string|max:255',
+    //             'destinations.*.lastName'       => 'required|string|max:255',
+    //             'destinations.*.companyName'    => 'nullable|string|max:255',
+    //             'destinations.*.phone'          => 'nullable|string|max:20',
+    //             'destinations.*.addressLine1'   => 'required|string|max:255',
+    //             'destinations.*.addressLine2'   => 'nullable|string|max:255',
+    //             'destinations.*.city'           => 'required|string|max:100',
+    //             'destinations.*.state'          => 'required|string|max:100',
+    //             'destinations.*.zip'            => 'required|string|max:20',
+    //             'destinations.*.country'        => 'required|string|max:100',
+    //             'destinations.*.shippingMethod' => 'required',
+    //             'destinations.*.shippingCost'   => 'required|numeric',
+    //             'destinations.*.shippingData'   => 'nullable',
+    //             'destinations.*.products'       => 'required|array|min:1',
+    //             'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
+    //             'destinations.*.products.*.quantity'   => 'required|integer|min:1',
+    //             'products'       => 'required_if:isMultiAddress,false|array|min:1',
+    //             'products.*.product_id' => 'required|integer|exists:products,id',
+    //             'products.*.quantity'   => 'required|integer|min:1',
+    //         ]);
+
+    //         $storeId = current_store_id();
+    //         if (!$storeId) {
+    //             return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
+    //         }
+
+    //         // ===== CURRENCY FETCH =====
+    //         $currencyId = $request->input('selectedCurrency.id');
+    //         $currency = \App\Models\Currency::where('store_id', $storeId)
+    //             ->where('id', $currencyId)
+    //             ->where('enabled', true)
+    //             ->first();
+
+    //         if (!$currency) {
+    //             return response()->json(['status' => false, 'message' => 'Currency not found'], 404);
+    //         }
+
+    //         $exchangeRate = (float) $currency->exchange_rate;
+    //         $currencyCode = $currency->code;
+    //         $currencySymbol = $currency->symbol;
+
+    //         // ===== COUPON FETCH =====
+    //         $discount = 0;
+    //         $couponCode = null;
+
+    //         if (!empty($validated['coupon'])) {
+    //             $coupon = \App\Models\CouponCode::where('store_id', $storeId)
+    //                 ->where('id', $validated['coupon']['id'])
+    //                 ->where('couponCode', $validated['coupon']['couponCode'])
+    //                 ->where('enabled', true)
+    //                 ->first();
+
+    //             if (!$coupon) {
+    //                 return response()->json(['status' => false, 'message' => 'Invalid coupon'], 404);
+    //             }
+
+    //             $discount = (float) $coupon->discountAmount;
+    //             $couponCode = $coupon->couponCode;
+    //         }
+
+    //         $manualDiscount = $validated['manualDiscount'] ?? 0;
+    //         $isMulti = $validated['isMultiAddress'];
+    //         $frontendAmount = (int) $request->input('amount', 0);
+
+    //         $calculatedTotal = 0;
+    //         $matchedRate = null;
+    //         $shippingCost = $validated['shippingCost'] ?? 0;
+    //         $shippingMethod = $validated['shippingMethod'] ?? null;
+    //         $shippingDataToSave = $validated['shippingData'] ?? null;
+
+    //         // Converted discount (coupon only)
+    //         $convertedDiscount = round($discount * $exchangeRate, 6);
+
+    //         // ===== AMOUNT VERIFICATION =====
+    //         if (!$isMulti) {
+    //             $totalWeight = 0;
+    //             $itemCount = 0;
+    //             $baseOrderTotal = 0;
+
+    //             foreach ($validated['products'] as $item) {
+    //                 $product = Product::where('store_id', $storeId)->find($item['product_id']);
+    //                 if ($product) {
+    //                     $convertedPrice = round($product->price * $exchangeRate, 6);
+    //                     $calculatedTotal += $convertedPrice * $item['quantity'];
+
+    //                     $salePrice = $product->getAttribute('sale_price');
+    //                     $normalPrice = $product->getAttribute('price');
+    //                     $unitPrice = $salePrice !== null ? (float) $salePrice : (float) ($normalPrice ?? 0);
+    //                     $baseOrderTotal += $unitPrice * $item['quantity'];
+
+    //                     $productWeight = (float) ($product->getAttribute('weight') ?? 0);
+    //                     $dimensions = $product->dimensions;
+    //                     if (is_string($dimensions)) {
+    //                         $decoded = json_decode($dimensions, true);
+    //                         $dimensions = (json_last_error() === JSON_ERROR_NONE) ? $decoded : [];
+    //                     }
+    //                     if (!is_array($dimensions)) $dimensions = [];
+    //                     $dimensionWeight = (float) ($dimensions['weight'] ?? 0);
+    //                     $weightUsed = $productWeight > 0 ? $productWeight : $dimensionWeight;
+    //                     $totalWeight += $weightUsed * $item['quantity'];
+    //                     $itemCount += $item['quantity'];
+    //                 }
+    //             }
+
+    //             if (!empty($validated['method_id']) && !empty($validated['destination'])) {
+    //                 $packageInfo = [
+    //                     'total_weight'  => round($totalWeight, 2),
+    //                     'weight_unit'   => 'LB',
+    //                     'order_total'   => round($baseOrderTotal, 2),
+    //                     'item_count'    => $itemCount,
+    //                     'package_value' => 0,
+    //                 ];
+
+    //                 $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
+    //                 $ratesResponse = $shippingRateService->getCheckoutShippingRates(
+    //                     $validated['destination'],
+    //                     $packageInfo,
+    //                     $storeId,
+    //                     null,
+    //                     $currency->code
+    //                 );
+
+    //                 $rates = $ratesResponse['rates'] ?? [];
+    //                 foreach ($rates as $rate) {
+    //                     if ((int) $rate['method_id'] === (int) $validated['method_id']) {
+    //                         if (!empty($validated['service_type'])) {
+    //                             if (($rate['service_type'] ?? '') === $validated['service_type']) {
+    //                                 $matchedRate = $rate;
+    //                                 break;
+    //                             }
+    //                         } else {
+    //                             $matchedRate = $rate;
+    //                             break;
+    //                         }
+    //                     }
+    //                 }
+
+    //                 if ($matchedRate) {
+    //                     $shippingCost = (float) $matchedRate['total_charge'];
+    //                     $shippingMethod = $matchedRate['service_type'] ?? $shippingMethod;
+    //                     $shippingDataToSave = $matchedRate['display_name'] ?? $shippingMethod;
+    //                 }
+    //             }
+
+    //             $calculatedTotal += $shippingCost;
+    //             $calculatedTotal -= $convertedDiscount;
+    //             $calculatedTotal -= round($manualDiscount * $exchangeRate, 6);
+    //         } else {
+    //             foreach ($validated['destinations'] as $dest) {
+    //                 foreach ($dest['products'] as $item) {
+    //                     $product = Product::where('store_id', $storeId)->find($item['product_id']);
+    //                     if ($product) {
+    //                         $convertedPrice = round($product->price * $exchangeRate, 6);
+    //                         $calculatedTotal += $convertedPrice * $item['quantity'];
+    //                     }
+    //                 }
+    //                 $calculatedTotal += ($dest['shippingCost'] ?? 0);
+    //             }
+    //             $calculatedTotal -= $convertedDiscount;
+    //             $calculatedTotal -= round($manualDiscount * $exchangeRate, 6);
+    //         }
+
+    //         if ($calculatedTotal < 0) $calculatedTotal = 0;
+
+    //         $calculatedCents = (int) round($calculatedTotal * 100);
+
+    //         if (abs($calculatedCents - $frontendAmount) > 1) {
+    //             return response()->json([
+    //                 'status'     => false,
+    //                 'message'    => 'Amount mismatch. Order cannot be placed.',
+    //                 'calculated' => $calculatedCents,
+    //                 'received'   => $frontendAmount,
+    //             ], 422);
+    //         }
+
+    //         $totalAmountFromPayload = $frontendAmount / 100;
+    //         // ===== AMOUNT VERIFICATION END =====
+
+    //         // ===== BAQI PURA ORIGINAL FLOW =====
+
+    //         $orderEmail = strtolower(trim($validated['email']));
+    //         $currentUser = $request->user('sanctum') ?? auth('sanctum')->user();
+
+    //         if (!$currentUser && $request->bearerToken()) {
+    //             $sanctumToken = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+    //             $currentUser = $sanctumToken?->tokenable;
+    //         }
+
+    //         $currentQuoteToken = null;
+    //         $existingDraft = null;
+
+    //         if ($currentUser) {
+    //             $sessionId = null;
+    //             $currentQuoteToken = $this->cartContext->getCurrentQuoteToken($storeId, $currentUser, $sessionId);
+
+    //             if ($currentQuoteToken) {
+    //                 try {
+    //                     $quotePayload = $this->draftQuote->decode($currentQuoteToken);
+    //                 } catch (\Exception $e) {
+    //                     return response()->json(['status' => false, 'message' => 'Current draft context is invalid or expired.'], 401);
+    //                 }
+
+    //                 $tokenStoreId = (int) ($quotePayload['store_id'] ?? 0);
+    //                 $tokenOrderId = (int) ($quotePayload['order_id'] ?? 0);
+    //                 $tokenUserId  = (int) ($quotePayload['user_id'] ?? 0);
+
+    //                 if ($tokenStoreId !== (int) $storeId || $tokenUserId !== (int) $currentUser->id) {
+    //                     return response()->json(['status' => false, 'message' => 'Draft context does not belong to the authenticated user.'], 403);
+    //                 }
+
+    //                 if ($tokenOrderId > 0) {
+    //                     $existingDraft = Order::query()
+    //                         ->where('id', $tokenOrderId)
+    //                         ->where('store_id', $storeId)
+    //                         ->where('user_id', $currentUser->id)
+    //                         ->where('is_draft', 1)
+    //                         ->first();
+
+    //                     if (!$existingDraft) {
+    //                         return response()->json(['status' => false, 'message' => 'Draft order not found.'], 404);
+    //                     }
+    //                 }
+
+    //                 if ($existingDraft) {
+    //                     $hasActiveDraftItems = Cart::query()
+    //                         ->where('store_id', $storeId)
+    //                         ->where('user_id', $currentUser->id)
+    //                         ->where('quote_token', $currentQuoteToken)
+    //                         ->where('isdraftcart', 1)
+    //                         ->exists();
+
+    //                     if (!$hasActiveDraftItems) {
+    //                         $this->cartContext->setNormalCart($storeId, $currentUser, null);
+    //                         return response()->json(['status' => false, 'message' => 'Draft cart is empty.'], 404);
+    //                     }
+    //                 }
+    //             }
+    //         }
+
+    //         $resolvePrice = function (int $productId, $fallbackPrice) use ($existingDraft) {
+    //             if ($existingDraft) {
+    //                 $row = \App\Models\OrderCartItemProduct::query()
+    //                     ->where('order_id', $existingDraft->id)
+    //                     ->where('product_id', $productId)
+    //                     ->latest('id')
+    //                     ->first();
+    //                 if ($row) return (float) $row->price;
+    //             }
+    //             return (float) $fallbackPrice;
+    //         };
+
+    //         $existingPayment = Payment::where('stripe_session_id', $validated['paymentIntentId'])->first();
+    //         if ($existingPayment) {
+    //             if ($existingPayment->payment_status === 'completed') {
+    //                 $order = Order::with('items.product.images', 'billingInformation', 'customer')->find($existingPayment->order_id);
+    //                 return response()->json(['status' => true, 'message' => 'Order already placed successfully.', 'data' => new OrderResource($order)]);
+    //             }
+    //             return response()->json(['status' => false, 'message' => 'This payment is already being processed.'], 409);
+    //         }
+
+    //         Stripe::setApiKey(config('services.stripe.secret'));
+    //         try {
+    //             $stripeIntent = PaymentIntent::retrieve($validated['paymentIntentId']);
+    //         } catch (\Exception $stripeException) {
+    //             return response()->json(['status' => false, 'message' => 'Unable to verify payment with Stripe.'], 422);
+    //         }
+
+    //         if ($stripeIntent->status !== 'requires_capture') {
+    //             return response()->json(['status' => false, 'message' => 'Payment has not been authorized.', 'payment_status' => $stripeIntent->status], 422);
+    //         }
+
+    //         $user = auth('sanctum')->user();
+    //         $customer = null;
+    //         $isGuest = false;
+
+    //         if ($user) {
+    //             $customer = $user->customer;
+    //         } else {
+    //             $user = User::where('email', $validated['email'])->where('userRole', 2)->where('store_id', $storeId)->first();
+    //             if (!$user) $isGuest = true;
+    //         }
+
+    //         if ($user && !$customer) $customer = $user->customer;
+
+    //         if (!$customer) {
+    //             $primary = $validated['isMultiAddress'] ? $validated['destinations'][0] : $validated;
+    //             $customer = Customer::create([
+    //                 'store_id'       => $storeId,
+    //                 'first_name'     => $primary['firstName'] ?? '',
+    //                 'last_name'      => $primary['lastName'] ?? '',
+    //                 'email'          => $validated['email'],
+    //                 'phone'          => $primary['phone'] ?? null,
+    //                 'company_name'   => $primary['companyName'] ?? null,
+    //                 'address'        => $primary['addressLine1'] ?? '',
+    //                 'address_line_2' => $primary['addressLine2'] ?? null,
+    //                 'city'           => $primary['city'] ?? null,
+    //                 'state'          => $primary['state'] ?? null,
+    //                 'zip'            => $primary['zip'] ?? null,
+    //                 'country'        => $primary['country'] ?? null,
+    //                 'user_type'      => $isGuest ? 'guest' : null,
+    //             ]);
+    //             if ($user) {
+    //                 $user->customer_id = $customer->id;
+    //                 $user->save();
+    //             }
+    //         }
+
+    //         $user = $currentUser;
+    //         if (!$user && $request->bearerToken()) {
+    //             $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+    //             $user = $token?->tokenable;
+    //         }
+
+    //         $orderEmail = strtolower(trim($validated['email'] ?? ''));
+    //         $sessionId  = $request->header('X-Session-ID');
+    //         $userId     = $user?->id;
+
+    //         if ($orderEmail) {
+    //             CouponUsage::where('store_id', $storeId)
+    //                 ->whereRaw('LOWER(email) = ?', [$orderEmail])
+    //                 ->where(function ($q) use ($userId, $sessionId) {
+    //                     if ($userId) $q->orWhere('user_id', $userId);
+    //                     if ($sessionId) $q->orWhere('session_id', $sessionId);
+    //                 })
+    //                 ->update(['user_used' => 1]);
+    //         }
+
+    //         if ($isGuest) {
+    //             try {
+    //                 $store = Store::find($storeId);
+    //                 $frontendUrl = rtrim($store?->base_url ?? '#', '/');
+    //                 $registerLink = $frontendUrl . '/auth/signup';
+    //                 Mail::to($validated['email'])->send(new \App\Mail\GuestAccountMail($customer->first_name, $validated['email'], $registerLink, $storeId));
+    //             } catch (\Exception $mailEx) {
+    //                 Log::error('GUEST ACCOUNT EMAIL FAILED', ['error' => $mailEx->getMessage(), 'email' => $validated['email']]);
+    //             }
+    //         }
+
+    //         if (!$user && !$isGuest) {
+    //             $user = User::where('email', $validated['email'])->first();
+    //         }
+
+    //         $orders = [];
+    //         $totalOrderAmount = 0;
+
+    //         $commonOrderFields = [
+    //             'ip_address'                    => $validated['ipAddress'] ?? $request->ip(),
+    //             'order_place_country'           => $validated['orderPlaceCountry'] ?? null,
+    //             'is_save_address_for_shipping'  => $validated['isSaveAddressForShipping'] ?? false,
+    //             'is_save_address_for_billing'   => $validated['isSaveAddressForBilling'] ?? false,
+    //             'billing_same'                  => $validated['billingSame'] ?? true,
+    //         ];
+
+    //         $draftConvertFields = [
+    //             'is_draft'   => 0,
+    //             'isdrafturl' => null,
+    //         ];
+
+    //         if (!$isMulti) {
+    //             $totalAmount = $totalAmountFromPayload;
+
+    //             $billing = BillingInformation::create([
+    //                 'store_id'        => $storeId,
+    //                 'first_name'      => $validated['firstName'],
+    //                 'last_name'       => $validated['lastName'],
+    //                 'customer_id'     => $customer->id,
+    //                 'company_name'    => $validated['companyName'] ?? null,
+    //                 'email'           => $validated['email'],
+    //                 'phone'           => $validated['phone'] ?? null,
+    //                 'address_line_1'  => $validated['addressLine1'],
+    //                 'address_line_2'  => $validated['addressLine2'] ?? null,
+    //                 'city'            => $validated['city'] ?? null,
+    //                 'state'           => $validated['state'] ?? null,
+    //                 'zip'             => $validated['zip'] ?? null,
+    //                 'country'         => $validated['country'] ?? null,
+    //                 'payment_method'  => $validated['paymentMethod'],
+    //                 'shipping_method' => $shippingMethod,
+    //                 'shipping_data'   => $shippingDataToSave,
+    //             ]);
+
+    //             $orderPayload = array_merge([
+    //                 'store_id'               => $storeId,
+    //                 'user_id'                => $user?->id ?? $existingDraft?->user_id,
+    //                 'customer_id'            => $customer->id,
+    //                 'billing_information_id' => $billing->id,
+    //                 'status'                 => 'Awaiting Payment',
+    //                 'shipping_cost'          => $shippingCost,
+    //                 'comments'               => $validated['comments'] ?? null,
+    //                 'device_type'            => $validated['deviceType'] ?? null,
+    //                 'user_type'              => $isGuest ? 'guest' : ($validated['userType'] ?? null),
+    //                 'total_amount'           => $totalAmount,
+    //                 'currency_code'          => $currencyCode,
+    //                 'currency_symbol'        => $currencySymbol,
+    //                 'exchange_rate'          => $exchangeRate,
+    //                 'discountAmount'         => $convertedDiscount,   // converted coupon amount
+    //                 'manualDiscount'         => $manualDiscount,
+    //                 'coupon_code'            => $couponCode,
+    //                 'is_multi_address'       => false,
+    //                 'newsletter'             => $validated['newsletter'] ?? false,
+    //             ], $commonOrderFields);
+
+    //             if ($existingDraft) {
+    //                 $existingDraft->items()->delete();
+    //                 $existingDraft->update(array_merge($orderPayload, $draftConvertFields));
+    //                 $order = $existingDraft->fresh();
+    //             } else {
+    //                 $order = Order::create(array_merge($orderPayload, ['order_number' => '']));
+    //                 $order->update(['order_number' => $order->id]);
+    //             }
+
+    //             foreach ($validated['products'] as $item) {
+    //                 $product = Product::find($item['product_id']);
+    //                 if ($product) {
+    //                     $order->items()->create([
+    //                         'store_id'   => $storeId,
+    //                         'product_id' => $product->id,
+    //                         'quantity'   => $item['quantity'],
+    //                         'price'      => $resolvePrice($product->id, $product->price) * $exchangeRate,
+    //                     ]);
+    //                     $product->decrement('current_stock', $item['quantity']);
+    //                 }
+    //             }
+
+    //             $orders[] = $order;
+    //             $totalOrderAmount = $totalAmount;
+    //         } else {
+    //             $destIndex = 0;
+    //             foreach ($validated['destinations'] as $dest) {
+    //                 $totalAmount = $totalAmountFromPayload;
+
+    //                 $billing = BillingInformation::create([
+    //                     'store_id'        => $storeId,
+    //                     'first_name'      => $dest['firstName'],
+    //                     'last_name'       => $dest['lastName'],
+    //                     'customer_id'     => $customer->id,
+    //                     'company_name'    => $dest['companyName'] ?? null,
+    //                     'email'           => $validated['email'],
+    //                     'phone'           => $dest['phone'] ?? null,
+    //                     'address_line_1'  => $dest['addressLine1'],
+    //                     'address_line_2'  => $dest['addressLine2'] ?? null,
+    //                     'city'            => $dest['city'],
+    //                     'state'           => $dest['state'],
+    //                     'zip'             => $dest['zip'],
+    //                     'country'         => $dest['country'],
+    //                     'payment_method'  => $validated['paymentMethod'],
+    //                     'shipping_method' => $dest['shippingMethod'],
+    //                     'shipping_data'   => $dest['shippingData'] ?? null,
+    //                 ]);
+
+    //                 $orderPayload = array_merge([
+    //                     'store_id'               => $storeId,
+    //                     'user_id'                => $user?->id ?? $existingDraft?->user_id,
+    //                     'customer_id'            => $customer->id,
+    //                     'billing_information_id' => $billing->id,
+    //                     'status'                 => 'Awaiting Payment',
+    //                     'shipping_cost'          => $dest['shippingCost'],
+    //                     'comments'               => $validated['comments'] ?? null,
+    //                     'device_type'            => $validated['deviceType'] ?? null,
+    //                     'user_type'              => $isGuest ? 'guest' : ($validated['userType'] ?? null),
+    //                     'total_amount'           => $totalAmount,
+    //                     'currency_code'          => $currencyCode,
+    //                     'currency_symbol'        => $currencySymbol,
+    //                     'exchange_rate'          => $exchangeRate,
+    //                     'discountAmount'         => $convertedDiscount,   // converted coupon amount
+    //                     'manualDiscount'         => $manualDiscount,
+    //                     'coupon_code'            => $couponCode,
+    //                     'is_multi_address'       => true,
+    //                     'newsletter'             => $validated['newsletter'] ?? false,
+    //                 ], $commonOrderFields);
+
+    //                 if ($existingDraft && $destIndex === 0) {
+    //                     $existingDraft->items()->delete();
+    //                     $existingDraft->update(array_merge($orderPayload, $draftConvertFields));
+    //                     $order = $existingDraft->fresh();
+    //                 } else {
+    //                     $order = Order::create(array_merge($orderPayload, ['order_number' => '']));
+    //                     $order->update(['order_number' => $order->id]);
+    //                 }
+
+    //                 foreach ($dest['products'] as $item) {
+    //                     $product = Product::find($item['product_id']);
+    //                     if ($product) {
+    //                         $order->items()->create([
+    //                             'store_id'   => $storeId,
+    //                             'product_id' => $product->id,
+    //                             'quantity'   => $item['quantity'],
+    //                             'price'      => $resolvePrice($product->id, $product->price) * $exchangeRate,
+    //                         ]);
+    //                         $product->decrement('current_stock', $item['quantity']);
+    //                     }
+    //                 }
+
+    //                 $orders[] = $order;
+    //                 $totalOrderAmount += $totalAmount;
+    //                 $destIndex++;
+    //             }
+    //         }
+
+    //         // Stripe billing details
+    //         $stripeBillingDetails = null;
+    //         try {
+    //             \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+    //             $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId']);
+    //             if ($stripeIntent->payment_method) {
+    //                 $paymentMethod = \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method);
+    //                 if ($paymentMethod->billing_details) {
+    //                     $bd = $paymentMethod->billing_details;
+    //                     $stripeBillingDetails = [
+    //                         'name'         => $bd->name ?? null,
+    //                         'email'        => $bd->email ?? null,
+    //                         'phone'        => $bd->phone ?? null,
+    //                         'addressLine1' => $bd->address->line1 ?? null,
+    //                         'addressLine2' => $bd->address->line2 ?? null,
+    //                         'city'         => $bd->address->city ?? null,
+    //                         'state'        => $bd->address->state ?? null,
+    //                         'zip'          => $bd->address->postal_code ?? null,
+    //                         'country'      => $bd->address->country ?? null,
+    //                     ];
+    //                 }
+    //             }
+    //         } catch (\Exception $stripeEx) {
+    //             Log::warning('Could not fetch Stripe billing details: ' . $stripeEx->getMessage());
+    //         }
+
+    //         if ($stripeBillingDetails) {
+    //             foreach ($orders as $ord) {
+    //                 $ord->update(['billing_address' => $stripeBillingDetails]);
+    //             }
+    //         }
+
+    //         // Saved addresses
+    //         $shippingData = null;
+    //         if ($validated['isSaveAddressForShipping'] ?? false) {
+    //             $shippingData = $isMulti ? $validated['destinations'][0] : [
+    //                 'firstName'    => $validated['firstName'] ?? null,
+    //                 'lastName'     => $validated['lastName'] ?? null,
+    //                 'companyName'  => $validated['companyName'] ?? null,
+    //                 'phone'        => $validated['phone'] ?? null,
+    //                 'addressLine1' => $validated['addressLine1'] ?? null,
+    //                 'addressLine2' => $validated['addressLine2'] ?? null,
+    //                 'city'         => $validated['city'] ?? null,
+    //                 'state'        => $validated['state'] ?? null,
+    //                 'zip'          => $validated['zip'] ?? null,
+    //                 'country'      => $validated['country'] ?? null,
+    //             ];
+    //         }
+
+    //         $billingData = null;
+    //         if ($validated['isSaveAddressForBilling'] ?? false) {
+    //             $billingData = $stripeBillingDetails ?? [
+    //                 'name'         => ($validated['firstName'] ?? '') . ' ' . ($validated['lastName'] ?? ''),
+    //                 'email'        => $validated['email'] ?? null,
+    //                 'phone'        => $validated['phone'] ?? null,
+    //                 'addressLine1' => $validated['addressLine1'] ?? null,
+    //                 'addressLine2' => $validated['addressLine2'] ?? null,
+    //                 'city'         => $validated['city'] ?? null,
+    //                 'state'        => $validated['state'] ?? null,
+    //                 'zip'          => $validated['zip'] ?? null,
+    //                 'country'      => $validated['country'] ?? null,
+    //             ];
+    //         }
+
+    //         if (($shippingData || $billingData) && $user) {
+    //             SavedAddress::create([
+    //                 'store_id'         => $storeId,
+    //                 'user_id'          => $user->id,
+    //                 'order_id'         => $orders[0]->id,
+    //                 'shipping_address' => $shippingData,
+    //                 'billing_address'  => $billingData,
+    //             ]);
+    //         }
+
+    //         // Risk data
+    //         $riskData = ['risk_score' => null, 'risk_level' => 'normal'];
+    //         try {
+    //             \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+    //             $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']]);
+    //             if (empty($freshIntent->latest_charge)) {
+    //                 usleep(800000);
+    //                 $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']]);
+    //             }
+    //             $charge = null;
+    //             if (!empty($freshIntent->latest_charge)) {
+    //                 $charge = is_string($freshIntent->latest_charge)
+    //                     ? \Stripe\Charge::retrieve($freshIntent->latest_charge, ['expand' => ['outcome', 'review']])
+    //                     : $freshIntent->latest_charge;
+    //             }
+    //             $score = null;
+    //             $level = null;
+    //             if ($charge && !empty($charge->outcome)) {
+    //                 $score = isset($charge->outcome->risk_score) ? (int) $charge->outcome->risk_score : null;
+    //                 $level = $charge->outcome->risk_level ?? null;
+    //             }
+    //             $riskData = ['risk_score' => $score, 'risk_level' => $level ?: 'normal'];
+    //         } catch (\Exception $e) {
+    //             \Log::warning('Could not fetch Stripe risk data: ' . $e->getMessage());
+    //         }
+
+    //         Payment::create(array_merge([
+    //             'order_id'          => $orders[0]->id,
+    //             'stripe_session_id' => $validated['paymentIntentId'],
+    //             'amount'            => $totalOrderAmount,
+    //             'discountAmount'    => $convertedDiscount,
+    //             'payment_status'    => 'authorized',
+    //         ], $riskData));
+
+    //         foreach ($orders as $ord) {
+    //             $ord->load('billingInformation');
+    //             OrderTimeline::addEvent($ord->id, $storeId, 'order_created', 'Order created', ['status' => $ord->status], 'dot');
+    //             OrderTimeline::addEvent($ord->id, $storeId, 'status_changed', 'Order status changed', ['previous_status' => 'Incomplete', 'new_status' => $ord->status], 'dot');
+    //             OrderTimeline::addEvent($ord->id, $storeId, 'shipping_quote', 'Shipping quote persisted', [
+    //                 'shipping_cost'   => $currencySymbol . number_format($ord->shipping_cost, 2),
+    //                 'shipping_method' => $ord->billingInformation->shipping_method ?? null,
+    //             ], 'dot');
+    //             OrderTimeline::addEvent($ord->id, $storeId, 'order_confirmed', 'Order confirmed', [], 'dot');
+    //             OrderTimeline::addEvent($ord->id, $storeId, 'payment_authorized', 'Payment authorized', [
+    //                 'source'         => ucwords(str_replace('_', ' ', $validated['paymentMethod'] ?? 'N/A')),
+    //                 'amount'         => $currencySymbol . number_format($ord->total_amount, 2),
+    //                 'payment_intent' => $validated['paymentIntentId'] ?? null,
+    //             ], 'payment');
+    //         }
+
+    //         foreach ($orders as $order) {
+    //             $order->load('items.product.images', 'billingInformation', 'customer');
+    //         }
+
+    //         try {
+    //             foreach ($orders as $ord) {
+    //                 $ord->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
+    //                 Mail::to($validated['email'])->send(new OrderPlacedMail($ord, $customer, $storeId));
+    //                 $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
+    //                 Mail::to($adminEmail)->send(new OrderPlacedMail($ord, $customer, $storeId));
+    //             }
+    //         } catch (\Exception $mailError) {
+    //             Log::error('ORDER EMAIL FAILED', ['error' => $mailError->getMessage()]);
+    //         }
+
+    //         // Cart clear
+    //         try {
+    //             $cartUser = $request->user('sanctum') ?? auth('sanctum')->user();
+    //             if (!$cartUser && $request->bearerToken()) {
+    //                 $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+    //                 $cartUser = $token?->tokenable;
+    //             }
+    //             if ($cartUser) {
+    //                 if ($existingDraft) {
+    //                     $draftQuoteToken = $currentQuoteToken;
+    //                     if ($draftQuoteToken) {
+    //                         \App\Models\Cart::query()
+    //                             ->where('store_id', $storeId)
+    //                             ->where('user_id', $cartUser->id)
+    //                             ->where('quote_token', $draftQuoteToken)
+    //                             ->where('isdraftcart', 1)
+    //                             ->delete();
+    //                         $sessionId = $cartUser ? null : $request->header('X-Session-ID');
+    //                         $this->cartContext->setNormalCart($storeId, $cartUser, $sessionId);
+    //                     }
+    //                 } else {
+    //                     \App\Models\Cart::query()
+    //                         ->where('store_id', $storeId)
+    //                         ->where('user_id', $cartUser->id)
+    //                         ->where(function ($q) {
+    //                             $q->whereNull('quote_token')->orWhere('quote_token', '');
+    //                         })
+    //                         ->where(function ($q) {
+    //                             $q->where('isdraftcart', 0)->orWhereNull('isdraftcart');
+    //                         })
+    //                         ->delete();
+    //                     $sessionId = $cartUser ? null : $request->header('X-Session-ID');
+    //                     $this->cartContext->setNormalCart($storeId, $cartUser, $sessionId);
+    //                 }
+    //             } else {
+    //                 $cartSessionId = $request->header('X-Session-ID');
+    //                 if (!empty($cartSessionId)) {
+    //                     \App\Models\Cart::query()
+    //                         ->where('store_id', $storeId)
+    //                         ->where('session_id', $cartSessionId)
+    //                         ->whereNull('user_id')
+    //                         ->where(function ($q) {
+    //                             $q->whereNull('quote_token')->orWhere('quote_token', '');
+    //                         })
+    //                         ->where(function ($q) {
+    //                             $q->where('isdraftcart', 0)->orWhereNull('isdraftcart');
+    //                         })
+    //                         ->delete();
+    //                 }
+    //             }
+    //         } catch (\Exception $cartEx) {
+    //             Log::warning('CART CLEAR AFTER ORDER FAILED', [
+    //                 'error' => $cartEx->getMessage(),
+    //                 'store_id' => $storeId,
+    //                 'order_ids' => collect($orders)->pluck('id'),
+    //             ]);
+    //         }
+
+    //         // Checkout form clear
+    //         try {
+    //             $checkoutUser = $currentUser;
+    //             $checkoutSessionId = $request->header('X-Session-ID');
+    //             $checkoutQuery = CheckoutFormData::query()->where('store_id', $storeId);
+    //             if ($checkoutUser) {
+    //                 $checkoutQuery->where('user_id', $checkoutUser->id);
+    //             } elseif (!empty($checkoutSessionId)) {
+    //                 $checkoutQuery->whereNull('user_id')->where('session_id', $checkoutSessionId);
+    //             } else {
+    //                 $checkoutQuery = null;
+    //             }
+    //             if ($checkoutQuery) {
+    //                 $checkoutQuery->where(function ($query) use ($existingDraft, $currentQuoteToken) {
+    //                     $query->where(function ($normalQuery) {
+    //                         $normalQuery->whereNull('quote_token')->orWhere('quote_token', '');
+    //                     });
+    //                     if ($existingDraft && $currentQuoteToken) {
+    //                         $query->orWhere('quote_token', $currentQuoteToken);
+    //                     }
+    //                 });
+    //                 $deletedCount = $checkoutQuery->delete();
+    //                 Log::info('Checkout form data cleared after order placement', [
+    //                     'store_id' => $storeId,
+    //                     'user_id' => $checkoutUser?->id,
+    //                     'session_id' => $checkoutSessionId,
+    //                     'deleted_count' => $deletedCount,
+    //                     'order_ids' => collect($orders)->pluck('id')->all(),
+    //                 ]);
+    //             }
+    //         } catch (\Throwable $checkoutEx) {
+    //             Log::error('Failed to clear checkout form data after order placement', [
+    //                 'store_id' => $storeId,
+    //                 'user_id' => $currentUser?->id,
+    //                 'error' => $checkoutEx->getMessage(),
+    //             ]);
+    //         }
+
+    //         return response()->json([
+    //             'status'  => true,
+    //             'message' => 'Order placed successfully.',
+    //             'data'    => OrderResource::collection($orders),
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Order creation failed',
+    //             'error'   => $e->getMessage(),
+    //             'line'    => $e->getLine(),
+    //             'file'    => $e->getFile(),
+    //         ], 500);
+    //     }
+    // }
+
     public function store(Request $request)
     {
         try {
@@ -1463,6 +2264,9 @@ class OrderController extends Controller
             $orders = [];
             $totalOrderAmount = 0;
 
+            // Centralized, tenant-specific customer-facing order numbering.
+            $numberGenerator = app(\App\Services\OrderNumberGenerator::class);
+
             $commonOrderFields = [
                 'ip_address'                    => $validated['ipAddress'] ?? $request->ip(),
                 'order_place_country'           => $validated['orderPlaceCountry'] ?? null,
@@ -1521,12 +2325,23 @@ class OrderController extends Controller
 
                 if ($existingDraft) {
                     $existingDraft->items()->delete();
-                    $existingDraft->update(array_merge($orderPayload, $draftConvertFields));
+                    // Clear any legacy ID-based number before assigning the real sequence.
+                    $existingDraft->update(array_merge(
+                        $orderPayload,
+                        $draftConvertFields,
+                        ['order_number' => null]
+                    ));
                     $order = $existingDraft->fresh();
                 } else {
-                    $order = Order::create(array_merge($orderPayload, ['order_number' => '']));
-                    $order->update(['order_number' => $order->id]);
+                    $order = Order::create(array_merge(
+                        $orderPayload,
+                        ['order_number' => null]
+                    ));
                 }
+
+                // Drafts receive a customer-facing number only when checkout is processed.
+                $numberGenerator->assign($order, (int) $storeId);
+                $order->refresh();
 
                 foreach ($validated['products'] as $item) {
                     $product = Product::find($item['product_id']);
@@ -1590,12 +2405,23 @@ class OrderController extends Controller
 
                     if ($existingDraft && $destIndex === 0) {
                         $existingDraft->items()->delete();
-                        $existingDraft->update(array_merge($orderPayload, $draftConvertFields));
+                        // Clear any legacy ID-based number before assigning the real sequence.
+                        $existingDraft->update(array_merge(
+                            $orderPayload,
+                            $draftConvertFields,
+                            ['order_number' => null]
+                        ));
                         $order = $existingDraft->fresh();
                     } else {
-                        $order = Order::create(array_merge($orderPayload, ['order_number' => '']));
-                        $order->update(['order_number' => $order->id]);
+                        $order = Order::create(array_merge(
+                            $orderPayload,
+                            ['order_number' => null]
+                        ));
                     }
+
+                    // Each destination is a separate actual order and gets its own number.
+                    $numberGenerator->assign($order, (int) $storeId);
+                    $order->refresh();
 
                     foreach ($dest['products'] as $item) {
                         $product = Product::find($item['product_id']);
@@ -1976,6 +2802,7 @@ class OrderController extends Controller
             ], 500);
         }
     }
+
 
     public function calculate(Request $request)
     {
@@ -3101,25 +3928,60 @@ class OrderController extends Controller
         ]);
     }
 
+    // public function createDraftOrder(Request $request)
+    // {
+    //     $validated = $request->validate([
+    //         'channel' => 'required|string|max:255',
+    //     ]);
+
+    //     $user = auth('sanctum')->user();
+
+    //     $order = Order::create([
+    //         'store_id'     => current_store_id(),
+    //         'user_id'      => $user?->id,
+    //         'session_id'   => $user ? null : session()->getId(),
+    //         'order_number' => '',
+    //         'status'       => 'Draft',
+    //         'is_draft'     => true,
+    //         'channel'      => $validated['channel'],
+    //     ]);
+    //     $order->update([
+    //         'order_number' => $order->id,
+    //     ]);
+
+    //     return response()->json([
+    //         'status'  => true,
+    //         'message' => 'Draft order created.',
+    //         'data'    => new OrderResource($order),
+    //     ]);
+    // }
+
+
     public function createDraftOrder(Request $request)
     {
         $validated = $request->validate([
             'channel' => 'required|string|max:255',
         ]);
 
+        $storeId = current_store_id();
+
+        if (!$storeId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store not selected.',
+            ], 400);
+        }
+
         $user = auth('sanctum')->user();
 
         $order = Order::create([
-            'store_id'     => current_store_id(),
+            'store_id'     => $storeId,
             'user_id'      => $user?->id,
             'session_id'   => $user ? null : session()->getId(),
-            'order_number' => '',
+            'order_number' => null,
             'status'       => 'Draft',
             'is_draft'     => true,
             'channel'      => $validated['channel'],
-        ]);
-        $order->update([
-            'order_number' => $order->id,
         ]);
 
         return response()->json([
@@ -3128,6 +3990,7 @@ class OrderController extends Controller
             'data'    => new OrderResource($order),
         ]);
     }
+
 
     public function deleteDraftOrder($id)
     {
