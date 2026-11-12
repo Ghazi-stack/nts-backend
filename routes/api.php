@@ -37,7 +37,8 @@ use App\Http\Controllers\api\Admin\{
     ReturnSettingController,
     OrderStatusController,
     LocalizationController,
-    PromotionSettingController
+    PromotionSettingController,
+    PaymentSettingsController
 };
 use App\Http\Controllers\api\Web\{
     CartController,
@@ -178,6 +179,40 @@ Route::prefix('dashboard')->middleware([
     'tenant.database',
     'auth:sanctum'
 ])->group(function () {
+
+
+    Route::middleware(['auth:sanctum'])->prefix('payment-settings')->group(function () {
+
+        // Retrieve all payment methods.
+        Route::get('/', [
+            PaymentSettingsController::class,
+            'index'
+        ]);
+
+        // Retrieve individual payment method.
+        Route::get('/{methodCode}', [
+            PaymentSettingsController::class,
+            'show'
+        ]);
+
+        // Save payment configuration.
+        Route::post('/{methodCode}', [
+            PaymentSettingsController::class,
+            'save'
+        ]);
+
+        // Enable payment method.
+        Route::patch('/{methodCode}/enable', [
+            PaymentSettingsController::class,
+            'enable'
+        ]);
+
+        // Disable payment method.
+        Route::patch('/{methodCode}/disable', [
+            PaymentSettingsController::class,
+            'disable'
+        ]);
+    });
 
     // Settings -> Localization
     Route::prefix('settings/localization')->group(function () {
