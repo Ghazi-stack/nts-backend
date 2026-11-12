@@ -91,26 +91,33 @@ class StaffLogController extends Controller
             ->orderBy('logged_at', 'desc')
             ->orderBy('id', 'desc');
 
-        // Optional filters
+        // Severity filter
+        if ($request->filled('severity')) {
+            $query->where('severity', $request->severity);
+        }
+
+        // Type filter
+        if ($request->filled('type')) {
+            $query->where('type', $request->type);
+        }
+
+        // Order ID filter
         if ($request->filled('order_id')) {
             $query->where('order_id', $request->order_id);
         }
 
-        if ($request->filled('type')) {
-            $query->where('type', $request->type); // Shipping quote / Payment gateway
-        }
-
-        if ($request->filled('severity')) {
-            $query->where('severity', $request->severity); // success / notice
-        }
-
+        // Email filter
         if ($request->filled('email')) {
             $query->where('email', 'like', '%' . $request->email . '%');
         }
 
+        // Search (summary pe)
+        if ($request->filled('search')) {
+            $query->where('summary', 'like', '%' . $request->search . '%');
+        }
+
         $perPage = $request->input('per_page', 20);
 
-        // Index pe sirf table columns
         $logs = $query->select([
             'id',
             'severity',
