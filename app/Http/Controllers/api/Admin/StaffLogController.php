@@ -155,29 +155,35 @@ class StaffLogController extends Controller
         // ===================== SHIPPING QUOTE =====================
         if ($log->type === 'Shipping quote') {
             $logData = $log->log_data ?? [];
+            $allRates = $logData['carrier_quotes'] ?? [];
 
             $data['request'] = $logData['request'] ?? null;
 
-            // Saare rates (pehle jaisa full data)
-            $data['carrier_quotes'] = $logData['carrier_quotes'] ?? [];
-
-            // Settings — FedEx ke liye list, baaki empty
             $moduleName = $log->module;
+            $filteredRates = [];
+
             if ($moduleName === 'FedEx (fedex)') {
-                $data['settings'] = [
-                    'deliveryServices' => collect($data['carrier_quotes'])
-                        ->pluck('service_type')
-                        ->filter()
-                        ->unique()
-                        ->values()
-                        ->all(),
-                ];
+                // Sirf FedEx rates
+                $filteredRates = collect($allRates)->where('is_fedex', true)->values()->all();
             } else {
-                $data['settings'] = [
-                    'deliveryServices' => [],
-                ];
+                // Sirf matching module ka rate
+                $filteredRates = collect($allRates)->where('display_name', $moduleName)->values()->all();
             }
+
+            if (empty($filteredRates) && !empty($allRates)) {
+                $filteredRates = [$allRates[0]];
+            }
+
+            $data['carrier_quotes'] = $filteredRates;
+
+            // Settings
+            $data['settings'] = [
+                'deliveryServices' => $moduleName === 'FedEx (fedex)'
+                    ? collect($filteredRates)->pluck('service_type')->filter()->unique()->values()->all()
+                    : [],
+            ];
         }
+        
         // ===================== PAYMENT =====================
         if ($log->type === 'Payment gateway') {
             $payment = $log->log_data ?? [];
