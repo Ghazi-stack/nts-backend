@@ -65,22 +65,18 @@ class NewsletterController extends Controller
         $user = auth('sanctum')->user();
         $name = $user ? $user->name : null;
 
-        // Soft deleted record check karo
         $existing = Newsletter::withTrashed()
             ->where('store_id', $storeId)
             ->where('email', $request->email)
             ->first();
 
         if ($existing && $existing->trashed()) {
-            // Soft deleted tha → restore + update
             $existing->restore();
             $existing->update([
                 'name' => $name,
             ]);
-
             $newsletter = $existing;
         } else {
-            // Naya record banao
             $newsletter = Newsletter::create([
                 'store_id' => $storeId,
                 'email'    => $request->email,
@@ -120,7 +116,7 @@ class NewsletterController extends Controller
                 'logged_at'     => now(),
             ];
 
-            // 1. Pehla log — isme detail aayega
+            // 1. Pehla log — detail mein duplicate message aayega
             \App\Models\SystemLog::create(array_merge($common, [
                 'severity' => 'success',
                 'summary'  => 'Subscriber ' . $email . ' stored for export.',
@@ -131,7 +127,7 @@ class NewsletterController extends Controller
                 ],
             ]));
 
-            // 2. Dusra log — isme detail nahi aayega
+            // 2. Dusra log — detail nahi aayega
             \App\Models\SystemLog::create(array_merge($common, [
                 'severity' => 'success',
                 'summary'  => 'Subscriber ' . $email . ' stored for export.',

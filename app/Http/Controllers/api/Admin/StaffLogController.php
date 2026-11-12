@@ -172,7 +172,6 @@ class StaffLogController extends Controller
                 $filteredRates = [$allRates[0]];
             }
 
-            // Sirf yeh fields rakho
             $data['carrier_quotes'] = collect($filteredRates)->map(function ($rate) {
                 return [
                     'currency'      => $rate['currency'] ?? null,
@@ -189,7 +188,6 @@ class StaffLogController extends Controller
                 ];
             })->values()->all();
 
-            // Settings
             $data['settings'] = [
                 'deliveryServices' => $moduleName === 'FedEx (fedex)'
                     ? collect($filteredRates)->pluck('service_type')->filter()->unique()->values()->all()
@@ -208,6 +206,17 @@ class StaffLogController extends Controller
             if ($log->severity === 'notice') {
                 $data['detail'] = $payment['message'] ?? 'Additional payment step required';
             }
+        }
+
+        // ===================== EMAIL INTEGRATION =====================
+        if ($log->type === 'Email integration') {
+            $logData = $log->log_data ?? [];
+
+            if (!empty($logData['has_detail'])) {
+                $data['detail'] = $logData['message'] ?? null;
+            }
+
+            $data['email'] = $logData['email'] ?? $log->email;
         }
 
         return response()->json([
