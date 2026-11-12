@@ -163,10 +163,8 @@ class StaffLogController extends Controller
             $filteredRates = [];
 
             if ($moduleName === 'FedEx (fedex)') {
-                // Sirf FedEx rates
                 $filteredRates = collect($allRates)->where('is_fedex', true)->values()->all();
             } else {
-                // Sirf matching module ka rate
                 $filteredRates = collect($allRates)->where('display_name', $moduleName)->values()->all();
             }
 
@@ -174,7 +172,22 @@ class StaffLogController extends Controller
                 $filteredRates = [$allRates[0]];
             }
 
-            $data['carrier_quotes'] = $filteredRates;
+            // Sirf yeh fields rakho
+            $data['carrier_quotes'] = collect($filteredRates)->map(function ($rate) {
+                return [
+                    'currency'      => $rate['currency'] ?? null,
+                    'is_fedex'      => $rate['is_fedex'] ?? false,
+                    'method_id'     => $rate['method_id'] ?? null,
+                    'rate_type'     => $rate['rate_type'] ?? null,
+                    'method_type'   => $rate['method_type'] ?? null,
+                    'delivery_day'  => $rate['delivery_day'] ?? null,
+                    'display_name'  => $rate['display_name'] ?? null,
+                    'service_name'  => $rate['service_name'] ?? null,
+                    'service_type'  => $rate['service_type'] ?? null,
+                    'total_charge'  => $rate['total_charge'] ?? 0,
+                    'delivery_date' => $rate['delivery_date'] ?? null,
+                ];
+            })->values()->all();
 
             // Settings
             $data['settings'] = [
@@ -183,7 +196,7 @@ class StaffLogController extends Controller
                     : [],
             ];
         }
-        
+
         // ===================== PAYMENT =====================
         if ($log->type === 'Payment gateway') {
             $payment = $log->log_data ?? [];
