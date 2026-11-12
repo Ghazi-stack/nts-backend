@@ -54,7 +54,6 @@ class NewsletterController extends Controller
             'email' => [
                 'required',
                 'email',
-                // Sirf active (non-deleted) records check karega
                 Rule::unique('newsletters')
                     ->where(function ($query) use ($storeId) {
                         return $query->where('store_id', $storeId)
@@ -104,6 +103,48 @@ class NewsletterController extends Controller
                 'error'          => $e->getMessage(),
             ]);
         }
+
+        // ===================== NEWSLETTER SYSTEM LOGS =====================
+        try {
+            $email = strtolower(trim($request->email));
+
+            $common = [
+                'store_id'      => $storeId,
+                'order_id'      => null,
+                'customer_id'   => null,
+                'user_id'       => $user?->id,
+                'type'          => 'Email integration',
+                'module'        => 'Subscribers',
+                'customer_type' => null,
+                'email'         => $email,
+                'logged_at'     => now(),
+            ];
+
+            // 1. Pehla log — isme detail aayega
+            \App\Models\SystemLog::create(array_merge($common, [
+                'severity' => 'success',
+                'summary'  => 'Subscriber ' . $email . ' stored for export.',
+                'log_data' => [
+                    'email'      => $email,
+                    'message'    => 'A duplicate subscriber with the email: ' . $email . ' was found',
+                    'has_detail' => true,
+                ],
+            ]));
+
+            // 2. Dusra log — isme detail nahi aayega
+            \App\Models\SystemLog::create(array_merge($common, [
+                'severity' => 'success',
+                'summary'  => 'Subscriber ' . $email . ' stored for export.',
+                'log_data' => [
+                    'email'      => $email,
+                    'message'    => null,
+                    'has_detail' => false,
+                ],
+            ]));
+        } catch (\Throwable $logEx) {
+            \Log::warning('Newsletter system log failed', ['error' => $logEx->getMessage()]);
+        }
+        // ===================== END =====================
 
         return response()->json([
             'status'  => true,
