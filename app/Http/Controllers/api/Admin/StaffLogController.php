@@ -152,38 +152,49 @@ class StaffLogController extends Controller
             'date'     => $log->logged_at?->format('jS M Y @ h:i A'),
         ];
 
-        // Shipping — jo table mein save hua wahi
+        // ===================== SHIPPING QUOTE =====================
         if ($log->type === 'Shipping quote') {
             $logData = $log->log_data ?? [];
+            $allRates = $logData['carrier_quotes'] ?? [];
 
             $data['request'] = $logData['request'] ?? null;
 
-            // Carrier quotes bilkul wahi jo rates API se aaye the
-            $data['carrier_quotes'] = collect($logData['carrier_quotes'] ?? [])->map(function ($rate) {
-                return [
-                    'display_name'  => $rate['display_name'] ?? null,
-                    'service_type'  => $rate['service_type'] ?? null,
-                    'total_charge'  => $rate['total_charge'] ?? 0,
-                    'currency'      => $rate['currency'] ?? null,
-                    'transit_days'  => $rate['transit_days'] ?? null,
-                    'delivery_date' => $rate['delivery_date'] ?? null,
-                    'is_fedex'      => $rate['is_fedex'] ?? false,
-                    'method_id'     => $rate['method_id'] ?? null,
-                    'method_type'   => $rate['method_type'] ?? null,
-                ];
+            // Sirf is module wala rate nikaalo
+            $moduleName = $log->module;
+            $matchedQuotes = collect($allRates)->filter(function ($rate) use ($moduleName) {
+                $display = $rate['display_name'] ?? '';
+                // FedEx case — saare FedEx rates
+                if ($moduleName === 'FedEx (fedex)' && !empty($rate['is_fedex'])) {
+                    return true;
+                }
+                // Baaki methods — exact match
+                return $display === $moduleName;
             })->values()->all();
 
-            $data['settings'] = [
-                'deliveryServices' => collect($logData['carrier_quotes'] ?? [])
-                    ->pluck('service_type')
-                    ->filter()
-                    ->unique()
-                    ->values()
-                    ->all(),
-            ];
+            if (empty($matchedQuotes) && !empty($allRates)) {
+                $matchedQuotes = [$allRates[0]];
+            }
+
+            $data['carrier_quotes'] = $matchedQuotes;
+
+            // Settings — FedEx ke liye list, baaki empty
+            if ($moduleName === 'FedEx (fedex)') {
+                $data['settings'] = [
+                    'deliveryServices' => collect($matchedQuotes)
+                        ->pluck('service_type')
+                        ->filter()
+                        ->unique()
+                        ->values()
+                        ->all(),
+                ];
+            } else {
+                $data['settings'] = [
+                    'deliveryServices' => [],
+                ];
+            }
         }
 
-        // Payment — table se hi
+        // ===================== PAYMENT =====================
         if ($log->type === 'Payment gateway') {
             $payment = $log->log_data ?? [];
 
