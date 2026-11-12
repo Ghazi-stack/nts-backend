@@ -155,39 +155,17 @@ class StaffLogController extends Controller
         // ===================== SHIPPING QUOTE =====================
         if ($log->type === 'Shipping quote') {
             $logData = $log->log_data ?? [];
-            $allRates = $logData['carrier_quotes'] ?? [];
-            $matchedRate = $logData['matched_rate'] ?? null;
 
             $data['request'] = $logData['request'] ?? null;
 
-            // Sirf matched / selected rate dikhao (kam data)
-            $carrierQuotes = [];
-
-            if ($matchedRate) {
-                $carrierQuotes = [$matchedRate];
-            } else {
-                // Fallback — module ke hisaab se filter
-                $moduleName = $log->module;
-                $carrierQuotes = collect($allRates)->filter(function ($rate) use ($moduleName) {
-                    $display = $rate['display_name'] ?? '';
-                    if ($moduleName === 'FedEx (fedex)' && !empty($rate['is_fedex'])) {
-                        return true;
-                    }
-                    return $display === $moduleName;
-                })->values()->all();
-
-                if (empty($carrierQuotes) && !empty($allRates)) {
-                    $carrierQuotes = [$allRates[0]];
-                }
-            }
-
-            $data['carrier_quotes'] = $carrierQuotes;
+            // Saare rates (pehle jaisa full data)
+            $data['carrier_quotes'] = $logData['carrier_quotes'] ?? [];
 
             // Settings — FedEx ke liye list, baaki empty
             $moduleName = $log->module;
             if ($moduleName === 'FedEx (fedex)') {
                 $data['settings'] = [
-                    'deliveryServices' => collect($carrierQuotes)
+                    'deliveryServices' => collect($data['carrier_quotes'])
                         ->pluck('service_type')
                         ->filter()
                         ->unique()
@@ -200,7 +178,6 @@ class StaffLogController extends Controller
                 ];
             }
         }
-
         // ===================== PAYMENT =====================
         if ($log->type === 'Payment gateway') {
             $payment = $log->log_data ?? [];
