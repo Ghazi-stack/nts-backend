@@ -2547,7 +2547,7 @@ class OrderController extends Controller
                 $email = $validated['email'] ?? null;
                 $orderIdForLog = $orders[0]->id ?? null;
 
-                // Shipping Quote Logs — har method ka alag record
+                // Shipping Quote Log — SIRF EK record per order
                 if (!$isMulti && !empty($ratesResponse['rates'] ?? [])) {
                     $destination = [
                         'streetAddress1' => $validated['addressLine1'] ?? '',
@@ -2577,42 +2577,49 @@ class OrderController extends Controller
 
                     $rates = $ratesResponse['rates'];
 
-                    foreach ($rates as $rate) {
-                        // Module — FedEx ke liye "FedEx (fedex)", baaki display_name
-                        if (!empty($rate['is_fedex']) && $rate['is_fedex'] === true) {
+                    // Module — selected rate ka
+                    $moduleName = 'Shipping';
+                    if ($matchedRate) {
+                        if (!empty($matchedRate['is_fedex']) && $matchedRate['is_fedex'] === true) {
                             $moduleName = 'FedEx (fedex)';
                         } else {
-                            $moduleName = $rate['display_name'] ?? $rate['service_name'] ?? 'Shipping';
+                            $moduleName = $matchedRate['display_name'] ?? 'Shipping';
                         }
-
-                        \App\Models\SystemLog::create([
-                            'store_id'      => $storeId,
-                            'order_id'      => $orderIdForLog,
-                            'customer_id'   => $customer->id ?? null,
-                            'user_id'       => $user?->id,
-                            'severity'      => 'success',
-                            'type'          => 'Shipping quote',
-                            'module'        => $moduleName,
-                            'summary'       => 'Successfully retrieved shipping quote',
-                            'customer_type' => $customerType,
-                            'email'         => $email,
-                            'logged_at'     => now(),
-                            'log_data'      => [
-                                'request' => [
-                                    'date'        => now()->format('jS M Y @ h:i A'),
-                                    'customer'    => $customerType === 'guest' ? 'guest' : trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
-                                    'email'       => $email,
-                                    'destination' => $destination,
-                                    'cart_items'  => $cartItemsForLog,
-                                    'weight'      => $packageInfo['total_weight'] ?? null,
-                                    'weight_unit' => 'LBS',
-                                ],
-                                'carrier_quotes' => [$rate],
-                                'matched_rate'   => ($matchedRate && ($matchedRate['method_id'] ?? null) == ($rate['method_id'] ?? null)
-                                    && ($matchedRate['service_type'] ?? '') == ($rate['service_type'] ?? '')) ? $matchedRate : null,
-                            ],
-                        ]);
+                    } elseif (!empty($rates[0])) {
+                        $first = $rates[0];
+                        if (!empty($first['is_fedex']) && $first['is_fedex'] === true) {
+                            $moduleName = 'FedEx (fedex)';
+                        } else {
+                            $moduleName = $first['display_name'] ?? 'Shipping';
+                        }
                     }
+
+                    \App\Models\SystemLog::create([
+                        'store_id'      => $storeId,
+                        'order_id'      => $orderIdForLog,
+                        'customer_id'   => $customer->id ?? null,
+                        'user_id'       => $user?->id,
+                        'severity'      => 'success',
+                        'type'          => 'Shipping quote',
+                        'module'        => $moduleName,
+                        'summary'       => 'Successfully retrieved shipping quote',
+                        'customer_type' => $customerType,
+                        'email'         => $email,
+                        'logged_at'     => now(),
+                        'log_data'      => [
+                            'request' => [
+                                'date'        => now()->format('jS M Y @ h:i A'),
+                                'customer'    => $customerType === 'guest' ? 'guest' : trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
+                                'email'       => $email,
+                                'destination' => $destination,
+                                'cart_items'  => $cartItemsForLog,
+                                'weight'      => $packageInfo['total_weight'] ?? null,
+                                'weight_unit' => 'LBS',
+                            ],
+                            'carrier_quotes' => $rates,
+                            'matched_rate'   => $matchedRate,
+                        ],
+                    ]);
                 }
 
                 // Payment Logs (2 records)
