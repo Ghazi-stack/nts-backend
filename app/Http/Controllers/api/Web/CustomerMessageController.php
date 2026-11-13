@@ -243,7 +243,7 @@ class CustomerMessageController extends Controller
             $perPage = $request->query('perPage', 20);
             $keyword = $request->query('keyword');
 
-            $query = CustomerMessage::with(['customer'])
+            $query = CustomerMessage::with(['customer', 'order']) // order relation load
                 ->where('store_id', $storeId);
 
             if ($orderId) {
@@ -259,6 +259,9 @@ class CustomerMessageController extends Controller
                             $c->where('first_name', 'like', "%{$keyword}%")
                                 ->orWhere('last_name', 'like', "%{$keyword}%")
                                 ->orWhere('email', 'like', "%{$keyword}%");
+                        })
+                        ->orWhereHas('order', function ($o) use ($keyword) {
+                            $o->where('order_number', 'like', "%{$keyword}%");
                         });
                 });
             }
@@ -275,11 +278,20 @@ class CustomerMessageController extends Controller
                 ->where('sender_type', 'customer')
                 ->count();
 
+            // Agar order_id diya gaya hai to uska order_number nikal lo (top level ke liye)
+            $orderNumber = null;
+            if ($orderId) {
+                $orderNumber = \App\Models\Order::where('id', $orderId)
+                    ->where('store_id', $storeId)
+                    ->value('order_number');
+            }
+
             return response()->json([
                 'status' => true,
                 'message' => 'Messages retrieved successfully.',
                 'totalMessages' => $totalMessages,
                 'unreadCount' => $unreadCount,
+                'orderNumber' => $orderNumber, // yahan aayega unreadCount ke neeche
                 'data' => $messages->map(function ($msg) use ($storeName) {
                     return $this->formatMessageWithSender($msg, $storeName);
                 }),
@@ -561,7 +573,7 @@ class CustomerMessageController extends Controller
         return [
             'id'             => $msg->id,
             'orderId'        => $msg->order_id,
-            'orderNumber'    => $msg->order_number,
+            'orderNumber'    => $msg->order?->order_number ?? $msg->order_number, // order table se prefer
             'senderType'     => $msg->sender_type,
             'senderLabel'    => $senderLabel,
             'from'           => $from,
@@ -569,7 +581,7 @@ class CustomerMessageController extends Controller
             'message'        => $msg->message,
             'preview'        => $senderLabel . ': ' . $msg->message,
             'isRead'         => $msg->is_read,
-            'isFlagged' => $msg->is_flagged,
+            'isFlagged'      => $msg->is_flagged,
             'customer'       => $msg->customer ? [
                 'id'        => $msg->customer->id,
                 'firstName' => $msg->customer->first_name,
