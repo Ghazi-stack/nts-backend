@@ -3524,6 +3524,7 @@ class OrderController extends Controller
                         $product = Product::find($item['product_id']);
                         if ($product) {
                             $cartItemsForLog[] = [
+                                'product_id' => $product->id,
                                 'name'       => $product->name ?? '',
                                 'sku'        => $product->sku ?? null,
                                 'quantity'   => $item['quantity'],
