@@ -133,13 +133,13 @@ class OrderController extends Controller
                 })
                 ->when($keyword !== '', function ($q) use ($keyword) {
                     $q->where(function ($query) use ($keyword) {
-                        $query->where('id', 'like', "%{$keyword}%")
-                            ->orWhere('order_number', 'like', "%{$keyword}%")
+                        $query->where('order_number', 'like', "%{$keyword}%")
+                            // ->orWhere('order_number', 'like', "%{$keyword}%")
                             ->orWhere('status', 'like', "%{$keyword}%")
                             ->orWhere('total_amount', 'like', "%{$keyword}%");
 
                         if (is_numeric($keyword)) {
-                            $query->orWhere('id', (int) $keyword)
+                            $query->orWhere('order_number', (int) $keyword)
                                 ->orWhere('total_amount', $keyword);
                         }
 
@@ -212,11 +212,11 @@ class OrderController extends Controller
             }
 
             if ($request->filled('orderIdFrom')) {
-                $query->where('id', '>=', (int) $request->input('orderIdFrom'));
+                $query->where('order_number', '>=', (int) $request->input('orderIdFrom'));
             }
 
             if ($request->filled('orderIdTo')) {
-                $query->where('id', '<=', (int) $request->input('orderIdTo'));
+                $query->where('order_number', '<=', (int) $request->input('orderIdTo'));
             }
 
             if ($request->filled('orderTotalFrom')) {
