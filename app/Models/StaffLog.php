@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class StaffLog extends Model
 {
-   // protected $connection = 'tenant';
+    protected $connection = 'tenant';
 
     protected $fillable = [
         'store_id',
