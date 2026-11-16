@@ -98,6 +98,13 @@ Route::post('/dashboard/user/register', [
     'registerOwner',
 ]);
 
+// Stripe Connect OAuth callback.
+    // Public endpoint: Stripe redirects the merchant here.
+    Route::get(
+        '/web/stripe/connect/callback',
+        [StripeConnectController::class, 'callback']
+    );
+
 Route::prefix('user')->controller(AuthController::class)->group(function () {
 
 
@@ -853,27 +860,18 @@ Route::prefix('dashboard')->middleware([
     )->middleware(['store.hash', 'tenant.dashboard']);
 
     // Authenticated store administration endpoints.
-    Route::middleware([
-        'auth:sanctum',
-        'store.hash',
-        'tenant.dashboard',
-    ])->prefix('stripe/connect')->group(function () {
+    // Stripe Connect — authenticated store administration
+    Route::prefix('stripe/connect')
+        ->middleware(['tenant.dashboard'])
+        ->controller(StripeConnectController::class)
+        ->group(function () {
 
-        Route::post(
-            '/',
-            [StripeConnectController::class, 'connect']
-        );
+            Route::post('/', 'connect');
 
-        Route::get(
-            '/status',
-            [StripeConnectController::class, 'status']
-        );
+            Route::get('/status', 'status');
 
-        Route::post(
-            '/disconnect',
-            [StripeConnectController::class, 'disconnect']
-        );
-    });
+            Route::post('/disconnect', 'disconnect');
+        });
 
     //Newsletter
     // Route::get('/subscribers/export', [NewsletterController::class, 'exportSubscribers']);
@@ -1117,13 +1115,6 @@ Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class
 
     // 📩 Webhook (no auth)
     Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
-
-    // Stripe Connect OAuth callback.
-    // Public endpoint: Stripe redirects the merchant here.
-    Route::get(
-        '/stripe/connect/callback',
-        [StripeConnectController::class, 'callback']
-    );
 
     Route::post(
         '/stripe/express-checkout/create-intent',
