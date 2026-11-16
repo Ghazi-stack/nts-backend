@@ -634,4 +634,118 @@ class UrlSettingController extends Controller
                 return null;
         }
     }
+
+    public function importRedirects(Request $request)
+    {
+        try {
+            $storeId = $this->getStoreId();
+
+            $request->validate([
+                'file' => 'required|file|mimes:csv,txt|max:10240',
+            ]);
+
+            $file = $request->file('file');
+            $handle = fopen($file->getRealPath(), 'r');
+
+            // Skip header row
+            fgetcsv($handle);
+
+            $imported = 0;
+            $skipped  = 0;
+            $errors   = [];
+
+            while (($row = fgetcsv($handle)) !== false) {
+                $domain    = trim($row[0] ?? '');
+                $oldPath   = trim($row[1] ?? '');
+                $manualUrl = trim($row[2] ?? '');
+                $dynType   = trim($row[3] ?? '');
+                $dynId     = trim($row[4] ?? '');
+
+                // Old path required
+                if (empty($oldPath)) {
+                    $skipped++;
+                    continue;
+                }
+
+                // Normalize old_url
+                if (!str_starts_with($oldPath, '/')) {
+                    $oldPath = '/' . $oldPath;
+                }
+
+                // Skip if already exists
+                if (Redirect::where('store_id', $storeId)->where('old_url', $oldPath)->exists()) {
+                    $skipped++;
+                    $errors[] = "Already exists: {$oldPath}";
+                    continue;
+                }
+
+                $redirectType = 'manual';
+                $newUrl       = $manualUrl;
+                $entityType   = 'manual';
+                $entityId     = null;
+                $productId    = null;
+
+                // ========== DYNAMIC CASE ==========
+                if (!empty($dynType) && !empty($dynId)) {
+                    $redirectType = 'dynamic';
+                    $entityType   = strtolower($dynType); // product, category, webpage
+                    $entityId     = (int) $dynId;
+                    $productId    = ($entityType === 'product') ? $entityId : null;
+
+                    // Backend khud new_url generate karega
+                    $newUrl = $this->generateDynamicUrl($entityType, $entityId, $storeId);
+
+                    if (!$newUrl) {
+                        $skipped++;
+                        $errors[] = "Dynamic target not found: {$oldPath} (Type: {$dynType}, ID: {$dynId})";
+                        continue;
+                    }
+                }
+
+                // ========== MANUAL CASE ==========
+                if ($redirectType === 'manual') {
+                    if (empty($newUrl)) {
+                        $skipped++;
+                        $errors[] = "No destination for: {$oldPath}";
+                        continue;
+                    }
+                    if (!str_starts_with($newUrl, '/')) {
+                        $newUrl = '/' . $newUrl;
+                    }
+                }
+
+                // Insert into table
+                Redirect::create([
+                    'store_id'      => $storeId,
+                    'product_id'    => $productId,
+                    'entity_id'     => $entityId,
+                    'entity_type'   => $entityType,
+                    'redirect_type' => $redirectType,
+                    'domain'        => $domain ?: $this->getDomain(),
+                    'old_url'       => $oldPath,
+                    'new_url'       => $newUrl,
+                    'is_active'     => true,
+                ]);
+
+                $imported++;
+            }
+
+            fclose($handle);
+
+            return response()->json([
+                'status'   => true,
+                'message'  => 'Import completed successfully',
+                'imported' => $imported,
+                'skipped'  => $skipped,
+                'errors'   => $errors,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Redirect Import Error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Import failed',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

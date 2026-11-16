@@ -763,6 +763,7 @@ Route::prefix('dashboard')->middleware([
         Route::get('/setting-redirect-show/{id}', 'showRedirect');                // Show by ID (Edit/Copy)
         Route::put('/setting-redirect-edit/{id}', 'updateRedirect');              // Update
         Route::delete('/setting-redirect-delete/{id}', 'destroyRedirect');          // Delete
+        Route::post('/setting-redirect-import', 'importRedirects');
     });
 
     Route::middleware([
