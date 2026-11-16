@@ -26,13 +26,17 @@ class BulkCreateProductRedirects implements ShouldQueue
     protected $progressKey;
     protected $setting;
     protected $tenantDatabase;
+    protected $domain;
+    protected $redirectType;
 
-    public function __construct($storeId, $progressKey, $setting, $tenantDatabase = null)
+    public function __construct($storeId, $progressKey, $setting, $tenantDatabase = null, $domain = null, $redirectType = 'dynamic')
     {
         $this->storeId = $storeId;
         $this->progressKey = $progressKey;
         $this->setting = (object) $setting;
         $this->tenantDatabase = $tenantDatabase;
+        $this->domain = $domain ?? 'https://hardware-parts.mybigcommerce.com';
+        $this->redirectType = $redirectType;
     }
 
     public function handle()
@@ -59,7 +63,6 @@ class BulkCreateProductRedirects implements ShouldQueue
             ->where('store_id', $this->storeId)
             ->orderBy('id')
             ->chunkById(100, function ($products) use (&$created, &$processed, $total, $progressKey) {
-
                 foreach ($products as $product) {
                     $seo = ProductSeo::on('tenant')
                         ->where('product_id', $product->id)
@@ -82,10 +85,13 @@ class BulkCreateProductRedirects implements ShouldQueue
                     Redirect::on('tenant')->updateOrCreate(
                         ['store_id' => $this->storeId, 'old_url' => $oldUrl],
                         [
-                            'product_id'  => $product->id,
-                            'entity_type' => 'product',
-                            'new_url'     => $newUrl,
-                            'is_active'   => true,
+                            'product_id'    => $product->id,
+                            'entity_id'     => $product->id,
+                            'entity_type'   => 'product',
+                            'redirect_type' => $this->redirectType,
+                            'domain'        => $this->domain,
+                            'new_url'       => $newUrl,
+                            'is_active'     => true,
                         ]
                     );
 
@@ -93,7 +99,6 @@ class BulkCreateProductRedirects implements ShouldQueue
                     $processed++;
                 }
 
-                // Progress update har chunk ke baad
                 Cache::put($progressKey, [
                     'current' => $processed,
                     'total'   => $total,

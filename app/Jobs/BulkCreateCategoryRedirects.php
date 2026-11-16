@@ -24,13 +24,17 @@ class BulkCreateCategoryRedirects implements ShouldQueue
     protected $progressKey;
     protected $setting;
     protected $tenantDatabase;
+    protected $domain;
+    protected $redirectType;
 
-    public function __construct($storeId, $progressKey, $setting, $tenantDatabase = null)
+    public function __construct($storeId, $progressKey, $setting, $tenantDatabase = null, $domain = null, $redirectType = 'dynamic')
     {
         $this->storeId = $storeId;
         $this->progressKey = $progressKey;
         $this->setting = (object) $setting;
         $this->tenantDatabase = $tenantDatabase;
+        $this->domain = $domain ?? 'https://hardware-parts.mybigcommerce.com';
+        $this->redirectType = $redirectType;
     }
 
     public function handle()
@@ -57,7 +61,6 @@ class BulkCreateCategoryRedirects implements ShouldQueue
             ->where('store_id', $this->storeId)
             ->orderBy('id')
             ->chunkById(100, function ($categories) use (&$created, &$processed, $total, $progressKey) {
-
                 foreach ($categories as $category) {
                     $oldUrl = '/' . ($category->slug ?? Str::slug($category->name)) . '/';
                     $newUrl = $this->generateCategoryUrl($category);
@@ -70,10 +73,13 @@ class BulkCreateCategoryRedirects implements ShouldQueue
                     Redirect::on('tenant')->updateOrCreate(
                         ['store_id' => $this->storeId, 'old_url' => $oldUrl],
                         [
-                            'product_id'  => null,
-                            'entity_type' => 'category',
-                            'new_url'     => $newUrl,
-                            'is_active'   => true,
+                            'product_id'    => null,
+                            'entity_id'     => $category->id,
+                            'entity_type'   => 'category',
+                            'redirect_type' => $this->redirectType,
+                            'domain'        => $this->domain,
+                            'new_url'       => $newUrl,
+                            'is_active'     => true,
                         ]
                     );
 
@@ -114,29 +120,18 @@ class BulkCreateCategoryRedirects implements ShouldQueue
         switch ($format) {
             case 'seo_optimized_short':
                 return '/' . $categorySlug . '/';
-
             case 'seo_optimized_long':
                 return '/categories/' . $categorySlug . '.html';
-
             case 'custom':
-                if (empty($custom)) {
-                    return '/' . $categorySlug . '/';
-                }
-
+                if (empty($custom)) return '/' . $categorySlug . '/';
                 $url = str_replace(
                     ['%categoryname%', '%parent%', '%id%'],
                     [$categorySlug, $parentSlug, $category->id],
                     $custom
                 );
-
-                if (!str_starts_with($url, '/')) {
-                    $url = '/' . $url;
-                }
-                if (!str_ends_with($url, '/') && !str_contains($url, '.')) {
-                    $url .= '/';
-                }
+                if (!str_starts_with($url, '/')) $url = '/' . $url;
+                if (!str_ends_with($url, '/') && !str_contains($url, '.')) $url .= '/';
                 return $url;
-
             default:
                 return '/' . $categorySlug . '/';
         }

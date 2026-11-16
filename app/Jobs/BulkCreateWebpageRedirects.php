@@ -24,13 +24,17 @@ class BulkCreateWebpageRedirects implements ShouldQueue
     protected $progressKey;
     protected $setting;
     protected $tenantDatabase;
+    protected $domain;
+    protected $redirectType;
 
-    public function __construct($storeId, $progressKey, $setting, $tenantDatabase = null)
+    public function __construct($storeId, $progressKey, $setting, $tenantDatabase = null, $domain = null, $redirectType = 'dynamic')
     {
         $this->storeId = $storeId;
         $this->progressKey = $progressKey;
         $this->setting = (object) $setting;
         $this->tenantDatabase = $tenantDatabase;
+        $this->domain = $domain ?? 'https://hardware-parts.mybigcommerce.com';
+        $this->redirectType = $redirectType;
     }
 
     public function handle()
@@ -57,7 +61,6 @@ class BulkCreateWebpageRedirects implements ShouldQueue
             ->where('store_id', $this->storeId)
             ->orderBy('id')
             ->chunkById(100, function ($pages) use (&$created, &$processed, $total, $progressKey) {
-
                 foreach ($pages as $page) {
                     $oldUrl = $page->page_url ?? ('/' . Str::slug($page->page_name) . '/');
                     if (!str_starts_with($oldUrl, '/')) {
@@ -74,10 +77,13 @@ class BulkCreateWebpageRedirects implements ShouldQueue
                     Redirect::on('tenant')->updateOrCreate(
                         ['store_id' => $this->storeId, 'old_url' => $oldUrl],
                         [
-                            'product_id'  => null,
-                            'entity_type' => 'webpage',
-                            'new_url'     => $newUrl,
-                            'is_active'   => true,
+                            'product_id'    => null,
+                            'entity_id'     => $page->id,
+                            'entity_type'   => 'webpage',
+                            'redirect_type' => $this->redirectType,
+                            'domain'        => $this->domain,
+                            'new_url'       => $newUrl,
+                            'is_active'     => true,
                         ]
                     );
 
@@ -110,29 +116,18 @@ class BulkCreateWebpageRedirects implements ShouldQueue
         switch ($format) {
             case 'seo_optimized_short':
                 return '/' . $pageSlug . '/';
-
             case 'seo_optimized_long':
                 return '/pages/' . $pageSlug . '.html';
-
             case 'custom':
-                if (empty($custom)) {
-                    return '/' . $pageSlug . '/';
-                }
-
+                if (empty($custom)) return '/' . $pageSlug . '/';
                 $url = str_replace(
                     ['%title%', '%id%'],
                     [$pageSlug, $page->id],
                     $custom
                 );
-
-                if (!str_starts_with($url, '/')) {
-                    $url = '/' . $url;
-                }
-                if (!str_ends_with($url, '/') && !str_contains($url, '.')) {
-                    $url .= '/';
-                }
+                if (!str_starts_with($url, '/')) $url = '/' . $url;
+                if (!str_ends_with($url, '/') && !str_contains($url, '.')) $url .= '/';
                 return $url;
-
             default:
                 return '/' . $pageSlug . '/';
         }

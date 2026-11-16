@@ -751,7 +751,11 @@ Route::prefix('dashboard')->middleware([
 
     // redirects Settings Routes (naya)
     Route::prefix('redirects')->middleware(['store.hash', 'tenant.dashboard'])->controller(UrlSettingController::class)->group(function () {
-        Route::get('/setting', 'redirectsSettingGetData');
+        Route::get('/setting-redirect', 'redirectsSettingGetData');          // List
+        Route::post('/setting-redirect-add', 'storeRedirect');                   // Create
+        Route::get('/setting-redirect-show/{id}', 'showRedirect');                // Show by ID (Edit/Copy)
+        Route::put('/setting-redirect-edit/{id}', 'updateRedirect');              // Update
+        Route::delete('/setting-redirect-delete/{id}', 'destroyRedirect');          // Delete
     });
 
     Route::middleware([
