@@ -221,4 +221,114 @@ class PaymentSettingsService
 
         return $method->fresh();
     }
+
+
+    /**
+     * Save credentials returned by Stripe Connect OAuth.
+     * Credentials are encrypted by the StorePaymentMethod model cast.
+     */
+    public function connectStripeAccount(
+        int $storeId,
+        array $oauthData
+    ): StorePaymentMethod {
+        return DB::connection('tenant')->transaction(
+            function () use ($storeId, $oauthData) {
+                $method = StorePaymentMethod::forStore($storeId)
+                    ->where('method_code', 'stripe')
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$method) {
+                    throw new RuntimeException(
+                        'Stripe payment method not found for this store.'
+                    );
+                }
+
+                $method->credentials = array_merge(
+                    $method->credentials ?? [],
+                    [
+                        'connection_type' => 'standard',
+                        'stripe_user_id' => $oauthData['stripe_user_id'],
+                        'access_token' => $oauthData['access_token'],
+                        'refresh_token' => $oauthData['refresh_token'] ?? null,
+                        'publishable_key' => $oauthData['stripe_publishable_key'] ?? null,
+                        'scope' => $oauthData['scope'] ?? 'read_write',
+                        'token_type' => $oauthData['token_type'] ?? 'bearer',
+                        'livemode' => (bool) ($oauthData['livemode'] ?? false),
+                    ]
+                );
+
+                $method->configuration = array_replace_recursive(
+                    $method->configuration ?? [],
+                    [
+                        'connection_type' => 'standard',
+                        'account_id' => $oauthData['stripe_user_id'],
+                        'livemode' => (bool) ($oauthData['livemode'] ?? false),
+                    ]
+                );
+
+                $method->is_configured = true;
+
+                // Do not automatically enable payments.
+                // Merchant can enable Stripe from Payment Settings.
+                $method->save();
+
+                return $method->fresh();
+            }
+        );
+    }
+
+    /**
+     * Remove stored Stripe connection credentials.
+     */
+    public function disconnectStripeAccount(int $storeId): void
+    {
+        DB::connection('tenant')->transaction(
+            function () use ($storeId) {
+                $method = StorePaymentMethod::forStore($storeId)
+                    ->where('method_code', 'stripe')
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$method) {
+                    throw new RuntimeException(
+                        'Stripe payment method not found.'
+                    );
+                }
+
+                $method->credentials = null;
+                $method->configuration = null;
+                $method->is_enabled = false;
+                $method->is_configured = false;
+                $method->save();
+            }
+        );
+    }
+
+    /**
+     * Return safe Stripe connection details.
+     * Never return access or refresh tokens.
+     */
+    public function getStripeConnectionStatus(int $storeId): array
+    {
+        $method = $this->getMethod($storeId, 'stripe');
+
+        $credentials = $method?->credentials ?? [];
+
+        $connected = !empty($credentials['stripe_user_id'])
+            && !empty($credentials['access_token']);
+
+        return [
+            'connected' => $connected,
+            'account_id' => $connected
+                ? $credentials['stripe_user_id']
+                : null,
+            'livemode' => $connected
+                ? (bool) ($credentials['livemode'] ?? false)
+                : null,
+            'is_enabled' => (bool) ($method?->is_enabled ?? false),
+            'is_configured' => (bool) ($method?->is_configured ?? false),
+        ];
+    }
+
 }

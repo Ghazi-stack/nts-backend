@@ -35,6 +35,10 @@ return [
         'secret' => env('STRIPE_SECRET'),
         'key' => env('STRIPE_KEY'),
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
+        'connect' => [
+            'client_id' => env('STRIPE_CONNECT_CLIENT_ID'),
+            'redirect_uri' => env('STRIPE_CONNECT_REDIRECT_URI'),
+        ],
     ],
 
 ];

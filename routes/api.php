@@ -55,7 +55,8 @@ use App\Http\Controllers\api\Web\{
     BulkInquiryController,
     CheckoutFormDataController,
     CustomerAddressController,
-    CustomerMessageController
+    CustomerMessageController,
+    StripeConnectController
 };
 use App\Http\Controllers\api\AuthController;
 use App\Http\Controllers\api\SitemapController;
@@ -846,6 +847,30 @@ Route::prefix('dashboard')->middleware([
         '/stripe/capture',
         [StripePaymentController::class, 'capturePayment']
     )->middleware(['store.hash', 'tenant.dashboard']);
+
+    // Authenticated store administration endpoints.
+    Route::middleware([
+        'auth:sanctum',
+        'store.hash',
+        'tenant.dashboard',
+    ])->prefix('stripe/connect')->group(function () {
+
+        Route::post(
+            '/',
+            [StripeConnectController::class, 'connect']
+        );
+
+        Route::get(
+            '/status',
+            [StripeConnectController::class, 'status']
+        );
+
+        Route::post(
+            '/disconnect',
+            [StripeConnectController::class, 'disconnect']
+        );
+    });
+
     //Newsletter
     // Route::get('/subscribers/export', [NewsletterController::class, 'exportSubscribers']);
     // Route::delete('/subscribers/delete-all', [NewsletterController::class, 'deleteAllSubscribers']);
@@ -1088,6 +1113,13 @@ Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class
 
     // 📩 Webhook (no auth)
     Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
+
+    // Stripe Connect OAuth callback.
+    // Public endpoint: Stripe redirects the merchant here.
+    Route::get(
+        '/stripe/connect/callback',
+        [StripeConnectController::class, 'callback']
+    );
 
     Route::post(
         '/stripe/express-checkout/create-intent',
