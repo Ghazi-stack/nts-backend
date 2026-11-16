@@ -3108,7 +3108,9 @@ class OrderController extends Controller
             }
 
             Stripe::setApiKey(config('services.stripe.secret'));
-            $stripeOptions = app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request);
+            $stripeOptions = config('services.stripe.connect_enabled', false)
+            ? app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request)
+            : [];
             try {
                 $stripeIntent = PaymentIntent::retrieve($validated['paymentIntentId'], [], $stripeOptions);
             } catch (\Exception $stripeException) {
@@ -3380,7 +3382,7 @@ class OrderController extends Controller
             $stripeBillingDetails = null;
             try {
                 \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-                $stripeOptions = app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request);
+                
                 $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], [], $stripeOptions);
                 if ($stripeIntent->payment_method) {
                     $paymentMethod = \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method, [], $stripeOptions);
@@ -3455,7 +3457,7 @@ class OrderController extends Controller
             $riskData = ['risk_score' => null, 'risk_level' => 'normal'];
             try {
                 \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-                $stripeOptions = $stripeOptions ?? app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request);
+                $stripeOptions = $stripeOptions ?? [];
                 $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']], $stripeOptions);
                 if (empty($freshIntent->latest_charge)) {
                     usleep(800000);
@@ -5896,7 +5898,9 @@ class OrderController extends Controller
 
             if (!$isDraft && $paymentMethodId) {
                 \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-                $stripeOptions = app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request);
+                $stripeOptions = config('services.stripe.connect_enabled', false)
+                ? app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request)
+                : [];
                 $intent = \Stripe\PaymentIntent::create([
                     'amount'               => (int) round($totalAmount * 100),
                     'currency'             => strtolower($currencyCode),
@@ -8763,7 +8767,9 @@ class OrderController extends Controller
 
                 if (!$isDraft && $paymentMethodId) {
                     \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-                    $stripeOptions = app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request);
+                    $stripeOptions = config('services.stripe.connect_enabled', false)
+                    ? app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request)
+                    : [];
 
                     $intent = \Stripe\PaymentIntent::create([
                         'amount'               => (int) round($totalAmount * 100),
