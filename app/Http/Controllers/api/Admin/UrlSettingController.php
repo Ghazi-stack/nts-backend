@@ -425,7 +425,7 @@ class UrlSettingController extends Controller
                 'store_id'      => $storeId,
                 'product_id'    => ($validated['entity_type'] ?? null) === 'product' ? ($validated['entity_id'] ?? null) : null,
                 'entity_id'     => $validated['entity_id'] ?? null,
-                'entity_type'   => $validated['entity_type'] ?? null,
+                'entity_type'   => $validated['entity_type'] ?? ($validated['redirect_type'] === 'manual' ? 'manual' : 'unknown'),
                 'redirect_type' => $validated['redirect_type'],
                 'domain'        => $this->getDomain(),
                 'old_url'       => $validated['old_url'],
