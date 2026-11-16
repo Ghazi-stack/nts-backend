@@ -896,6 +896,14 @@ Route::prefix('dashboard')->middleware([
 
 
 
+// Stripe webhooks must remain outside tenant middleware because Stripe
+// does not send the X-Store-Hash header.
+Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
+Route::post('/stripe/connect/webhook', [
+    \App\Http\Controllers\api\Web\StripeConnectWebhookController::class,
+    'handle',
+]);
+
 // ===============================
 // 🌐 PUBLIC + WEB ROUTES
 // ===============================
@@ -1112,9 +1120,6 @@ Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class
 
     // 💳 Stripe - User/Guest (token optional)
     Route::post('/stripe/pay', [StripePaymentController::class, 'pay']);
-
-    // 📩 Webhook (no auth)
-    Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
 
     Route::post(
         '/stripe/express-checkout/create-intent',
