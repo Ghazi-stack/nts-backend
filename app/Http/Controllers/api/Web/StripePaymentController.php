@@ -18,10 +18,18 @@ use Illuminate\Support\Facades\Log;
 
 class StripePaymentController extends Controller
 {
+    
     private function connectedStripeOptions(Request $request): array
     {
+        // Temporarily use the original platform Stripe account.
+        if (!config('services.stripe.connect_enabled', false)) {
+            return [];
+        }
+
+        // Use Stripe Connect when explicitly enabled.
         return app(StripeConnectAccountResolver::class)->optionsForRequest($request);
     }
+
 
     /**
      * 💳 Pay - Authorize only (hold), do NOT capture yet
