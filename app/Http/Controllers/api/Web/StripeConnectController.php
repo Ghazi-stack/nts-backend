@@ -205,7 +205,7 @@ class StripeConnectController extends Controller
             ]);
 
             // Return merchant to the store admin payment settings page.
-            $frontendUrl = rtrim($store->base_url ?? '', '/');
+            $frontendUrl = rtrim(config('app.dashboard_url'), '/');
 
             if ($frontendUrl) {
                 return redirect(

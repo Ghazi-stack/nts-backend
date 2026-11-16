@@ -59,6 +59,7 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
     'frontend_url' => env('FRONTEND_URL', 'https://server-blink.vercel.app'),
+    'dashboard_url' => env('DASHBOARD_URL', 'https://dashboard.advertsedge.com'),
 
     'asset_url' => env('ASSET_URL'),
 
