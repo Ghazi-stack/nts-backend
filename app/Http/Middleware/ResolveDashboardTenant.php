@@ -45,6 +45,33 @@ class ResolveDashboardTenant
         }
 
         try {
+            $user = auth('sanctum')->user();
+            $store = $request->attributes->get('resolved_store');
+
+            Log::info('Dashboard Tenant Authorization Debug', [
+                'authenticated_user_id' => $user?->id,
+                'authenticated_user_role' => $user?->userRole,
+                'resolved_store_id' => $store?->id,
+                'resolved_store_hash' => $store?->store_hash,
+                'resolved_store_owner_id' => $store?->user_id,
+            ]);
+
+            $isOwner = DB::connection('central')
+                ->table('stores')
+                ->where('id', $store->id)
+                ->where('user_id', $user->id)
+                ->exists();
+
+            $isMember = DB::connection('central')
+                ->table('store_user')
+                ->where('store_id', $store->id)
+                ->where('user_id', $user->id)
+                ->exists();
+
+            Log::info('Dashboard Tenant Authorization Result', [
+                'is_owner' => $isOwner,
+                'is_member' => $isMember,
+            ]);
             // Verify ownership in the central registry.
             $isOwner = DB::connection('central')
                 ->table('stores')
