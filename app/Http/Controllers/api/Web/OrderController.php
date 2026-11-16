@@ -1621,7 +1621,7 @@ class OrderController extends Controller
     //             \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
     //             $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId']);
     //             if ($stripeIntent->payment_method) {
-    //                 $paymentMethod = \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method);
+    //                 $paymentMethod = \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method, [], $stripeOptions);
     //                 if ($paymentMethod->billing_details) {
     //                     $bd = $paymentMethod->billing_details;
     //                     $stripeBillingDetails = [
@@ -1693,15 +1693,15 @@ class OrderController extends Controller
     //         $riskData = ['risk_score' => null, 'risk_level' => 'normal'];
     //         try {
     //             \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-    //             $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']]);
+    //             $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']], $stripeOptions);
     //             if (empty($freshIntent->latest_charge)) {
     //                 usleep(800000);
-    //                 $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']]);
+    //                 $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']], $stripeOptions);
     //             }
     //             $charge = null;
     //             if (!empty($freshIntent->latest_charge)) {
     //                 $charge = is_string($freshIntent->latest_charge)
-    //                     ? \Stripe\Charge::retrieve($freshIntent->latest_charge, ['expand' => ['outcome', 'review']])
+    //                     ? \Stripe\Charge::retrieve($freshIntent->latest_charge, ['expand' => ['outcome', 'review']], $stripeOptions)
     //                     : $freshIntent->latest_charge;
     //             }
     //             $score = null;
@@ -2424,7 +2424,7 @@ class OrderController extends Controller
     //             \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
     //             $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId']);
     //             if ($stripeIntent->payment_method) {
-    //                 $paymentMethod = \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method);
+    //                 $paymentMethod = \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method, [], $stripeOptions);
     //                 if ($paymentMethod->billing_details) {
     //                     $bd = $paymentMethod->billing_details;
     //                     $stripeBillingDetails = [
@@ -2496,15 +2496,15 @@ class OrderController extends Controller
     //         $riskData = ['risk_score' => null, 'risk_level' => 'normal'];
     //         try {
     //             \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-    //             $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']]);
+    //             $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']], $stripeOptions);
     //             if (empty($freshIntent->latest_charge)) {
     //                 usleep(800000);
-    //                 $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']]);
+    //                 $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']], $stripeOptions);
     //             }
     //             $charge = null;
     //             if (!empty($freshIntent->latest_charge)) {
     //                 $charge = is_string($freshIntent->latest_charge)
-    //                     ? \Stripe\Charge::retrieve($freshIntent->latest_charge, ['expand' => ['outcome', 'review']])
+    //                     ? \Stripe\Charge::retrieve($freshIntent->latest_charge, ['expand' => ['outcome', 'review']], $stripeOptions)
     //                     : $freshIntent->latest_charge;
     //             }
     //             $score = null;
@@ -3108,8 +3108,9 @@ class OrderController extends Controller
             }
 
             Stripe::setApiKey(config('services.stripe.secret'));
+            $stripeOptions = app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request);
             try {
-                $stripeIntent = PaymentIntent::retrieve($validated['paymentIntentId']);
+                $stripeIntent = PaymentIntent::retrieve($validated['paymentIntentId'], [], $stripeOptions);
             } catch (\Exception $stripeException) {
                 return response()->json(['status' => false, 'message' => 'Unable to verify payment with Stripe.'], 422);
             }
@@ -3379,9 +3380,10 @@ class OrderController extends Controller
             $stripeBillingDetails = null;
             try {
                 \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-                $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId']);
+                $stripeOptions = app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request);
+                $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], [], $stripeOptions);
                 if ($stripeIntent->payment_method) {
-                    $paymentMethod = \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method);
+                    $paymentMethod = \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method, [], $stripeOptions);
                     if ($paymentMethod->billing_details) {
                         $bd = $paymentMethod->billing_details;
                         $stripeBillingDetails = [
@@ -3453,15 +3455,16 @@ class OrderController extends Controller
             $riskData = ['risk_score' => null, 'risk_level' => 'normal'];
             try {
                 \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-                $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']]);
+                $stripeOptions = $stripeOptions ?? app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request);
+                $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']], $stripeOptions);
                 if (empty($freshIntent->latest_charge)) {
                     usleep(800000);
-                    $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']]);
+                    $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']], $stripeOptions);
                 }
                 $charge = null;
                 if (!empty($freshIntent->latest_charge)) {
                     $charge = is_string($freshIntent->latest_charge)
-                        ? \Stripe\Charge::retrieve($freshIntent->latest_charge, ['expand' => ['outcome', 'review']])
+                        ? \Stripe\Charge::retrieve($freshIntent->latest_charge, ['expand' => ['outcome', 'review']], $stripeOptions)
                         : $freshIntent->latest_charge;
                 }
                 $score = null;
@@ -5893,6 +5896,7 @@ class OrderController extends Controller
 
             if (!$isDraft && $paymentMethodId) {
                 \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+                $stripeOptions = app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request);
                 $intent = \Stripe\PaymentIntent::create([
                     'amount'               => (int) round($totalAmount * 100),
                     'currency'             => strtolower($currencyCode),
@@ -5907,7 +5911,9 @@ class OrderController extends Controller
                         'store_id' => $storeId,
                         'products' => json_encode($products),
                     ],
-                ], ['idempotency_key' => uniqid('dashboard_payment_', true)]);
+                ], array_merge($stripeOptions, [
+                    'idempotency_key' => 'dashboard_payment_' . (string) ($request->header('Idempotency-Key') ?: ($request->input('checkout_id') ?: \Illuminate\Support\Str::uuid())),
+                ]));
 
                 if (in_array($intent->status, ['requires_action', 'requires_source_action'])) {
                     DB::rollBack();
@@ -5929,15 +5935,15 @@ class OrderController extends Controller
                 }
 
                 try {
-                    $freshIntent = \Stripe\PaymentIntent::retrieve($intent->id, ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']]);
+                    $freshIntent = \Stripe\PaymentIntent::retrieve($intent->id, ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']], $stripeOptions);
                     if (empty($freshIntent->latest_charge)) {
                         usleep(800000);
-                        $freshIntent = \Stripe\PaymentIntent::retrieve($intent->id, ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']]);
+                        $freshIntent = \Stripe\PaymentIntent::retrieve($intent->id, ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']], $stripeOptions);
                     }
                     $charge = null;
                     if (!empty($freshIntent->latest_charge)) {
                         $charge = is_string($freshIntent->latest_charge)
-                            ? \Stripe\Charge::retrieve($freshIntent->latest_charge, ['expand' => ['outcome', 'review']])
+                            ? \Stripe\Charge::retrieve($freshIntent->latest_charge, ['expand' => ['outcome', 'review']], $stripeOptions)
                             : $freshIntent->latest_charge;
                     }
                     $score = null;
@@ -6026,7 +6032,12 @@ class OrderController extends Controller
                 'billing_address'              => $billingAddressJson,
             ]);
 
-            $order->update(['order_number' => $order->id]);
+            // Draft orders must not consume the configured order-number sequence.
+            if (!$isDraft) {
+                app(\App\Services\OrderNumberGenerator::class)
+                    ->assign($order, (int) $storeId);
+                $order->refresh();
+            }
 
             if ($saveBilling || $saveShipping) {
                 $shippingAddressJson = [
@@ -8752,6 +8763,7 @@ class OrderController extends Controller
 
                 if (!$isDraft && $paymentMethodId) {
                     \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
+                    $stripeOptions = app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request);
 
                     $intent = \Stripe\PaymentIntent::create([
                         'amount'               => (int) round($totalAmount * 100),
@@ -8768,9 +8780,9 @@ class OrderController extends Controller
                             'store_id'    => $storeId,
                             'products'    => json_encode($products),
                         ],
-                    ], [
-                        'idempotency_key' => uniqid('dashboard_new_customer_payment_', true),
-                    ]);
+                    ], array_merge($stripeOptions, [
+                        'idempotency_key' => 'dashboard_new_customer_payment_' . (string) ($request->header('Idempotency-Key') ?: ($request->input('checkout_id') ?: \Illuminate\Support\Str::uuid())),
+                    ]));
 
                     if (in_array($intent->status, ['requires_action', 'requires_source_action'])) {
                         $requiresAction = $intent->client_secret;
@@ -8838,8 +8850,13 @@ class OrderController extends Controller
                     'billing_address'              => $billingAddressJson,
                 ];
 
-                $order = Order::create(array_merge($orderPayload, ['order_number' => '']));
-                $order->update(['order_number' => $order->id]);
+                // Draft orders must not consume the configured order-number sequence.
+                $order = Order::create(array_merge($orderPayload, ['order_number' => null]));
+                if (!$isDraft) {
+                    app(\App\Services\OrderNumberGenerator::class)
+                        ->assign($order, (int) $storeId);
+                    $order->refresh();
+                }
 
                 // ===== ADDRESS BOOK (original logic kept) =====
                 $saveBilling = (bool) ($formAddress['saveToAddressBook'] ?? $validated['isSaveAddressForBilling'] ?? false);

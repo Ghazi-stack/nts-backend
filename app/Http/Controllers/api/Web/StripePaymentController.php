@@ -13,10 +13,16 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Http\Controllers\Controller;
 use App\Models\OrderTimeline;
+use App\Services\StripeConnectAccountResolver;
 use Illuminate\Support\Facades\Log;
 
 class StripePaymentController extends Controller
 {
+    private function connectedStripeOptions(Request $request): array
+    {
+        return app(StripeConnectAccountResolver::class)->optionsForRequest($request);
+    }
+
     /**
      * 💳 Pay - Authorize only (hold), do NOT capture yet
      * Guest ya logged-in user dono use kar sakte hain (token optional)
@@ -192,6 +198,7 @@ class StripePaymentController extends Controller
         $orderNumber = 'ORD-' . strtoupper(Str::random(8));
 
         Stripe::setApiKey(config('services.stripe.secret'));
+        $stripeOptions = $this->connectedStripeOptions($request);
 
         try {
             DB::beginTransaction();
@@ -211,9 +218,9 @@ class StripePaymentController extends Controller
                     'currency_id'  => $currency->id,
                     'coupon_id'    => $validated['coupon']['id'] ?? null,
                 ],
-            ], [
-                'idempotency_key' => uniqid('payment_', true)
-            ]);
+            ], array_merge($stripeOptions, [
+                'idempotency_key' => 'payment_' . (string) ($request->header('Idempotency-Key') ?: ($request->input('checkout_id') ?: Str::uuid()))
+            ]));
 
             if (in_array($intent->status, ['requires_action', 'requires_source_action'])) {
                 DB::commit();
@@ -235,7 +242,7 @@ class StripePaymentController extends Controller
             $riskLevel = null;
 
             $charge = $intent->latest_charge
-                ? \Stripe\Charge::retrieve($intent->latest_charge)
+                ? \Stripe\Charge::retrieve($intent->latest_charge, [], $stripeOptions)
                 : null;
 
             if ($charge && $charge->outcome) {
@@ -303,6 +310,7 @@ class StripePaymentController extends Controller
         }
 
         Stripe::setApiKey(config('services.stripe.secret'));
+        $stripeOptions = $this->connectedStripeOptions($request);
 
         $results      = [];
         $successCount = 0;
@@ -333,7 +341,7 @@ class StripePaymentController extends Controller
                     continue;
                 }
 
-                $intent = PaymentIntent::retrieve($intentId);
+                $intent = PaymentIntent::retrieve($intentId, [], $stripeOptions);
 
                 if ($intent->status !== 'requires_capture') {
                     $failedCount++;
@@ -351,7 +359,7 @@ class StripePaymentController extends Controller
                     $captureParams['amount_to_capture'] = $request->amount_to_capture;
                 }
 
-                $captured = $intent->capture($captureParams);
+                $captured = $intent->capture($captureParams, $stripeOptions);
 
                 $payment->update([
                     'payment_status' => 'completed',
@@ -888,6 +896,7 @@ class StripePaymentController extends Controller
             Stripe::setApiKey(
                 config('services.stripe.secret')
             );
+            $stripeOptions = $this->connectedStripeOptions($request);
 
             /*
             |--------------------------------------------------------------------------
@@ -923,7 +932,7 @@ class StripePaymentController extends Controller
                     'store_id' => (string) $storeId,
                     'checkout_type' => 'express_checkout',
                 ],
-            ], [
+            ], array_merge($stripeOptions, [
                 /*
                  * Prevent accidental duplicate PaymentIntents.
                  *
@@ -938,7 +947,7 @@ class StripePaymentController extends Controller
                         'discount' => $discountAmount,
                         'manual_discount' => $manualDiscount,
                     ])),
-            ]);
+            ]));
 
             return response()->json([
                 'status' => true,
@@ -1035,6 +1044,7 @@ class StripePaymentController extends Controller
             Stripe::setApiKey(
                 config('services.stripe.secret')
             );
+            $stripeOptions = $this->connectedStripeOptions($request);
 
             /*
             |--------------------------------------------------------------------------
@@ -1043,7 +1053,9 @@ class StripePaymentController extends Controller
             */
 
             $intent = PaymentIntent::retrieve(
-                $validated['payment_intent_id']
+                $validated['payment_intent_id'],
+                [],
+                $stripeOptions
             );
 
             /*
@@ -1166,7 +1178,7 @@ class StripePaymentController extends Controller
                     'checkout_type' => 'express_checkout',
                     'shipping_cost' => (string) $shippingCost,
                 ],
-            ]);
+            ], $stripeOptions);
 
             return response()->json([
                 'status' => true,
