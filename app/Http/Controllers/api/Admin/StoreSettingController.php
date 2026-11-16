@@ -43,9 +43,9 @@ class StoreSettingController extends Controller
         return strcmp($left, $right) <=> 0;
     }
 
+    
     public function store(Request $request)
     {
-        // Validate the sequence value explicitly so invalid values return 422.
         $request->validate([
             'miscellaneous' => 'sometimes|nullable|array',
             'miscellaneous.startingOrderNumber' => [
@@ -56,7 +56,8 @@ class StoreSettingController extends Controller
         ]);
 
         try {
-            $storeId = $this->getStoreId();
+            // Always use the legacy tenant store ID.
+            $storeId = current_store_id();
 
             $data = [
                 'website'         => $request->input('website'),
@@ -69,6 +70,7 @@ class StoreSettingController extends Controller
             ];
 
             DB::connection('tenant')->transaction(function () use ($storeId, $data, $request) {
+
                 $setting = StoreSetting::where('store_id', $storeId)
                     ->lockForUpdate()
                     ->first();
@@ -79,22 +81,22 @@ class StoreSettingController extends Controller
                 }
 
                 $incomingMiscellaneous = $request->input('miscellaneous');
+
                 $incomingStart = is_array($incomingMiscellaneous)
                     ? ($incomingMiscellaneous['startingOrderNumber'] ?? null)
                     : null;
 
                 if ($incomingStart !== null) {
                     $incomingStart = (string) $incomingStart;
+
                     $currentMiscellaneous = $setting->miscellaneous ?? [];
                     $currentStart = $currentMiscellaneous['startingOrderNumber'] ?? null;
 
-                    // The configured value is the next number available.
                     $minimumAllowed = $currentStart !== null
                         ? (string) $currentStart
                         : null;
 
-                    // Also protect sequences if older orders were numbered before
-                    // the generator maintained the setting value.
+                    // Only inspect orders belonging to the current legacy store.
                     $highestAssigned = Order::where('store_id', $storeId)
                         ->whereNotNull('order_number')
                         ->whereRaw("order_number REGEXP '^[0-9]+$'")
@@ -104,7 +106,7 @@ class StoreSettingController extends Controller
                     if ($highestAssigned !== null) {
                         $afterHighest = ltrim((string) $highestAssigned, '0');
                         $afterHighest = $afterHighest === '' ? '0' : $afterHighest;
-                        // Avoid native integer overflow for large configured sequences.
+
                         $afterHighest = $this->incrementNumericString($afterHighest);
 
                         if (
@@ -114,6 +116,16 @@ class StoreSettingController extends Controller
                             $minimumAllowed = $afterHighest;
                         }
                     }
+
+                    \Log::info('Starting order number validation', [
+                        'current_store_id' => $storeId,
+                        'tenant_database' => DB::connection('tenant')->getDatabaseName(),
+                        'settings_store_id' => $setting->store_id,
+                        'current_starting_number' => $currentStart,
+                        'highest_order_number' => $highestAssigned,
+                        'minimum_allowed' => $minimumAllowed,
+                        'incoming_starting_number' => $incomingStart,
+                    ]);
 
                     if (
                         $minimumAllowed !== null &&
@@ -138,12 +150,11 @@ class StoreSettingController extends Controller
                 'message' => 'Settings saved successfully',
                 'data'    => $setting
             ], 200);
-        } catch (Exception $e) {
-            // Preserve intentional 4xx responses raised by the sequence guard.
-            if (method_exists($e, 'getResponse') && $e->getResponse()) {
-                return $e->getResponse();
-            }
 
+        } catch (\Illuminate\Http\Exceptions\HttpResponseException $e) {
+            return $e->getResponse();
+
+        } catch (\Exception $e) {
             return response()->json([
                 'status'  => false,
                 'message' => 'Something went wrong',
@@ -151,6 +162,7 @@ class StoreSettingController extends Controller
             ], 500);
         }
     }
+
 
     /**
      * Increment an unsigned numeric string without integer overflow.
