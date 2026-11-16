@@ -39,6 +39,7 @@ return [
             'client_id' => env('STRIPE_CONNECT_CLIENT_ID'),
             'redirect_uri' => env('STRIPE_CONNECT_REDIRECT_URI'),
             'webhook_secret' => env('STRIPE_CONNECT_WEBHOOK_SECRET'),
+            'connect_enabled' => env('STRIPE_CONNECT_ENABLED', false),
         ],
     ],
 
