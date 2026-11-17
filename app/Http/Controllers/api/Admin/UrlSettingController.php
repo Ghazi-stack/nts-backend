@@ -39,15 +39,19 @@ class UrlSettingController extends Controller
     {
         $storeId = $this->getStoreId();
 
+        // Pehle legacy_store_id se try karo
         $store = \DB::connection('central')
             ->table('stores')
-            ->where('id', $storeId)
+            ->where('legacy_store_id', $storeId)
             ->first(['id', 'name', 'base_url']);
 
-        \Log::info('=== DOMAIN DEBUG ===', [
-            'store_id_from_function' => $storeId,
-            'store_from_db'          => $store,
-        ]);
+        // Agar nahi mila to id se try karo
+        if (!$store) {
+            $store = \DB::connection('central')
+                ->table('stores')
+                ->where('id', $storeId)
+                ->first(['id', 'name', 'base_url']);
+        }
 
         $baseUrl = $store->base_url ?? null;
 
