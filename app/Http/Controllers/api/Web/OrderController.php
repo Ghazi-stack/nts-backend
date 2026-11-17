@@ -3756,7 +3756,7 @@ class OrderController extends Controller
         }
     }
 
-    public function calculate(Request $request)
+   public function calculate(Request $request)
     {
         try {
             $validated = $request->validate([
@@ -3787,6 +3787,9 @@ class OrderController extends Controller
                 'products'         => 'required_if:isMultiAddress,false|array|min:1',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
+
+                // Optional orderId
+                'orderId'          => 'nullable|integer',
             ]);
 
             $storeId = current_store_id();
@@ -3982,6 +3985,26 @@ class OrderController extends Controller
 
             $amountInCents = (int) round($calculatedTotal * 100);
 
+            // ===== ORDER CALCULATION SAVE (only when orderId present) =====
+            if ($request->filled('orderId')) {
+                \App\Models\OrderCalculation::create([
+                    'order_id'                    => $request->input('orderId'),
+                    'store_id'                    => $storeId,
+                    'currency_id'                 => $currency->id ?? null,
+                    'amount_decimal'              => round($calculatedTotal, 6),
+                    'amount_cents'                => $amountInCents,
+                    'shipping_cost'               => round($shippingCost, 6),
+                    'manual_discount'             => $manualDiscount,
+                    'converted_coupon_discount'   => $convertedCouponDiscount ?? 0,
+                    'currency'                    => $currencyData,
+                    'coupon'                      => $couponData,
+                    'matched_rate'                => $matchedRate,
+                    'items'                       => $items,
+                    'payload'                     => $request->all(),
+                ]);
+            }
+            // ==============================================================
+
             return response()->json([
                 'status' => true,
                 'data'   => [
@@ -3989,7 +4012,7 @@ class OrderController extends Controller
                     'amountDecimal'           => round($calculatedTotal, 6),
                     'currency'                => $currencyData,
                     'coupon'                  => $couponData,
-                    'manualDiscount'          => $manualDiscount,                    // exact payload value
+                    'manualDiscount'          => $manualDiscount,
                     'convertedCouponDiscount' => $convertedCouponDiscount ?? 0,
                     'shippingCost'            => round($shippingCost, 6),
                     'matchedRate'             => $matchedRate,
