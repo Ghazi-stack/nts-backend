@@ -928,15 +928,13 @@ class UrlSettingController extends Controller
             $csv = $this->generateRedirectsCsv($redirects, $includeDynamicUrl);
 
             $fileName = 'Redirect-Export-' . Str::random(10) . '-' . now()->format('YmdHis') . '.csv';
-            $s3Path   = "redirect_exports/{$storeId}/{$fileName}";
 
-            // Public upload (permanent URL)
+            // Pehle store ID, phir folder
+            $s3Path = "{$storeId}/redirect_exports/{$fileName}";
+
             Storage::disk('s3')->put($s3Path, $csv, 'public');
-
-            // Permanent public URL
             $downloadUrl = Storage::disk('s3')->url($s3Path);
 
-            // Activity Log
             $log = RedirectActivityLog::create([
                 'store_id'     => $storeId,
                 'type'         => 'export',
