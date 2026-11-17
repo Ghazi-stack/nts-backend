@@ -921,63 +921,36 @@ class UrlSettingController extends Controller
             $storeId = $this->getStoreId();
             $includeDynamicUrl = $request->boolean('export_dynamic_urls', false);
 
-            $redirects = Redirect::where('store_id', $storeId)
-                ->orderBy('id')
-                ->get();
+            $redirects = Redirect::where('store_id', $storeId)->orderBy('id')->get();
 
             if ($redirects->isEmpty()) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'No redirects found to export.',
-                ], 404);
+                return response()->json(['status' => false, 'message' => 'No redirects found.'], 404);
             }
 
             $csv = $this->generateRedirectsCsv($redirects, $includeDynamicUrl);
 
             $fileName = 'Redirect-Export-' . Str::random(10) . '-' . now()->format('YmdHis') . '.csv';
+            $s3Path   = "{$storeId}/redirect_exports/{$fileName}";
 
-            // Pehle store ID, phir folder
-            $s3Path = "{$storeId}/redirect_exports/{$fileName}";
+            // Upload try karo
+            $uploaded = Storage::disk('s3')->put($s3Path, $csv, 'public');
 
-            Storage::disk('s3')->put($s3Path, $csv, 'public');
-            $downloadUrl = Storage::disk('s3')->url($s3Path);
-
-            $log = RedirectActivityLog::create([
-                'store_id'     => $storeId,
-                'type'         => 'export',
-                'total_items'  => $redirects->count(),
-                'successful'   => $redirects->count(),
-                'errors'       => 0,
-                'status'       => 'complete',
-                'file_name'    => $fileName,
-                'download_url' => $downloadUrl,
-                's3_path'      => $s3Path,
-            ]);
-
+            // Debug response
             return response()->json([
-                'status'       => true,
-                'message'      => 'Export completed successfully',
-                'total'        => $redirects->count(),
-                'file_name'    => $fileName,
-                'download_url' => $downloadUrl,
-                's3_path'      => $s3Path,
-                'log_id'       => $log->id,
+                'status'     => true,
+                'uploaded'   => $uploaded,
+                's3_path'    => $s3Path,
+                'exists'     => Storage::disk('s3')->exists($s3Path),
+                'csv_size'   => strlen($csv),
+                'disk'       => config('filesystems.disks.s3.bucket'),
+                'url'        => Storage::disk('s3')->url($s3Path),
             ]);
         } catch (\Exception $e) {
-            Log::error('Redirect Export Error: ' . $e->getMessage());
-
-            RedirectActivityLog::create([
-                'store_id'      => $this->getStoreId(),
-                'type'          => 'export',
-                'status'        => 'failed',
-                'errors'        => 1,
-                'error_message' => $e->getMessage(),
-            ]);
-
             return response()->json([
                 'status'  => false,
                 'message' => 'Export failed',
                 'error'   => $e->getMessage(),
+                'trace'   => $e->getTraceAsString(),
             ], 500);
         }
     }
