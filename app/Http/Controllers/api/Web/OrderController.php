@@ -3298,7 +3298,7 @@ class OrderController extends Controller
                             'store_id'   => $storeId,
                             'product_id' => $product->id,
                             'quantity'   => $item['quantity'],
-                            'price'      => $resolvePrice($product->id, $product->price) * $exchangeRate,
+                             'price'      => round($resolvePrice($product->id, $product->price) * $exchangeRate, 6), // ← 6 decimal
                         ]);
                         $product->decrement('current_stock', $item['quantity']);
                     }
@@ -3382,7 +3382,7 @@ class OrderController extends Controller
                                 'store_id'   => $storeId,
                                 'product_id' => $product->id,
                                 'quantity'   => $item['quantity'],
-                                'price'      => $resolvePrice($product->id, $product->price) * $exchangeRate,
+                                'price'      => round($resolvePrice($product->id, $product->price) * $exchangeRate, 6),
                             ]);
                             $product->decrement('current_stock', $item['quantity']);
                         }
