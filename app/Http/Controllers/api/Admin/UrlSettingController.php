@@ -897,10 +897,15 @@ class UrlSettingController extends Controller
             $storeId = $this->getStoreId();
             $includeDynamicUrl = $request->boolean('export_dynamic_urls', false);
 
-            $redirects = Redirect::where('store_id', $storeId)->orderBy('id')->get();
+            $redirects = Redirect::where('store_id', $storeId)
+                ->orderBy('id')
+                ->get();
 
             if ($redirects->isEmpty()) {
-                return response()->json(['status' => false, 'message' => 'No redirects found.'], 404);
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'No redirects found to export.',
+                ], 404);
             }
 
             $csv = $this->generateRedirectsCsv($redirects, $includeDynamicUrl);
@@ -908,19 +913,45 @@ class UrlSettingController extends Controller
             $fileName = 'Redirect-Export-' . Str::random(10) . '-' . now()->format('YmdHis') . '.csv';
             $s3Path   = "redirect_exports/{$storeId}/{$fileName}";
 
-            // Upload karo
-            $uploaded = Storage::disk('s3')->put($s3Path, $csv);
+            // Public upload (permanent URL)
+            Storage::disk('s3')->put($s3Path, $csv, 'public');
 
-            // Debug response
+            // Permanent public URL
+            $downloadUrl = Storage::disk('s3')->url($s3Path);
+
+            // Activity Log
+            $log = RedirectActivityLog::create([
+                'store_id'     => $storeId,
+                'type'         => 'export',
+                'total_items'  => $redirects->count(),
+                'successful'   => $redirects->count(),
+                'errors'       => 0,
+                'status'       => 'complete',
+                'file_name'    => $fileName,
+                'download_url' => $downloadUrl,
+                's3_path'      => $s3Path,
+            ]);
+
             return response()->json([
-                'status'     => true,
-                'uploaded'   => $uploaded,          // true/false
-                's3_path'    => $s3Path,
-                'exists'     => Storage::disk('s3')->exists($s3Path),
-                'csv_size'   => strlen($csv),
-                'file_name'  => $fileName,
+                'status'       => true,
+                'message'      => 'Export completed successfully',
+                'total'        => $redirects->count(),
+                'file_name'    => $fileName,
+                'download_url' => $downloadUrl,
+                's3_path'      => $s3Path,
+                'log_id'       => $log->id,
             ]);
         } catch (\Exception $e) {
+            Log::error('Redirect Export Error: ' . $e->getMessage());
+
+            RedirectActivityLog::create([
+                'store_id'      => $this->getStoreId(),
+                'type'          => 'export',
+                'status'        => 'failed',
+                'errors'        => 1,
+                'error_message' => $e->getMessage(),
+            ]);
+
             return response()->json([
                 'status'  => false,
                 'message' => 'Export failed',
@@ -933,7 +964,6 @@ class UrlSettingController extends Controller
     {
         $handle = fopen('php://temp', 'r+');
 
-        // Header
         $headers = [
             'Domain',
             'Old Path',
