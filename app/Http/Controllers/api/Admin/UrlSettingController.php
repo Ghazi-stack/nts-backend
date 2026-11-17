@@ -39,13 +39,20 @@ class UrlSettingController extends Controller
     {
         $storeId = $this->getStoreId();
 
-        $baseUrl = DB::connection('central')
+        $store = \DB::connection('central')
             ->table('stores')
             ->where('id', $storeId)
-            ->value('base_url');
+            ->first(['id', 'name', 'base_url']);
+
+        \Log::info('=== DOMAIN DEBUG ===', [
+            'store_id_from_function' => $storeId,
+            'store_from_db'          => $store,
+        ]);
+
+        $baseUrl = $store->base_url ?? null;
 
         if (!$baseUrl) {
-            return null;   // ya empty string
+            return null;
         }
 
         $baseUrl = rtrim($baseUrl, '/');
