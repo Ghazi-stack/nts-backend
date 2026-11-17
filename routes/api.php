@@ -767,6 +767,8 @@ Route::prefix('dashboard')->middleware([
         Route::post('/setting-redirect-export', 'exportRedirects');
         Route::get('/setting-redirect-activity', 'redirectActivityLogs');
         Route::get('/setting-redirect-activity/{id}', 'redirectActivityLogDetail');
+        Route::post('/setting-redirect-bulk-delete', 'bulkDeleteRedirects');
+        Route::post('/setting-redirect-bulk-export', 'bulkExportRedirects');
     });
 
     Route::middleware([

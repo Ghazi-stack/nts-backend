@@ -1088,4 +1088,110 @@ class UrlSettingController extends Controller
             ]
         ]);
     }
+
+    public function bulkDeleteRedirects(Request $request)
+    {
+        try {
+            $storeId = $this->getStoreId();
+
+            $validated = $request->validate([
+                'ids'   => 'required|array|min:1',
+                'ids.*' => 'integer',
+            ]);
+
+            $ids = $validated['ids'];
+
+            $deleted = Redirect::where('store_id', $storeId)
+                ->whereIn('id', $ids)
+                ->delete();
+
+            // Activity Log
+            RedirectActivityLog::create([
+                'store_id'    => $storeId,
+                'type'        => 'bulk_delete',
+                'total_items' => count($ids),
+                'successful'  => $deleted,
+                'errors'      => count($ids) - $deleted,
+                'status'      => 'complete',
+            ]);
+
+            return response()->json([
+                'status'  => true,
+                'message' => "{$deleted} redirect(s) deleted successfully",
+                'deleted' => $deleted,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Bulk Delete Error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Bulk delete failed',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function bulkExportRedirects(Request $request)
+    {
+        try {
+            $storeId = $this->getStoreId();
+
+            $validated = $request->validate([
+                'ids'                 => 'required|array|min:1',
+                'ids.*'               => 'integer',
+                'export_dynamic_urls' => 'sometimes|boolean',
+            ]);
+
+            $ids = $validated['ids'];
+            $includeDynamicUrl = $request->boolean('export_dynamic_urls', false);
+
+            $redirects = Redirect::where('store_id', $storeId)
+                ->whereIn('id', $ids)
+                ->orderBy('id')
+                ->get();
+
+            if ($redirects->isEmpty()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'No redirects found for selected IDs.',
+                ], 404);
+            }
+
+            $csv = $this->generateRedirectsCsv($redirects, $includeDynamicUrl);
+
+            $fileName = 'Redirect-Export-Selected-' . Str::random(8) . '-' . now()->format('YmdHis') . '.csv';
+            $s3Path   = "{$storeId}/redirect_exports/{$fileName}";
+
+            Storage::disk('s3')->put($s3Path, $csv, 'public');
+            $downloadUrl = Storage::disk('s3')->url($s3Path);
+
+            // Activity Log
+            $log = RedirectActivityLog::create([
+                'store_id'     => $storeId,
+                'type'         => 'bulk_export',
+                'total_items'  => $redirects->count(),
+                'successful'   => $redirects->count(),
+                'errors'       => 0,
+                'status'       => 'complete',
+                'file_name'    => $fileName,
+                'download_url' => $downloadUrl,
+                's3_path'      => $s3Path,
+            ]);
+
+            return response()->json([
+                'status'       => true,
+                'message'      => 'Selected redirects exported successfully',
+                'total'        => $redirects->count(),
+                'file_name'    => $fileName,
+                'download_url' => $downloadUrl,
+                'log_id'       => $log->id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Bulk Export Error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Bulk export failed',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
