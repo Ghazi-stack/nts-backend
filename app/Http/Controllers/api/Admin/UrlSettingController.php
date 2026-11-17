@@ -451,25 +451,25 @@ class UrlSettingController extends Controller
             $storeId = $this->getStoreId();
 
             $validated = $request->validate([
-                'old_url'       => 'required|string|max:255',
-                'redirect_type' => 'required|in:manual,dynamic',
-                'new_url'       => 'required_if:redirect_type,manual|nullable|string|max:500',
-                'entity_type'   => 'required_if:redirect_type,dynamic|nullable|in:product,brand,category,page,blog_post,webpage',
-                'entity_id'     => 'required_if:redirect_type,dynamic|nullable|integer',
-                'is_active'     => 'sometimes|boolean',
+                'oldUrl'       => 'required|string|max:255',
+                'redirectType' => 'required|in:manual,dynamic',
+                'newUrl'       => 'required_if:redirectType,manual|nullable|string|max:500',
+                'entityType'   => 'required_if:redirectType,dynamic|nullable|in:product,brand,category,page,blog_post,webpage',
+                'entityId'     => 'required_if:redirectType,dynamic|nullable|integer',
+                'isActive'     => 'sometimes|boolean',
             ]);
 
-            if (Redirect::where('store_id', $storeId)->where('old_url', $validated['old_url'])->exists()) {
+            if (Redirect::where('store_id', $storeId)->where('old_url', $validated['oldUrl'])->exists()) {
                 return response()->json([
                     'status'  => false,
                     'message' => 'Old URL already exists for this store.',
                 ], 422);
             }
 
-            $newUrl = $validated['new_url'] ?? null;
+            $newUrl = $validated['newUrl'] ?? null;
 
-            if ($validated['redirect_type'] === 'dynamic') {
-                $newUrl = $this->generateDynamicUrl($validated['entity_type'], $validated['entity_id'], $storeId);
+            if ($validated['redirectType'] === 'dynamic') {
+                $newUrl = $this->generateDynamicUrl($validated['entityType'], $validated['entityId'], $storeId);
                 if (!$newUrl) {
                     return response()->json([
                         'status'  => false,
@@ -480,20 +480,33 @@ class UrlSettingController extends Controller
 
             $redirect = Redirect::create([
                 'store_id'      => $storeId,
-                'product_id'    => ($validated['entity_type'] ?? null) === 'product' ? ($validated['entity_id'] ?? null) : null,
-                'entity_id'     => $validated['entity_id'] ?? null,
-                'entity_type'   => $validated['entity_type'] ?? ($validated['redirect_type'] === 'manual' ? 'manual' : 'unknown'),
-                'redirect_type' => $validated['redirect_type'],
+                'product_id'    => ($validated['entityType'] ?? null) === 'product' ? ($validated['entityId'] ?? null) : null,
+                'entity_id'     => $validated['entityId'] ?? null,
+                'entity_type'   => $validated['entityType'] ?? ($validated['redirectType'] === 'manual' ? 'manual' : 'unknown'),
+                'redirect_type' => $validated['redirectType'],
                 'domain'        => $this->getDomain(),
-                'old_url'       => $validated['old_url'],
+                'old_url'       => $validated['oldUrl'],
                 'new_url'       => $newUrl,
-                'is_active'     => $validated['is_active'] ?? true,
+                'is_active'     => $validated['isActive'] ?? true,
             ]);
 
             return response()->json([
                 'status'  => true,
                 'message' => 'Redirect created successfully',
-                'data'    => $redirect,
+                'data'    => [
+                    'id'           => $redirect->id,
+                    'storeId'      => $redirect->store_id,
+                    'productId'    => $redirect->product_id,
+                    'entityId'     => $redirect->entity_id,
+                    'entityType'   => $redirect->entity_type,
+                    'redirectType' => $redirect->redirect_type,
+                    'domain'       => $redirect->domain,
+                    'oldUrl'       => $redirect->old_url,
+                    'newUrl'       => $redirect->new_url,
+                    'isActive'     => (bool) $redirect->is_active,
+                    'createdAt'    => $redirect->created_at,
+                    'updatedAt'    => $redirect->updated_at,
+                ],
             ], 201);
         } catch (\Exception $e) {
             Log::error('Create Redirect Error: ' . $e->getMessage());
@@ -556,16 +569,16 @@ class UrlSettingController extends Controller
             }
 
             $validated = $request->validate([
-                'old_url'       => 'sometimes|required|string|max:255',
-                'redirect_type' => 'sometimes|required|in:manual,dynamic',
-                'new_url'       => 'nullable|string|max:500',
-                'entity_type'   => 'nullable|in:product,brand,category,page,blog_post,webpage',
-                'entity_id'     => 'nullable|integer',
-                'is_active'     => 'sometimes|boolean',
+                'oldUrl'       => 'sometimes|required|string|max:255',
+                'redirectType' => 'sometimes|required|in:manual,dynamic',
+                'newUrl'       => 'nullable|string|max:500',
+                'entityType'   => 'nullable|in:product,brand,category,page,blog_post,webpage',
+                'entityId'     => 'nullable|integer',
+                'isActive'     => 'sometimes|boolean',
             ]);
 
-            if (isset($validated['old_url']) && $validated['old_url'] !== $redirect->old_url) {
-                if (Redirect::where('store_id', $storeId)->where('old_url', $validated['old_url'])->where('id', '!=', $id)->exists()) {
+            if (isset($validated['oldUrl']) && $validated['oldUrl'] !== $redirect->old_url) {
+                if (Redirect::where('store_id', $storeId)->where('old_url', $validated['oldUrl'])->where('id', '!=', $id)->exists()) {
                     return response()->json([
                         'status'  => false,
                         'message' => 'Old URL already exists for this store.',
@@ -573,33 +586,48 @@ class UrlSettingController extends Controller
                 }
             }
 
-            $redirectType = $validated['redirect_type'] ?? $redirect->redirect_type;
-            $newUrl = $validated['new_url'] ?? $redirect->new_url;
+            $redirectType = $validated['redirectType'] ?? $redirect->redirect_type;
+            $newUrl = $validated['newUrl'] ?? $redirect->new_url;
 
-            if ($redirectType === 'dynamic' && isset($validated['entity_type'], $validated['entity_id'])) {
-                $generated = $this->generateDynamicUrl($validated['entity_type'], $validated['entity_id'], $storeId);
+            if ($redirectType === 'dynamic' && isset($validated['entityType'], $validated['entityId'])) {
+                $generated = $this->generateDynamicUrl($validated['entityType'], $validated['entityId'], $storeId);
                 if ($generated) {
                     $newUrl = $generated;
                 }
             }
 
             $redirect->update([
-                'old_url'       => $validated['old_url'] ?? $redirect->old_url,
+                'old_url'       => $validated['oldUrl'] ?? $redirect->old_url,
                 'redirect_type' => $redirectType,
-                'entity_type'   => $validated['entity_type'] ?? $redirect->entity_type,
-                'entity_id'     => $validated['entity_id'] ?? $redirect->entity_id,
-                'product_id'    => (($validated['entity_type'] ?? $redirect->entity_type) === 'product')
-                    ? ($validated['entity_id'] ?? $redirect->entity_id)
+                'entity_type'   => $validated['entityType'] ?? $redirect->entity_type,
+                'entity_id'     => $validated['entityId'] ?? $redirect->entity_id,
+                'product_id'    => (($validated['entityType'] ?? $redirect->entity_type) === 'product')
+                    ? ($validated['entityId'] ?? $redirect->entity_id)
                     : $redirect->product_id,
                 'domain'        => $this->getDomain(),
                 'new_url'       => $newUrl,
-                'is_active'     => $validated['is_active'] ?? $redirect->is_active,
+                'is_active'     => $validated['isActive'] ?? $redirect->is_active,
             ]);
+
+            $fresh = $redirect->fresh();
 
             return response()->json([
                 'status'  => true,
                 'message' => 'Redirect updated successfully',
-                'data'    => $redirect->fresh(),
+                'data'    => [
+                    'id'           => $fresh->id,
+                    'storeId'      => $fresh->store_id,
+                    'productId'    => $fresh->product_id,
+                    'entityId'     => $fresh->entity_id,
+                    'entityType'   => $fresh->entity_type,
+                    'redirectType' => $fresh->redirect_type,
+                    'domain'       => $fresh->domain,
+                    'oldUrl'       => $fresh->old_url,
+                    'newUrl'       => $fresh->new_url,
+                    'isActive'     => (bool) $fresh->is_active,
+                    'createdAt'    => $fresh->created_at,
+                    'updatedAt'    => $fresh->updated_at,
+                ],
             ]);
         } catch (\Exception $e) {
             Log::error('Update Redirect Error: ' . $e->getMessage());
@@ -919,7 +947,7 @@ class UrlSettingController extends Controller
     {
         try {
             $storeId = $this->getStoreId();
-            $includeDynamicUrl = $request->boolean('export_dynamic_urls', false);
+            $includeDynamicUrl = $request->boolean('exportDynamicUrls', false);
 
             $redirects = Redirect::where('store_id', $storeId)->orderBy('id')->get();
 
@@ -1149,11 +1177,11 @@ class UrlSettingController extends Controller
             $validated = $request->validate([
                 'ids'                 => 'required|array|min:1',
                 'ids.*'               => 'integer',
-                'export_dynamic_urls' => 'sometimes|boolean',
+                'exportDynamicUrls' => 'sometimes|boolean',
             ]);
 
             $ids = $validated['ids'];
-            $includeDynamicUrl = $request->boolean('export_dynamic_urls', false);
+            $includeDynamicUrl = $request->boolean('exportDynamicUrls', false);
 
             $redirects = Redirect::where('store_id', $storeId)
                 ->whereIn('id', $ids)
