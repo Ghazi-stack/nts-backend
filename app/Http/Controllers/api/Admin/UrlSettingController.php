@@ -12,10 +12,12 @@ use App\Models\Redirect;
 use App\Models\ProductSeo;
 use App\Models\Product;
 use App\Models\Category;
+use App\Models\RedirectActivityLog;
 use App\Models\WebPage;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class UrlSettingController extends Controller
@@ -773,8 +775,7 @@ class UrlSettingController extends Controller
             $file = $request->file('file');
             $handle = fopen($file->getRealPath(), 'r');
 
-            // Skip header row
-            fgetcsv($handle);
+            fgetcsv($handle); // skip header
 
             $imported = 0;
             $skipped  = 0;
@@ -787,18 +788,15 @@ class UrlSettingController extends Controller
                 $dynType   = trim($row[3] ?? '');
                 $dynId     = trim($row[4] ?? '');
 
-                // Old path required
                 if (empty($oldPath)) {
                     $skipped++;
                     continue;
                 }
 
-                // Normalize old_url
                 if (!str_starts_with($oldPath, '/')) {
                     $oldPath = '/' . $oldPath;
                 }
 
-                // Skip if already exists
                 if (Redirect::where('store_id', $storeId)->where('old_url', $oldPath)->exists()) {
                     $skipped++;
                     $errors[] = "Already exists: {$oldPath}";
@@ -811,14 +809,12 @@ class UrlSettingController extends Controller
                 $entityId     = null;
                 $productId    = null;
 
-                // ========== DYNAMIC CASE ==========
                 if (!empty($dynType) && !empty($dynId)) {
                     $redirectType = 'dynamic';
-                    $entityType   = strtolower($dynType); // product, category, webpage
+                    $entityType   = strtolower($dynType);
                     $entityId     = (int) $dynId;
                     $productId    = ($entityType === 'product') ? $entityId : null;
 
-                    // Backend khud new_url generate karega
                     $newUrl = $this->generateDynamicUrl($entityType, $entityId, $storeId);
 
                     if (!$newUrl) {
@@ -828,7 +824,6 @@ class UrlSettingController extends Controller
                     }
                 }
 
-                // ========== MANUAL CASE ==========
                 if ($redirectType === 'manual') {
                     if (empty($newUrl)) {
                         $skipped++;
@@ -840,7 +835,6 @@ class UrlSettingController extends Controller
                     }
                 }
 
-                // Insert into table
                 Redirect::create([
                     'store_id'      => $storeId,
                     'product_id'    => $productId,
@@ -858,20 +852,166 @@ class UrlSettingController extends Controller
 
             fclose($handle);
 
+            // ========== ACTIVITY LOG ==========
+            $log = RedirectActivityLog::create([
+                'store_id'      => $storeId,
+                'type'          => 'import',
+                'total_items'   => $imported + $skipped,
+                'successful'    => $imported,
+                'errors'        => $skipped,
+                'status'        => 'complete',
+                'file_name'     => $file->getClientOriginalName(),
+                'error_message' => !empty($errors) ? implode("\n", array_slice($errors, 0, 20)) : null,
+            ]);
+
             return response()->json([
                 'status'   => true,
                 'message'  => 'Import completed successfully',
                 'imported' => $imported,
                 'skipped'  => $skipped,
                 'errors'   => $errors,
+                'log_id'   => $log->id,
             ]);
         } catch (\Exception $e) {
             Log::error('Redirect Import Error: ' . $e->getMessage());
+
+            RedirectActivityLog::create([
+                'store_id'      => $this->getStoreId(),
+                'type'          => 'import',
+                'status'        => 'failed',
+                'errors'        => 1,
+                'error_message' => $e->getMessage(),
+            ]);
+
             return response()->json([
                 'status'  => false,
                 'message' => 'Import failed',
                 'error'   => $e->getMessage(),
             ], 500);
         }
+    }
+
+    public function exportRedirects(Request $request)
+    {
+        try {
+            $storeId = $this->getStoreId();
+            $includeDynamicUrl = $request->boolean('export_dynamic_urls', false);
+
+            $redirects = Redirect::where('store_id', $storeId)->orderBy('id')->get();
+
+            if ($redirects->isEmpty()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'No redirects found to export.',
+                ], 404);
+            }
+
+            $csv = $this->generateRedirectsCsv($redirects, $includeDynamicUrl);
+
+            $fileName = 'Redirect-Export-' . Str::random(10) . '-' . now()->format('YmdHis') . '.csv';
+            $s3Path   = "redirect_exports/{$storeId}/{$fileName}";
+
+            Storage::disk('s3')->put($s3Path, $csv, 'public');
+            $downloadUrl = Storage::disk('s3')->url($s3Path);
+
+            // ========== ACTIVITY LOG ==========
+            $log = RedirectActivityLog::create([
+                'store_id'     => $storeId,
+                'type'         => 'export',
+                'total_items'  => $redirects->count(),
+                'successful'   => $redirects->count(),
+                'errors'       => 0,
+                'status'       => 'complete',
+                'file_name'    => $fileName,
+                'download_url' => $downloadUrl,
+                's3_path'      => $s3Path,
+            ]);
+
+            return response()->json([
+                'status'       => true,
+                'message'      => 'Export completed successfully',
+                'total'        => $redirects->count(),
+                'file_name'    => $fileName,
+                'download_url' => $downloadUrl,
+                's3_path'      => $s3Path,
+                'log_id'       => $log->id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Redirect Export Error: ' . $e->getMessage());
+
+            RedirectActivityLog::create([
+                'store_id'      => $this->getStoreId(),
+                'type'          => 'export',
+                'status'        => 'failed',
+                'errors'        => 1,
+                'error_message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Export failed',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function redirectActivityLogs(Request $request)
+    {
+        $storeId = $this->getStoreId();
+        $perPage = $request->query('perPage', 10);
+
+        $logs = RedirectActivityLog::where('store_id', $storeId)
+            ->latest()
+            ->paginate($perPage);
+
+        $data = $logs->getCollection()->map(function ($log) {
+            return [
+                'id'           => $log->id,
+                'dateFinished' => $log->created_at->format('m/d/Y, g:i:s A'),
+                'type'         => ucfirst($log->type),
+                'totalItems'   => $log->total_items,
+                'successful'   => $log->successful,
+                'errors'       => $log->errors,
+                'status'       => strtoupper($log->status),
+                'fileName'     => $log->file_name,
+                'downloadUrl'  => $log->download_url,
+            ];
+        });
+
+        return response()->json([
+            'status'      => true,
+            'total'       => $logs->total(),
+            'perPage'     => $logs->perPage(),
+            'currentPage' => $logs->currentPage(),
+            'totalPages'  => $logs->lastPage(),
+            'data'        => $data,
+        ]);
+    }
+
+    public function redirectActivityLogDetail($id)
+    {
+        $storeId = $this->getStoreId();
+
+        $log = RedirectActivityLog::where('store_id', $storeId)->find($id);
+
+        if (!$log) {
+            return response()->json(['status' => false, 'message' => 'Log not found'], 404);
+        }
+
+        return response()->json([
+            'status' => true,
+            'data'   => [
+                'id'           => $log->id,
+                'dateFinished' => $log->created_at->format('m/d/Y, g:i:s A'),
+                'type'         => ucfirst($log->type),
+                'totalItems'   => $log->total_items,
+                'successful'   => $log->successful,
+                'errors'       => $log->errors,
+                'status'       => strtoupper($log->status),
+                'fileName'     => $log->file_name,
+                'downloadUrl'  => $log->download_url,
+                'errorMessage' => $log->error_message,
+            ]
+        ]);
     }
 }

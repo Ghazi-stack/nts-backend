@@ -99,11 +99,11 @@ Route::post('/dashboard/user/register', [
 ]);
 
 // Stripe Connect OAuth callback.
-    // Public endpoint: Stripe redirects the merchant here.
-    Route::get(
-        '/web/stripe/connect/callback',
-        [StripeConnectController::class, 'callback']
-    );
+// Public endpoint: Stripe redirects the merchant here.
+Route::get(
+    '/web/stripe/connect/callback',
+    [StripeConnectController::class, 'callback']
+);
 
 Route::prefix('user')->controller(AuthController::class)->group(function () {
 
@@ -764,6 +764,9 @@ Route::prefix('dashboard')->middleware([
         Route::put('/setting-redirect-edit/{id}', 'updateRedirect');              // Update
         Route::delete('/setting-redirect-delete/{id}', 'destroyRedirect');          // Delete
         Route::post('/setting-redirect-import', 'importRedirects');
+        Route::post('/setting-redirect-export', 'exportRedirects');
+        Route::get('/setting-redirect-activity', 'redirectActivityLogs');
+        Route::get('/setting-redirect-activity/{id}', 'redirectActivityLogDetail');
     });
 
     Route::middleware([
