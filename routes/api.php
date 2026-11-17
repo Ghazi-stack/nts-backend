@@ -191,11 +191,25 @@ Route::prefix('dashboard')->middleware([
 
     Route::middleware(['auth:sanctum'])->prefix('payment-settings')->group(function () {
 
+        Route::get('/catalog', [PaymentSettingsController::class, 'catalog']);
         // Retrieve all payment methods.
         Route::get('/', [
             PaymentSettingsController::class,
             'index'
         ]);
+
+        Route::get('/{methodCode}/setup', [PaymentSettingsController::class, 'setup']);
+        Route::get('/{methodCode}/providers', [PaymentSettingsController::class, 'providers']);
+
+        Route::patch(
+            '/{methodCode}/providers/{providerCode}/enable',
+            [PaymentSettingsController::class, 'enableProvider']
+        );
+
+        Route::patch(
+            '/{methodCode}/providers/{providerCode}/disable',
+            [PaymentSettingsController::class, 'disableProvider']
+        );
 
         // Retrieve individual payment method.
         Route::get('/{methodCode}', [

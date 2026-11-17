@@ -5,24 +5,50 @@ namespace App\Http\Controllers\api\Admin;
 use App\Http\Controllers\Controller;
 use App\Services\PaymentSettingsService;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 class PaymentSettingsController extends Controller
 {
     protected PaymentSettingsService $paymentSettings;
 
-    public function __construct(
-        PaymentSettingsService $paymentSettings
-    ) {
+    public function __construct(PaymentSettingsService $paymentSettings)
+    {
         $this->paymentSettings = $paymentSettings;
     }
 
-    /**
-     * Resolve authenticated store.
-     */
+    private function keysToSnakeCase(array $data): array
+    {
+        $result = [];
+
+        foreach ($data as $key => $value) {
+            $newKey = is_string($key) ? Str::snake($key) : $key;
+
+            $result[$newKey] = is_array($value)
+                ? $this->keysToSnakeCase($value)
+                : $value;
+        }
+
+        return $result;
+    }
+
+    private function keysToCamelCase(array $data): array
+    {
+        $result = [];
+
+        foreach ($data as $key => $value) {
+            $newKey = is_string($key) ? Str::camel($key) : $key;
+
+            $result[$newKey] = is_array($value)
+                ? $this->keysToCamelCase($value)
+                : $value;
+        }
+
+        return $result;
+    }
+
     private function getStoreId(): int
     {
         $storeId = current_store_id();
@@ -37,52 +63,72 @@ class PaymentSettingsController extends Controller
         return (int) $storeId;
     }
 
-    /**
-     * Safe payment method response.
-     * Credentials are never returned.
-     */
     private function formatMethod($method): array
     {
-        $configuration = $method->configuration ?? [];
-
         return [
             'id' => $method->id,
-            'store_id' => $method->store_id,
-            'method_code' => $method->method_code,
+            'storeId' => $method->store_id,
+            'methodCode' => $method->method_code,
             'category' => $method->category,
-            'display_name' => $method->display_name,
-            'is_enabled' => (bool) $method->is_enabled,
-            'is_configured' => (bool) $method->is_configured,
-            'available_countries' => $method->available_countries,
-            'configuration' => $configuration,
-
-            // Never expose credentials.
-            'has_credentials' => !empty($method->credentials),
-
-            'created_at' => $method->created_at,
-            'updated_at' => $method->updated_at,
+            'displayName' => $method->display_name,
+            'isEnabled' => (bool) $method->is_enabled,
+            'isConfigured' => (bool) $method->is_configured,
+            'availableCountries' => $method->available_countries,
+            'configuration' => $this->keysToCamelCase(
+                $method->configuration ?? []
+            ),
+            'hasCredentials' => !empty($method->credentials),
+            'createdAt' => $method->created_at,
+            'updatedAt' => $method->updated_at,
         ];
     }
 
+    private function validationErrorResponse($validator)
+    {
+        $errors = [];
+
+        foreach ($validator->errors()->messages() as $field => $messages) {
+            $camelField = implode('.', array_map(
+                fn ($part) => ctype_digit((string) $part)
+                    ? $part
+                    : Str::camel($part),
+                explode('.', $field)
+            ));
+
+            $errors[$camelField] = $messages;
+        }
+
+        return response()->json([
+            'status' => false,
+            'message' => 'Validation failed.',
+            'errors' => $errors,
+        ], 422);
+    }
+
     /**
-     * GET: List all payment methods.
+     * GET /payment-settings
+     * All methods, grouped by category.
      */
     public function index()
     {
         try {
-            $storeId = $this->getStoreId();
+            $groups = $this->paymentSettings->getGroupedMethods(
+                $this->getStoreId()
+            );
 
-            $methods = $this->paymentSettings
-                ->getMethods($storeId);
+            $data = [];
+
+            foreach ($groups as $category => $methods) {
+                $data[$category] = $methods
+                    ->map(fn ($method) => $this->formatMethod($method))
+                    ->values();
+            }
 
             return response()->json([
                 'status' => true,
                 'message' => 'Payment methods retrieved successfully.',
-                'data' => $methods->map(
-                    fn ($method) => $this->formatMethod($method)
-                ),
+                'data' => $data,
             ]);
-
         } catch (Throwable $e) {
             report($e);
 
@@ -94,15 +140,89 @@ class PaymentSettingsController extends Controller
     }
 
     /**
-     * GET: Retrieve one payment method.
+     * GET /payment-settings/catalog
+     * Static setup definitions; not a statement of live availability.
+     */
+    public function catalog()
+    {
+        try {
+            return response()->json([
+                'status' => true,
+                'message' => 'Payment catalog retrieved successfully.',
+                'data' => $this->paymentSettings->getCatalog(),
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Unable to retrieve payment catalog.',
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /payment-settings/{methodCode}/setup
+     */
+    public function setup(string $methodCode)
+    {
+        $definition = $this->paymentSettings->getCatalogMethod($methodCode);
+
+        if (!$definition) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Payment method setup not found.',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Payment method setup retrieved successfully.',
+            'data' => $definition,
+        ]);
+    }
+
+    /**
+     * GET /payment-settings/{methodCode}/providers
+     */
+    public function providers(string $methodCode)
+    {
+        try {
+            $providers = $this->paymentSettings->getWalletProviders(
+                $this->getStoreId(),
+                $methodCode
+            );
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Wallet providers retrieved successfully.',
+                'data' => $providers,
+            ]);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 404);
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Unable to retrieve wallet providers.',
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /payment-settings/{methodCode}
      */
     public function show(string $methodCode)
     {
         try {
-            $storeId = $this->getStoreId();
-
-            $method = $this->paymentSettings
-                ->getMethod($storeId, $methodCode);
+            $method = $this->paymentSettings->getMethod(
+                $this->getStoreId(),
+                $methodCode
+            );
 
             if (!$method) {
                 return response()->json([
@@ -116,7 +236,6 @@ class PaymentSettingsController extends Controller
                 'message' => 'Payment method retrieved successfully.',
                 'data' => $this->formatMethod($method),
             ]);
-
         } catch (Throwable $e) {
             report($e);
 
@@ -128,14 +247,16 @@ class PaymentSettingsController extends Controller
     }
 
     /**
-     * POST: Save or update payment method configuration.
+     * POST /payment-settings/{methodCode}
      */
     public function save(Request $request, string $methodCode)
     {
         $storeId = $this->getStoreId();
 
-        $method = $this->paymentSettings
-            ->getMethod($storeId, $methodCode);
+        $method = $this->paymentSettings->getMethod(
+            $storeId,
+            $methodCode
+        );
 
         if (!$method) {
             return response()->json([
@@ -144,25 +265,37 @@ class PaymentSettingsController extends Controller
             ], 404);
         }
 
-        $validated = $request->validate([
+        $normalizedData = $this->keysToSnakeCase($request->all());
+
+        $validator = Validator::make($normalizedData, [
             'display_name' => 'sometimes|required|string|max:150',
 
+            // Supports:
+            // { "allCountries": true, "countries": [] }
             'available_countries' => 'sometimes|nullable|array',
-
-            'available_countries.*' => 'string|max:3',
+            'available_countries.all_countries' => 'sometimes|boolean',
+            'available_countries.countries' => 'sometimes|array',
+            'available_countries.countries.*' => [
+                'string',
+                'size:2',
+                'alpha',
+            ],
 
             'configuration' => 'sometimes|nullable|array',
 
             'credentials' => 'sometimes|nullable|array',
-
             'credentials.*' => 'nullable|string|max:10000',
         ]);
+
+        if ($validator->fails()) {
+            return $this->validationErrorResponse($validator);
+        }
 
         try {
             $saved = $this->paymentSettings->saveConfiguration(
                 $storeId,
                 $methodCode,
-                $validated
+                $validator->validated()
             );
 
             return response()->json([
@@ -170,7 +303,6 @@ class PaymentSettingsController extends Controller
                 'message' => 'Payment configuration saved successfully.',
                 'data' => $this->formatMethod($saved),
             ]);
-
         } catch (Throwable $e) {
             report($e);
 
@@ -182,28 +314,26 @@ class PaymentSettingsController extends Controller
     }
 
     /**
-     * PATCH: Enable payment method.
+     * PATCH /payment-settings/{methodCode}/enable
      */
     public function enable(string $methodCode)
     {
         try {
-            $storeId = $this->getStoreId();
-
-            $method = $this->paymentSettings
-                ->enableMethod($storeId, $methodCode);
+            $method = $this->paymentSettings->enableMethod(
+                $this->getStoreId(),
+                $methodCode
+            );
 
             return response()->json([
                 'status' => true,
                 'message' => 'Payment method enabled successfully.',
                 'data' => $this->formatMethod($method),
             ]);
-
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             return response()->json([
                 'status' => false,
                 'message' => $e->getMessage(),
             ], 422);
-
         } catch (Throwable $e) {
             report($e);
 
@@ -215,34 +345,110 @@ class PaymentSettingsController extends Controller
     }
 
     /**
-     * PATCH: Disable payment method.
+     * PATCH /payment-settings/{methodCode}/disable
      */
     public function disable(string $methodCode)
     {
         try {
-            $storeId = $this->getStoreId();
-
-            $method = $this->paymentSettings
-                ->disableMethod($storeId, $methodCode);
+            $method = $this->paymentSettings->disableMethod(
+                $this->getStoreId(),
+                $methodCode
+            );
 
             return response()->json([
                 'status' => true,
                 'message' => 'Payment method disabled successfully.',
                 'data' => $this->formatMethod($method),
             ]);
-
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             return response()->json([
                 'status' => false,
                 'message' => $e->getMessage(),
             ], 404);
-
         } catch (Throwable $e) {
             report($e);
 
             return response()->json([
                 'status' => false,
                 'message' => 'Unable to disable payment method.',
+            ], 500);
+        }
+    }
+
+    /**
+     * PATCH /payment-settings/{methodCode}/providers/{providerCode}/enable
+     */
+    public function enableProvider(
+        string $methodCode,
+        string $providerCode
+    ) {
+        try {
+            $provider = $this->paymentSettings->enableWalletProvider(
+                $this->getStoreId(),
+                $methodCode,
+                $providerCode
+            );
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Wallet provider enabled successfully.',
+                'data' => [
+                    'methodCode' => $provider->method_code,
+                    'providerCode' => $provider->provider_code,
+                    'isEnabled' => (bool) $provider->is_enabled,
+                    'isAvailable' => (bool) $provider->is_available,
+                ],
+            ]);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Unable to enable wallet provider.',
+            ], 500);
+        }
+    }
+
+    /**
+     * PATCH /payment-settings/{methodCode}/providers/{providerCode}/disable
+     */
+    public function disableProvider(
+        string $methodCode,
+        string $providerCode
+    ) {
+        try {
+            $provider = $this->paymentSettings->disableWalletProvider(
+                $this->getStoreId(),
+                $methodCode,
+                $providerCode
+            );
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Wallet provider disabled successfully.',
+                'data' => [
+                    'methodCode' => $provider->method_code,
+                    'providerCode' => $provider->provider_code,
+                    'isEnabled' => (bool) $provider->is_enabled,
+                    'isAvailable' => (bool) $provider->is_available,
+                ],
+            ]);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 404);
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Unable to disable wallet provider.',
             ], 500);
         }
     }
