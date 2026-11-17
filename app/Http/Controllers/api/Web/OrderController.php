@@ -664,7 +664,7 @@ class OrderController extends Controller
         }
     }
 
-    public function showByOrderId(Request $request)
+   public function showByOrderId(Request $request)
     {
         try {
             $user = auth('sanctum')->user();
@@ -681,11 +681,18 @@ class OrderController extends Controller
             $order = $orderQuery->firstOrFail();
             $customer = $order->customer;
 
+            // ===== ORDER CALCULATION MATCH =====
+            $calculation = \App\Models\OrderCalculation::where('order_id', $orderId)
+                ->where('store_id', current_store_id())
+                ->latest()
+                ->first();
+            // ===================================
+
             // Group order items by destination (if you have multiple destinations, else single)
             $shippingDestinations = $order->items
-                ->groupBy(fn($item) => $item->destination_id ?? 0) // fallback to 0 if no destination
+                ->groupBy(fn($item) => $item->destination_id ?? 0)
                 ->map(function ($items, $key) use ($order, $customer) {
-                    $billing = $order->billingInformation; // adjust if you store per-destination billing
+                    $billing = $order->billingInformation;
                     return [
                         "address" => [
                             "firstName" => $billing->first_name ?? null,
@@ -718,6 +725,7 @@ class OrderController extends Controller
                 "staffNotes" => $order->staff_notes,
                 "isDraft" => $order->is_draft,
                 "totalAmount" => $order->total_amount,
+                "amountDecimal" => $calculation ? (float) $calculation->amount_decimal : null,  // ← yeh add kiya
                 'currencyCode' => $order->currency_code,
                 'currencySymbol' => $order->currency_symbol,
                 'exchangeRate' => $order->exchange_rate,
