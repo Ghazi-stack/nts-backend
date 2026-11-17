@@ -932,29 +932,55 @@ class UrlSettingController extends Controller
             $fileName = 'Redirect-Export-' . Str::random(10) . '-' . now()->format('YmdHis') . '.csv';
             $s3Path   = "{$storeId}/redirect_exports/{$fileName}";
 
-            // Upload try karo
-            $uploaded = Storage::disk('s3')->put($s3Path, $csv, 'public');
+            // Visibility ke bina try karo
+            $uploaded = Storage::disk('s3')->put($s3Path, $csv);
 
-            // Debug response
+            if (!$uploaded) {
+                // Fallback: purana path try karo
+                $s3Path = "redirect_exports/{$storeId}/{$fileName}";
+                $uploaded = Storage::disk('s3')->put($s3Path, $csv);
+            }
+
+            if (!$uploaded) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'S3 upload failed',
+                    's3_path' => $s3Path,
+                ], 500);
+            }
+
+            $downloadUrl = Storage::disk('s3')->url($s3Path);
+
+            $log = RedirectActivityLog::create([
+                'store_id'     => $storeId,
+                'type'         => 'export',
+                'total_items'  => $redirects->count(),
+                'successful'   => $redirects->count(),
+                'errors'       => 0,
+                'status'       => 'complete',
+                'file_name'    => $fileName,
+                'download_url' => $downloadUrl,
+                's3_path'      => $s3Path,
+            ]);
+
             return response()->json([
-                'status'     => true,
-                'uploaded'   => $uploaded,
-                's3_path'    => $s3Path,
-                'exists'     => Storage::disk('s3')->exists($s3Path),
-                'csv_size'   => strlen($csv),
-                'disk'       => config('filesystems.disks.s3.bucket'),
-                'url'        => Storage::disk('s3')->url($s3Path),
+                'status'       => true,
+                'message'      => 'Export completed successfully',
+                'total'        => $redirects->count(),
+                'file_name'    => $fileName,
+                'download_url' => $downloadUrl,
+                's3_path'      => $s3Path,
+                'log_id'       => $log->id,
             ]);
         } catch (\Exception $e) {
+            Log::error('Export Error: ' . $e->getMessage());
             return response()->json([
                 'status'  => false,
                 'message' => 'Export failed',
                 'error'   => $e->getMessage(),
-                'trace'   => $e->getTraceAsString(),
             ], 500);
         }
     }
-
     private function generateRedirectsCsv($redirects, bool $includeDynamicUrl): string
     {
         $handle = fopen('php://temp', 'r+');
