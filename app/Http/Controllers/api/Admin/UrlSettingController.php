@@ -615,23 +615,149 @@ class UrlSettingController extends Controller
     {
         switch ($entityType) {
             case 'product':
-                $seo = ProductSeo::where('product_id', $entityId)
-                    ->whereHas('product', fn($q) => $q->where('store_id', $storeId))
+                $product = Product::where('id', $entityId)
+                    ->where('store_id', $storeId)
                     ->first();
-                return $seo?->product_url ? '/' . ltrim($seo->product_url, '/') : null;
+
+                if (!$product) return null;
+
+                // UrlSetting se format lo
+                $setting = UrlSetting::where('store_id', $storeId)
+                    ->where('entity_type', 'product')
+                    ->first();
+
+                if (!$setting) {
+                    // Fallback to ProductSeo
+                    $seo = ProductSeo::where('product_id', $entityId)->first();
+                    return $seo?->product_url ? '/' . ltrim($seo->product_url, '/') : null;
+                }
+
+                return $this->generateProductUrlFromSetting($product, $setting);
 
             case 'category':
                 $category = Category::where('id', $entityId)->where('store_id', $storeId)->first();
-                return $category?->slug ? '/' . ltrim($category->slug, '/') . '/' : null;
+                if (!$category) return null;
+
+                $setting = UrlSetting::where('store_id', $storeId)
+                    ->where('entity_type', 'category')
+                    ->first();
+
+                return $setting
+                    ? $this->generateCategoryUrlFromSetting($category, $setting)
+                    : ('/' . ltrim($category->slug ?? '', '/') . '/');
 
             case 'webpage':
             case 'page':
                 $page = WebPage::where('id', $entityId)->where('store_id', $storeId)->first();
-                $url = $page?->page_url ?? ($page?->slug ? '/' . ltrim($page->slug, '/') . '/' : null);
-                return $url ? '/' . ltrim($url, '/') : null;
+                if (!$page) return null;
+
+                $setting = UrlSetting::where('store_id', $storeId)
+                    ->where('entity_type', 'webpage')
+                    ->first();
+
+                return $setting
+                    ? $this->generateWebpageUrlFromSetting($page, $setting)
+                    : ($page->page_url ?? ('/' . Str::slug($page->page_name) . '/'));
 
             default:
                 return null;
+        }
+    }
+
+    private function generateProductUrlFromSetting($product, $setting): string
+    {
+        $format = $setting->format_type;
+        $custom = $setting->custom_format;
+        $titleSlug = Str::slug($product->name ?? '');
+        $sku = $product->sku ?? '';
+
+        $categorySlug = 'uncategorized';
+        if ($product->category_id) {
+            $category = Category::find($product->category_id);
+            if ($category) {
+                $categorySlug = $category->slug ?? Str::slug($category->name);
+            }
+        }
+
+        switch ($format) {
+            case 'seo_optimized_short':
+                return '/' . $titleSlug . '/';
+            case 'seo_optimized_long':
+                return '/products/' . $titleSlug . '.html';
+            case 'seo_optimized_category':
+                return '/' . $categorySlug . '/' . $titleSlug . '/';
+            case 'custom':
+                if (empty($custom)) return '/' . $titleSlug . '/';
+                $url = str_replace(
+                    ['%title%', '%sku%', '%id%', '%categoryname%', '%parent%'],
+                    [$titleSlug, $sku, $product->id, $categorySlug, $categorySlug],
+                    $custom
+                );
+                if (!str_starts_with($url, '/')) $url = '/' . $url;
+                if (!str_ends_with($url, '/') && !str_contains($url, '.')) $url .= '/';
+                return $url;
+            default:
+                return '/' . $titleSlug . '/';
+        }
+    }
+
+    private function generateCategoryUrlFromSetting($category, $setting): string
+    {
+        $format = $setting->format_type;
+        $custom = $setting->custom_format;
+        $categorySlug = $category->slug ?? Str::slug($category->name ?? '');
+
+        $parentSlug = '';
+        if ($category->parent_id) {
+            $parent = Category::find($category->parent_id);
+            if ($parent) {
+                $parentSlug = $parent->slug ?? Str::slug($parent->name ?? '');
+            }
+        }
+
+        switch ($format) {
+            case 'seo_optimized_short':
+                return '/' . $categorySlug . '/';
+            case 'seo_optimized_long':
+                return '/categories/' . $categorySlug . '.html';
+            case 'custom':
+                if (empty($custom)) return '/' . $categorySlug . '/';
+                $url = str_replace(
+                    ['%categoryname%', '%parent%', '%id%'],
+                    [$categorySlug, $parentSlug, $category->id],
+                    $custom
+                );
+                if (!str_starts_with($url, '/')) $url = '/' . $url;
+                if (!str_ends_with($url, '/') && !str_contains($url, '.')) $url .= '/';
+                return $url;
+            default:
+                return '/' . $categorySlug . '/';
+        }
+    }
+
+    private function generateWebpageUrlFromSetting($page, $setting): string
+    {
+        $format = $setting->format_type;
+        $custom = $setting->custom_format;
+        $pageSlug = Str::slug($page->page_name ?? '');
+
+        switch ($format) {
+            case 'seo_optimized_short':
+                return '/' . $pageSlug . '/';
+            case 'seo_optimized_long':
+                return '/pages/' . $pageSlug . '.html';
+            case 'custom':
+                if (empty($custom)) return '/' . $pageSlug . '/';
+                $url = str_replace(
+                    ['%title%', '%id%'],
+                    [$pageSlug, $page->id],
+                    $custom
+                );
+                if (!str_starts_with($url, '/')) $url = '/' . $url;
+                if (!str_ends_with($url, '/') && !str_contains($url, '.')) $url .= '/';
+                return $url;
+            default:
+                return '/' . $pageSlug . '/';
         }
     }
 
