@@ -924,19 +924,22 @@ class UrlSettingController extends Controller
             $redirects = Redirect::where('store_id', $storeId)->orderBy('id')->get();
 
             if ($redirects->isEmpty()) {
-                return response()->json(['status' => false, 'message' => 'No redirects found.'], 404);
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'No redirects found to export.',
+                ], 404);
             }
 
             $csv = $this->generateRedirectsCsv($redirects, $includeDynamicUrl);
 
             $fileName = 'Redirect-Export-' . Str::random(10) . '-' . now()->format('YmdHis') . '.csv';
-            $s3Path   = "{$storeId}/redirect_exports/{$fileName}";
 
-            // Visibility ke bina try karo
+            // Path 1 try karo
+            $s3Path = "{$storeId}/redirect_exports/{$fileName}";
             $uploaded = Storage::disk('s3')->put($s3Path, $csv);
 
+            // Agar fail ho to Path 2 try karo
             if (!$uploaded) {
-                // Fallback: purana path try karo
                 $s3Path = "redirect_exports/{$storeId}/{$fileName}";
                 $uploaded = Storage::disk('s3')->put($s3Path, $csv);
             }
@@ -944,8 +947,7 @@ class UrlSettingController extends Controller
             if (!$uploaded) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'S3 upload failed',
-                    's3_path' => $s3Path,
+                    'message' => 'S3 upload failed on both paths',
                 ], 500);
             }
 
@@ -974,6 +976,15 @@ class UrlSettingController extends Controller
             ]);
         } catch (\Exception $e) {
             Log::error('Export Error: ' . $e->getMessage());
+
+            RedirectActivityLog::create([
+                'store_id'      => $this->getStoreId(),
+                'type'          => 'export',
+                'status'        => 'failed',
+                'errors'        => 1,
+                'error_message' => $e->getMessage(),
+            ]);
+
             return response()->json([
                 'status'  => false,
                 'message' => 'Export failed',
@@ -981,6 +992,7 @@ class UrlSettingController extends Controller
             ], 500);
         }
     }
+
     private function generateRedirectsCsv($redirects, bool $includeDynamicUrl): string
     {
         $handle = fopen('php://temp', 'r+');
