@@ -955,6 +955,54 @@ class UrlSettingController extends Controller
         }
     }
 
+    private function generateRedirectsCsv($redirects, bool $includeDynamicUrl): string
+    {
+        $handle = fopen('php://temp', 'r+');
+
+        // Header
+        $headers = [
+            'Domain',
+            'Old Path',
+            'Manual URL/Path',
+            'Dynamic Target Type',
+            'Dynamic Target ID',
+        ];
+
+        if ($includeDynamicUrl) {
+            $headers[] = 'Dynamic Target URL (read-only)';
+        }
+
+        fputcsv($handle, $headers);
+
+        foreach ($redirects as $redirect) {
+            $row = [
+                $redirect->domain ?? '',
+                $redirect->old_url ?? '',
+                $redirect->redirect_type === 'manual' ? ($redirect->new_url ?? '') : '',
+                $redirect->redirect_type === 'dynamic' ? ucfirst($redirect->entity_type ?? '') : '',
+                $redirect->redirect_type === 'dynamic' ? ($redirect->entity_id ?? '') : '',
+            ];
+
+            if ($includeDynamicUrl) {
+                $fullUrl = '';
+                if ($redirect->redirect_type === 'dynamic' && !empty($redirect->new_url)) {
+                    $domain = rtrim($redirect->domain ?? 'https://hardware-parts.mybigcommerce.com', '/');
+                    $path   = '/' . ltrim($redirect->new_url, '/');
+                    $fullUrl = $domain . $path;
+                }
+                $row[] = $fullUrl;
+            }
+
+            fputcsv($handle, $row);
+        }
+
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+
+        return $csv;
+    }
+
     public function redirectActivityLogs(Request $request)
     {
         $storeId = $this->getStoreId();
