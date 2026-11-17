@@ -518,6 +518,13 @@ class OrderController extends Controller
                 ], 404);
             }
 
+            // ===== ORDER CALCULATION MATCH =====
+            $calculation = \App\Models\OrderCalculation::where('order_id', $request->orderId)
+                ->where('store_id', $storeId)
+                ->latest()
+                ->first();
+            // ===================================
+
             return response()->json([
                 'status' => true,
                 'message' => 'Order retrieved successfully.',
@@ -534,6 +541,7 @@ class OrderController extends Controller
                     'manualDiscount' => $order->manual_discount,
                     'couponCode'     => $order->coupon_code,
                     'totalAmount' => $order->total_amount,
+                    'amountDecimal' => $calculation ? (float) $calculation->amount_decimal : null,  // ← yeh add kiya
                     'currencyCode' => $order->currency_code,
                     'currencySymbol' => $order->currency_symbol,
                     'exchangeRate' => $order->exchange_rate,
