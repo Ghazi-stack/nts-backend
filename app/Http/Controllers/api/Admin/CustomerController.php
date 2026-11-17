@@ -540,8 +540,8 @@ class CustomerController extends Controller
 
                 try {
                     $store = Store::on('central')
-                    ->where('legacy_store_id', $storeId)
-                    ->first();
+                        ->where('legacy_store_id', $storeId)
+                        ->first();
                     $frontendUrl = rtrim($store?->base_url ?? '#', '/');
 
                     $resetToken = \Illuminate\Support\Facades\Password::broker()->createToken($storeUser);
@@ -955,21 +955,6 @@ class CustomerController extends Controller
             ])
                 ->where('user_id', $user->id);
 
-            /*
-        |--------------------------------------------------------------------------
-        | Optional Draft Filter
-        |--------------------------------------------------------------------------
-        |
-        | /my-orders
-        |     -> non-draft orders only (is_draft = 0)
-        |
-        | /my-orders?isDraft=true
-        |     -> draft orders only
-        |
-        | /my-orders?isDraft=false
-        |     -> non-draft orders only
-        |
-        */
             if ($request->has('isDraft')) {
                 $isDraft = filter_var(
                     $request->query('isDraft'),
@@ -990,11 +975,7 @@ class CustomerController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->get();
 
-            /*
-        |--------------------------------------------------------------------------
-        | Remove product-less items
-        |--------------------------------------------------------------------------
-        */
+            // Remove product-less items
             $orders->each(function ($order) {
                 $order->setRelation(
                     'items',
@@ -1004,18 +985,27 @@ class CustomerController extends Controller
                 );
             });
 
-            /*
-        |--------------------------------------------------------------------------
-        | Build resources
-        |--------------------------------------------------------------------------
-        */
+            // ===== LOAD CALCULATIONS FOR ALL ORDERS =====
+            $orderNumbers = $orders->pluck('order_number')->filter()->values();
+            $calculations = \App\Models\OrderCalculation::whereIn('order_id', $orderNumbers)
+                ->where('store_id', current_store_id())
+                ->latest()
+                ->get()
+                ->keyBy('order_id');
+            // ============================================
+
             $result = [];
 
             foreach ($orders as $order) {
                 try {
-                    $result[] = (new MyOrderResource($order))->resolve();
+                    $resource = (new MyOrderResource($order))->resolve();
+
+                    // calculatedAmount add karo
+                    $calc = $calculations->get($order->order_number);
+                    $resource['amountDecimal'] = $calc ? (float) $calc->amount_decimal : null;
+
+                    $result[] = $resource;
                 } catch (\Throwable $e) {
-                    // Skip problematic order and continue processing others
                     continue;
                 }
             }
@@ -1208,7 +1198,7 @@ class CustomerController extends Controller
     //     }
     // }
 
-    
+
     public function exportCSV(Request $request)
     {
         $storeId = null;
@@ -1237,7 +1227,7 @@ class CustomerController extends Controller
 
             $customerIds = array_values(array_unique(array_filter(
                 array_map('intval', $customerIds),
-                fn ($id) => $id > 0
+                fn($id) => $id > 0
             )));
 
             // Count matching customers while the tenant connection is active.
@@ -1319,7 +1309,6 @@ class CustomerController extends Controller
                     'Access-Control-Expose-Headers' => 'X-Total-Rows',
                 ])
                 ->deleteFileAfterSend(true);
-
         } catch (\Throwable $e) {
             if (is_resource($handle)) {
                 fclose($handle);
