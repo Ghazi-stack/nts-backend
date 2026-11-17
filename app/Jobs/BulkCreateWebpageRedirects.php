@@ -33,7 +33,7 @@ class BulkCreateWebpageRedirects implements ShouldQueue
         $this->progressKey = $progressKey;
         $this->setting = (object) $setting;
         $this->tenantDatabase = $tenantDatabase;
-        $this->domain = $domain ?? 'https://hardware-parts.mybigcommerce.com';
+        $this->domain = $domain;
         $this->redirectType = $redirectType;
     }
 

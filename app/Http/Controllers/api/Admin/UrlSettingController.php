@@ -18,7 +18,9 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+
 
 class UrlSettingController extends Controller
 {
@@ -35,9 +37,24 @@ class UrlSettingController extends Controller
 
     private function getDomain()
     {
-        return 'https://hardware-parts.mybigcommerce.com';
-    }
+        $storeId = $this->getStoreId();
 
+        $baseUrl = DB::connection('central')
+            ->table('stores')
+            ->where('id', $storeId)
+            ->value('base_url');
+
+        if (!$baseUrl) {
+            return null;   // ya empty string
+        }
+
+        $baseUrl = rtrim($baseUrl, '/');
+        if (!str_starts_with($baseUrl, 'http')) {
+            $baseUrl = 'https://' . $baseUrl;
+        }
+
+        return $baseUrl;
+    }
     /**
      * ===================== PRODUCT URL SETTINGS =====================
      */
@@ -990,7 +1007,7 @@ class UrlSettingController extends Controller
             if ($includeDynamicUrl) {
                 $fullUrl = '';
                 if ($redirect->redirect_type === 'dynamic' && !empty($redirect->new_url)) {
-                    $domain = rtrim($redirect->domain ?? 'https://hardware-parts.mybigcommerce.com', '/');
+                    $domain = rtrim($redirect->domain ?? $this->getDomain(), '/');
                     $path   = '/' . ltrim($redirect->new_url, '/');
                     $fullUrl = $domain . $path;
                 }
