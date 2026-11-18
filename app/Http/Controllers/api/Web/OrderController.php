@@ -2901,6 +2901,7 @@ class OrderController extends Controller
             $exchangeRate = (float) $currency->exchange_rate;
             $currencyCode = $currency->code;
             $currencySymbol = $currency->symbol;
+            $decimalPlaces = (int) ($currency->decimal_places ?? 2);
 
             // ===== COUPON FETCH =====
             $discount = 0;
@@ -2934,7 +2935,7 @@ class OrderController extends Controller
             $packageInfo = null;
 
             // Converted discount (coupon only)
-            $convertedDiscount = round($discount * $exchangeRate, 6);
+          $convertedDiscount = round($discount * $exchangeRate, $decimalPlaces);
 
             // ===== AMOUNT VERIFICATION =====
             if (!$isMulti) {
@@ -2945,7 +2946,7 @@ class OrderController extends Controller
                 foreach ($validated['products'] as $item) {
                     $product = Product::where('store_id', $storeId)->find($item['product_id']);
                     if ($product) {
-                        $convertedPrice = round($product->price * $exchangeRate, 6);
+                        $convertedPrice = round($product->price * $exchangeRate, $decimalPlaces);
                         $calculatedTotal += $convertedPrice * $item['quantity'];
 
                         $salePrice = $product->getAttribute('sale_price');
@@ -3009,20 +3010,20 @@ class OrderController extends Controller
 
                 $calculatedTotal += $shippingCost;
                 $calculatedTotal -= $convertedDiscount;
-                $calculatedTotal -= round($manualDiscount * $exchangeRate, 6);
+                $calculatedTotal -= round($manualDiscount * $exchangeRate, $decimalPlaces);
             } else {
                 foreach ($validated['destinations'] as $dest) {
                     foreach ($dest['products'] as $item) {
                         $product = Product::where('store_id', $storeId)->find($item['product_id']);
                         if ($product) {
-                            $convertedPrice = round($product->price * $exchangeRate, 6);
+                            $convertedPrice = round($product->price * $exchangeRate, $decimalPlaces);
                             $calculatedTotal += $convertedPrice * $item['quantity'];
                         }
                     }
                     $calculatedTotal += ($dest['shippingCost'] ?? 0);
                 }
                 $calculatedTotal -= $convertedDiscount;
-                $calculatedTotal -= round($manualDiscount * $exchangeRate, 6);
+                $calculatedTotal -= round($manualDiscount * $exchangeRate, $decimalPlaces);
             }
 
             if ($calculatedTotal < 0) $calculatedTotal = 0;
@@ -3298,7 +3299,7 @@ class OrderController extends Controller
                             'store_id'   => $storeId,
                             'product_id' => $product->id,
                             'quantity'   => $item['quantity'],
-                             'price'      => round($resolvePrice($product->id, $product->price) * $exchangeRate, 6), // ← 6 decimal
+                            'price' => round($resolvePrice($product->id, $product->price) * $exchangeRate, $decimalPlaces),
                         ]);
                         $product->decrement('current_stock', $item['quantity']);
                     }
@@ -3382,7 +3383,7 @@ class OrderController extends Controller
                                 'store_id'   => $storeId,
                                 'product_id' => $product->id,
                                 'quantity'   => $item['quantity'],
-                                'price'      => round($resolvePrice($product->id, $product->price) * $exchangeRate, 6),
+                                'price' => round($resolvePrice($product->id, $product->price) * $exchangeRate, $decimalPlaces),
                             ]);
                             $product->decrement('current_stock', $item['quantity']);
                         }
@@ -3825,6 +3826,8 @@ class OrderController extends Controller
             }
 
             $exchangeRate = (float) $currency->exchange_rate;
+            $decimalPlaces = (int) ($currency->decimal_places ?? 2);
+
             $currencyData = [
                 'id'           => $currency->id,
                 'code'         => $currency->code,
@@ -3876,8 +3879,8 @@ class OrderController extends Controller
                 foreach ($validated['products'] as $item) {
                     $product = Product::where('store_id', $storeId)->find($item['product_id']);
                     if ($product) {
-                        $convertedPrice = round($product->price * $exchangeRate, 6);
-                        $lineTotal = round($convertedPrice * $item['quantity'], 6);
+                       $convertedPrice = round($product->price * $exchangeRate, $decimalPlaces);
+                       $lineTotal = round($convertedPrice * $item['quantity'], $decimalPlaces);
                         $calculatedTotal += $lineTotal;
 
                         $items[] = [
@@ -3962,7 +3965,7 @@ class OrderController extends Controller
                 $calculatedTotal += $shippingCost;
 
                 // Only coupon is converted. manualDiscount is NOT converted
-                $convertedCouponDiscount = round($discount * $exchangeRate, 6);
+               $convertedCouponDiscount = round($discount * $exchangeRate, $decimalPlaces);
                 $calculatedTotal -= $convertedCouponDiscount;
                 $calculatedTotal -= $manualDiscount;   // raw value, no conversion
 
@@ -3971,8 +3974,8 @@ class OrderController extends Controller
                     foreach ($dest['products'] as $item) {
                         $product = Product::where('store_id', $storeId)->find($item['product_id']);
                         if ($product) {
-                            $convertedPrice = round($product->price * $exchangeRate, 6);
-                            $lineTotal = round($convertedPrice * $item['quantity'], 6);
+                            $convertedPrice = round($product->price * $exchangeRate, $decimalPlaces);
+                            $lineTotal = round($convertedPrice * $item['quantity'], $decimalPlaces);
                             $calculatedTotal += $lineTotal;
 
                             $items[] = [
@@ -3990,7 +3993,7 @@ class OrderController extends Controller
                     $calculatedTotal += ($dest['shippingCost'] ?? 0);
                 }
 
-                $convertedCouponDiscount = round($discount * $exchangeRate, 6);
+                $convertedCouponDiscount = round($discount * $exchangeRate, $decimalPlaces);
                 $calculatedTotal -= $convertedCouponDiscount;
                 $calculatedTotal -= $manualDiscount;   // raw value, no conversion
             }
@@ -4007,9 +4010,9 @@ class OrderController extends Controller
                     'order_id'                    => $request->input('orderId'),
                     'store_id'                    => $storeId,
                     'currency_id'                 => $currency->id ?? null,
-                    'amount_decimal'              => round($calculatedTotal, 6),
+                    'amount_decimal'              => round($calculatedTotal, $decimalPlaces),
                     'amount_cents'                => $amountInCents,
-                    'shipping_cost'               => round($shippingCost, 6),
+                    'shipping_cost'               => round($shippingCost, $decimalPlaces),
                     'manual_discount'             => $manualDiscount,
                     'converted_coupon_discount'   => $convertedCouponDiscount ?? 0,
                     'currency'                    => $currencyData,
@@ -4025,12 +4028,12 @@ class OrderController extends Controller
                 'status' => true,
                 'data'   => [
                     'amount'                  => $amountInCents,
-                    'amountDecimal'           => round($calculatedTotal, 6),
+                    'amountDecimal'           => round($calculatedTotal, $decimalPlaces),
                     'currency'                => $currencyData,
                     'coupon'                  => $couponData,
                     'manualDiscount'          => $manualDiscount,
                     'convertedCouponDiscount' => $convertedCouponDiscount ?? 0,
-                    'shippingCost'            => round($shippingCost, 6),
+                    'shippingCost'            => round($shippingCost, $decimalPlaces),
                     'matchedRate'             => $matchedRate,
                     'items'                   => $items,
                 ],
