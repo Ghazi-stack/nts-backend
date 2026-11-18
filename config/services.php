@@ -40,6 +40,7 @@ return [
             'redirect_uri' => env('STRIPE_CONNECT_REDIRECT_URI'),
             'webhook_secret' => env('STRIPE_CONNECT_WEBHOOK_SECRET'),
             'connect_enabled' => env('STRIPE_CONNECT_ENABLED', false),
+            'dynamic_settings_enabled' => env('STRIPE_DYNAMIC_SETTINGS_ENABLED', false),
         ],
     ],
 

@@ -468,4 +468,15 @@ class PaymentSettingsService
             'is_configured' => (bool) ($method?->is_configured ?? false),
         ];
     }
+
+    /**
+     * Get resolved Stripe settings for a store.
+     *
+     * Dynamic settings remain inactive until the feature flag is enabled.
+     */
+    public function getResolvedStripeSettings(int $storeId): array
+    {
+        return app(StripePaymentSettingsResolver::class)
+            ->resolve($storeId);
+    }
 }

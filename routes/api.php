@@ -198,6 +198,16 @@ Route::prefix('dashboard')->middleware([
             'index'
         ]);
 
+        Route::prefix('stripe')
+        ->controller(\App\Http\Controllers\api\Admin\StripePaymentSettingsController::class)
+        ->group(function () {
+            Route::get('/configuration', 'showConfiguration');
+            Route::put('/configuration', 'updateConfiguration');
+
+            Route::get('/webhook', 'showWebhook');
+            Route::put('/webhook/{environment}', 'saveWebhook');
+        });
+
         Route::get('/{methodCode}/setup', [PaymentSettingsController::class, 'setup']);
         Route::get('/{methodCode}/providers', [PaymentSettingsController::class, 'providers']);
 
@@ -918,7 +928,15 @@ Route::prefix('dashboard')->middleware([
 
 // Stripe webhooks must remain outside tenant middleware because Stripe
 // does not send the X-Store-Hash header.
-Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
+// Route::post('/stripe/webhook', [StripePaymentController::class, 'handleWebhook']);
+Route::post(
+    '/stripe/webhook/{storeHash}/{environment}',
+    [StripePaymentController::class, 'handleWebhook']
+)->where([
+    'storeHash' => 'store-[a-z0-9]{12}',
+    'environment' => 'test|live',
+]);
+
 Route::post('/stripe/connect/webhook', [
     \App\Http\Controllers\api\Web\StripeConnectWebhookController::class,
     'handle',

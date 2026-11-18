@@ -15,6 +15,10 @@ use App\Http\Controllers\Controller;
 use App\Models\OrderTimeline;
 use App\Services\StripeConnectAccountResolver;
 use Illuminate\Support\Facades\Log;
+use App\Models\StorePaymentMethod;
+use App\Services\StripePaymentSettingsResolver;
+use App\Models\StoreStripeWebhookEndpoint;
+use App\Services\TenantCredentialResolver;
 
 class StripePaymentController extends Controller
 {
@@ -30,6 +34,28 @@ class StripePaymentController extends Controller
         return app(StripeConnectAccountResolver::class)->optionsForRequest($request);
     }
 
+    /**
+     * Get the Stripe capture method configured for this store.
+     *
+     * authorize_capture = automatic capture
+     * authorize_only    = manual capture
+     *
+     * Existing stores without a saved transaction setting
+     * retain the previous manual-capture behavior.
+     */
+    private function stripeCaptureMethodForStore(int $storeId): string
+    {
+        $resolved = app(StripePaymentSettingsResolver::class)
+            ->resolve($storeId);
+
+        if (!$resolved['active']) {
+            return 'manual';
+        }
+
+        return $resolved['settings']['transactionType'] === 'authorize_capture'
+            ? 'automatic'
+            : 'manual';
+    }
 
     /**
      * 💳 Pay - Authorize only (hold), do NOT capture yet
@@ -67,6 +93,17 @@ class StripePaymentController extends Controller
 
         $user = auth('sanctum')->user();
         $storeId = current_store_id();
+
+        $dynamicStripeSettings = app(StripePaymentSettingsResolver::class)
+            ->resolve((int) $storeId);
+
+        $transactionType = $dynamicStripeSettings['active']
+            ? $dynamicStripeSettings['settings']['transactionType']
+            : 'authorize_only';
+
+        $captureMethod = $transactionType === 'authorize_capture'
+            ? 'automatic'
+            : 'manual';
 
         if (!$storeId) {
             return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
@@ -218,7 +255,7 @@ class StripePaymentController extends Controller
                 'confirmation_method' => 'manual',
                 'payment_method_types' => ['card'],
                 'confirm' => true,
-                'capture_method' => 'manual',
+                'capture_method' => $captureMethod,
                 'metadata' => [
                     'user_id'      => $user?->id,
                     'order_number' => $orderNumber,
@@ -238,14 +275,26 @@ class StripePaymentController extends Controller
                 ]);
             }
 
-            if ($intent->status !== 'requires_capture') {
+            // if ($intent->status !== 'requires_capture') {
+            //     DB::rollBack();
+            //     return response()->json([
+            //         'status'  => 'error',
+            //         'message' => 'Payment authorization failed. Status: ' . $intent->status,
+            //     ], 400);
+            // }
+
+            $expectedStatus = $captureMethod === 'automatic'
+                ? 'succeeded'
+                : 'requires_capture';
+
+            if ($intent->status !== $expectedStatus) {
                 DB::rollBack();
+
                 return response()->json([
-                    'status'  => 'error',
-                    'message' => 'Payment authorization failed. Status: ' . $intent->status,
+                    'status' => 'error',
+                    'message' => 'Payment processing failed. Status: ' . $intent->status,
                 ], 400);
             }
-
             $riskScore = null;
             $riskLevel = null;
 
@@ -261,11 +310,14 @@ class StripePaymentController extends Controller
             DB::commit();
 
             return response()->json([
-                'status'             => 'authorized',
-                'message'            => 'Payment authorized (on hold). Capture pending.',
+                'status' => $captureMethod === 'automatic' ? 'completed' : 'authorized',
+                'message' => $captureMethod === 'automatic'
+                ? 'Payment completed successfully.'
+                : 'Payment authorized (on hold). Capture pending.',
                 'amount'             => $intent->amount,
                 'payment_intent_id'  => $intent->id,
                 'payment_status'     => $intent->status,
+                'capture_method' => $captureMethod,
                 'risk_score'         => $riskScore,
                 'risk_level'         => $riskLevel,
                 'order_number'       => $orderNumber,
@@ -289,12 +341,167 @@ class StripePaymentController extends Controller
      * 💰 Capture - Actually charge the held payment
      * ADMIN ONLY - route middleware se protect hoga
      */
+    // public function capturePayment(Request $request)
+    // {
+    //     $request->validate([
+    //         'payment_intent_id'  => 'nullable',
+    //         'payment_intent_ids' => 'nullable|array',
+    //         'amount_to_capture'  => 'nullable|integer',
+    //     ]);
+
+    //     $intentIds = [];
+
+    //     if ($request->filled('payment_intent_id')) {
+    //         $single = $request->input('payment_intent_id');
+    //         $intentIds = is_array($single) ? $single : [$single];
+    //     }
+
+    //     if ($request->filled('payment_intent_ids') && is_array($request->payment_intent_ids)) {
+    //         $intentIds = array_merge($intentIds, $request->payment_intent_ids);
+    //     }
+
+    //     $intentIds = array_values(array_unique(array_filter(array_map('trim', $intentIds))));
+
+    //     if (empty($intentIds)) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Please provide payment_intent_id.',
+    //         ], 422);
+    //     }
+
+    //     Stripe::setApiKey(config('services.stripe.secret'));
+    //     $stripeOptions = $this->connectedStripeOptions($request);
+
+    //     $results      = [];
+    //     $successCount = 0;
+    //     $failedCount  = 0;
+
+    //     foreach ($intentIds as $intentId) {
+    //         try {
+    //             $payment = Payment::where('stripe_session_id', $intentId)->first();
+
+    //             if (!$payment) {
+    //                 $failedCount++;
+    //                 $results[] = [
+    //                     'payment_intent_id' => $intentId,
+    //                     'status'            => false,
+    //                     'message'           => 'Payment record not found.',
+    //                 ];
+    //                 continue;
+    //             }
+
+    //             if ($payment->payment_status === 'completed') {
+    //                 $failedCount++;
+    //                 $results[] = [
+    //                     'payment_intent_id' => $intentId,
+    //                     'order_id'          => $payment->order_id,
+    //                     'status'            => false,
+    //                     'message'           => 'Payment already captured.',
+    //                 ];
+    //                 continue;
+    //             }
+
+    //             $intent = PaymentIntent::retrieve($intentId, [], $stripeOptions);
+
+    //             if ($intent->status !== 'requires_capture') {
+    //                 $failedCount++;
+    //                 $results[] = [
+    //                     'payment_intent_id' => $intentId,
+    //                     'order_id'          => $payment->order_id,
+    //                     'status'            => false,
+    //                     'message'           => 'Payment cannot be captured. Current status: ' . $intent->status,
+    //                 ];
+    //                 continue;
+    //             }
+
+    //             $captureParams = [];
+    //             if (count($intentIds) === 1 && $request->has('amount_to_capture') && $request->amount_to_capture > 0) {
+    //                 $captureParams['amount_to_capture'] = $request->amount_to_capture;
+    //             }
+
+    //             $captured = $intent->capture($captureParams, $stripeOptions);
+
+    //             $payment->update([
+    //                 'payment_status' => 'completed',
+    //             ]);
+
+
+    //             $storeId = current_store_id();
+    //             event(new \App\Events\RealtimeStatsUpdated((int) $storeId));
+
+    //             OrderTimeline::addEvent($payment->order_id, $storeId, 'payment_captured', 'Capture request successfully processed for the order #' . ($payment->order->order_number ?? $payment->order_id), [
+    //                 'source'         => 'Credit Card (via Stripe)',
+    //                 'payment_intent' => $intentId,
+    //                 'amount'         => '$' . number_format($captured->amount_received / 100, 2),
+    //             ], 'payment');
+
+    //             $order = $payment->order;
+    //             if ($order) {
+    //                 $previousStatus = $order->status;
+    //                 $order->update(['status' => 'Awaiting Fulfillment']);
+
+    //                 OrderTimeline::addEvent($order->id, $storeId, 'status_changed', 'Order status changed', [
+    //                     'previous_status' => $previousStatus,
+    //                     'new_status'      => 'Awaiting Fulfillment',
+    //                 ], 'dot');
+    //             }
+
+    //             $successCount++;
+    //             $results[] = [
+    //                 'payment_intent_id' => $intentId,
+    //                 'order_id'          => $payment->order_id,
+    //                 'status'            => true,
+    //                 'message'           => 'Payment captured successfully.',
+    //                 'amount_captured'   => $captured->amount_received,
+    //                 'payment_status'    => $captured->status,
+    //             ];
+    //         } catch (\Stripe\Exception\CardException $e) {
+    //             $failedCount++;
+    //             $results[] = [
+    //                 'payment_intent_id' => $intentId,
+    //                 'status'            => false,
+    //                 'message'           => $e->getError()->message,
+    //             ];
+    //         } catch (\Exception $e) {
+    //             $failedCount++;
+    //             $results[] = [
+    //                 'payment_intent_id' => $intentId,
+    //                 'status'            => false,
+    //                 'message'           => $e->getMessage(),
+    //             ];
+    //         }
+    //     }
+
+    //     $isSingle = count($intentIds) === 1;
+    //     $first    = $results[0];
+
+    //     if ($isSingle) {
+    //         return response()->json([
+    //             'status'          => $first['status'],
+    //             'message'         => $first['message'],
+    //             'amount_captured' => $first['amount_captured'] ?? null,
+    //             'payment_status'  => $first['payment_status'] ?? null,
+    //             'order_id'        => $first['order_id'] ?? null,
+    //         ], $first['status'] ? 200 : 400);
+    //     }
+
+    //     return response()->json([
+    //         'status'         => $failedCount === 0,
+    //         'message'        => $successCount . ' captured, ' . $failedCount . ' failed.',
+    //         'success_count'  => $successCount,
+    //         'failed_count'   => $failedCount,
+    //         'data'           => $results,
+    //     ]);
+    // }
+
+
+
     public function capturePayment(Request $request)
     {
         $request->validate([
             'payment_intent_id'  => 'nullable',
             'payment_intent_ids' => 'nullable|array',
-            'amount_to_capture'  => 'nullable|integer',
+            'amount_to_capture'  => 'nullable|integer|min:1',
         ]);
 
         $intentIds = [];
@@ -308,7 +515,9 @@ class StripePaymentController extends Controller
             $intentIds = array_merge($intentIds, $request->payment_intent_ids);
         }
 
-        $intentIds = array_values(array_unique(array_filter(array_map('trim', $intentIds))));
+        $intentIds = array_values(array_unique(array_filter(
+            array_map('trim', $intentIds)
+        )));
 
         if (empty($intentIds)) {
             return response()->json([
@@ -318,127 +527,192 @@ class StripePaymentController extends Controller
         }
 
         Stripe::setApiKey(config('services.stripe.secret'));
+
         $stripeOptions = $this->connectedStripeOptions($request);
 
-        $results      = [];
+        $results = [];
         $successCount = 0;
-        $failedCount  = 0;
+        $failedCount = 0;
 
         foreach ($intentIds as $intentId) {
             try {
-                $payment = Payment::where('stripe_session_id', $intentId)->first();
+                $payment = Payment::where(
+                    'stripe_session_id',
+                    $intentId
+                )->first();
 
                 if (!$payment) {
                     $failedCount++;
+
                     $results[] = [
                         'payment_intent_id' => $intentId,
-                        'status'            => false,
-                        'message'           => 'Payment record not found.',
+                        'status' => false,
+                        'message' => 'Payment record not found.',
                     ];
+
                     continue;
                 }
 
                 if ($payment->payment_status === 'completed') {
                     $failedCount++;
+
                     $results[] = [
                         'payment_intent_id' => $intentId,
-                        'order_id'          => $payment->order_id,
-                        'status'            => false,
-                        'message'           => 'Payment already captured.',
+                        'order_id' => $payment->order_id,
+                        'status' => false,
+                        'message' => 'Payment already captured.',
                     ];
+
                     continue;
                 }
 
-                $intent = PaymentIntent::retrieve($intentId, [], $stripeOptions);
+                $intent = PaymentIntent::retrieve(
+                    $intentId,
+                    [],
+                    $stripeOptions
+                );
 
                 if ($intent->status !== 'requires_capture') {
                     $failedCount++;
+
                     $results[] = [
                         'payment_intent_id' => $intentId,
-                        'order_id'          => $payment->order_id,
-                        'status'            => false,
-                        'message'           => 'Payment cannot be captured. Current status: ' . $intent->status,
+                        'order_id' => $payment->order_id,
+                        'status' => false,
+                        'message' => 'Payment cannot be captured. Current status: ' . $intent->status,
                     ];
+
                     continue;
                 }
 
                 $captureParams = [];
-                if (count($intentIds) === 1 && $request->has('amount_to_capture') && $request->amount_to_capture > 0) {
-                    $captureParams['amount_to_capture'] = $request->amount_to_capture;
+
+                if (
+                    count($intentIds) === 1 &&
+                    $request->has('amount_to_capture') &&
+                    $request->amount_to_capture > 0
+                ) {
+                    $captureParams['amount_to_capture'] =
+                        (int) $request->amount_to_capture;
                 }
 
-                $captured = $intent->capture($captureParams, $stripeOptions);
+                $captured = $intent->capture(
+                    $captureParams,
+                    $stripeOptions
+                );
+
+                if ($captured->status !== 'succeeded') {
+                    throw new \RuntimeException(
+                        'Stripe capture did not complete. Status: ' . $captured->status
+                    );
+                }
 
                 $payment->update([
                     'payment_status' => 'completed',
                 ]);
 
-
-                $storeId = current_store_id();
-                event(new \App\Events\RealtimeStatsUpdated((int) $storeId));
-
-                OrderTimeline::addEvent($payment->order_id, $storeId, 'payment_captured', 'Capture request successfully processed for the order #' . ($payment->order->order_number ?? $payment->order_id), [
-                    'source'         => 'Credit Card (via Stripe)',
-                    'payment_intent' => $intentId,
-                    'amount'         => '$' . number_format($captured->amount_received / 100, 2),
-                ], 'payment');
-
                 $order = $payment->order;
+                $storeId = $order?->store_id;
+
+                if ($storeId) {
+                    event(new \App\Events\RealtimeStatsUpdated((int) $storeId));
+                }
+
                 if ($order) {
                     $previousStatus = $order->status;
-                    $order->update(['status' => 'Awaiting Fulfillment']);
 
-                    OrderTimeline::addEvent($order->id, $storeId, 'status_changed', 'Order status changed', [
-                        'previous_status' => $previousStatus,
-                        'new_status'      => 'Awaiting Fulfillment',
-                    ], 'dot');
+                    if ($previousStatus !== 'Awaiting Fulfillment') {
+                        $order->update([
+                            'status' => 'Awaiting Fulfillment',
+                        ]);
+
+                        OrderTimeline::addEvent(
+                            $order->id,
+                            $storeId,
+                            'payment_captured',
+                            'Payment captured successfully for order #' . (
+                                $order->order_number ?? $order->id
+                            ),
+                            [
+                                'source' => 'Credit Card (via Stripe)',
+                                'payment_intent' => $intentId,
+                                'amount' => '$' . number_format(
+                                    ($captured->amount_received ?? 0) / 100,
+                                    2
+                                ),
+                            ],
+                            'payment'
+                        );
+
+                        OrderTimeline::addEvent(
+                            $order->id,
+                            $storeId,
+                            'status_changed',
+                            'Order status changed',
+                            [
+                                'previous_status' => $previousStatus,
+                                'new_status' => 'Awaiting Fulfillment',
+                            ],
+                            'dot'
+                        );
+                    }
                 }
 
                 $successCount++;
+
                 $results[] = [
                     'payment_intent_id' => $intentId,
-                    'order_id'          => $payment->order_id,
-                    'status'            => true,
-                    'message'           => 'Payment captured successfully.',
-                    'amount_captured'   => $captured->amount_received,
-                    'payment_status'    => $captured->status,
+                    'order_id' => $payment->order_id,
+                    'status' => true,
+                    'message' => 'Payment captured successfully.',
+                    'amount_captured' => $captured->amount_received,
+                    'payment_status' => $captured->status,
                 ];
+
             } catch (\Stripe\Exception\CardException $e) {
                 $failedCount++;
+
                 $results[] = [
                     'payment_intent_id' => $intentId,
-                    'status'            => false,
-                    'message'           => $e->getError()->message,
+                    'status' => false,
+                    'message' => $e->getError()->message,
                 ];
-            } catch (\Exception $e) {
+
+            } catch (\Throwable $e) {
                 $failedCount++;
+
+                \Log::error('Stripe payment capture failed.', [
+                    'payment_intent_id' => $intentId,
+                    'error' => $e->getMessage(),
+                ]);
+
                 $results[] = [
                     'payment_intent_id' => $intentId,
-                    'status'            => false,
-                    'message'           => $e->getMessage(),
+                    'status' => false,
+                    'message' => 'Payment capture failed. Please check the payment status before retrying.',
                 ];
             }
         }
 
         $isSingle = count($intentIds) === 1;
-        $first    = $results[0];
+        $first = $results[0];
 
         if ($isSingle) {
             return response()->json([
-                'status'          => $first['status'],
-                'message'         => $first['message'],
+                'status' => $first['status'],
+                'message' => $first['message'],
                 'amount_captured' => $first['amount_captured'] ?? null,
-                'payment_status'  => $first['payment_status'] ?? null,
-                'order_id'        => $first['order_id'] ?? null,
+                'payment_status' => $first['payment_status'] ?? null,
+                'order_id' => $first['order_id'] ?? null,
             ], $first['status'] ? 200 : 400);
         }
 
         return response()->json([
-            'status'         => $failedCount === 0,
-            'message'        => $successCount . ' captured, ' . $failedCount . ' failed.',
-            'success_count'  => $successCount,
-            'failed_count'   => $failedCount,
-            'data'           => $results,
+            'status' => $failedCount === 0,
+            'message' => $successCount . ' captured, ' . $failedCount . ' failed.',
+            'success_count' => $successCount,
+            'failed_count' => $failedCount,
+            'data' => $results,
         ]);
     }
 
@@ -493,136 +767,445 @@ class StripePaymentController extends Controller
     //     return response()->json(['status' => 'success']);
     // }
 
-    public function handleWebhook(Request $request)
-    {
-        $payload = $request->getContent();
+    // public function handleWebhook(Request $request)
+    // {
+    //     $payload = $request->getContent();
 
+    //     $sigHeader = $request->header('Stripe-Signature');
+
+    //     $endpointSecret = config('services.stripe.webhook_secret')
+    //         ?? env('STRIPE_WEBHOOK_SECRET');
+
+    //     try {
+
+    //         $event = Webhook::constructEvent(
+    //             $payload,
+    //             $sigHeader,
+    //             $endpointSecret
+    //         );
+    //     } catch (\UnexpectedValueException $e) {
+
+    //         \Log::error('Stripe webhook invalid payload', [
+    //             'error' => $e->getMessage(),
+    //         ]);
+
+    //         return response()->json([
+    //             'error' => 'Invalid payload',
+    //         ], 400);
+    //     } catch (\Stripe\Exception\SignatureVerificationException $e) {
+
+    //         \Log::error('Stripe webhook signature verification failed', [
+    //             'error' => $e->getMessage(),
+    //         ]);
+
+    //         return response()->json([
+    //             'error' => 'Invalid signature',
+    //         ], 400);
+    //     }
+
+    //     try {
+
+    //         /*
+    //         |--------------------------------------------------------------------------
+    //         | PAYMENT AUTHORIZED
+    //         |--------------------------------------------------------------------------
+    //         |
+    //         | Manual capture PaymentIntent becomes capturable.
+    //         |
+    //         */
+
+    //         if ($event->type === 'payment_intent.amount_capturable_updated') {
+
+    //             $intent = $event->data->object;
+
+    //             $payment = Payment::where(
+    //                 'stripe_session_id',
+    //                 $intent->id
+    //             )->first();
+
+    //             if ($payment) {
+
+    //                 $payment->update([
+    //                     'payment_status' => 'authorized',
+    //                 ]);
+
+    //                 \Log::info(
+    //                     'Stripe Payment authorized',
+    //                     [
+    //                         'payment_intent_id' => $intent->id,
+    //                         'order_id' => $payment->order_id,
+    //                     ]
+    //                 );
+    //             }
+    //         }
+
+
+    //         /*
+    //         |--------------------------------------------------------------------------
+    //         | PAYMENT CAPTURED
+    //         |--------------------------------------------------------------------------
+    //         */ elseif ($event->type === 'payment_intent.succeeded') {
+
+    //             $intent = $event->data->object;
+
+    //             $payment = Payment::where(
+    //                 'stripe_session_id',
+    //                 $intent->id
+    //             )->first();
+
+    //             if ($payment) {
+
+    //                 /*
+    //                 |--------------------------------------------------------------------------
+    //                 | Idempotency protection
+    //                 |--------------------------------------------------------------------------
+    //                 */
+
+    //                 if ($payment->payment_status !== 'completed') {
+
+    //                     $payment->update([
+    //                         'payment_status' => 'completed',
+    //                     ]);
+
+    //                     $order = $payment->order;
+
+    //                     if ($order) {
+
+    //                         $previousStatus = $order->status;
+
+    //                         $order->update([
+    //                             'status' => 'Awaiting Fulfillment',
+    //                         ]);
+
+    //                         /*
+    //                         |--------------------------------------------------------------------------
+    //                         | Timeline
+    //                         |--------------------------------------------------------------------------
+    //                         */
+
+    //                         try {
+
+    //                             $storeId = current_store_id();
+
+    //                             OrderTimeline::addEvent(
+    //                                 $order->id,
+    //                                 $storeId,
+    //                                 'payment_captured',
+    //                                 'Payment captured successfully.',
+    //                                 [
+    //                                     'source' => 'Express Checkout via Stripe',
+    //                                     'payment_intent' => $intent->id,
+    //                                     'amount' => '$' . number_format(
+    //                                         ($intent->amount_received ?? $intent->amount) / 100,
+    //                                         2
+    //                                     ),
+    //                                 ],
+    //                                 'payment'
+    //                             );
+
+    //                             OrderTimeline::addEvent(
+    //                                 $order->id,
+    //                                 $storeId,
+    //                                 'status_changed',
+    //                                 'Order status changed',
+    //                                 [
+    //                                     'previous_status' => $previousStatus,
+    //                                     'new_status' => 'Awaiting Fulfillment',
+    //                                 ],
+    //                                 'dot'
+    //                             );
+    //                         } catch (\Throwable $timelineException) {
+
+    //                             \Log::warning(
+    //                                 'Unable to create Express Checkout order timeline',
+    //                                 [
+    //                                     'error' => $timelineException->getMessage(),
+    //                                 ]
+    //                             );
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //         }
+
+
+    //         /*
+    //         |--------------------------------------------------------------------------
+    //         | PAYMENT CANCELED
+    //         |--------------------------------------------------------------------------
+    //         */ elseif ($event->type === 'payment_intent.canceled') {
+
+    //             $intent = $event->data->object;
+
+    //             $payment = Payment::where(
+    //                 'stripe_session_id',
+    //                 $intent->id
+    //             )->first();
+
+    //             if ($payment) {
+
+    //                 if (
+    //                     in_array(
+    //                         $payment->payment_status,
+    //                         ['pending', 'authorized']
+    //                     )
+    //                 ) {
+
+    //                     $payment->update([
+    //                         'payment_status' => 'expired',
+    //                     ]);
+
+    //                     $order = $payment->order;
+
+    //                     if ($order) {
+
+    //                         $order->update([
+    //                             'status' => 'Payment Expired',
+    //                         ]);
+    //                     }
+    //                 }
+    //             }
+    //         }
+
+
+    //         /*
+    //         |--------------------------------------------------------------------------
+    //         | PAYMENT FAILED
+    //         |--------------------------------------------------------------------------
+    //         */ elseif ($event->type === 'payment_intent.payment_failed') {
+
+    //             $intent = $event->data->object;
+
+    //             $payment = Payment::where(
+    //                 'stripe_session_id',
+    //                 $intent->id
+    //             )->first();
+
+    //             if ($payment) {
+
+    //                 $payment->update([
+    //                     'payment_status' => 'failed',
+    //                 ]);
+
+    //                 $order = $payment->order;
+
+    //                 if ($order) {
+
+    //                     $order->update([
+    //                         'status' => 'Payment Failed',
+    //                     ]);
+    //                 }
+    //             }
+    //         }
+    //     } catch (\Throwable $e) {
+
+    //         \Log::error(
+    //             'Stripe webhook processing error',
+    //             [
+    //                 'event_type' => $event->type ?? null,
+    //                 'error' => $e->getMessage(),
+    //                 'trace' => $e->getTraceAsString(),
+    //             ]
+    //         );
+
+    //         /*
+    //         |--------------------------------------------------------------------------
+    //         | Return 200 only if you intentionally don't want Stripe retrying.
+    //         |
+    //         | For critical processing errors, returning 500 lets Stripe retry.
+    //         |--------------------------------------------------------------------------
+    //         */
+
+    //         return response()->json([
+    //             'error' => 'Webhook processing failed',
+    //         ], 500);
+    //     }
+
+    //     return response()->json([
+    //         'status' => 'success',
+    //     ]);
+    // }
+
+    
+    public function handleWebhook(
+        Request $request,
+        string $storeHash,
+        string $environment
+    ) {
+        $resolver = app(TenantCredentialResolver::class);
+        $endpoint = null;
+        $store = null;
+
+        if (!in_array($environment, ['test', 'live'], true)) {
+            return response()->json([
+                'error' => 'Invalid webhook environment.',
+            ], 400);
+        }
+
+        $payload = $request->getContent();
         $sigHeader = $request->header('Stripe-Signature');
 
-        $endpointSecret = config('services.stripe.webhook_secret')
-            ?? env('STRIPE_WEBHOOK_SECRET');
-
-        try {
-
-            $event = Webhook::constructEvent(
-                $payload,
-                $sigHeader,
-                $endpointSecret
-            );
-        } catch (\UnexpectedValueException $e) {
-
-            \Log::error('Stripe webhook invalid payload', [
-                'error' => $e->getMessage(),
-            ]);
-
+        if (empty($sigHeader)) {
             return response()->json([
-                'error' => 'Invalid payload',
-            ], 400);
-        } catch (\Stripe\Exception\SignatureVerificationException $e) {
-
-            \Log::error('Stripe webhook signature verification failed', [
-                'error' => $e->getMessage(),
-            ]);
-
-            return response()->json([
-                'error' => 'Invalid signature',
+                'error' => 'Missing Stripe signature.',
             ], 400);
         }
 
         try {
+            // Resolve the tenant using the store hash.
+            $store = $resolver->connectByStoreHash($storeHash);
+            $storeId = (int) $store->id;
 
-            /*
-            |--------------------------------------------------------------------------
-            | PAYMENT AUTHORIZED
-            |--------------------------------------------------------------------------
-            |
-            | Manual capture PaymentIntent becomes capturable.
-            |
-            */
+            // Find this store's webhook configuration.
+            $endpoint = StoreStripeWebhookEndpoint::forStore($storeId)
+                ->forEnvironment($environment)
+                ->first();
 
-            if ($event->type === 'payment_intent.amount_capturable_updated') {
-
-                $intent = $event->data->object;
-
-                $payment = Payment::where(
-                    'stripe_session_id',
-                    $intent->id
-                )->first();
-
-                if ($payment) {
-
-                    $payment->update([
-                        'payment_status' => 'authorized',
-                    ]);
-
-                    \Log::info(
-                        'Stripe Payment authorized',
-                        [
-                            'payment_intent_id' => $intent->id,
-                            'order_id' => $payment->order_id,
-                        ]
-                    );
-                }
+            if ($endpoint && !$endpoint->is_enabled) {
+                return response()->json([
+                    'error' => 'This webhook endpoint is disabled.',
+                ], 403);
             }
 
+            // Prefer the store-specific signing secret.
+            // Fall back to the existing platform secret for legacy setups.
+            $endpointSecret = $endpoint?->signing_secret;
 
-            /*
-            |--------------------------------------------------------------------------
-            | PAYMENT CAPTURED
-            |--------------------------------------------------------------------------
-            */ elseif ($event->type === 'payment_intent.succeeded') {
+            if (empty($endpointSecret)) {
+                $endpointSecret = config('services.stripe.webhook_secret')
+                    ?? env('STRIPE_WEBHOOK_SECRET');
+            }
 
-                $intent = $event->data->object;
+            if (empty($endpointSecret)) {
+                Log::error('Stripe webhook signing secret is not configured.', [
+                    'store_id' => $storeId,
+                    'environment' => $environment,
+                ]);
 
-                $payment = Payment::where(
-                    'stripe_session_id',
-                    $intent->id
-                )->first();
+                return response()->json([
+                    'error' => 'Webhook signing secret is not configured.',
+                ], 500);
+            }
 
-                if ($payment) {
+            // Verify Stripe signature.
+            try {
+                $event = Webhook::constructEvent(
+                    $payload,
+                    $sigHeader,
+                    $endpointSecret
+                );
+            } catch (\UnexpectedValueException $e) {
+                Log::warning('Stripe webhook invalid payload.', [
+                    'store_id' => $storeId,
+                    'error' => $e->getMessage(),
+                ]);
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Idempotency protection
-                    |--------------------------------------------------------------------------
-                    */
+                return response()->json([
+                    'error' => 'Invalid payload.',
+                ], 400);
+            } catch (\Stripe\Exception\SignatureVerificationException $e) {
+                Log::warning('Stripe webhook signature verification failed.', [
+                    'store_id' => $storeId,
+                    'environment' => $environment,
+                ]);
+
+                return response()->json([
+                    'error' => 'Invalid signature.',
+                ], 400);
+            }
+
+            // Prevent test events from being processed by live endpoints
+            // and live events from being processed by test endpoints.
+            $eventIsLive = (bool) ($event->livemode ?? false);
+
+            if (
+                ($environment === 'live' && !$eventIsLive) ||
+                ($environment === 'test' && $eventIsLive)
+            ) {
+                Log::warning('Stripe webhook environment mismatch.', [
+                    'store_id' => $storeId,
+                    'environment' => $environment,
+                    'event_livemode' => $eventIsLive,
+                ]);
+
+                return response()->json([
+                    'error' => 'Webhook environment mismatch.',
+                ], 400);
+            }
+
+            $intent = $event->data->object ?? null;
+
+            if (!isset($intent->id)) {
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Event does not contain a PaymentIntent.',
+                ]);
+            }
+
+            $payment = Payment::where(
+                'stripe_session_id',
+                $intent->id
+            )->first();
+
+            // Return 500 so Stripe retries if the local payment record
+            // has not been created yet.
+            if (!$payment) {
+                Log::warning('Stripe webhook payment record not found.', [
+                    'store_id' => $storeId,
+                    'payment_intent_id' => $intent->id,
+                    'event_type' => $event->type,
+                ]);
+
+                return response()->json([
+                    'error' => 'Payment record not found yet.',
+                ], 500);
+            }
+
+            $order = $payment->order;
+            $orderStoreId = (int) ($order?->store_id ?? $storeId);
+
+            switch ($event->type) {
+                case 'payment_intent.amount_capturable_updated':
 
                     if ($payment->payment_status !== 'completed') {
-
                         $payment->update([
-                            'payment_status' => 'completed',
+                            'payment_status' => 'authorized',
                         ]);
+                    }
 
-                        $order = $payment->order;
+                    Log::info('Stripe payment authorized.', [
+                        'payment_intent_id' => $intent->id,
+                        'order_id' => $payment->order_id,
+                        'store_id' => $orderStoreId,
+                    ]);
 
-                        if ($order) {
+                    break;
 
-                            $previousStatus = $order->status;
+                case 'payment_intent.succeeded':
 
+                    $payment->update([
+                        'payment_status' => 'completed',
+                    ]);
+
+                    if ($order) {
+                        $previousStatus = $order->status;
+
+                        if ($previousStatus !== 'Awaiting Fulfillment') {
                             $order->update([
                                 'status' => 'Awaiting Fulfillment',
                             ]);
 
-                            /*
-                            |--------------------------------------------------------------------------
-                            | Timeline
-                            |--------------------------------------------------------------------------
-                            */
-
                             try {
-
-                                $storeId = current_store_id();
-
                                 OrderTimeline::addEvent(
                                     $order->id,
-                                    $storeId,
-                                    'payment_captured',
-                                    'Payment captured successfully.',
+                                    $orderStoreId,
+                                    'payment_completed',
+                                    'Payment completed successfully.',
                                     [
-                                        'source' => 'Express Checkout via Stripe',
+                                        'source' => 'Stripe',
                                         'payment_intent' => $intent->id,
                                         'amount' => '$' . number_format(
-                                            ($intent->amount_received ?? $intent->amount) / 100,
+                                            ($intent->amount_received ?? $intent->amount ?? 0) / 100,
                                             2
                                         ),
                                     ],
@@ -631,7 +1214,7 @@ class StripePaymentController extends Controller
 
                                 OrderTimeline::addEvent(
                                     $order->id,
-                                    $storeId,
+                                    $orderStoreId,
                                     'status_changed',
                                     'Order status changed',
                                     [
@@ -641,116 +1224,108 @@ class StripePaymentController extends Controller
                                     'dot'
                                 );
                             } catch (\Throwable $timelineException) {
-
-                                \Log::warning(
-                                    'Unable to create Express Checkout order timeline',
+                                Log::warning(
+                                    'Unable to create Stripe payment timeline.',
                                     [
+                                        'order_id' => $order->id,
                                         'error' => $timelineException->getMessage(),
                                     ]
                                 );
                             }
                         }
                     }
-                }
-            }
 
+                    Log::info('Stripe payment completed.', [
+                        'payment_intent_id' => $intent->id,
+                        'order_id' => $payment->order_id,
+                        'store_id' => $orderStoreId,
+                    ]);
 
-            /*
-            |--------------------------------------------------------------------------
-            | PAYMENT CANCELED
-            |--------------------------------------------------------------------------
-            */ elseif ($event->type === 'payment_intent.canceled') {
+                    break;
 
-                $intent = $event->data->object;
+                case 'payment_intent.canceled':
 
-                $payment = Payment::where(
-                    'stripe_session_id',
-                    $intent->id
-                )->first();
-
-                if ($payment) {
-
-                    if (
-                        in_array(
-                            $payment->payment_status,
-                            ['pending', 'authorized']
-                        )
-                    ) {
-
+                    if (in_array(
+                        $payment->payment_status,
+                        ['pending', 'authorized'],
+                        true
+                    )) {
                         $payment->update([
                             'payment_status' => 'expired',
                         ]);
 
-                        $order = $payment->order;
-
                         if ($order) {
-
                             $order->update([
                                 'status' => 'Payment Expired',
                             ]);
                         }
                     }
-                }
-            }
 
+                    break;
 
-            /*
-            |--------------------------------------------------------------------------
-            | PAYMENT FAILED
-            |--------------------------------------------------------------------------
-            */ elseif ($event->type === 'payment_intent.payment_failed') {
+                case 'payment_intent.payment_failed':
 
-                $intent = $event->data->object;
-
-                $payment = Payment::where(
-                    'stripe_session_id',
-                    $intent->id
-                )->first();
-
-                if ($payment) {
-
-                    $payment->update([
-                        'payment_status' => 'failed',
-                    ]);
-
-                    $order = $payment->order;
-
-                    if ($order) {
-
-                        $order->update([
-                            'status' => 'Payment Failed',
+                    if ($payment->payment_status !== 'completed') {
+                        $payment->update([
+                            'payment_status' => 'failed',
                         ]);
+
+                        if ($order) {
+                            $order->update([
+                                'status' => 'Payment Failed',
+                            ]);
+                        }
                     }
-                }
+
+                    break;
             }
-        } catch (\Throwable $e) {
 
-            \Log::error(
-                'Stripe webhook processing error',
-                [
-                    'event_type' => $event->type ?? null,
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString(),
-                ]
-            );
-
-            /*
-            |--------------------------------------------------------------------------
-            | Return 200 only if you intentionally don't want Stripe retrying.
-            |
-            | For critical processing errors, returning 500 lets Stripe retry.
-            |--------------------------------------------------------------------------
-            */
+            // Record the latest successfully processed event.
+            if ($endpoint) {
+                $endpoint->update([
+                    'last_event_at' => now(),
+                    'last_event_type' => $event->type,
+                    'last_event_status' => 'processed',
+                    'last_error' => null,
+                ]);
+            }
 
             return response()->json([
-                'error' => 'Webhook processing failed',
-            ], 500);
-        }
+                'status' => 'success',
+            ]);
 
-        return response()->json([
-            'status' => 'success',
-        ]);
+        } catch (\Throwable $e) {
+            Log::error('Stripe webhook processing failed.', [
+                'store_hash' => $storeHash,
+                'environment' => $environment,
+                'event_type' => $event->type ?? null,
+                'error' => $e->getMessage(),
+            ]);
+
+            if ($endpoint) {
+                try {
+                    $endpoint->update([
+                        'last_event_at' => now(),
+                        'last_event_type' => $event->type ?? null,
+                        'last_event_status' => 'failed',
+                        'last_error' => $e->getMessage(),
+                    ]);
+                } catch (\Throwable $trackingException) {
+                    Log::warning('Unable to update webhook tracking.', [
+                        'error' => $trackingException->getMessage(),
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'error' => 'Webhook processing failed.',
+            ], 500);
+
+        } finally {
+            $resolver->disconnect();
+        }
     }
+
 
     // Wallet Payment Functions
 
@@ -930,11 +1505,12 @@ class StripePaymentController extends Controller
                 ],
 
                 /*
-                 * IMPORTANT:
-                 *
-                 * Your existing system authorizes first and captures later.
-                 */
-                'capture_method' => 'manual',
+                * Capture behavior comes from this store's Stripe settings.
+                *
+                * authorize_capture = automatic
+                * authorize_only    = manual
+                */
+                'capture_method' => $this->stripeCaptureMethodForStore($storeId),
 
                 'metadata' => [
                     'store_id' => (string) $storeId,
@@ -975,6 +1551,8 @@ class StripePaymentController extends Controller
                     'currency' => $intent->currency,
 
                     'status' => $intent->status,
+
+                    'capture_method' => $intent->capture_method,
                 ],
             ]);
         } catch (\Stripe\Exception\ApiErrorException $e) {
