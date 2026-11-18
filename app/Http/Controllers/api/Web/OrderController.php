@@ -357,31 +357,26 @@ class OrderController extends Controller
                 ->groupBy(fn($row) => $row->order_id . '-' . $row->product_id);
 
             $orders->getCollection()->transform(function ($order) use ($overrides) {
-                        // Order ki currency se decimal places lo
-                    $currency = \App\Models\Currency::where('store_id', $order->store_id)
-                        ->where('code', $order->currency_code)
-                        ->first();
-                    $decimalPlaces = (int) ($currency->decimal_places ?? 2);
+                foreach ($order->items as $item) {
+                    $key = $order->id . '-' . $item->product_id;
+                    $row = $overrides->get($key)?->last();
 
-                    foreach ($order->items as $item) {
-                        $key = $order->id . '-' . $item->product_id;
-                        $row = $overrides->get($key)?->last();
-
-                        $finalPrice = $row ? $row->price : $item->price;
-                        $formattedPrice = round((float) $finalPrice, $decimalPlaces);
-
-                        $item->quantity = $row ? $row->qty : $item->quantity;
-                        $item->price    = $formattedPrice;
-
-                        if ($item->relationLoaded('product') && $item->product) {
-                            $cloned = clone $item->product;
-                            $cloned->setAttribute('price', $formattedPrice);
-                            $item->setRelation('product', $cloned);
-                        }
+                    if (!$row) {
+                        continue;
                     }
 
-                    return $order;
-                });
+                    $item->quantity = $row->qty;
+                    $item->price    = $row->price;
+
+                    if ($item->relationLoaded('product') && $item->product) {
+                        $cloned = clone $item->product;
+                        $cloned->setAttribute('price', $row->price);
+                        $item->setRelation('product', $cloned);
+                    }
+                }
+
+                return $order;
+            });
 
             return response()->json([
                 'status'     => true,
