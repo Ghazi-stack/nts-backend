@@ -1179,8 +1179,8 @@ class UrlSettingController extends Controller
             $storeId = $this->getStoreId();
 
             $validated = $request->validate([
-                'ids'                 => 'required|array|min:1',
-                'ids.*'               => 'integer',
+                'ids'               => 'required|array|min:1',
+                'ids.*'             => 'integer',
                 'exportDynamicUrls' => 'sometimes|boolean',
             ]);
 
@@ -1202,9 +1202,24 @@ class UrlSettingController extends Controller
             $csv = $this->generateRedirectsCsv($redirects, $includeDynamicUrl);
 
             $fileName = 'Redirect-Export-Selected-' . Str::random(8) . '-' . now()->format('YmdHis') . '.csv';
-            $s3Path   = "{$storeId}/redirect_exports/{$fileName}";
 
-            Storage::disk('s3')->put($s3Path, $csv, 'public');
+            // Path 1 try karo
+            $s3Path = "{$storeId}/redirect_exports/{$fileName}";
+            $uploaded = Storage::disk('s3')->put($s3Path, $csv);
+
+            // Agar fail ho to Path 2 try karo
+            if (!$uploaded) {
+                $s3Path = "redirect_exports/{$storeId}/{$fileName}";
+                $uploaded = Storage::disk('s3')->put($s3Path, $csv);
+            }
+
+            if (!$uploaded) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'S3 upload failed on both paths',
+                ], 500);
+            }
+
             $downloadUrl = Storage::disk('s3')->url($s3Path);
 
             // Activity Log
@@ -1226,6 +1241,7 @@ class UrlSettingController extends Controller
                 'total'        => $redirects->count(),
                 'file_name'    => $fileName,
                 'download_url' => $downloadUrl,
+                's3_path'      => $s3Path,
                 'log_id'       => $log->id,
             ]);
         } catch (\Exception $e) {
