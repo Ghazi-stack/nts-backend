@@ -70,7 +70,7 @@ class RealtimeController extends Controller
                         'orderId'   => $order->id,
                         'productId' => $item->product_id,
                         'name'      => $item->product->name ?? null,
-                        'image'     => $image->url ?? $image->image ?? $image->path ?? null,
+                        'image' => $this->productImageUrl($image),
                         'soldAt'    => $capturedAt,
                     ];
                 });
@@ -94,6 +94,32 @@ class RealtimeController extends Controller
                 'createdAt' => optional($row->created_at)->toDateTimeString(),
             ])->values(),
         ];
+    }
+
+    private function productImageUrl($image): ?string
+    {
+        if (!$image) {
+            return null;
+        }
+
+        $path = $image->path ?? null;
+
+        if (!$path) {
+            return null;
+        }
+
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+
+        $base = rtrim(
+            config('filesystems.disks.s3.url')
+                ?? env('AWS_URL')
+                ?? 'https://dn3xtdxrpdtqv.cloudfront.net',
+            '/'
+        );
+
+        return $base . '/' . ltrim($path, '/');
     }
 
     public function searchIndex(Request $request)
