@@ -1115,6 +1115,15 @@ class UrlSettingController extends Controller
             return response()->json(['status' => false, 'message' => 'Log not found'], 404);
         }
 
+        // errorMessage ko array mein convert karo
+        $errorMessage = null;
+        if (!empty($log->error_message)) {
+            $decoded = json_decode($log->error_message, true);
+            $errorMessage = is_array($decoded) ? $decoded : [
+                ['row' => null, 'message' => $log->error_message]
+            ];
+        }
+
         return response()->json([
             'status' => true,
             'data'   => [
@@ -1127,7 +1136,7 @@ class UrlSettingController extends Controller
                 'status'       => strtoupper($log->status),
                 'fileName'     => $log->file_name,
                 'downloadUrl'  => $log->download_url,
-                'errorMessage' => $log->error_message,
+                'errorMessage' => $errorMessage,
             ]
         ]);
     }
