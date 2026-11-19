@@ -67,7 +67,7 @@ class StripePaymentController extends Controller
             'payment_method_id' => 'required|string',
             'amount'            => 'required|integer',
 
-            'orderId'           => 'required|integer|exists:orders,id',
+            'orderId'           => 'required|integer|exists:orders,order_number',
 
             'selectedCurrency' => 'required|array',
             'selectedCurrency.id' => 'required|integer',
