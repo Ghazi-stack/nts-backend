@@ -3807,7 +3807,7 @@ class OrderController extends Controller
     {
         try {
             $validated = $request->validate([
-                'payment_method_id' => 'required|string',
+                'paymentMethodId' => 'required|string',
                 'userType'          => 'nullable|string|max:100',
                 'deviceType'        => 'nullable|string|max:1000',
                 'firstName'         => 'required_if:isMultiAddress,false|string|max:255',
@@ -4387,7 +4387,7 @@ class OrderController extends Controller
             $intent = PaymentIntent::create([
                 'amount' => $frontendAmount,
                 'currency' => strtolower($currencyCode),
-                'payment_method' => $validated['payment_method_id'],
+                'payment_method' => $validated['paymentMethodId'],
                 'confirmation_method' => 'manual',
                 'payment_method_types' => ['card'],
                 'confirm' => true,
