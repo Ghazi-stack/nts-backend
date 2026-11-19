@@ -22,7 +22,7 @@ use App\Services\TenantCredentialResolver;
 
 class StripePaymentController extends Controller
 {
-    
+
     private function connectedStripeOptions(Request $request): array
     {
         // Temporarily use the original platform Stripe account.
@@ -65,7 +65,9 @@ class StripePaymentController extends Controller
     {
         $validated = $request->validate([
             'payment_method_id' => 'required|string',
-            'amount'            => 'required|integer', // cents
+            'amount'            => 'required|integer',
+
+            'orderId'           => 'required|integer|exists:orders,id',
 
             'selectedCurrency' => 'required|array',
             'selectedCurrency.id' => 'required|integer',
@@ -143,7 +145,7 @@ class StripePaymentController extends Controller
         $shippingCost = $validated['shippingCost'] ?? 0;
         $matchedRate = null;
 
-        // ===== PRODUCTS CALCULATION (same as calculate) =====
+        // ===== PRODUCTS CALCULATION =====
         $totalWeight = 0;
         $itemCount = 0;
         $baseOrderTotal = 0;
@@ -177,7 +179,7 @@ class StripePaymentController extends Controller
             }
         }
 
-        // ===== SHIPPING RATE MATCHING (same as calculate) =====
+        // ===== SHIPPING RATE MATCHING =====
         if (!empty($validated['method_id']) && !empty($validated['destination'])) {
             $packageInfo = [
                 'total_weight'  => round($totalWeight, 2),
@@ -218,7 +220,7 @@ class StripePaymentController extends Controller
             }
         }
 
-        // ===== FINAL TOTAL (same formula as calculate) =====
+        // ===== FINAL TOTAL =====
         $calculatedTotal += $shippingCost;
         $convertedCouponDiscount = round($discount * $exchangeRate, 6);
         $calculatedTotal -= $convertedCouponDiscount;
@@ -228,19 +230,8 @@ class StripePaymentController extends Controller
             $calculatedTotal = 0;
         }
 
-        $calculatedCents = (int) round($calculatedTotal * 100);
-
-        // ===== AMOUNT VERIFICATION =====
-        if (abs($calculatedCents - $request->amount) > 1) {
-            return response()->json([
-                'status'     => false,
-                'message'    => 'Amount mismatch. Please refresh and try again.',
-                'calculated' => $calculatedCents,
-                'received'   => $request->amount,
-            ], 422);
-        }
-
-        $orderNumber = 'ORD-' . strtoupper(Str::random(8));
+        // Order ID from payload only
+        $orderId = $validated['orderId'] ?? null;
 
         Stripe::setApiKey(config('services.stripe.secret'));
         $stripeOptions = $this->connectedStripeOptions($request);
@@ -257,11 +248,11 @@ class StripePaymentController extends Controller
                 'confirm' => true,
                 'capture_method' => $captureMethod,
                 'metadata' => [
-                    'user_id'      => $user?->id,
-                    'order_number' => $orderNumber,
-                    'products'     => json_encode($validated['products']),
-                    'currency_id'  => $currency->id,
-                    'coupon_id'    => $validated['coupon']['id'] ?? null,
+                    'user_id'     => $user?->id,
+                    'order_number'=> $orderId,   // ← jo payload se aaya wahi
+                    'products'    => json_encode($validated['products']),
+                    'currency_id' => $currency->id,
+                    'coupon_id'   => $validated['coupon']['id'] ?? null,
                 ],
             ], array_merge($stripeOptions, [
                 'idempotency_key' => 'payment_' . (string) ($request->header('Idempotency-Key') ?: ($request->input('checkout_id') ?: Str::uuid()))
@@ -275,26 +266,18 @@ class StripePaymentController extends Controller
                 ]);
             }
 
-            // if ($intent->status !== 'requires_capture') {
-            //     DB::rollBack();
-            //     return response()->json([
-            //         'status'  => 'error',
-            //         'message' => 'Payment authorization failed. Status: ' . $intent->status,
-            //     ], 400);
-            // }
-
             $expectedStatus = $captureMethod === 'automatic'
                 ? 'succeeded'
                 : 'requires_capture';
 
             if ($intent->status !== $expectedStatus) {
                 DB::rollBack();
-
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Payment processing failed. Status: ' . $intent->status,
                 ], 400);
             }
+
             $riskScore = null;
             $riskLevel = null;
 
@@ -312,15 +295,15 @@ class StripePaymentController extends Controller
             return response()->json([
                 'status' => $captureMethod === 'automatic' ? 'completed' : 'authorized',
                 'message' => $captureMethod === 'automatic'
-                ? 'Payment completed successfully.'
-                : 'Payment authorized (on hold). Capture pending.',
+                    ? 'Payment completed successfully.'
+                    : 'Payment authorized (on hold). Capture pending.',
                 'amount'             => $intent->amount,
                 'payment_intent_id'  => $intent->id,
                 'payment_status'     => $intent->status,
-                'capture_method' => $captureMethod,
+                'capture_method'     => $captureMethod,
                 'risk_score'         => $riskScore,
                 'risk_level'         => $riskLevel,
-                'order_number'       => $orderNumber,
+                'order_number'        => $orderId,
             ]);
         } catch (\Stripe\Exception\CardException $e) {
             DB::rollBack();
@@ -668,7 +651,6 @@ class StripePaymentController extends Controller
                     'amount_captured' => $captured->amount_received,
                     'payment_status' => $captured->status,
                 ];
-
             } catch (\Stripe\Exception\CardException $e) {
                 $failedCount++;
 
@@ -677,7 +659,6 @@ class StripePaymentController extends Controller
                     'status' => false,
                     'message' => $e->getError()->message,
                 ];
-
             } catch (\Throwable $e) {
                 $failedCount++;
 
@@ -1026,7 +1007,7 @@ class StripePaymentController extends Controller
     //     ]);
     // }
 
-    
+
     public function handleWebhook(
         Request $request,
         string $storeHash,
@@ -1293,7 +1274,6 @@ class StripePaymentController extends Controller
             return response()->json([
                 'status' => 'success',
             ]);
-
         } catch (\Throwable $e) {
             Log::error('Stripe webhook processing failed.', [
                 'store_hash' => $storeHash,
@@ -1320,7 +1300,6 @@ class StripePaymentController extends Controller
             return response()->json([
                 'error' => 'Webhook processing failed.',
             ], 500);
-
         } finally {
             $resolver->disconnect();
         }
