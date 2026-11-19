@@ -3803,57 +3803,56 @@ class OrderController extends Controller
     //     }
     // }
 
-    public function store(Request $request)
+   public function store(Request $request)
     {
         try {
             $validated = $request->validate([
-                'orderId'        => 'nullable|integer|exists:orders,id',
-                'userType'       => 'nullable|string|max:100',
-                'deviceType'     => 'nullable|string|max:1000',
-                'firstName'      => 'required_if:isMultiAddress,false|string|max:255',
-                'lastName'       => 'required_if:isMultiAddress,false|string|max:255',
-                'companyName'    => 'nullable|string|max:255',
-                'email'          => 'required|email',
-                'phone'          => 'nullable|string|max:20',
-                'addressLine1'   => 'required_if:isMultiAddress,false|string|max:255',
-                'addressLine2'   => 'nullable|string|max:255',
-                'city'           => 'nullable|string|max:100',
-                'state'          => 'nullable|string|max:100',
-                'zip'            => 'nullable|string|max:20',
-                'country'        => 'nullable|string|max:100',
-                'newsletter'     => 'nullable|boolean',
-                'paymentMethod'  => 'required|string|max:100',
-                'shippingMethod' => 'nullable|string|max:100',
-                'shippingCost'   => 'nullable|numeric',
-                'shippingData'   => 'nullable',
-                'comments'       => 'nullable|string|max:1000',
-                'discountAmount' => 'nullable|numeric',
-                'manualDiscount' => 'nullable|numeric',
-                'paymentIntentId' => 'required|string',
-                'coupon'         => 'nullable|array',
-                'coupon.id'      => 'required_with:coupon|integer',
+                'payment_method_id' => 'required|string',
+                'userType'          => 'nullable|string|max:100',
+                'deviceType'        => 'nullable|string|max:1000',
+                'firstName'         => 'required_if:isMultiAddress,false|string|max:255',
+                'lastName'          => 'required_if:isMultiAddress,false|string|max:255',
+                'companyName'       => 'nullable|string|max:255',
+                'email'             => 'required|email',
+                'phone'             => 'nullable|string|max:20',
+                'addressLine1'      => 'required_if:isMultiAddress,false|string|max:255',
+                'addressLine2'      => 'nullable|string|max:255',
+                'city'              => 'nullable|string|max:100',
+                'state'             => 'nullable|string|max:100',
+                'zip'               => 'nullable|string|max:20',
+                'country'           => 'nullable|string|max:100',
+                'newsletter'        => 'nullable|boolean',
+                'paymentMethod'     => 'required|string|max:100',
+                'shippingMethod'    => 'nullable|string|max:100',
+                'shippingCost'      => 'nullable|numeric',
+                'shippingData'      => 'nullable',
+                'comments'          => 'nullable|string|max:1000',
+                'discountAmount'    => 'nullable|numeric',
+                'manualDiscount'    => 'nullable|numeric',
+                'coupon'            => 'nullable|array',
+                'coupon.id'         => 'required_with:coupon|integer',
                 'coupon.couponCode' => 'required_with:coupon|string',
-                'isMultiAddress' => 'required|boolean',
-                'ipAddress'      => 'nullable|string|max:45',
+                'isMultiAddress'    => 'required|boolean',
+                'ipAddress'         => 'nullable|string|max:45',
                 'orderPlaceCountry' => 'nullable|string|max:45',
                 'isSaveAddressForShipping' => 'nullable|boolean',
                 'isSaveAddressForBilling'  => 'nullable|boolean',
-                'billingSame'    => 'nullable|boolean',
-                'amount'         => 'required|integer',
-                'currency'       => 'nullable|string|size:3',
-                'selectedCurrency' => 'required|array',
+                'billingSame'       => 'nullable|boolean',
+                'amount'            => 'required|integer',
+                'currency'          => 'nullable|string|size:3',
+                'selectedCurrency'  => 'required|array',
                 'selectedCurrency.id' => 'required|integer',
                 'selectedCurrency.exchangeRate' => 'required|numeric',
 
-                'method_id'      => 'nullable|integer',
-                'service_type'   => 'nullable|string',
-                'destination'    => 'required_with:method_id|array',
+                'method_id'         => 'nullable|integer',
+                'service_type'      => 'nullable|string',
+                'destination'       => 'required_with:method_id|array',
                 'destination.country_code' => 'required_with:destination|string|size:2',
                 'destination.state'        => 'nullable|string|max:255',
                 'destination.city'         => 'nullable|string|max:255',
                 'destination.postal_code'  => 'nullable|string|max:50',
 
-                'destinations'   => 'required_if:isMultiAddress,true|array|min:1',
+                'destinations'      => 'required_if:isMultiAddress,true|array|min:1',
                 'destinations.*.firstName'      => 'required|string|max:255',
                 'destinations.*.lastName'       => 'required|string|max:255',
                 'destinations.*.companyName'    => 'nullable|string|max:255',
@@ -3870,7 +3869,7 @@ class OrderController extends Controller
                 'destinations.*.products'       => 'required|array|min:1',
                 'destinations.*.products.*.product_id' => 'required|integer|exists:products,id',
                 'destinations.*.products.*.quantity'   => 'required|integer|min:1',
-                'products'       => 'required_if:isMultiAddress,false|array|min:1',
+                'products'          => 'required_if:isMultiAddress,false|array|min:1',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity'   => 'required|integer|min:1',
             ]);
@@ -3880,7 +3879,7 @@ class OrderController extends Controller
                 return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
             }
 
-            $stripeSettings = app(StripePaymentSettingsResolver::class)
+            $stripeSettings = app(\App\Services\StripePaymentSettingsResolver::class)
                 ->resolve((int) $storeId);
 
             $captureMethod = $stripeSettings['active']
@@ -3947,8 +3946,7 @@ class OrderController extends Controller
             $ratesResponse = null;
             $packageInfo = null;
 
-            // Converted discount (coupon only)
-          $convertedDiscount = round($discount * $exchangeRate, $decimalPlaces);
+            $convertedDiscount = round($discount * $exchangeRate, $decimalPlaces);
 
             // ===== AMOUNT VERIFICATION =====
             if (!$isMulti) {
@@ -4055,7 +4053,7 @@ class OrderController extends Controller
             $totalAmountFromPayload = $frontendAmount / 100;
             // ===== AMOUNT VERIFICATION END =====
 
-            // ===== BAQI PURA ORIGINAL FLOW =====
+            // ===== ORDER CREATE FIRST (to get order_number) =====
 
             $orderEmail = strtolower(trim($validated['email']));
             $currentUser = $request->user('sanctum') ?? auth('sanctum')->user();
@@ -4127,38 +4125,6 @@ class OrderController extends Controller
                 }
                 return (float) $fallbackPrice;
             };
-
-            $existingPayment = Payment::where('stripe_session_id', $validated['paymentIntentId'])->first();
-            if ($existingPayment) {
-                if ($existingPayment->payment_status === 'completed') {
-                    $order = Order::with('items.product.images', 'billingInformation', 'customer')->find($existingPayment->order_id);
-                    return response()->json(['status' => true, 'message' => 'Order already placed successfully.', 'data' => new OrderResource($order)]);
-                }
-                return response()->json(['status' => false, 'message' => 'This payment is already being processed.'], 409);
-            }
-
-            Stripe::setApiKey(config('services.stripe.secret'));
-            $stripeOptions = config('services.stripe.connect_enabled', false)
-            ? app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request)
-            : [];
-            try {
-                $stripeIntent = PaymentIntent::retrieve($validated['paymentIntentId'], [], $stripeOptions);
-            } catch (\Exception $stripeException) {
-                return response()->json(['status' => false, 'message' => 'Unable to verify payment with Stripe.'], 422);
-            }
-
-            // if ($stripeIntent->status !== 'requires_capture') {
-            //     return response()->json(['status' => false, 'message' => 'Payment has not been authorized.', 'payment_status' => $stripeIntent->status], 422);
-            // }
-
-            if ($stripeIntent->status !== $expectedStripeStatus) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Payment verification failed.',
-                    'payment_status' => $stripeIntent->status,
-                    'expected_status' => $expectedStripeStatus,
-                ], 422);
-            }
 
             $user = auth('sanctum')->user();
             $customer = null;
@@ -4292,17 +4258,13 @@ class OrderController extends Controller
 
                 if ($existingDraft) {
                     $existingDraft->items()->delete();
-
-                    // Clear any legacy ID-based number before assigning the configured sequence.
                     $existingDraft->update(array_merge(
                         $orderPayload,
                         $draftConvertFields,
                         ['order_number' => null]
                     ));
-
                     $order = $existingDraft->fresh();
                 } else {
-                    // New processed orders start without a number; the generator assigns it.
                     $order = Order::create(array_merge(
                         $orderPayload,
                         ['order_number' => null]
@@ -4321,7 +4283,7 @@ class OrderController extends Controller
                             'store_id'   => $storeId,
                             'product_id' => $product->id,
                             'quantity'   => $item['quantity'],
-                            'price' => round($resolvePrice($product->id, $product->price) * $exchangeRate, $decimalPlaces),
+                            'price'      => round($resolvePrice($product->id, $product->price) * $exchangeRate, $decimalPlaces),
                         ]);
                         $product->decrement('current_stock', $item['quantity']);
                     }
@@ -4376,17 +4338,13 @@ class OrderController extends Controller
 
                     if ($existingDraft && $destIndex === 0) {
                         $existingDraft->items()->delete();
-
-                        // Clear any legacy ID-based number before assigning the configured sequence.
                         $existingDraft->update(array_merge(
                             $orderPayload,
                             $draftConvertFields,
                             ['order_number' => null]
                         ));
-
                         $order = $existingDraft->fresh();
                     } else {
-                        // Each destination creates a separate processed order.
                         $order = Order::create(array_merge(
                             $orderPayload,
                             ['order_number' => null]
@@ -4405,7 +4363,7 @@ class OrderController extends Controller
                                 'store_id'   => $storeId,
                                 'product_id' => $product->id,
                                 'quantity'   => $item['quantity'],
-                                'price' => round($resolvePrice($product->id, $product->price) * $exchangeRate, $decimalPlaces),
+                                'price'      => round($resolvePrice($product->id, $product->price) * $exchangeRate, $decimalPlaces),
                             ]);
                             $product->decrement('current_stock', $item['quantity']);
                         }
@@ -4417,14 +4375,72 @@ class OrderController extends Controller
                 }
             }
 
+            // Order number ab available hai
+            $generatedOrderNumber = $orders[0]->order_number ?? null;
+
+            // ===== CREATE PAYMENT INTENT (after order, with order_number) =====
+            Stripe::setApiKey(config('services.stripe.secret'));
+            $stripeOptions = config('services.stripe.connect_enabled', false)
+                ? app(\App\Services\StripeConnectAccountResolver::class)->optionsForRequest($request)
+                : [];
+
+            $intent = PaymentIntent::create([
+                'amount' => $frontendAmount,
+                'currency' => strtolower($currencyCode),
+                'payment_method' => $validated['payment_method_id'],
+                'confirmation_method' => 'manual',
+                'payment_method_types' => ['card'],
+                'confirm' => true,
+                'capture_method' => $captureMethod,
+                'metadata' => [
+                    'user_id'      => $user?->id,
+                    'order_number' => $generatedOrderNumber,
+                    'order_id'     => $orders[0]->id,
+                    'products'     => json_encode($validated['products'] ?? []),
+                    'currency_id'  => $currency->id,
+                    'coupon_id'    => $validated['coupon']['id'] ?? null,
+                ],
+            ], array_merge($stripeOptions, [
+                'idempotency_key' => 'payment_' . (string) ($request->header('Idempotency-Key') ?: ($request->input('checkout_id') ?: Str::uuid()))
+            ]));
+
+            if (in_array($intent->status, ['requires_action', 'requires_source_action'])) {
+                return response()->json([
+                    'status' => 'requires_action',
+                    'payment_intent_client_secret' => $intent->client_secret,
+                    'payment_intent_id' => $intent->id,
+                    'order_number' => $generatedOrderNumber,
+                ]);
+            }
+
+            if ($intent->status !== $expectedStripeStatus) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Payment verification failed.',
+                    'payment_status' => $intent->status,
+                    'expected_status' => $expectedStripeStatus,
+                ], 422);
+            }
+
+            $paymentIntentId = $intent->id;
+
+            // Risk data
+            $riskScore = null;
+            $riskLevel = null;
+            $charge = $intent->latest_charge
+                ? \Stripe\Charge::retrieve($intent->latest_charge, [], $stripeOptions)
+                : null;
+            if ($charge && $charge->outcome) {
+                $riskScore = $charge->outcome->risk_score ?? null;
+                $riskLevel = $charge->outcome->risk_level ?? null;
+            }
+            // ===== PAYMENT INTENT END =====
+
             // Stripe billing details
             $stripeBillingDetails = null;
             try {
-                \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-                
-                $stripeIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], [], $stripeOptions);
-                if ($stripeIntent->payment_method) {
-                    $paymentMethod = \Stripe\PaymentMethod::retrieve($stripeIntent->payment_method, [], $stripeOptions);
+                if ($intent->payment_method) {
+                    $paymentMethod = \Stripe\PaymentMethod::retrieve($intent->payment_method, [], $stripeOptions);
                     if ($paymentMethod->billing_details) {
                         $bd = $paymentMethod->billing_details;
                         $stripeBillingDetails = [
@@ -4492,59 +4508,36 @@ class OrderController extends Controller
                 ]);
             }
 
-            // Risk data
-            $riskData = ['risk_score' => null, 'risk_level' => 'normal'];
-            try {
-                \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
-                $stripeOptions = $stripeOptions ?? [];
-                $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']], $stripeOptions);
-                if (empty($freshIntent->latest_charge)) {
-                    usleep(800000);
-                    $freshIntent = \Stripe\PaymentIntent::retrieve($validated['paymentIntentId'], ['expand' => ['latest_charge', 'latest_charge.outcome', 'latest_charge.review', 'review']], $stripeOptions);
-                }
-                $charge = null;
-                if (!empty($freshIntent->latest_charge)) {
-                    $charge = is_string($freshIntent->latest_charge)
-                        ? \Stripe\Charge::retrieve($freshIntent->latest_charge, ['expand' => ['outcome', 'review']], $stripeOptions)
-                        : $freshIntent->latest_charge;
-                }
-                $score = null;
-                $level = null;
-                if ($charge && !empty($charge->outcome)) {
-                    $score = isset($charge->outcome->risk_score) ? (int) $charge->outcome->risk_score : null;
-                    $level = $charge->outcome->risk_level ?? null;
-                }
-                $riskData = ['risk_score' => $score, 'risk_level' => $level ?: 'normal'];
-            } catch (\Exception $e) {
-                \Log::warning('Could not fetch Stripe risk data: ' . $e->getMessage());
-            }
+            $riskData = [
+                'risk_score' => $riskScore,
+                'risk_level' => $riskLevel ?: 'normal',
+            ];
 
             Payment::create(array_merge([
                 'order_id'          => $orders[0]->id,
-                'stripe_session_id' => $validated['paymentIntentId'],
+                'stripe_session_id' => $paymentIntentId,
                 'amount'            => $totalOrderAmount,
                 'discountAmount'    => $convertedDiscount,
-                // 'payment_status'    => 'authorized',
-                'payment_status' => $localPaymentStatus,
+                'payment_status'    => $localPaymentStatus,
             ], $riskData));
 
             foreach ($orders as $ord) {
                 $ord->load('billingInformation');
-                OrderTimeline::addEvent($ord->id, $storeId, 'order_created', 'Order created', ['status' => $ord->status], 'dot');
-                OrderTimeline::addEvent($ord->id, $storeId, 'status_changed', 'Order status changed', ['previous_status' => 'Incomplete', 'new_status' => $ord->status], 'dot');
-                OrderTimeline::addEvent($ord->id, $storeId, 'shipping_quote', 'Shipping quote persisted', [
+                \App\Models\OrderTimeline::addEvent($ord->id, $storeId, 'order_created', 'Order created', ['status' => $ord->status], 'dot');
+                \App\Models\OrderTimeline::addEvent($ord->id, $storeId, 'status_changed', 'Order status changed', ['previous_status' => 'Incomplete', 'new_status' => $ord->status], 'dot');
+                \App\Models\OrderTimeline::addEvent($ord->id, $storeId, 'shipping_quote', 'Shipping quote persisted', [
                     'shipping_cost'   => $currencySymbol . number_format($ord->shipping_cost, 2),
                     'shipping_method' => $ord->billingInformation->shipping_method ?? null,
                 ], 'dot');
-                OrderTimeline::addEvent($ord->id, $storeId, 'order_confirmed', 'Order confirmed', [], 'dot');
-                // OrderTimeline::addEvent($ord->id, $storeId, 'payment_authorized', 'Payment authorized', [
+                \App\Models\OrderTimeline::addEvent($ord->id, $storeId, 'order_confirmed', 'Order confirmed', [], 'dot');
+
                 $paymentEvent = $captureMethod === 'automatic' ? 'payment_completed' : 'payment_authorized';
                 $paymentTitle = $captureMethod === 'automatic' ? 'Payment completed' : 'Payment authorized';
 
-                OrderTimeline::addEvent($ord->id, $storeId, $paymentEvent, $paymentTitle, [
+                \App\Models\OrderTimeline::addEvent($ord->id, $storeId, $paymentEvent, $paymentTitle, [
                     'source'         => ucwords(str_replace('_', ' ', $validated['paymentMethod'] ?? 'N/A')),
                     'amount'         => $currencySymbol . number_format($ord->total_amount, 2),
-                    'payment_intent' => $validated['paymentIntentId'] ?? null,
+                    'payment_intent' => $paymentIntentId,
                 ], 'payment');
             }
 
@@ -4554,7 +4547,6 @@ class OrderController extends Controller
                 $email = $validated['email'] ?? null;
                 $orderIdForLog = $orders[0]->id ?? null;
 
-                // Shipping Quote Log — SIRF EK record per order
                 if (!$isMulti && !empty($ratesResponse['rates'] ?? [])) {
                     $destination = [
                         'streetAddress1' => $validated['addressLine1'] ?? '',
@@ -4585,7 +4577,6 @@ class OrderController extends Controller
 
                     $rates = $ratesResponse['rates'];
 
-                    // Module — selected rate ka
                     $moduleName = 'Shipping';
                     if ($matchedRate) {
                         if (!empty($matchedRate['is_fedex']) && $matchedRate['is_fedex'] === true) {
@@ -4630,7 +4621,6 @@ class OrderController extends Controller
                     ]);
                 }
 
-                // Payment Logs (2 records)
                 $commonPayment = [
                     'store_id'      => $storeId,
                     'order_id'      => $orderIdForLog,
@@ -4650,7 +4640,7 @@ class OrderController extends Controller
                         : 'Payment with Credit Card (via Stripe) has been authorized successfully for Order ID: ')
                         . $orderIdForLog,
                     'log_data' => [
-                        'transaction_id' => $validated['paymentIntentId'] ?? null,
+                        'transaction_id' => $paymentIntentId,
                         'status'         => $localPaymentStatus,
                         'amount'         => $totalOrderAmount,
                         'currency'       => $currencyCode,
@@ -4666,7 +4656,7 @@ class OrderController extends Controller
                         'severity' => 'notice',
                         'summary'  => 'Payment with Credit Card (via Stripe) is awaiting capture for Order ID: ' . $orderIdForLog,
                         'log_data' => [
-                            'transaction_id' => $validated['paymentIntentId'] ?? null,
+                            'transaction_id' => $paymentIntentId,
                             'status'         => 'requires_capture',
                             'amount'         => $totalOrderAmount,
                             'currency'       => $currencyCode,
@@ -4687,9 +4677,9 @@ class OrderController extends Controller
             try {
                 foreach ($orders as $ord) {
                     $ord->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
-                    Mail::to($validated['email'])->send(new OrderPlacedMail($ord, $customer, $storeId));
+                    Mail::to($validated['email'])->send(new \App\Mail\OrderPlacedMail($ord, $customer, $storeId));
                     $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
-                    Mail::to($adminEmail)->send(new OrderPlacedMail($ord, $customer, $storeId));
+                    Mail::to($adminEmail)->send(new \App\Mail\OrderPlacedMail($ord, $customer, $storeId));
                 }
             } catch (\Exception $mailError) {
                 Log::error('ORDER EMAIL FAILED', ['error' => $mailError->getMessage()]);
@@ -4706,7 +4696,7 @@ class OrderController extends Controller
                     if ($existingDraft) {
                         $draftQuoteToken = $currentQuoteToken;
                         if ($draftQuoteToken) {
-                            \App\Models\Cart::query()
+                            Cart::query()
                                 ->where('store_id', $storeId)
                                 ->where('user_id', $cartUser->id)
                                 ->where('quote_token', $draftQuoteToken)
@@ -4716,7 +4706,7 @@ class OrderController extends Controller
                             $this->cartContext->setNormalCart($storeId, $cartUser, $sessionId);
                         }
                     } else {
-                        \App\Models\Cart::query()
+                        Cart::query()
                             ->where('store_id', $storeId)
                             ->where('user_id', $cartUser->id)
                             ->where(function ($q) {
@@ -4732,7 +4722,7 @@ class OrderController extends Controller
                 } else {
                     $cartSessionId = $request->header('X-Session-ID');
                     if (!empty($cartSessionId)) {
-                        \App\Models\Cart::query()
+                        Cart::query()
                             ->where('store_id', $storeId)
                             ->where('session_id', $cartSessionId)
                             ->whereNull('user_id')
@@ -4792,9 +4782,15 @@ class OrderController extends Controller
             }
 
             return response()->json([
-                'status'  => true,
-                'message' => 'Order placed successfully.',
-                'data'    => OrderResource::collection($orders),
+                'status'            => true,
+                'message'           => 'Order placed successfully.',
+                'payment_intent_id' => $paymentIntentId,
+                'payment_status'    => $intent->status,
+                'capture_method'    => $captureMethod,
+                'risk_score'        => $riskScore,
+                'risk_level'        => $riskLevel,
+                'order_number'      => $generatedOrderNumber,
+                'data'              => \App\Http\Resources\OrderResource::collection($orders),
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -4805,7 +4801,8 @@ class OrderController extends Controller
                 'file'    => $e->getFile(),
             ], 500);
         }
-    } 
+    }
+
 
    public function calculate(Request $request)
     {
