@@ -831,13 +831,16 @@ class UrlSettingController extends Controller
             $file = $request->file('file');
             $handle = fopen($file->getRealPath(), 'r');
 
-            fgetcsv($handle); // skip header
+            fgetcsv($handle); // skip header (row 1)
 
             $imported = 0;
             $skipped  = 0;
-            $errors   = [];
+            $errors   = []; // [{row: X, message: "..."}]
+            $rowNum   = 1; // header is row 1
 
             while (($row = fgetcsv($handle)) !== false) {
+                $rowNum++; // data starts at row 2
+
                 $domain    = trim($row[0] ?? '');
                 $oldPath   = trim($row[1] ?? '');
                 $manualUrl = trim($row[2] ?? '');
@@ -846,6 +849,7 @@ class UrlSettingController extends Controller
 
                 if (empty($oldPath)) {
                     $skipped++;
+                    $errors[] = ['row' => $rowNum, 'message' => 'Old Path is empty'];
                     continue;
                 }
 
@@ -855,7 +859,7 @@ class UrlSettingController extends Controller
 
                 if (Redirect::where('store_id', $storeId)->where('old_url', $oldPath)->exists()) {
                     $skipped++;
-                    $errors[] = "Already exists: {$oldPath}";
+                    $errors[] = ['row' => $rowNum, 'message' => "Already exists: {$oldPath}"];
                     continue;
                 }
 
@@ -875,7 +879,7 @@ class UrlSettingController extends Controller
 
                     if (!$newUrl) {
                         $skipped++;
-                        $errors[] = "Dynamic target not found: {$oldPath} (Type: {$dynType}, ID: {$dynId})";
+                        $errors[] = ['row' => $rowNum, 'message' => "Dynamic target not found: {$oldPath} (Type: {$dynType}, ID: {$dynId})"];
                         continue;
                     }
                 }
@@ -883,7 +887,7 @@ class UrlSettingController extends Controller
                 if ($redirectType === 'manual') {
                     if (empty($newUrl)) {
                         $skipped++;
-                        $errors[] = "No destination for: {$oldPath}";
+                        $errors[] = ['row' => $rowNum, 'message' => "No destination for: {$oldPath}"];
                         continue;
                     }
                     if (!str_starts_with($newUrl, '/')) {
@@ -908,7 +912,7 @@ class UrlSettingController extends Controller
 
             fclose($handle);
 
-            // ========== ACTIVITY LOG ==========
+            // Activity Log with row-wise errors
             $log = RedirectActivityLog::create([
                 'store_id'      => $storeId,
                 'type'          => 'import',
@@ -917,7 +921,7 @@ class UrlSettingController extends Controller
                 'errors'        => $skipped,
                 'status'        => 'complete',
                 'file_name'     => $file->getClientOriginalName(),
-                'error_message' => !empty($errors) ? implode("\n", array_slice($errors, 0, 20)) : null,
+                'error_message' => !empty($errors) ? json_encode($errors) : null,
             ]);
 
             return response()->json([
@@ -936,7 +940,7 @@ class UrlSettingController extends Controller
                 'type'          => 'import',
                 'status'        => 'failed',
                 'errors'        => 1,
-                'error_message' => $e->getMessage(),
+                'error_message' => json_encode([['row' => null, 'message' => $e->getMessage()]]),
             ]);
 
             return response()->json([
@@ -946,7 +950,7 @@ class UrlSettingController extends Controller
             ], 500);
         }
     }
-
+    
     public function exportRedirects(Request $request)
     {
         try {
