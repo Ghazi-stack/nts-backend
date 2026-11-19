@@ -436,7 +436,7 @@ class RealtimeController extends Controller
                 'productId' => $item->product_id,
                 'name'      => $item->product->name ?? null,
                 'sku'       => $item->product->sku ?? null,
-                'image'     => $image->url ?? $image->image ?? $image->path ?? null,
+                'image' => $this->productImageUrl($image),
                 'qty'       => (int) $item->quantity,
                 'price'     => round($sold, 2),
                 'total'     => round($sold * (int) $item->quantity, 2),
