@@ -539,7 +539,7 @@ class RealtimeController extends Controller
                     'id'      => $product->id,
                     'name'    => $product->name,
                     'sku'     => $product->sku,
-                    'image'   => $image->url ?? $image->image ?? $image->path ?? null,
+                    'image' => $this->productImageUrl($image),
                     'brand'   => $product->brand->name ?? null,
                     'addedAt' => optional($product->created_at)->toDateString(),
                 ],
