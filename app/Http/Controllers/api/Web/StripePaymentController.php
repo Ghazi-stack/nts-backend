@@ -61,264 +61,264 @@ class StripePaymentController extends Controller
      * 💳 Pay - Authorize only (hold), do NOT capture yet
      * Guest ya logged-in user dono use kar sakte hain (token optional)
      */
-    public function pay(Request $request)
-    {
-        $validated = $request->validate([
-            'payment_method_id' => 'required|string',
-            'amount'            => 'required|integer',
+    // public function pay(Request $request)
+    // {
+    //     $validated = $request->validate([
+    //         'payment_method_id' => 'required|string',
+    //         'amount'            => 'required|integer',
 
-            'orderId'           => 'required|integer|exists:orders,id',
+    //         'orderId'           => 'required|integer|exists:orders,id',
 
-            'selectedCurrency' => 'required|array',
-            'selectedCurrency.id' => 'required|integer',
-            'selectedCurrency.exchangeRate' => 'required|numeric',
+    //         'selectedCurrency' => 'required|array',
+    //         'selectedCurrency.id' => 'required|integer',
+    //         'selectedCurrency.exchangeRate' => 'required|numeric',
 
-            'coupon'           => 'nullable|array',
-            'coupon.id'        => 'required_with:coupon|integer',
-            'coupon.couponCode' => 'required_with:coupon|string',
+    //         'coupon'           => 'nullable|array',
+    //         'coupon.id'        => 'required_with:coupon|integer',
+    //         'coupon.couponCode' => 'required_with:coupon|string',
 
-            'method_id'        => 'nullable|integer',
-            'service_type'     => 'nullable|string',
-            'destination'      => 'required_with:method_id|array',
-            'destination.country_code' => 'required_with:destination|string|size:2',
-            'destination.state'        => 'nullable|string|max:255',
-            'destination.city'         => 'nullable|string|max:255',
-            'destination.postal_code'  => 'nullable|string|max:50',
+    //         'method_id'        => 'nullable|integer',
+    //         'service_type'     => 'nullable|string',
+    //         'destination'      => 'required_with:method_id|array',
+    //         'destination.country_code' => 'required_with:destination|string|size:2',
+    //         'destination.state'        => 'nullable|string|max:255',
+    //         'destination.city'         => 'nullable|string|max:255',
+    //         'destination.postal_code'  => 'nullable|string|max:50',
 
-            'products'         => 'required|array|min:1',
-            'products.*.product_id' => 'required|integer|exists:products,id',
-            'products.*.quantity'   => 'required|integer|min:1',
+    //         'products'         => 'required|array|min:1',
+    //         'products.*.product_id' => 'required|integer|exists:products,id',
+    //         'products.*.quantity'   => 'required|integer|min:1',
 
-            'manualDiscount'   => 'nullable|numeric',
-            'shippingCost'     => 'nullable|numeric',
-        ]);
+    //         'manualDiscount'   => 'nullable|numeric',
+    //         'shippingCost'     => 'nullable|numeric',
+    //     ]);
 
-        $user = auth('sanctum')->user();
-        $storeId = current_store_id();
+    //     $user = auth('sanctum')->user();
+    //     $storeId = current_store_id();
 
-        $dynamicStripeSettings = app(StripePaymentSettingsResolver::class)
-            ->resolve((int) $storeId);
+    //     $dynamicStripeSettings = app(StripePaymentSettingsResolver::class)
+    //         ->resolve((int) $storeId);
 
-        $transactionType = $dynamicStripeSettings['active']
-            ? $dynamicStripeSettings['settings']['transactionType']
-            : 'authorize_only';
+    //     $transactionType = $dynamicStripeSettings['active']
+    //         ? $dynamicStripeSettings['settings']['transactionType']
+    //         : 'authorize_only';
 
-        $captureMethod = $transactionType === 'authorize_capture'
-            ? 'automatic'
-            : 'manual';
+    //     $captureMethod = $transactionType === 'authorize_capture'
+    //         ? 'automatic'
+    //         : 'manual';
 
-        if (!$storeId) {
-            return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
-        }
+    //     if (!$storeId) {
+    //         return response()->json(['status' => false, 'message' => 'Store not selected'], 400);
+    //     }
 
-        // ===== CURRENCY =====
-        $currencyId = $request->input('selectedCurrency.id');
-        $currency = \App\Models\Currency::where('store_id', $storeId)
-            ->where('id', $currencyId)
-            ->where('enabled', true)
-            ->first();
+    //     // ===== CURRENCY =====
+    //     $currencyId = $request->input('selectedCurrency.id');
+    //     $currency = \App\Models\Currency::where('store_id', $storeId)
+    //         ->where('id', $currencyId)
+    //         ->where('enabled', true)
+    //         ->first();
 
-        if (!$currency) {
-            return response()->json(['status' => false, 'message' => 'Currency not found'], 404);
-        }
+    //     if (!$currency) {
+    //         return response()->json(['status' => false, 'message' => 'Currency not found'], 404);
+    //     }
 
-        $exchangeRate = (float) $currency->exchange_rate;
-        $currencyCode = strtolower($currency->code);
+    //     $exchangeRate = (float) $currency->exchange_rate;
+    //     $currencyCode = strtolower($currency->code);
 
-        // ===== COUPON =====
-        $discount = 0;
-        if (!empty($validated['coupon'])) {
-            $coupon = \App\Models\CouponCode::where('store_id', $storeId)
-                ->where('id', $validated['coupon']['id'])
-                ->where('couponCode', $validated['coupon']['couponCode'])
-                ->where('enabled', true)
-                ->first();
+    //     // ===== COUPON =====
+    //     $discount = 0;
+    //     if (!empty($validated['coupon'])) {
+    //         $coupon = \App\Models\CouponCode::where('store_id', $storeId)
+    //             ->where('id', $validated['coupon']['id'])
+    //             ->where('couponCode', $validated['coupon']['couponCode'])
+    //             ->where('enabled', true)
+    //             ->first();
 
-            if (!$coupon) {
-                return response()->json(['status' => false, 'message' => 'Invalid coupon'], 404);
-            }
-            $discount = (float) $coupon->discountAmount;
-        }
+    //         if (!$coupon) {
+    //             return response()->json(['status' => false, 'message' => 'Invalid coupon'], 404);
+    //         }
+    //         $discount = (float) $coupon->discountAmount;
+    //     }
 
-        $manualDiscount = $validated['manualDiscount'] ?? 0;
-        $calculatedTotal = 0;
-        $shippingCost = $validated['shippingCost'] ?? 0;
-        $matchedRate = null;
+    //     $manualDiscount = $validated['manualDiscount'] ?? 0;
+    //     $calculatedTotal = 0;
+    //     $shippingCost = $validated['shippingCost'] ?? 0;
+    //     $matchedRate = null;
 
-        // ===== PRODUCTS CALCULATION =====
-        $totalWeight = 0;
-        $itemCount = 0;
-        $baseOrderTotal = 0;
+    //     // ===== PRODUCTS CALCULATION =====
+    //     $totalWeight = 0;
+    //     $itemCount = 0;
+    //     $baseOrderTotal = 0;
 
-        foreach ($validated['products'] as $item) {
-            $product = Product::where('store_id', $storeId)->find($item['product_id']);
-            if ($product) {
-                $convertedPrice = round($product->price * $exchangeRate, 6);
-                $lineTotal = round($convertedPrice * $item['quantity'], 6);
-                $calculatedTotal += $lineTotal;
+    //     foreach ($validated['products'] as $item) {
+    //         $product = Product::where('store_id', $storeId)->find($item['product_id']);
+    //         if ($product) {
+    //             $convertedPrice = round($product->price * $exchangeRate, 6);
+    //             $lineTotal = round($convertedPrice * $item['quantity'], 6);
+    //             $calculatedTotal += $lineTotal;
 
-                $salePrice = $product->getAttribute('sale_price');
-                $normalPrice = $product->getAttribute('price');
-                $unitPrice = $salePrice !== null ? (float) $salePrice : (float) ($normalPrice ?? 0);
-                $baseOrderTotal += $unitPrice * $item['quantity'];
+    //             $salePrice = $product->getAttribute('sale_price');
+    //             $normalPrice = $product->getAttribute('price');
+    //             $unitPrice = $salePrice !== null ? (float) $salePrice : (float) ($normalPrice ?? 0);
+    //             $baseOrderTotal += $unitPrice * $item['quantity'];
 
-                $productWeight = (float) ($product->getAttribute('weight') ?? 0);
-                $dimensions = $product->dimensions;
+    //             $productWeight = (float) ($product->getAttribute('weight') ?? 0);
+    //             $dimensions = $product->dimensions;
 
-                if (is_string($dimensions)) {
-                    $decoded = json_decode($dimensions, true);
-                    $dimensions = (json_last_error() === JSON_ERROR_NONE) ? $decoded : [];
-                }
-                if (!is_array($dimensions)) $dimensions = [];
+    //             if (is_string($dimensions)) {
+    //                 $decoded = json_decode($dimensions, true);
+    //                 $dimensions = (json_last_error() === JSON_ERROR_NONE) ? $decoded : [];
+    //             }
+    //             if (!is_array($dimensions)) $dimensions = [];
 
-                $dimensionWeight = (float) ($dimensions['weight'] ?? 0);
-                $weightUsed = $productWeight > 0 ? $productWeight : $dimensionWeight;
+    //             $dimensionWeight = (float) ($dimensions['weight'] ?? 0);
+    //             $weightUsed = $productWeight > 0 ? $productWeight : $dimensionWeight;
 
-                $totalWeight += $weightUsed * $item['quantity'];
-                $itemCount += $item['quantity'];
-            }
-        }
+    //             $totalWeight += $weightUsed * $item['quantity'];
+    //             $itemCount += $item['quantity'];
+    //         }
+    //     }
 
-        // ===== SHIPPING RATE MATCHING =====
-        if (!empty($validated['method_id']) && !empty($validated['destination'])) {
-            $packageInfo = [
-                'total_weight'  => round($totalWeight, 2),
-                'weight_unit'   => 'LB',
-                'order_total'   => round($baseOrderTotal, 2),
-                'item_count'    => $itemCount,
-                'package_value' => 0,
-            ];
+    //     // ===== SHIPPING RATE MATCHING =====
+    //     if (!empty($validated['method_id']) && !empty($validated['destination'])) {
+    //         $packageInfo = [
+    //             'total_weight'  => round($totalWeight, 2),
+    //             'weight_unit'   => 'LB',
+    //             'order_total'   => round($baseOrderTotal, 2),
+    //             'item_count'    => $itemCount,
+    //             'package_value' => 0,
+    //         ];
 
-            $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
+    //         $shippingRateService = app(\App\Services\FedEx\ShippingRateService::class);
 
-            $ratesResponse = $shippingRateService->getCheckoutShippingRates(
-                $validated['destination'],
-                $packageInfo,
-                $storeId,
-                null,
-                $currency->code
-            );
+    //         $ratesResponse = $shippingRateService->getCheckoutShippingRates(
+    //             $validated['destination'],
+    //             $packageInfo,
+    //             $storeId,
+    //             null,
+    //             $currency->code
+    //         );
 
-            $rates = $ratesResponse['rates'] ?? [];
+    //         $rates = $ratesResponse['rates'] ?? [];
 
-            foreach ($rates as $rate) {
-                if ((int) $rate['method_id'] === (int) $validated['method_id']) {
-                    if (!empty($validated['service_type'])) {
-                        if (($rate['service_type'] ?? '') === $validated['service_type']) {
-                            $matchedRate = $rate;
-                            break;
-                        }
-                    } else {
-                        $matchedRate = $rate;
-                        break;
-                    }
-                }
-            }
+    //         foreach ($rates as $rate) {
+    //             if ((int) $rate['method_id'] === (int) $validated['method_id']) {
+    //                 if (!empty($validated['service_type'])) {
+    //                     if (($rate['service_type'] ?? '') === $validated['service_type']) {
+    //                         $matchedRate = $rate;
+    //                         break;
+    //                     }
+    //                 } else {
+    //                     $matchedRate = $rate;
+    //                     break;
+    //                 }
+    //             }
+    //         }
 
-            if ($matchedRate) {
-                $shippingCost = (float) $matchedRate['total_charge'];
-            }
-        }
+    //         if ($matchedRate) {
+    //             $shippingCost = (float) $matchedRate['total_charge'];
+    //         }
+    //     }
 
-        // ===== FINAL TOTAL =====
-        $calculatedTotal += $shippingCost;
-        $convertedCouponDiscount = round($discount * $exchangeRate, 6);
-        $calculatedTotal -= $convertedCouponDiscount;
-        $calculatedTotal -= $manualDiscount;
+    //     // ===== FINAL TOTAL =====
+    //     $calculatedTotal += $shippingCost;
+    //     $convertedCouponDiscount = round($discount * $exchangeRate, 6);
+    //     $calculatedTotal -= $convertedCouponDiscount;
+    //     $calculatedTotal -= $manualDiscount;
 
-        if ($calculatedTotal < 0) {
-            $calculatedTotal = 0;
-        }
+    //     if ($calculatedTotal < 0) {
+    //         $calculatedTotal = 0;
+    //     }
 
-        // Order ID from payload only
-        $orderId = $validated['orderId'] ?? null;
+    //     // Order ID from payload only
+    //     $orderId = $validated['orderId'] ?? null;
 
-        Stripe::setApiKey(config('services.stripe.secret'));
-        $stripeOptions = $this->connectedStripeOptions($request);
+    //     Stripe::setApiKey(config('services.stripe.secret'));
+    //     $stripeOptions = $this->connectedStripeOptions($request);
 
-        try {
-            DB::beginTransaction();
+    //     try {
+    //         DB::beginTransaction();
 
-            $intent = PaymentIntent::create([
-                'amount' => $request->amount,
-                'currency' => $currencyCode,
-                'payment_method' => $request->payment_method_id,
-                'confirmation_method' => 'manual',
-                'payment_method_types' => ['card'],
-                'confirm' => true,
-                'capture_method' => $captureMethod,
-                'metadata' => [
-                    'user_id'     => $user?->id,
-                    'order_number'=> $orderId,   // ← jo payload se aaya wahi
-                    'products'    => json_encode($validated['products']),
-                    'currency_id' => $currency->id,
-                    'coupon_id'   => $validated['coupon']['id'] ?? null,
-                ],
-            ], array_merge($stripeOptions, [
-                'idempotency_key' => 'payment_' . (string) ($request->header('Idempotency-Key') ?: ($request->input('checkout_id') ?: Str::uuid()))
-            ]));
+    //         $intent = PaymentIntent::create([
+    //             'amount' => $request->amount,
+    //             'currency' => $currencyCode,
+    //             'payment_method' => $request->payment_method_id,
+    //             'confirmation_method' => 'manual',
+    //             'payment_method_types' => ['card'],
+    //             'confirm' => true,
+    //             'capture_method' => $captureMethod,
+    //             'metadata' => [
+    //                 'user_id'     => $user?->id,
+    //                 'order_number'=> $orderId,   // ← jo payload se aaya wahi
+    //                 'products'    => json_encode($validated['products']),
+    //                 'currency_id' => $currency->id,
+    //                 'coupon_id'   => $validated['coupon']['id'] ?? null,
+    //             ],
+    //         ], array_merge($stripeOptions, [
+    //             'idempotency_key' => 'payment_' . (string) ($request->header('Idempotency-Key') ?: ($request->input('checkout_id') ?: Str::uuid()))
+    //         ]));
 
-            if (in_array($intent->status, ['requires_action', 'requires_source_action'])) {
-                DB::commit();
-                return response()->json([
-                    'status' => 'requires_action',
-                    'payment_intent_client_secret' => $intent->client_secret
-                ]);
-            }
+    //         if (in_array($intent->status, ['requires_action', 'requires_source_action'])) {
+    //             DB::commit();
+    //             return response()->json([
+    //                 'status' => 'requires_action',
+    //                 'payment_intent_client_secret' => $intent->client_secret
+    //             ]);
+    //         }
 
-            $expectedStatus = $captureMethod === 'automatic'
-                ? 'succeeded'
-                : 'requires_capture';
+    //         $expectedStatus = $captureMethod === 'automatic'
+    //             ? 'succeeded'
+    //             : 'requires_capture';
 
-            if ($intent->status !== $expectedStatus) {
-                DB::rollBack();
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Payment processing failed. Status: ' . $intent->status,
-                ], 400);
-            }
+    //         if ($intent->status !== $expectedStatus) {
+    //             DB::rollBack();
+    //             return response()->json([
+    //                 'status' => 'error',
+    //                 'message' => 'Payment processing failed. Status: ' . $intent->status,
+    //             ], 400);
+    //         }
 
-            $riskScore = null;
-            $riskLevel = null;
+    //         $riskScore = null;
+    //         $riskLevel = null;
 
-            $charge = $intent->latest_charge
-                ? \Stripe\Charge::retrieve($intent->latest_charge, [], $stripeOptions)
-                : null;
+    //         $charge = $intent->latest_charge
+    //             ? \Stripe\Charge::retrieve($intent->latest_charge, [], $stripeOptions)
+    //             : null;
 
-            if ($charge && $charge->outcome) {
-                $riskScore = $charge->outcome->risk_score ?? null;
-                $riskLevel = $charge->outcome->risk_level ?? null;
-            }
+    //         if ($charge && $charge->outcome) {
+    //             $riskScore = $charge->outcome->risk_score ?? null;
+    //             $riskLevel = $charge->outcome->risk_level ?? null;
+    //         }
 
-            DB::commit();
+    //         DB::commit();
 
-            return response()->json([
-                'status' => $captureMethod === 'automatic' ? 'completed' : 'authorized',
-                'message' => $captureMethod === 'automatic'
-                    ? 'Payment completed successfully.'
-                    : 'Payment authorized (on hold). Capture pending.',
-                'amount'             => $intent->amount,
-                'payment_intent_id'  => $intent->id,
-                'payment_status'     => $intent->status,
-                'capture_method'     => $captureMethod,
-                'risk_score'         => $riskScore,
-                'risk_level'         => $riskLevel,
-                'order_number'        => $orderId,
-            ]);
-        } catch (\Stripe\Exception\CardException $e) {
-            DB::rollBack();
-            return response()->json([
-                'status' => 'error',
-                'message' => $e->getError()->message
-            ], 402);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json([
-                'status' => 'error',
-                'message' => $e->getMessage()
-            ], 500);
-        }
-    }
+    //         return response()->json([
+    //             'status' => $captureMethod === 'automatic' ? 'completed' : 'authorized',
+    //             'message' => $captureMethod === 'automatic'
+    //                 ? 'Payment completed successfully.'
+    //                 : 'Payment authorized (on hold). Capture pending.',
+    //             'amount'             => $intent->amount,
+    //             'payment_intent_id'  => $intent->id,
+    //             'payment_status'     => $intent->status,
+    //             'capture_method'     => $captureMethod,
+    //             'risk_score'         => $riskScore,
+    //             'risk_level'         => $riskLevel,
+    //             'order_number'        => $orderId,
+    //         ]);
+    //     } catch (\Stripe\Exception\CardException $e) {
+    //         DB::rollBack();
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => $e->getError()->message
+    //         ], 402);
+    //     } catch (\Exception $e) {
+    //         DB::rollBack();
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
 
     /**
      * 💰 Capture - Actually charge the held payment

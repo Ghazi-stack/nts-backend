@@ -1157,7 +1157,7 @@ Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class
     Route::get('/currencies', [CurrencyController::class, 'allCurrencyWeb']);
 
     // 💳 Stripe - User/Guest (token optional)
-    Route::post('/stripe/pay', [StripePaymentController::class, 'pay']);
+    // Route::post('/stripe/pay', [StripePaymentController::class, 'pay']);
 
     Route::post(
         '/stripe/express-checkout/create-intent',

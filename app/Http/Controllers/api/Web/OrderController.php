@@ -4395,7 +4395,7 @@ class OrderController extends Controller
                 'metadata' => [
                     'user_id'      => $user?->id,
                     'order_number' => $generatedOrderNumber,
-                    'order_id'     => $orders[0]->id,
+                    // 'order_id'     => $orders[0]->id,
                     'products'     => json_encode($validated['products'] ?? []),
                     'currency_id'  => $currency->id,
                     'coupon_id'    => $validated['coupon']['id'] ?? null,
