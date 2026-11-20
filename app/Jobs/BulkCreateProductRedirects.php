@@ -82,6 +82,7 @@ class BulkCreateProductRedirects implements ShouldQueue
                         continue;
                     }
 
+                    // 1. Redirect save
                     Redirect::on('tenant')->updateOrCreate(
                         ['store_id' => $this->storeId, 'old_url' => $oldUrl],
                         [
@@ -94,6 +95,11 @@ class BulkCreateProductRedirects implements ShouldQueue
                             'is_active'     => true,
                         ]
                     );
+
+                    // 2. ProductSeo update (new URL)
+                    $seo->update([
+                        'product_url' => $newUrl,
+                    ]);
 
                     $created++;
                     $processed++;
