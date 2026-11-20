@@ -342,7 +342,7 @@ class UrlSettingController extends Controller
         ]);
     }
 
-     public function bulkUpdateProgress($progressKey)
+    public function bulkUpdateProgress($progressKey)
     {
         $progress = Cache::get($progressKey, [
             'current' => 0,
@@ -351,9 +351,34 @@ class UrlSettingController extends Controller
             'status'  => 'unknown',
         ]);
 
+        // Message based on status
+        $message = null;
+
+        switch ($progress['status']) {
+            case 'queued':
+                $message = 'Waiting to start...';
+                break;
+            case 'processing':
+                $message = "Processing {$progress['current']} of {$progress['total']}...";
+                break;
+            case 'completed':
+                if ($progress['created'] === 0) {
+                    $message = 'No updates needed. All URLs are already up to date.';
+                } else {
+                    $message = "Completed. {$progress['created']} redirect(s) created.";
+                }
+                break;
+            case 'failed':
+                $message = 'Process failed. Please try again.';
+                break;
+            default:
+                $message = 'Unknown status';
+        }
+
+        $progress['message'] = $message;
+
         return response()->json($progress);
     }
-
 
     // ===================== REDIRECTS CRUD =====================
 
