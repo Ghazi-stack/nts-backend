@@ -16,6 +16,7 @@ return new class extends Migration
             $table->unsignedBigInteger('store_id')->index();
             $table->string('key')->index();           // e.g. order_email
             $table->string('name');
+            $table->text('description')->nullable();
             $table->boolean('enabled')->default(true);
 
             // optional headers
@@ -34,7 +35,23 @@ return new class extends Migration
             $table->unsignedBigInteger('updated_by')->nullable();
 
             $table->timestamps();
-            $table->unique(['store_id','key']);
+            $table->unique(['store_id', 'key']);
+        });
+
+        Schema::create('transactional_email_phrases', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('template_id');
+            $table->string('phrase_name');
+            $table->text('phrase_value')->nullable();
+            $table->boolean('is_system')->default(false);
+            $table->timestamps();
+
+            $table->foreign('template_id')
+                ->references('id')
+                ->on('transactional_email_templates')
+                ->cascadeOnDelete();
+
+            $table->unique(['template_id', 'phrase_name']);
         });
     }
 
@@ -43,6 +60,7 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::dropIfExists('transactional_email_phrases');
         Schema::dropIfExists('transactional_email_templates');
     }
 };

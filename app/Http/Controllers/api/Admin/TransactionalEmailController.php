@@ -1,10 +1,12 @@
 <?php
+
 namespace App\Http\Controllers\api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TransactionalEmailTemplateResource;
 use App\Mail\TransactionalTemplatedMail;
 use App\Models\TransactionalEmailTemplate;
+use App\Models\TransactionalEmailPhrase;
 use App\Services\TransactionalEmailService;
 use Exception;
 use Illuminate\Http\Request;
@@ -18,44 +20,46 @@ class TransactionalEmailController extends Controller
     public function index(Request $r)
     {
         try {
-            $q = TransactionalEmailTemplate::with('updater')
+            $q = TransactionalEmailTemplate::with(['updater', 'phrases'])
                 ->ofStore(current_store_id());
 
             if ($r->filled('search')) {
                 $s = $r->search;
-                $q->where(fn($qq)=>$qq->where('name','like',"%$s%")->orWhere('key','like',"%$s%"));
+                $q->where(fn($qq) => $qq->where('name', 'like', "%$s%")->orWhere('key', 'like', "%$s%"));
             }
+
             $q->orderBy('name');
 
             $pageSize = (int) $r->input('pageSize', 50);
             $rows = $q->paginate($pageSize);
 
             return response()->json([
-                'status' => true,
-                'message'=> 'Email templates fetched.',
-                'data'   => TransactionalEmailTemplateResource::collection($rows),
+                'status'  => true,
+                'message' => 'Email templates fetched.',
+                'data'    => TransactionalEmailTemplateResource::collection($rows),
                 'pagination' => [
-                    'total' => $rows->total(),
-                    'page' => $rows->currentPage(),
+                    'total'    => $rows->total(),
+                    'page'     => $rows->currentPage(),
                     'pageSize' => $rows->perPage(),
                     'lastPage' => $rows->lastPage(),
                 ]
             ]);
         } catch (Exception $e) {
-            return response()->json(['error'=>$e->getMessage()],500);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
     public function show(string $key)
     {
-        $tpl = TransactionalEmailTemplate::with('updater')
+        $tpl = TransactionalEmailTemplate::with(['updater', 'phrases'])
             ->ofStore(current_store_id())
-            ->key($key)->firstOrFail();
+            ->key($key)
+            ->firstOrFail();
 
         return response()->json([
-            'status'=>true,
-            'message'=>'Template fetched.',
-            'data'=> new TransactionalEmailTemplateResource($tpl)
+            'status'  => true,
+            'message' => 'Template fetched.',
+            'data'    => new TransactionalEmailTemplateResource($tpl)
         ]);
     }
 
@@ -64,6 +68,7 @@ class TransactionalEmailController extends Controller
         try {
             $data = $r->validate([
                 'name'        => 'nullable|string|max:255',
+                'description' => 'nullable|string',
                 'enabled'     => 'nullable|boolean',
                 'from_name'   => 'nullable|string|max:255',
                 'from_email'  => 'nullable|email',
@@ -80,30 +85,36 @@ class TransactionalEmailController extends Controller
             $tpl = TransactionalEmailTemplate::updateOrCreate(
                 ['store_id' => current_store_id(), 'key' => $key],
                 array_merge(
-                    ['name' => $data['name'] ?? ucwords(str_replace('_',' ', $key))],
+                    ['name' => $data['name'] ?? ucwords(str_replace('_', ' ', $key))],
                     $data,
                     ['updated_by' => auth()->id()]
                 )
-            )->load('updater');
+            )->load(['updater', 'phrases']);
 
             return response()->json([
-                'status'=>true,
-                'message'=>'Template saved.',
-                'data'=> new TransactionalEmailTemplateResource($tpl)
+                'status'  => true,
+                'message' => 'Template saved.',
+                'data'    => new TransactionalEmailTemplateResource($tpl)
             ], 201);
         } catch (ValidationException $e) {
-            return response()->json(['errors'=>$e->errors()],422);
+            return response()->json(['errors' => $e->errors()], 422);
         } catch (Exception $e) {
-            return response()->json(['error'=>$e->getMessage()],500);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
     public function toggle(string $key)
     {
         $tpl = TransactionalEmailTemplate::ofStore(current_store_id())->key($key)->firstOrFail();
-        $tpl->update(['enabled'=>!$tpl->enabled,'updated_by'=>auth()->id()]);
+        $tpl->update([
+            'enabled'    => !$tpl->enabled,
+            'updated_by' => auth()->id()
+        ]);
+
         return response()->json([
-            'status'=>true,'message'=>'Status updated.','data'=>new TransactionalEmailTemplateResource($tpl->fresh('updater'))
+            'status'  => true,
+            'message' => 'Status updated.',
+            'data'    => new TransactionalEmailTemplateResource($tpl->fresh(['updater', 'phrases']))
         ]);
     }
 
@@ -113,33 +124,140 @@ class TransactionalEmailController extends Controller
         $render = $this->svc->render($tpl, $r->input('data', []));
 
         return response()->json([
-            'status'=>true,'message'=>'Preview generated.','data'=>$render
+            'status'  => true,
+            'message' => 'Preview generated.',
+            'data'    => $render
         ]);
     }
 
     public function sendTest(Request $r, string $key)
     {
-
         $storeId = current_store_id();
 
         if (!$storeId) {
-            return response()->json([
-                'error' => 'Store not selected.',
-            ], 400);
+            return response()->json(['error' => 'Store not selected.'], 400);
         }
 
-        $tpl = $this->svc->get(current_store_id(), $key);
-        if (!$tpl->enabled) return response()->json(['error'=>'Template is disabled.'], 400);
+        $tpl = $this->svc->get($storeId, $key);
 
-        $r->validate(['to'=>'required|email','data'=>'nullable|array']);
+        if (!$tpl->enabled) {
+            return response()->json(['error' => 'Template is disabled.'], 400);
+        }
+
+        $r->validate([
+            'to'   => 'required|email',
+            'data' => 'nullable|array',
+        ]);
 
         $render  = $this->svc->render($tpl, $r->input('data', []));
         $headers = $this->svc->headers($tpl);
 
         Mail::to($r->to)->send(
-            new TransactionalTemplatedMail($render['subject'], $render['html'], $render['text'], $headers, storeId: (int) $storeId)
+            new TransactionalTemplatedMail(
+                $render['subject'],
+                $render['html'],
+                $render['text'],
+                $headers,
+                storeId: (int) $storeId
+            )
         );
 
-        return response()->json(['status'=>true,'message'=>'Test email sent.']);
+        return response()->json(['status' => true, 'message' => 'Test email sent.']);
+    }
+
+    // ==================== PHRASES ====================
+
+    public function addPhrase(Request $r, string $key)
+    {
+        $r->validate([
+            'phraseName'  => 'required|string',
+            'phraseValue' => 'nullable|string',
+        ]);
+
+        $tpl = TransactionalEmailTemplate::ofStore(current_store_id())->key($key)->firstOrFail();
+
+        $phrase = TransactionalEmailPhrase::create([
+            'template_id'  => $tpl->id,
+            'phrase_name'  => $r->phraseName,
+            'phrase_value' => $r->phraseValue ?? '',
+            'is_system'    => false,
+        ]);
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Phrase added.',
+            'data'    => [
+                'id'          => $phrase->id,
+                'phraseName'  => $phrase->phrase_name,
+                'phraseValue' => $phrase->phrase_value,
+                'isSystem'    => $phrase->is_system,
+            ]
+        ], 201);
+    }
+
+    public function updatePhrases(Request $r, string $key)
+    {
+        $r->validate([
+            'phrases'                 => 'required|array',
+            'phrases.*.phraseName'    => 'required|string',
+            'phrases.*.phraseValue'   => 'nullable|string',
+        ]);
+
+        $tpl = TransactionalEmailTemplate::ofStore(current_store_id())->key($key)->firstOrFail();
+
+        foreach ($r->phrases as $p) {
+            TransactionalEmailPhrase::updateOrCreate(
+                [
+                    'template_id' => $tpl->id,
+                    'phrase_name' => $p['phraseName'],
+                ],
+                [
+                    'phrase_value' => $p['phraseValue'] ?? '',
+                ]
+            );
+        }
+
+        $tpl->update(['updated_by' => auth()->id()]);
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Phrases updated.',
+        ]);
+    }
+
+    public function deletePhrase(string $key, int $phraseId)
+    {
+        $tpl = TransactionalEmailTemplate::ofStore(current_store_id())->key($key)->firstOrFail();
+
+        $phrase = TransactionalEmailPhrase::where('template_id', $tpl->id)
+            ->where('id', $phraseId)
+            ->where('is_system', false)
+            ->firstOrFail();
+
+        $phrase->delete();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Phrase deleted.',
+        ]);
+    }
+
+    public function updateCode(Request $r, string $key)
+    {
+        $r->validate([
+            'bodyHtml' => 'required|string',
+        ]);
+
+        $tpl = TransactionalEmailTemplate::ofStore(current_store_id())->key($key)->firstOrFail();
+
+        $tpl->update([
+            'body_html'  => $r->bodyHtml,
+            'updated_by' => auth()->id(),
+        ]);
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Code updated successfully.',
+        ]);
     }
 }

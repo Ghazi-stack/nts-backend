@@ -199,14 +199,14 @@ Route::prefix('dashboard')->middleware([
         ]);
 
         Route::prefix('stripe')
-        ->controller(\App\Http\Controllers\api\Admin\StripePaymentSettingsController::class)
-        ->group(function () {
-            Route::get('/configuration', 'showConfiguration');
-            Route::put('/configuration', 'updateConfiguration');
+            ->controller(\App\Http\Controllers\api\Admin\StripePaymentSettingsController::class)
+            ->group(function () {
+                Route::get('/configuration', 'showConfiguration');
+                Route::put('/configuration', 'updateConfiguration');
 
-            Route::get('/webhook', 'showWebhook');
-            Route::put('/webhook/{environment}', 'saveWebhook');
-        });
+                Route::get('/webhook', 'showWebhook');
+                Route::put('/webhook/{environment}', 'saveWebhook');
+            });
 
         Route::get('/{methodCode}/setup', [PaymentSettingsController::class, 'setup']);
         Route::get('/{methodCode}/providers', [PaymentSettingsController::class, 'providers']);
@@ -848,13 +848,21 @@ Route::prefix('dashboard')->middleware([
 
 
         // Transactional Emails
-        Route::prefix('transactional-emails')->controller(TransactionalEmailController::class)->group(function () {
+        Route::prefix('transactional-emails')->middleware(['store.hash', 'tenant.dashboard'])->controller(TransactionalEmailController::class)->group(function () {
             Route::get('/get', 'index');
             Route::get('/get-single/{key}', 'show');
             Route::post('/create-key/{key}', 'upsert');
             Route::patch('/toggle/{key}', 'toggle');
             Route::post('/preview/{key}', 'preview');
             Route::post('/send-test/{key}', 'sendTest');
+
+            // Phrases
+            Route::post('/{key}/phrases', 'addPhrase');
+            Route::put('/{key}/phrases', 'updatePhrases');
+            Route::delete('/{key}/phrases/{phraseId}', 'deletePhrase');
+
+            // Code
+            Route::put('/{key}/code', 'updateCode');
         });
 
         // Banners
