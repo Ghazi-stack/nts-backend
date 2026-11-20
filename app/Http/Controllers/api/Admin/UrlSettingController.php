@@ -342,45 +342,14 @@ class UrlSettingController extends Controller
 
     public function bulkUpdateProgress($progressKey)
     {
-        // SSE headers
-        header('Content-Type: text/event-stream');
-        header('Cache-Control: no-cache');
-        header('Connection: keep-alive');
-        header('X-Accel-Buffering: no'); // Nginx ke liye
+        $progress = Cache::get($progressKey, [
+            'current' => 0,
+            'total'   => 0,
+            'created' => 0,
+            'status'  => 'unknown',
+        ]);
 
-        // Output buffering band karo
-        if (ob_get_level()) ob_end_clean();
-
-        $maxAttempts = 600; // 10 minutes max (1 sec interval)
-        $attempt = 0;
-
-        while ($attempt < $maxAttempts) {
-            $progress = Cache::get($progressKey, [
-                'current' => 0,
-                'total'   => 0,
-                'created' => 0,
-                'status'  => 'unknown',
-            ]);
-
-            // SSE format mein bhejo
-            echo "data: " . json_encode($progress) . "\n\n";
-            ob_flush();
-            flush();
-
-            // Agar completed ya failed ho to band kar do
-            if (in_array($progress['status'] ?? '', ['completed', 'failed', 'unknown'])) {
-                break;
-            }
-
-            $attempt++;
-            sleep(1); // 1 second wait
-        }
-
-        // Connection close
-        echo "data: " . json_encode(['status' => 'timeout']) . "\n\n";
-        ob_flush();
-        flush();
-        exit;
+        return response()->json($progress);
     }
 
     // ===================== REDIRECTS CRUD =====================
@@ -950,7 +919,7 @@ class UrlSettingController extends Controller
             ], 500);
         }
     }
-    
+
     public function exportRedirects(Request $request)
     {
         try {
