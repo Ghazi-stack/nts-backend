@@ -36,9 +36,64 @@ class PaymentSettingsService
             ->get();
     }
 
-    public function getGroupedMethods(int $storeId): array
-    {
+    // public function getGroupedMethods(int $storeId): array
+    // {
+    //     $methods = $this->getMethods($storeId);
+
+    //     $grouped = [];
+
+    //     foreach (self::CATEGORY_ORDER as $category) {
+    //         $grouped[$category] = $methods
+    //             ->where('category', $category)
+    //             ->values();
+    //     }
+
+    //     return $grouped;
+    // }
+
+    
+    
+    public function getGroupedMethods(
+        int $storeId,
+        ?string $country = null
+    ): array {
         $methods = $this->getMethods($storeId);
+
+        // No country provided: show offline methods only.
+        if (empty($country)) {
+            $methods = $methods
+                ->where('category', 'offline')
+                ->values();
+        } else {
+            $country = strtoupper(trim($country));
+
+            // Filter methods by explicitly configured country availability.
+            $methods = $methods->filter(function ($method) use ($country) {
+                $availableCountries = $method->available_countries;
+
+                // Null or invalid configuration means unavailable.
+                if (!is_array($availableCountries)) {
+                    return false;
+                }
+
+                // Explicitly available worldwide.
+                if (($availableCountries['all_countries'] ?? false) === true) {
+                    return true;
+                }
+
+                // Otherwise, country must be explicitly listed.
+                $countries = $availableCountries['countries'] ?? [];
+
+                if (!is_array($countries)) {
+                    return false;
+                }
+
+                return in_array($country, array_map(
+                    'strtoupper',
+                    $countries
+                ), true);
+            })->values();
+        }
 
         $grouped = [];
 

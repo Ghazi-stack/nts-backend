@@ -109,11 +109,56 @@ class PaymentSettingsController extends Controller
      * GET /payment-settings
      * All methods, grouped by category.
      */
-    public function index()
+    // public function index()
+    // {
+    //     try {
+    //         $groups = $this->paymentSettings->getGroupedMethods(
+    //             $this->getStoreId()
+    //         );
+
+    //         $data = [];
+
+    //         foreach ($groups as $category => $methods) {
+    //             $data[$category] = $methods
+    //                 ->map(fn ($method) => $this->formatMethod($method))
+    //                 ->values();
+    //         }
+
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Payment methods retrieved successfully.',
+    //             'data' => $data,
+    //         ]);
+    //     } catch (Throwable $e) {
+    //         report($e);
+
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Unable to retrieve payment methods.',
+    //         ], 500);
+    //     }
+    // }
+
+    
+    public function index(Request $request)
     {
         try {
+            $country = $request->query('country');
+
+            if ($country !== null) {
+                $country = strtoupper(trim($country));
+
+                if (!preg_match('/^[A-Z]{2}$/', $country)) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Country must be a valid ISO alpha-2 code, such as US, PK, or GB.',
+                    ], 422);
+                }
+            }
+
             $groups = $this->paymentSettings->getGroupedMethods(
-                $this->getStoreId()
+                $this->getStoreId(),
+                $country
             );
 
             $data = [];
@@ -138,7 +183,6 @@ class PaymentSettingsController extends Controller
             ], 500);
         }
     }
-
     /**
      * GET /payment-settings/catalog
      * Static setup definitions; not a statement of live availability.
