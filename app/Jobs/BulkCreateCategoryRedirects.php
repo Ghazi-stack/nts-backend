@@ -33,7 +33,7 @@ class BulkCreateCategoryRedirects implements ShouldQueue
         $this->progressKey = $progressKey;
         $this->setting = (object) $setting;
         $this->tenantDatabase = $tenantDatabase;
-        $this->domain = $domain;   // controller se aayega, fallback nahi
+        $this->domain = $domain;
         $this->redirectType = $redirectType;
     }
 
@@ -62,7 +62,8 @@ class BulkCreateCategoryRedirects implements ShouldQueue
             ->orderBy('id')
             ->chunkById(100, function ($categories) use (&$created, &$processed, $total, $progressKey) {
                 foreach ($categories as $category) {
-                    $oldUrl = '/' . ($category->slug ?? Str::slug($category->name)) . '/';
+                    $oldSlug = $category->slug ?? Str::slug($category->name);
+                    $oldUrl = '/' . $oldSlug . '/';
                     $newUrl = $this->generateCategoryUrl($category);
 
                     if (rtrim($oldUrl, '/') === rtrim($newUrl, '/')) {
@@ -70,6 +71,7 @@ class BulkCreateCategoryRedirects implements ShouldQueue
                         continue;
                     }
 
+                    // 1. Redirect save
                     Redirect::on('tenant')->updateOrCreate(
                         ['store_id' => $this->storeId, 'old_url' => $oldUrl],
                         [
@@ -82,6 +84,12 @@ class BulkCreateCategoryRedirects implements ShouldQueue
                             'is_active'     => true,
                         ]
                     );
+
+                    // 2. Category slug update
+                    $newSlug = trim($newUrl, '/');
+                    $category->update([
+                        'slug' => $newSlug,
+                    ]);
 
                     $created++;
                     $processed++;

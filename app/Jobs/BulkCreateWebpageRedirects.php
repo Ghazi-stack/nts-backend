@@ -62,7 +62,7 @@ class BulkCreateWebpageRedirects implements ShouldQueue
             ->orderBy('id')
             ->chunkById(100, function ($pages) use (&$created, &$processed, $total, $progressKey) {
                 foreach ($pages as $page) {
-                    $oldUrl = $page->page_url ?? ('/' . Str::slug($page->page_name) . '/');
+                    $oldUrl = $page->slugWithUrl ?? ('/' . Str::slug($page->page_name ?? '') . '/');
                     if (!str_starts_with($oldUrl, '/')) {
                         $oldUrl = '/' . $oldUrl;
                     }
@@ -74,6 +74,7 @@ class BulkCreateWebpageRedirects implements ShouldQueue
                         continue;
                     }
 
+                    // 1. Redirect save
                     Redirect::on('tenant')->updateOrCreate(
                         ['store_id' => $this->storeId, 'old_url' => $oldUrl],
                         [
@@ -86,6 +87,11 @@ class BulkCreateWebpageRedirects implements ShouldQueue
                             'is_active'     => true,
                         ]
                     );
+
+                    // 2. WebPage slugWithUrl update
+                    $page->update([
+                        'slugWithUrl' => $newUrl,
+                    ]);
 
                     $created++;
                     $processed++;
