@@ -26,6 +26,7 @@ return new class extends Migration
             $table->string('cc')->nullable();
             $table->string('bcc')->nullable();
 
+            
             $table->string('subject')->nullable();
             $table->longText('body_html')->nullable();
             $table->longText('body_text')->nullable();
