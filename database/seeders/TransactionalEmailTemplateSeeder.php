@@ -5,18 +5,25 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use App\Models\TransactionalEmailTemplate;
 use App\Models\TransactionalEmailPhrase;
-use Illuminate\Support\Facades\DB;
+use App\Models\Store;
 
 class TransactionalEmailTemplateSeeder extends Seeder
 {
     public function run(): void
     {
-        // Force tenant connection
         $dbName = config('database.connections.tenant.database');
 
-        // tenant_2_uztsciwzc2pq → 2
-        preg_match('/tenant_(\d+)_/', $dbName, $matches);
-        $storeId = isset($matches[1]) ? (int) $matches[1] : 1;
+        // Central connection se store nikaalo
+        $store = Store::on('central')
+            ->where('tenant_database', $dbName)
+            ->first();
+
+        if (!$store) {
+            $this->command->error("Store not found for database: {$dbName}");
+            return;
+        }
+
+        $storeId = $store->id;
 
         $this->command->info("Seeding for Store ID: {$storeId} | DB: {$dbName}");
 
