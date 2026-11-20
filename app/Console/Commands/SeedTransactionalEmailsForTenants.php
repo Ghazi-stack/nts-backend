@@ -17,15 +17,15 @@ class SeedTransactionalEmailsForTenants extends Command
         $stores = Store::all();
 
         if ($stores->isEmpty()) {
-            $this->error('No stores found in central database.');
+            $this->error('No stores found.');
             return Command::FAILURE;
         }
 
         foreach ($stores as $store) {
-            $dbName = $store->database_name ?? null;
+            $dbName = $store->tenant_database ?? null;
 
             if (!$dbName) {
-                $this->warn("Store ID {$store->id} has no database_name. Skipping...");
+                $this->warn("Store ID {$store->id} has no tenant_database. Skipping...");
                 continue;
             }
 
@@ -34,12 +34,10 @@ class SeedTransactionalEmailsForTenants extends Command
             $this->info("Database: {$dbName}");
 
             try {
-                // Switch to tenant database
                 config(['database.connections.tenant.database' => $dbName]);
                 DB::purge('tenant');
                 DB::reconnect('tenant');
 
-                // Run seeder
                 Artisan::call('db:seed', [
                     '--class' => 'TransactionalEmailTemplateSeeder',
                     '--force' => true,
