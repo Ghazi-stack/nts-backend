@@ -185,6 +185,67 @@ class PaymentSettingsService
         return false;
     }
 
+    // public function saveConfiguration(
+    //     int $storeId,
+    //     string $methodCode,
+    //     array $data
+    // ): StorePaymentMethod {
+    //     return DB::connection('tenant')->transaction(function () use (
+    //         $storeId,
+    //         $methodCode,
+    //         $data
+    //     ) {
+    //         $method = StorePaymentMethod::forStore($storeId)
+    //             ->where('method_code', $methodCode)
+    //             ->lockForUpdate()
+    //             ->first();
+
+    //         if (!$method) {
+    //             throw new RuntimeException(
+    //                 'Payment method not found for this store.'
+    //             );
+    //         }
+
+    //         if (array_key_exists('display_name', $data)) {
+    //             $method->display_name = $data['display_name'];
+    //         }
+
+    //         if (array_key_exists('available_countries', $data)) {
+    //             $method->available_countries = $data['available_countries'];
+    //         }
+
+    //         if (array_key_exists('configuration', $data)) {
+    //             $method->configuration = array_replace_recursive(
+    //                 $method->configuration ?? [],
+    //                 $data['configuration'] ?? []
+    //             );
+    //         }
+
+    //         if (array_key_exists('credentials', $data)) {
+    //             $method->credentials = array_merge(
+    //                 $method->credentials ?? [],
+    //                 $data['credentials'] ?? []
+    //             );
+    //         }
+
+    //         $method->is_configured = $this->isConfigurationComplete(
+    //             $methodCode,
+    //             $method->configuration ?? [],
+    //             $method->credentials ?? []
+    //         );
+
+    //         // Do not silently leave an enabled method active if its
+    //         // required configuration has become incomplete.
+    //         if (!$method->is_configured) {
+    //             $method->is_enabled = false;
+    //         }
+
+    //         $method->save();
+
+    //         return $method->fresh();
+    //     });
+    // }
+
     public function saveConfiguration(
         int $storeId,
         string $methodCode,
@@ -212,6 +273,11 @@ class PaymentSettingsService
 
             if (array_key_exists('available_countries', $data)) {
                 $method->available_countries = $data['available_countries'];
+            }
+
+            // Save supported currency codes.
+            if (array_key_exists('available_currencies', $data)) {
+                $method->available_currencies = $data['available_currencies'];
             }
 
             if (array_key_exists('configuration', $data)) {

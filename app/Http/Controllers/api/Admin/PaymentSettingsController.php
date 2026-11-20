@@ -74,6 +74,7 @@ class PaymentSettingsController extends Controller
             'isEnabled' => (bool) $method->is_enabled,
             'isConfigured' => (bool) $method->is_configured,
             'availableCountries' => $method->available_countries,
+            'availableCurrencies' => $method->available_currencies,
             'configuration' => $this->keysToCamelCase(
                 $method->configuration ?? []
             ),
@@ -309,6 +310,74 @@ class PaymentSettingsController extends Controller
     /**
      * POST /payment-settings/{methodCode}
      */
+    // public function save(Request $request, string $methodCode)
+    // {
+    //     $storeId = $this->getStoreId();
+
+    //     $method = $this->paymentSettings->getMethod(
+    //         $storeId,
+    //         $methodCode
+    //     );
+
+    //     if (!$method) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Payment method not found.',
+    //         ], 404);
+    //     }
+
+    //     $normalizedData = $this->keysToSnakeCase($request->all());
+
+    //     $validator = Validator::make($normalizedData, [
+    //         'display_name' => 'sometimes|required|string|max:150',
+
+    //         // Supports:
+    //         // { "allCountries": true, "countries": [] }
+    //         'available_countries' => 'sometimes|nullable|array',
+    //         'available_countries.all_countries' => 'sometimes|boolean',
+    //         'available_countries.countries' => 'sometimes|array',
+    //         'available_countries.countries.*' => [
+    //             'string',
+    //             'size:2',
+    //             'alpha',
+    //         ],
+
+    //         'configuration' => 'sometimes|nullable|array',
+
+    //         'credentials' => 'sometimes|nullable|array',
+    //         'credentials.*' => 'nullable|string|max:10000',
+    //     ]);
+
+    //     if ($validator->fails()) {
+    //         return $this->validationErrorResponse($validator);
+    //     }
+
+    //     try {
+    //         $saved = $this->paymentSettings->saveConfiguration(
+    //             $storeId,
+    //             $methodCode,
+    //             $validator->validated()
+    //         );
+
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Payment configuration saved successfully.',
+    //             'data' => $this->formatMethod($saved),
+    //         ]);
+    //     } catch (Throwable $e) {
+    //         report($e);
+
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Unable to save payment configuration.',
+    //         ], 500);
+    //     }
+    // }
+
+    
+    /**
+ * POST /payment-settings/{methodCode}
+ */
     public function save(Request $request, string $methodCode)
     {
         $storeId = $this->getStoreId();
@@ -330,14 +399,21 @@ class PaymentSettingsController extends Controller
         $validator = Validator::make($normalizedData, [
             'display_name' => 'sometimes|required|string|max:150',
 
-            // Supports:
-            // { "allCountries": true, "countries": [] }
+            // Existing country settings
             'available_countries' => 'sometimes|nullable|array',
             'available_countries.all_countries' => 'sometimes|boolean',
             'available_countries.countries' => 'sometimes|array',
             'available_countries.countries.*' => [
                 'string',
                 'size:2',
+                'alpha',
+            ],
+
+            // Supported currencies: USD, PKR, EUR, GBP, etc.
+            'available_currencies' => 'sometimes|nullable|array',
+            'available_currencies.*' => [
+                'string',
+                'size:3',
                 'alpha',
             ],
 
