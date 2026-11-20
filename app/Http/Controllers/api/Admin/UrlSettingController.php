@@ -351,8 +351,27 @@ class UrlSettingController extends Controller
             'status'  => 'unknown',
         ]);
 
+        // Message add karo
+        $message = null;
+        if ($progress['status'] === 'completed') {
+            if ($progress['created'] === 0) {
+                $message = 'No updates needed. All URLs are already up to date.';
+            } else {
+                $message = "{$progress['created']} redirect(s) created successfully.";
+            }
+        } elseif ($progress['status'] === 'processing') {
+            $message = "Processing... {$progress['current']}/{$progress['total']}";
+        } elseif ($progress['status'] === 'queued') {
+            $message = 'Waiting to start...';
+        } elseif ($progress['status'] === 'failed') {
+            $message = 'Process failed. Please try again.';
+        }
+
+        $progress['message'] = $message;
+
         return response()->json($progress);
     }
+
 
     // ===================== REDIRECTS CRUD =====================
 
