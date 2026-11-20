@@ -503,24 +503,88 @@ class UrlSettingController extends Controller
                 ], 404);
             }
 
+            $data = [
+                'id'           => $redirect->id,
+                'storeId'      => $redirect->store_id,
+                'productId'    => $redirect->product_id,
+                'entityId'     => $redirect->entity_id,
+                'entityType'   => $redirect->entity_type,
+                'redirectType' => $redirect->redirect_type,
+                'domain'       => $redirect->domain,
+                'oldUrl'       => $redirect->old_url,
+                'newUrl'       => $redirect->new_url,
+                'isActive'     => (bool) $redirect->is_active,
+                'createdAt'    => $redirect->created_at,
+                'updatedAt'    => $redirect->updated_at,
+                'entity'       => null,
+            ];
+
+            // Product data load karo
+            if ($redirect->entity_type === 'product' && $redirect->entity_id) {
+                $product = Product::with(['brand', 'categories', 'images', 'content', 'seo'])
+                    ->where('store_id', $storeId)
+                    ->find($redirect->entity_id);
+
+                if ($product) {
+                    $data['entity'] = [
+                        'id'          => $product->id,
+                        'name'        => $product->name,
+                        'sku'         => $product->sku,
+                        'price'       => $product->price,
+                        'status'      => $product->status,
+                        'brand'       => $product->brand ? [
+                            'id'   => $product->brand->id,
+                            'name' => $product->brand->name,
+                        ] : null,
+                        'categories'  => $product->categories->map(fn($c) => [
+                            'id'   => $c->id,
+                            'name' => $c->name,
+                            'slug' => $c->slug,
+                        ]),
+                        'images'      => $product->images->map(fn($i) => [
+                            'id'        => $i->id,
+                            'path'      => $i->path,
+                            'isPrimary' => (bool) $i->is_primary,
+                        ]),
+                        'seo'         => $product->seo ? [
+                            'productUrl'    => $product->seo->product_url,
+                            'pageTitle'     => $product->seo->page_title,
+                            'metaDescription' => $product->seo->meta_description,
+                        ] : null,
+                    ];
+                }
+            }
+
+            // Category data load karo
+            if ($redirect->entity_type === 'category' && $redirect->entity_id) {
+                $category = Category::where('store_id', $storeId)->find($redirect->entity_id);
+                if ($category) {
+                    $data['entity'] = [
+                        'id'   => $category->id,
+                        'name' => $category->name,
+                        'slug' => $category->slug,
+                    ];
+                }
+            }
+
+            // Webpage data load karo
+            if (in_array($redirect->entity_type, ['webpage', 'page']) && $redirect->entity_id) {
+                $page = WebPage::where('store_id', $storeId)->find($redirect->entity_id);
+                if ($page) {
+                    $data['entity'] = [
+                        'id'          => $page->id,
+                        'pageName'    => $page->page_name,
+                        'slugWithUrl' => $page->slugWithUrl,
+                    ];
+                }
+            }
+
             return response()->json([
                 'status' => true,
-                'data'   => [
-                    'id'           => $redirect->id,
-                    'storeId'      => $redirect->store_id,
-                    'productId'    => $redirect->product_id,
-                    'entityId'     => $redirect->entity_id,
-                    'entityType'   => $redirect->entity_type,
-                    'redirectType' => $redirect->redirect_type,
-                    'domain'       => $redirect->domain,
-                    'oldUrl'       => $redirect->old_url,
-                    'newUrl'       => $redirect->new_url,
-                    'isActive'     => (bool) $redirect->is_active,
-                    'createdAt'    => $redirect->created_at,
-                    'updatedAt'    => $redirect->updated_at,
-                ]
+                'data'   => $data,
             ]);
         } catch (\Exception $e) {
+            Log::error('Show Redirect Error: ' . $e->getMessage());
             return response()->json([
                 'status'  => false,
                 'message' => 'Failed to fetch redirect',
