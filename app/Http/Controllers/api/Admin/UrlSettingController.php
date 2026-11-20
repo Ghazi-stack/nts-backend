@@ -14,6 +14,9 @@ use App\Models\Product;
 use App\Models\Category;
 use App\Models\RedirectActivityLog;
 use App\Models\WebPage;
+use App\Http\Resources\ProductResource;
+use App\Http\Resources\CategoryResource;
+use App\Http\Resources\WebPageResource;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -490,6 +493,8 @@ class UrlSettingController extends Controller
         }
     }
 
+
+
     public function showRedirect($id)
     {
         try {
@@ -519,63 +524,34 @@ class UrlSettingController extends Controller
                 'entity'       => null,
             ];
 
-            // Product data load karo
+            // Product — ProductResource use karo
             if ($redirect->entity_type === 'product' && $redirect->entity_id) {
                 $product = Product::with(['brand', 'categories', 'images', 'content', 'seo'])
                     ->where('store_id', $storeId)
                     ->find($redirect->entity_id);
 
                 if ($product) {
-                    $data['entity'] = [
-                        'id'          => $product->id,
-                        'name'        => $product->name,
-                        'sku'         => $product->sku,
-                        'price'       => $product->price,
-                        'status'      => $product->status,
-                        'brand'       => $product->brand ? [
-                            'id'   => $product->brand->id,
-                            'name' => $product->brand->name,
-                        ] : null,
-                        'categories'  => $product->categories->map(fn($c) => [
-                            'id'   => $c->id,
-                            'name' => $c->name,
-                            'slug' => $c->slug,
-                        ]),
-                        'images'      => $product->images->map(fn($i) => [
-                            'id'        => $i->id,
-                            'path'      => $i->path,
-                            'isPrimary' => (bool) $i->is_primary,
-                        ]),
-                        'seo'         => $product->seo ? [
-                            'productUrl'    => $product->seo->product_url,
-                            'pageTitle'     => $product->seo->page_title,
-                            'metaDescription' => $product->seo->meta_description,
-                        ] : null,
-                    ];
+                    $data['entity'] = new ProductResource($product);
                 }
             }
 
-            // Category data load karo
+            // Category — CategoryResource use karo
             if ($redirect->entity_type === 'category' && $redirect->entity_id) {
-                $category = Category::where('store_id', $storeId)->find($redirect->entity_id);
+                $category = Category::with(['childrenRecursive', 'products'])
+                    ->where('store_id', $storeId)
+                    ->find($redirect->entity_id);
+
                 if ($category) {
-                    $data['entity'] = [
-                        'id'   => $category->id,
-                        'name' => $category->name,
-                        'slug' => $category->slug,
-                    ];
+                    $data['entity'] = new CategoryResource($category);
                 }
             }
 
-            // Webpage data load karo
+            // Webpage — WebPageResource use karo
             if (in_array($redirect->entity_type, ['webpage', 'page']) && $redirect->entity_id) {
                 $page = WebPage::where('store_id', $storeId)->find($redirect->entity_id);
+
                 if ($page) {
-                    $data['entity'] = [
-                        'id'          => $page->id,
-                        'pageName'    => $page->page_name,
-                        'slugWithUrl' => $page->slugWithUrl,
-                    ];
+                    $data['entity'] = new WebPageResource($page);
                 }
             }
 
