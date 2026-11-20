@@ -13,7 +13,6 @@ class TransactionalEmailTemplateSeeder extends Seeder
     {
         $dbName = config('database.connections.tenant.database');
 
-        // Central connection se store nikaalo
         $store = Store::on('central')
             ->where('tenant_database', $dbName)
             ->first();
@@ -23,7 +22,8 @@ class TransactionalEmailTemplateSeeder extends Seeder
             return;
         }
 
-        $storeId = $store->id;
+        // legacy_store_id use karo (ye current_store_id() return karta hai)
+        $storeId = $store->legacy_store_id ?? $store->id;
 
         $this->command->info("Seeding for Store ID: {$storeId} | DB: {$dbName}");
 
