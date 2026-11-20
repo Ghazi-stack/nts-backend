@@ -3,9 +3,7 @@
 namespace App\Services;
 
 use App\Models\TransactionalEmailTemplate;
-use App\Models\TransactionalEmailPhrase;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\View;
 
 class TransactionalEmailService
 {
@@ -27,8 +25,10 @@ class TransactionalEmailService
         }
 
         $subject = $this->interpolate($tpl->subject ?? '', $vars);
-        $html    = $tpl->body_html ? $this->bladeFromString($tpl->body_html, $vars) : '';
-        $text    = $tpl->body_text ? $this->bladeFromString($tpl->body_text, $vars) : strip_tags($html);
+        $html    = $this->interpolate($tpl->body_html ?? '', $vars);
+        $text    = $tpl->body_text
+            ? $this->interpolate($tpl->body_text, $vars)
+            : strip_tags($html);
 
         return [
             'subject' => $subject,
@@ -50,20 +50,9 @@ class TransactionalEmailService
 
     private function interpolate(string $str, array $data): string
     {
-        return preg_replace_callback('/{{\s*([a-z0-9\._]+)\s*}}/i', function ($m) use ($data) {
-            return (string) Arr::get($data, $m[1], '');
+        return preg_replace_callback('/{{\s*([a-zA-Z0-9_\.]+)\s*}}/', function ($m) use ($data) {
+            $key = $m[1];
+            return Arr::get($data, $key, $m[0]); // nahi mila to original {{key}} chhod do
         }, $str);
-    }
-
-    private function bladeFromString(string $contents, array $data): string
-    {
-        $hash = sha1($contents);
-        $path = storage_path("framework/views/tpl_{$hash}.blade.php");
-
-        if (!file_exists($path)) {
-            file_put_contents($path, $contents);
-        }
-
-        return View::file($path, ['data' => $data])->render();
     }
 }
