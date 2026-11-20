@@ -342,7 +342,7 @@ class UrlSettingController extends Controller
         ]);
     }
 
-    public function bulkUpdateProgress($progressKey)
+     public function bulkUpdateProgress($progressKey)
     {
         $progress = Cache::get($progressKey, [
             'current' => 0,
@@ -350,13 +350,6 @@ class UrlSettingController extends Controller
             'created' => 0,
             'status'  => 'unknown',
         ]);
-
-        // Message sirf completed pe
-        if ($progress['status'] === 'completed') {
-            $progress['message'] = $progress['created'] === 0
-                ? 'No updates needed. All URLs are already up to date.'
-                : "{$progress['created']} redirect(s) created successfully.";
-        }
 
         return response()->json($progress);
     }
