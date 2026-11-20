@@ -140,25 +140,40 @@ class PaymentSettingsController extends Controller
     // }
 
     
+    
+/**
+ * GET /payment-settings
+ * Payment methods grouped by category and filtered by currency.
+ */
     public function index(Request $request)
     {
+        $validator = Validator::make($request->query(), [
+            'currency' => [
+                'nullable',
+                'string',
+                'size:3',
+                'alpha',
+            ],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Validation failed.',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
         try {
-            $country = $request->query('country');
+            $currency = $request->query('currency');
 
-            if ($country !== null) {
-                $country = strtoupper(trim($country));
-
-                if (!preg_match('/^[A-Z]{2}$/', $country)) {
-                    return response()->json([
-                        'status' => false,
-                        'message' => 'Country must be a valid ISO alpha-2 code, such as US, PK, or GB.',
-                    ], 422);
-                }
-            }
+            $currency = $currency !== null
+                ? strtoupper(trim($currency))
+                : null;
 
             $groups = $this->paymentSettings->getGroupedMethods(
                 $this->getStoreId(),
-                $country
+                $currency
             );
 
             $data = [];
@@ -183,6 +198,7 @@ class PaymentSettingsController extends Controller
             ], 500);
         }
     }
+
     /**
      * GET /payment-settings/catalog
      * Static setup definitions; not a statement of live availability.

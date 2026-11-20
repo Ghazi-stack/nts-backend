@@ -53,45 +53,35 @@ class PaymentSettingsService
 
     
     
+    
     public function getGroupedMethods(
         int $storeId,
-        ?string $country = null
+        ?string $currency = null
     ): array {
         $methods = $this->getMethods($storeId);
 
-        // No country provided: show offline methods only.
-        if (empty($country)) {
+        // Without a selected currency, show offline methods only.
+        if ($currency === null || trim($currency) === '') {
             $methods = $methods
                 ->where('category', 'offline')
                 ->values();
         } else {
-            $country = strtoupper(trim($country));
+            $currency = strtoupper(trim($currency));
 
-            // Filter methods by explicitly configured country availability.
-            $methods = $methods->filter(function ($method) use ($country) {
-                $availableCountries = $method->available_countries;
+            // Include only methods explicitly supporting this currency.
+            $methods = $methods->filter(function ($method) use ($currency) {
+                $availableCurrencies = $method->available_currencies;
 
-                // Null or invalid configuration means unavailable.
-                if (!is_array($availableCountries)) {
+                if (!is_array($availableCurrencies)) {
                     return false;
                 }
 
-                // Explicitly available worldwide.
-                if (($availableCountries['all_countries'] ?? false) === true) {
-                    return true;
-                }
+                $availableCurrencies = array_map(
+                    fn ($code) => strtoupper(trim((string) $code)),
+                    $availableCurrencies
+                );
 
-                // Otherwise, country must be explicitly listed.
-                $countries = $availableCountries['countries'] ?? [];
-
-                if (!is_array($countries)) {
-                    return false;
-                }
-
-                return in_array($country, array_map(
-                    'strtoupper',
-                    $countries
-                ), true);
+                return in_array($currency, $availableCurrencies, true);
             })->values();
         }
 
@@ -105,6 +95,7 @@ class PaymentSettingsService
 
         return $grouped;
     }
+
 
     public function getCatalog(): array
     {

@@ -19,6 +19,7 @@ class StorePaymentMethod extends Model
         'is_enabled',
         'is_configured',
         'available_countries',
+        'available_currencies',
         'configuration',
         'credentials',
     ];
@@ -35,6 +36,7 @@ class StorePaymentMethod extends Model
         'is_enabled' => 'boolean',
         'is_configured' => 'boolean',
         'available_countries' => 'array',
+        'available_currencies' => 'array',
         'configuration' => 'array',
         'credentials' => 'encrypted:array',
     ];
