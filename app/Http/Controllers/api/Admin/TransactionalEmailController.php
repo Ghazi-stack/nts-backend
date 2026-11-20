@@ -19,6 +19,13 @@ class TransactionalEmailController extends Controller
 
     public function index(Request $r)
     {
+
+        // Debug
+        \Log::info('Current Store ID: ' . current_store_id());
+        \Log::info('Tenant DB: ' . config('database.connections.tenant.database'));
+
+        $count = TransactionalEmailTemplate::count();
+        \Log::info('Total templates in current DB: ' . $count);
         try {
             $q = TransactionalEmailTemplate::with(['updater', 'phrases'])
                 ->ofStore(current_store_id());
