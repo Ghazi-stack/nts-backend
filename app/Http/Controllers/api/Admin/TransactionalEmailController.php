@@ -19,23 +19,17 @@ class TransactionalEmailController extends Controller
 
     public function index(Request $r)
     {
-
-        // Debug
-        \Log::info('Current Store ID: ' . current_store_id());
-        \Log::info('Tenant DB: ' . config('database.connections.tenant.database'));
-
-        $count = TransactionalEmailTemplate::count();
-        \Log::info('Total templates in current DB: ' . $count);
         try {
             $q = TransactionalEmailTemplate::with(['updater', 'phrases'])
                 ->ofStore(current_store_id());
 
             if ($r->filled('search')) {
                 $s = $r->search;
-                $q->where(fn($qq) => $qq->where('name', 'like', "%$s%")->orWhere('key', 'like', "%$s%"));
+                $q->where(fn($qq) => $qq->where('name', 'like', "%$s%")
+                    ->orWhere('key', 'like', "%$s%"));
             }
 
-            $q->orderBy('name');
+            $q->orderBy('id');
 
             $pageSize = (int) $r->input('pageSize', 50);
             $rows = $q->paginate($pageSize);
