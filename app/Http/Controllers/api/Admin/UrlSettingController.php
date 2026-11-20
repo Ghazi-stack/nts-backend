@@ -543,23 +543,30 @@ class UrlSettingController extends Controller
                 }
             }
 
-            // Category — full resource
+            // Category — sirf name, slug, image
             if ($redirect->entity_type === 'category' && $redirect->entity_id) {
-                $category = Category::with(['childrenRecursive', 'products'])
-                    ->where('store_id', $storeId)
-                    ->find($redirect->entity_id);
+                $category = Category::where('store_id', $storeId)->find($redirect->entity_id);
 
                 if ($category) {
-                    $data['entity'] = new CategoryResource($category);
+                    $data['entity'] = [
+                        'id'    => $category->id,
+                        'name'  => $category->name,
+                        'slug'  => $category->slug,
+                        'image' => $category->image ? Storage::disk('s3')->url($category->image) : null,
+                    ];
                 }
             }
 
-            // Webpage — full resource
+            // Webpage — sirf pageName, slugWithUrl
             if (in_array($redirect->entity_type, ['webpage', 'page']) && $redirect->entity_id) {
                 $page = WebPage::where('store_id', $storeId)->find($redirect->entity_id);
 
                 if ($page) {
-                    $data['entity'] = new WebPageResource($page);
+                    $data['entity'] = [
+                        'id'          => $page->id,
+                        'pageName'    => $page->page_name,
+                        'slugWithUrl' => $page->slugWithUrl,
+                    ];
                 }
             }
 
