@@ -14,7 +14,6 @@ use App\Models\Product;
 use App\Models\Category;
 use App\Models\RedirectActivityLog;
 use App\Models\WebPage;
-use App\Http\Resources\ProductResource;
 use App\Http\Resources\CategoryResource;
 use App\Http\Resources\WebPageResource;
 use Illuminate\Support\Facades\Cache;
@@ -493,8 +492,6 @@ class UrlSettingController extends Controller
         }
     }
 
-
-
     public function showRedirect($id)
     {
         try {
@@ -521,21 +518,32 @@ class UrlSettingController extends Controller
                 'isActive'     => (bool) $redirect->is_active,
                 'createdAt'    => $redirect->created_at,
                 'updatedAt'    => $redirect->updated_at,
+                'image'        => null,
                 'entity'       => null,
             ];
 
-            // Product — ProductResource use karo
+            // Product — sirf image
             if ($redirect->entity_type === 'product' && $redirect->entity_id) {
-                $product = Product::with(['brand', 'categories', 'images', 'content', 'seo'])
+                $product = Product::with(['images'])
                     ->where('store_id', $storeId)
                     ->find($redirect->entity_id);
 
-                if ($product) {
-                    $data['entity'] = new ProductResource($product);
+                if ($product && $product->images) {
+                    $data['image'] = $product->images->map(function ($img) {
+                        $url = Storage::disk('s3')->url($img->path);
+                        return [
+                            'path'        => $url,
+                            'url'         => $url,
+                            'isPrimary'   => (int) $img->is_primary,
+                            'store_id'    => $img->store_id,
+                            'altText'     => $img->alt_text,
+                            'description' => $img->description,
+                        ];
+                    });
                 }
             }
 
-            // Category — CategoryResource use karo
+            // Category — full resource
             if ($redirect->entity_type === 'category' && $redirect->entity_id) {
                 $category = Category::with(['childrenRecursive', 'products'])
                     ->where('store_id', $storeId)
@@ -546,7 +554,7 @@ class UrlSettingController extends Controller
                 }
             }
 
-            // Webpage — WebPageResource use karo
+            // Webpage — full resource
             if (in_array($redirect->entity_type, ['webpage', 'page']) && $redirect->entity_id) {
                 $page = WebPage::where('store_id', $storeId)->find($redirect->entity_id);
 
