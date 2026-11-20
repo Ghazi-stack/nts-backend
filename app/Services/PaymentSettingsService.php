@@ -52,8 +52,6 @@ class PaymentSettingsService
     // }
 
     
-    
-    
     public function getGroupedMethods(
         int $storeId,
         ?string $currency = null
@@ -68,7 +66,6 @@ class PaymentSettingsService
         } else {
             $currency = strtoupper(trim($currency));
 
-            // Include only methods explicitly supporting this currency.
             $methods = $methods->filter(function ($method) use ($currency) {
                 $availableCurrencies = $method->available_currencies;
 
@@ -80,6 +77,11 @@ class PaymentSettingsService
                     fn ($code) => strtoupper(trim((string) $code)),
                     $availableCurrencies
                 );
+
+                // Wildcard means available for every currency.
+                if (in_array('*', $availableCurrencies, true)) {
+                    return true;
+                }
 
                 return in_array($currency, $availableCurrencies, true);
             })->values();
@@ -95,7 +97,6 @@ class PaymentSettingsService
 
         return $grouped;
     }
-
 
     public function getCatalog(): array
     {

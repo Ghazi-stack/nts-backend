@@ -8,6 +8,7 @@ use RuntimeException;
 use Throwable;
 use Database\Seeders\TenantRoleSeeder;
 use Database\Seeders\PaymentMethodsSeeder;
+use Database\Seeders\PaymentMethodsCurrencyBackfillSeeder;
 
 class TenantProvisioningService
 {
@@ -16,7 +17,8 @@ class TenantProvisioningService
         private TenantSchemaInstaller $schemaInstaller,
         private TenantDataMigrator $dataMigrator,
         private TenantRoleSeeder $tenantRoleSeeder,
-        private PaymentMethodsSeeder $paymentMethodsSeeder
+        private PaymentMethodsSeeder $paymentMethodsSeeder,
+        private PaymentMethodsCurrencyBackfillSeeder $paymentMethodsCurrencyBackfillSeeder
     ) {}
 
     public function provisionDatabase(int $registryStoreId): object
@@ -163,6 +165,7 @@ class TenantProvisioningService
             );
 
             $this->paymentMethodsSeeder->run($tenantStoreId);
+            $this->paymentMethodsCurrencyBackfillSeeder->run($tenantStoreId);
 
             // Verify the schema installer did not change the target connection.
             DB::purge('tenant');
