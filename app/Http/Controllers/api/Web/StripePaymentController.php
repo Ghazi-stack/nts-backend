@@ -23,16 +23,83 @@ use App\Services\TenantCredentialResolver;
 class StripePaymentController extends Controller
 {
 
+    // private function connectedStripeOptions(Request $request): array
+    // {
+    //     // Temporarily use the original platform Stripe account.
+    //     if (!config('services.stripe.connect_enabled', false)) {
+    //         return [];
+    //     }
+
+    //     // Use Stripe Connect when explicitly enabled.
+    //     return app(StripeConnectAccountResolver::class)->optionsForRequest($request);
+    // }
+
+    
+    
     private function connectedStripeOptions(Request $request): array
     {
-        // Temporarily use the original platform Stripe account.
-        if (!config('services.stripe.connect_enabled', false)) {
+        $connectEnabled = (bool) config(
+            'services.stripe.connect.connect_enabled',
+            config('services.stripe.connect_enabled', false)
+        );
+
+        // Preserve the existing platform Stripe behavior
+        // when Stripe Connect is disabled.
+        if (!$connectEnabled) {
+            $secret = config('services.stripe.secret');
+
+            if (empty($secret)) {
+                throw new \RuntimeException(
+                    'Stripe Sandbox API secret is not configured.'
+                );
+            }
+
+            Stripe::setApiKey($secret);
+
             return [];
         }
 
-        // Use Stripe Connect when explicitly enabled.
-        return app(StripeConnectAccountResolver::class)->optionsForRequest($request);
+        // Resolve and validate the connected account.
+        $stripeOptions = app(StripeConnectAccountResolver::class)
+            ->optionsForRequest($request);
+
+        $store = $request->attributes->get('resolved_store')
+            ?? $request->attributes->get('tenant_store');
+
+        if (!$store || empty($store->store_hash)) {
+            throw new \RuntimeException('Store context is missing.');
+        }
+
+        $centralStore = DB::connection('central')
+            ->table('stores')
+            ->where('store_hash', $store->store_hash)
+            ->where('provisioning_status', 'active')
+            ->first();
+
+        if (!$centralStore) {
+            throw new \RuntimeException('Active store not found.');
+        }
+
+        $environment = (bool) $centralStore->stripe_livemode
+            ? 'live'
+            : 'sandbox';
+
+        $secret = config(
+            "services.stripe.connect.{$environment}.secret"
+        );
+
+        if (empty($secret)) {
+            throw new \RuntimeException(
+                "Stripe {$environment} API secret is not configured."
+            );
+        }
+
+        // Use the platform secret matching the connected account environment.
+        Stripe::setApiKey($secret);
+
+        return $stripeOptions;
     }
+
 
     /**
      * Get the Stripe capture method configured for this store.
@@ -1047,15 +1114,29 @@ class StripePaymentController extends Controller
                     'error' => 'This webhook endpoint is disabled.',
                 ], 403);
             }
-
+            
             // Prefer the store-specific signing secret.
-            // Fall back to the existing platform secret for legacy setups.
             $endpointSecret = $endpoint?->signing_secret;
 
+            // Fall back to the matching platform environment secret.
             if (empty($endpointSecret)) {
-                $endpointSecret = config('services.stripe.webhook_secret')
-                    ?? env('STRIPE_WEBHOOK_SECRET');
+                $stripeEnvironment = $environment === 'live'
+                    ? 'live'
+                    : 'sandbox';
+
+                $endpointSecret = config(
+                    "services.stripe.connect.{$stripeEnvironment}.webhook_secret"
+                );
+
+                // Backward compatibility for existing Sandbox webhooks.
+                if (
+                    empty($endpointSecret) &&
+                    $stripeEnvironment === 'sandbox'
+                ) {
+                    $endpointSecret = config('services.stripe.webhook_secret');
+                }
             }
+
 
             if (empty($endpointSecret)) {
                 Log::error('Stripe webhook signing secret is not configured.', [

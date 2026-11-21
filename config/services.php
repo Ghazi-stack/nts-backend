@@ -39,8 +39,26 @@ return [
             'client_id' => env('STRIPE_CONNECT_CLIENT_ID'),
             'redirect_uri' => env('STRIPE_CONNECT_REDIRECT_URI'),
             'webhook_secret' => env('STRIPE_CONNECT_WEBHOOK_SECRET'),
+
             'connect_enabled' => env('STRIPE_CONNECT_ENABLED', false),
             'dynamic_settings_enabled' => env('STRIPE_DYNAMIC_SETTINGS_ENABLED', false),
+
+            // Environment-specific credentials
+            'sandbox' => [
+                'secret' => env('STRIPE_SECRET'),
+                'key' => env('STRIPE_KEY'),
+                'client_id' => env('STRIPE_CONNECT_CLIENT_ID'),
+                'redirect_uri' => env('STRIPE_CONNECT_REDIRECT_URI'),
+                'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
+            ],
+
+            'live' => [
+                'secret' => env('STRIPE_LIVE_SECRET'),
+                'key' => env('STRIPE_LIVE_KEY'),
+                'client_id' => env('STRIPE_LIVE_CONNECT_CLIENT_ID'),
+                'redirect_uri' => env('STRIPE_LIVE_CONNECT_REDIRECT_URI'),
+                'webhook_secret' => env('STRIPE_LIVE_WEBHOOK_SECRET'),
+            ],
         ],
     ],
 

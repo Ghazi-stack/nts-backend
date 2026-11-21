@@ -15,8 +15,8 @@ class StripePaymentSettingsResolver
     public function resolve(int $storeId): array
     {
         $dynamicSettingsEnabled = (bool) config(
-            'services.stripe.dynamic_settings_enabled',
-            false
+            'services.stripe.connect.dynamic_settings_enabled',
+            config('services.stripe.dynamic_settings_enabled', false)
         );
 
         // Preserve the existing payment behavior until explicitly activated.
@@ -51,6 +51,21 @@ class StripePaymentSettingsResolver
             ];
         }
 
+        $credentials = $method->credentials ?? [];
+
+        if (
+            empty($credentials['stripe_user_id']) ||
+            empty($credentials['access_token']) ||
+            !array_key_exists('livemode', $credentials)
+        ) {
+            return [
+                'active' => false,
+                'reason' => 'stripe_connection_credentials_incomplete',
+                'storeId' => $storeId,
+                'settings' => null,
+            ];
+        }
+
         $configuration = $method->configuration ?? [];
 
         $transactionType = $configuration['transaction_type']
@@ -67,13 +82,16 @@ class StripePaymentSettingsResolver
 
         $paymentMethods = $configuration['payment_methods'] ?? [];
 
+        $livemode = (bool) $credentials['livemode'];
+
         return [
             'active' => true,
             'reason' => null,
             'storeId' => $storeId,
+            'environment' => $livemode ? 'live' : 'sandbox',
             'settings' => [
                 'transactionType' => $transactionType,
-                'testMode' => (bool) ($configuration['test_mode'] ?? true),
+                'testMode' => !$livemode,
                 'statementDescriptor' => $configuration['statement_descriptor'] ?? null,
                 'createCustomerOnPaymentAttempt' => (bool) (
                     $configuration['create_customer_on_payment_attempt'] ?? false

@@ -4,17 +4,15 @@ namespace App\Services;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Models\StorePaymentMethod;
 use RuntimeException;
 
-/**
- * Resolves the connected Stripe account for the store already selected by
- * ResolveStoreByHash / ConnectTenantDatabase. Never accepts an account ID
- * supplied by the browser.
- */
 class StripeConnectAccountResolver
 {
-    public function optionsForRequest(Request $request, bool $requireEnabled = true): array
-    {
+    public function optionsForRequest(
+        Request $request,
+        bool $requireEnabled = true
+    ): array {
         $store = $request->attributes->get('resolved_store')
             ?? $request->attributes->get('tenant_store');
 
@@ -29,27 +27,83 @@ class StripeConnectAccountResolver
             ->first();
 
         if (!$centralStore || empty($centralStore->stripe_account_id)) {
-            throw new RuntimeException('This store has not connected a Stripe account.');
+            throw new RuntimeException(
+                'This store has not connected a Stripe account.'
+            );
         }
 
-        $storeId = (int) ($centralStore->legacy_store_id ?? $centralStore->id);
-        $method = \App\Models\StorePaymentMethod::forStore($storeId)
+        $storeId = (int) (
+            $centralStore->legacy_store_id ?? $centralStore->id
+        );
+
+        $method = StorePaymentMethod::forStore($storeId)
             ->where('method_code', 'stripe')
             ->first();
 
         $credentials = $method?->credentials ?? [];
-        $accountId = $credentials['stripe_user_id'] ?? null;
 
-        if (!$method || !$method->is_configured || !$accountId) {
-            throw new RuntimeException('Stripe connection credentials are not configured for this store.');
+        if (
+            !$method ||
+            !$method->is_configured ||
+            empty($credentials['stripe_user_id'])
+        ) {
+            throw new RuntimeException(
+                'Stripe connection credentials are not configured for this store.'
+            );
         }
 
         if ($requireEnabled && !$method->is_enabled) {
-            throw new RuntimeException('Stripe payments are disabled for this store.');
+            throw new RuntimeException(
+                'Stripe payments are disabled for this store.'
+            );
         }
 
-        if (!hash_equals((string) $centralStore->stripe_account_id, (string) $accountId)) {
-            throw new RuntimeException('Stripe account configuration does not match the central store registry.');
+        $accountId = (string) $credentials['stripe_user_id'];
+
+        if (!hash_equals(
+            (string) $centralStore->stripe_account_id,
+            $accountId
+        )) {
+            throw new RuntimeException(
+                'Stripe account configuration does not match the central store registry.'
+            );
+        }
+
+        // The OAuth credentials must explicitly contain their environment.
+        if (!array_key_exists('livemode', $credentials)) {
+            throw new RuntimeException(
+                'Stripe account environment is missing from connection credentials.'
+            );
+        }
+
+        $credentialsLivemode = filter_var(
+            $credentials['livemode'],
+            FILTER_VALIDATE_BOOLEAN,
+            FILTER_NULL_ON_FAILURE
+        );
+
+        if ($credentialsLivemode === null) {
+            throw new RuntimeException(
+                'Stripe account environment is invalid.'
+            );
+        }
+
+        $centralLivemode = filter_var(
+            $centralStore->stripe_livemode,
+            FILTER_VALIDATE_BOOLEAN,
+            FILTER_NULL_ON_FAILURE
+        );
+
+        if ($centralLivemode === null) {
+            throw new RuntimeException(
+                'Stripe environment is missing from the central store registry.'
+            );
+        }
+
+        if ($credentialsLivemode !== $centralLivemode) {
+            throw new RuntimeException(
+                'Stripe account environment does not match the central store registry.'
+            );
         }
 
         return [

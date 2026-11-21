@@ -63,9 +63,31 @@ class PaymentSettingsController extends Controller
         return (int) $storeId;
     }
 
+    // private function formatMethod($method): array
+    // {
+    //     return [
+    //         'id' => $method->id,
+    //         'storeId' => $method->store_id,
+    //         'methodCode' => $method->method_code,
+    //         'category' => $method->category,
+    //         'displayName' => $method->display_name,
+    //         'isEnabled' => (bool) $method->is_enabled,
+    //         'isConfigured' => (bool) $method->is_configured,
+    //         'availableCountries' => $method->available_countries,
+    //         'availableCurrencies' => $method->available_currencies,
+    //         'configuration' => $this->keysToCamelCase(
+    //             $method->configuration ?? []
+    //         ),
+    //         'hasCredentials' => !empty($method->credentials),
+    //         'createdAt' => $method->created_at,
+    //         'updatedAt' => $method->updated_at,
+    //     ];
+    // }
+
+    
     private function formatMethod($method): array
     {
-        return [
+        $formatted = [
             'id' => $method->id,
             'storeId' => $method->store_id,
             'methodCode' => $method->method_code,
@@ -82,8 +104,22 @@ class PaymentSettingsController extends Controller
             'createdAt' => $method->created_at,
             'updatedAt' => $method->updated_at,
         ];
-    }
 
+        if (
+            $method->method_code === 'stripe' &&
+            !$method->is_configured
+        ) {
+            $connectUrl = url('/api/stripe/connect');
+
+            $formatted['connectUrls'] = [
+                'sandbox' => $connectUrl,
+                'live' => $connectUrl,
+            ];
+        }
+
+        return $formatted;
+    }
+    
     private function validationErrorResponse($validator)
     {
         $errors = [];
