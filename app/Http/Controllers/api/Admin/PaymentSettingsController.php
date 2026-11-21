@@ -73,31 +73,27 @@ class PaymentSettingsController extends Controller
             ->where('provisioning_status', 'active')
             ->first();
 
-        if (!$store || empty($store->store_hash)) {
-            throw new RuntimeException('Active store not found.');
+        if (!$store) {
+            return [];
         }
 
-        $environments = ['sandbox', 'live'];
-        $authorizationUrls = [];
+        $connectUrls = [];
 
-        foreach ($environments as $environment) {
-            $stripeConfig = config(
+        foreach (['sandbox', 'live'] as $environment) {
+            $environmentConfig = config(
                 "services.stripe.connect.{$environment}"
             );
 
-            $clientId = $stripeConfig['client_id'] ?? null;
-            $redirectUri = $stripeConfig['redirect_uri'] ?? null;
+            $clientId = $environmentConfig['client_id'] ?? null;
+            $redirectUri = $environmentConfig['redirect_uri'] ?? null;
 
+            // Skip environments that are not configured.
             if (empty($clientId) || empty($redirectUri)) {
-                throw new RuntimeException(
-                    "Stripe {$environment} Connect configuration is incomplete."
-                );
+                continue;
             }
 
-            // Generate a unique state for this authorization attempt.
             $state = Str::random(64);
 
-            // Store the state for callback validation.
             Cache::put(
                 'stripe_connect_state:' . hash('sha256', $state),
                 [
@@ -108,35 +104,30 @@ class PaymentSettingsController extends Controller
                 now()->addMinutes(10)
             );
 
-            $stripeUser = [];
-
-            if (!empty($store->name)) {
-                $stripeUser['business_name'] = $store->name;
-            }
-
-            if (!empty($store->base_url)) {
-                $stripeUser['url'] = $store->base_url;
-            }
-
             $params = [
-                'client_id' => $clientId,
                 'response_type' => 'code',
+                'client_id' => $clientId,
                 'scope' => 'read_write',
                 'redirect_uri' => $redirectUri,
                 'state' => $state,
             ];
 
-            if (!empty($stripeUser)) {
-                $params['stripe_user'] = $stripeUser;
+            if (!empty($store->name)) {
+                $params['stripe_user[business_name]'] = $store->name;
             }
 
-            $authorizationUrls[$environment] =
-                'https://connect.stripe.com/oauth/authorize?'
-                . http_build_query($params);
+            if (!empty($store->base_url)) {
+                $params['stripe_user[url]'] = $store->base_url;
+            }
+
+            $connectUrls[$environment] =
+                'https://connect.stripe.com/oauth/authorize?' .
+                http_build_query($params);
         }
 
-        return $authorizationUrls;
+        return $connectUrls;
     }
+
 
     // private function formatMethod($method): array
     // {
