@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class PaymentSettingsController extends Controller
 {
@@ -63,6 +65,79 @@ class PaymentSettingsController extends Controller
         return (int) $storeId;
     }
 
+    private function generateStripeAuthorizationUrls(int $storeId): array
+    {
+        $store = DB::connection('central')
+            ->table('stores')
+            ->where('legacy_store_id', $storeId)
+            ->where('provisioning_status', 'active')
+            ->first();
+
+        if (!$store || empty($store->store_hash)) {
+            throw new RuntimeException('Active store not found.');
+        }
+
+        $environments = ['sandbox', 'live'];
+        $authorizationUrls = [];
+
+        foreach ($environments as $environment) {
+            $stripeConfig = config(
+                "services.stripe.connect.{$environment}"
+            );
+
+            $clientId = $stripeConfig['client_id'] ?? null;
+            $redirectUri = $stripeConfig['redirect_uri'] ?? null;
+
+            if (empty($clientId) || empty($redirectUri)) {
+                throw new RuntimeException(
+                    "Stripe {$environment} Connect configuration is incomplete."
+                );
+            }
+
+            // Generate a unique state for this authorization attempt.
+            $state = Str::random(64);
+
+            // Store the state for callback validation.
+            Cache::put(
+                'stripe_connect_state:' . hash('sha256', $state),
+                [
+                    'store_hash' => $store->store_hash,
+                    'environment' => $environment,
+                    'created_at' => now()->timestamp,
+                ],
+                now()->addMinutes(10)
+            );
+
+            $stripeUser = [];
+
+            if (!empty($store->name)) {
+                $stripeUser['business_name'] = $store->name;
+            }
+
+            if (!empty($store->base_url)) {
+                $stripeUser['url'] = $store->base_url;
+            }
+
+            $params = [
+                'client_id' => $clientId,
+                'response_type' => 'code',
+                'scope' => 'read_write',
+                'redirect_uri' => $redirectUri,
+                'state' => $state,
+            ];
+
+            if (!empty($stripeUser)) {
+                $params['stripe_user'] = $stripeUser;
+            }
+
+            $authorizationUrls[$environment] =
+                'https://connect.stripe.com/oauth/authorize?'
+                . http_build_query($params);
+        }
+
+        return $authorizationUrls;
+    }
+
     // private function formatMethod($method): array
     // {
     //     return [
@@ -87,7 +162,7 @@ class PaymentSettingsController extends Controller
     
     private function formatMethod($method): array
     {
-        $formatted = [
+        return [
             'id' => $method->id,
             'storeId' => $method->store_id,
             'methodCode' => $method->method_code,
@@ -104,20 +179,6 @@ class PaymentSettingsController extends Controller
             'createdAt' => $method->created_at,
             'updatedAt' => $method->updated_at,
         ];
-
-        if (
-            $method->method_code === 'stripe' &&
-            !$method->is_configured
-        ) {
-            $connectUrl = url('/api/stripe/connect');
-
-            $formatted['connectUrls'] = [
-                'sandbox' => $connectUrl,
-                'live' => $connectUrl,
-            ];
-        }
-
-        return $formatted;
     }
     
     private function validationErrorResponse($validator)
@@ -202,6 +263,8 @@ class PaymentSettingsController extends Controller
         }
 
         try {
+            $storeId = $this->getStoreId();
+
             $currency = $request->query('currency');
 
             $currency = $currency !== null
@@ -209,7 +272,7 @@ class PaymentSettingsController extends Controller
                 : null;
 
             $groups = $this->paymentSettings->getGroupedMethods(
-                $this->getStoreId(),
+                $storeId,
                 $currency
             );
 
@@ -218,7 +281,23 @@ class PaymentSettingsController extends Controller
             foreach ($groups as $category => $methods) {
                 $data[$category] = $methods
                     ->map(fn ($method) => $this->formatMethod($method))
-                    ->values();
+                    ->values()
+                    ->all();
+            }
+
+            // Add actual Stripe OAuth URLs when Stripe is not configured.
+            if (isset($data['online'])) {
+                foreach ($data['online'] as $index => $method) {
+                    if (
+                        $method['methodCode'] === 'stripe' &&
+                        !$method['isConfigured']
+                    ) {
+                        $data['online'][$index]['connectUrls'] =
+                            $this->generateStripeAuthorizationUrls($storeId);
+
+                        break;
+                    }
+                }
             }
 
             return response()->json([
@@ -226,6 +305,7 @@ class PaymentSettingsController extends Controller
                 'message' => 'Payment methods retrieved successfully.',
                 'data' => $data,
             ]);
+
         } catch (Throwable $e) {
             report($e);
 
