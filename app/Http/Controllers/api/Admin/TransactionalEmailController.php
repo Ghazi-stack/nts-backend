@@ -291,10 +291,7 @@ class TransactionalEmailController extends Controller
     {
         $storeId = current_store_id();
 
-        $tpl = TransactionalEmailTemplate::ofStore($storeId)
-            ->key($key)
-            ->with('phrases')
-            ->first();
+        $tpl = TransactionalEmailTemplate::ofStore($storeId)->key($key)->first();
 
         if (!$tpl) {
             return response()->json([
@@ -303,9 +300,17 @@ class TransactionalEmailController extends Controller
             ], 404);
         }
 
+        // Custom phrases delete (jo user ne add kiye)
+        TransactionalEmailPhrase::where('template_id', $tpl->id)
+            ->where('is_system', false)
+            ->delete();
+
+        // Reload
+        $tpl->load('phrases');
+
         return response()->json([
             'status'  => true,
-            'message' => 'Template data fetched.',
+            'message' => 'Reset successful. Custom phrases removed.',
             'data'    => new TransactionalEmailTemplateResource($tpl),
         ]);
     }
