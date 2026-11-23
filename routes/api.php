@@ -865,7 +865,7 @@ Route::prefix('dashboard')->middleware([
 
             // Code
             Route::put('/{key}/code', 'updateCode');
-            Route::get('/reset/{key}', 'resetToDefault');
+            Route::post('/reset/{key}', 'resetToDefault');
         });
 
         // Banners

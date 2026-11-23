@@ -20,7 +20,12 @@ class TransactionalEmailController extends Controller
     public function index(Request $r)
     {
         try {
-            $q = TransactionalEmailTemplate::with(['updater', 'phrases'])
+            $q = TransactionalEmailTemplate::with([
+                'updater',
+                'phrases' => function ($q) {
+                    $q->orderBy('is_system', 'desc')->orderBy('id', 'asc');
+                }
+            ])
                 ->ofStore(current_store_id());
 
             if ($r->filled('search')) {
@@ -52,7 +57,12 @@ class TransactionalEmailController extends Controller
 
     public function show(string $key)
     {
-        $tpl = TransactionalEmailTemplate::with(['updater', 'phrases'])
+        $tpl = TransactionalEmailTemplate::with([
+            'updater',
+            'phrases' => function ($q) {
+                $q->orderBy('is_system', 'desc')->orderBy('id', 'asc');
+            }
+        ])
             ->ofStore(current_store_id())
             ->key($key)
             ->firstOrFail();
