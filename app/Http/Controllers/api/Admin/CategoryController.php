@@ -357,10 +357,10 @@ class CategoryController extends Controller
                 'image'               => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
             ]);
 
-            // figure out slug (no uniqueness check)
+            // figure out slug (preserve slash)
             $finalSlug = $category->slug;
             if ($request->filled('slug')) {
-                $finalSlug = Str::slug($request->slug);
+                $finalSlug = trim($request->slug, '/');
             } elseif ($request->filled('name')) {
                 $finalSlug = Str::slug($request->name);
             }
