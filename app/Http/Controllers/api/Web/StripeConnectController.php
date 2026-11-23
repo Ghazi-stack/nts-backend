@@ -478,7 +478,7 @@ class StripeConnectController extends Controller
 
             if ($frontendUrl) {
                 return redirect(
-                    $frontendUrl . '/admin/payment-settings?stripe=connected'
+                    $frontendUrl . '/manage/settings/payment/stripeocs'
                 );
             }
 

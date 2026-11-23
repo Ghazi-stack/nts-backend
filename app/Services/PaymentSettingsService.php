@@ -301,11 +301,9 @@ class PaymentSettingsService
                 $method->credentials ?? []
             );
 
-            // Do not silently leave an enabled method active if its
-            // required configuration has become incomplete.
-            if (!$method->is_configured) {
-                $method->is_enabled = false;
-            }
+            // Automatically enable when configuration is complete.
+            // Keep incomplete payment methods disabled.
+            $method->is_enabled = $method->is_configured;
 
             $method->save();
 
@@ -360,6 +358,7 @@ class PaymentSettingsService
     // }
 
 
+    
     public function disableMethod(
         int $storeId,
         string $methodCode
@@ -377,26 +376,25 @@ class PaymentSettingsService
                 throw new RuntimeException('Payment method not found.');
             }
 
-            // Only online payment methods lose their saved configuration.
-            if ($method->category === 'online') {
-                if ($methodCode === 'stripe') {
-                    throw new RuntimeException(
-                        'Stripe must be disconnected through the Stripe OAuth disconnect flow.'
-                    );
-                }
-
-                $method->configuration = null;
-                $method->credentials = null;
-                $method->is_configured = false;
+            // Stripe must be disconnected through OAuth first.
+            if ($methodCode === 'stripe') {
+                throw new RuntimeException(
+                    'Stripe must be disconnected through the Stripe OAuth disconnect flow.'
+                );
             }
 
-            // Offline methods retain their configuration and credentials.
+            // Clear configuration for every non-Stripe payment method.
+            $method->configuration = null;
+            $method->credentials = null;
+            $method->is_configured = false;
             $method->is_enabled = false;
+
             $method->save();
 
             return $method->fresh();
         });
     }
+
 
 
     /**
@@ -568,6 +566,7 @@ class PaymentSettingsService
             );
 
             $method->is_configured = true;
+            $method->is_enabled = true;
             $method->save();
 
             return $method->fresh();
