@@ -413,8 +413,8 @@ class UrlSettingController extends Controller
             $sortBy        = $request->query('sortBy', 'created_at');
             $sortDirection = $request->query('sortDirection', 'desc');
 
-            // Sirf old_url aur new_url allowed
-            $allowedSort = ['old_url', 'new_url'];
+            // Sirf old_url aur redirect_type allowed
+            $allowedSort = ['old_url', 'redirect_type'];
             if (!in_array($sortBy, $allowedSort)) {
                 $sortBy = 'created_at';
             }
