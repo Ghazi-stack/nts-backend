@@ -13,6 +13,7 @@ class StaffLogController extends Controller
     public function index(Request $request)
     {
         $storeId = current_store_id();
+        $currentUser = auth('sanctum')->user();
 
         if (!$storeId) {
             return response()->json([
@@ -21,25 +22,29 @@ class StaffLogController extends Controller
             ], 400);
         }
 
-        $currentUser = auth('sanctum')->user();
-
-        // Central database se owner check
-        $isOwner = \App\Models\Store::on('central')
+        // Direct DB query on central connection
+        $storeOwnerId = \DB::connection('central')
+            ->table('stores')
             ->where('id', $storeId)
-            ->where('user_id', $currentUser->id)
-            ->exists();
+            ->value('user_id');
+
+        $isOwner = ($storeOwnerId == $currentUser->id);
 
         if (!$isOwner) {
             return response()->json([
                 'status'  => false,
-                'message' => 'Only store owner can view staff logs.'
+                'message' => 'Only store owner can view staff logs.',
+                'debug'   => [
+                    'store_id' => $storeId,
+                    'user_id' => $currentUser->id,
+                    'store_owner_id' => $storeOwnerId,
+                ]
             ], 403);
         }
 
         $query = StaffLog::where('store_id', $storeId)
             ->orderBy('id', 'desc');
 
-        // Search by username or action
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('username', 'like', "%{$search}%")
@@ -47,7 +52,6 @@ class StaffLogController extends Controller
             });
         }
 
-        // Optional filter by action_type
         if ($type = $request->input('action_type')) {
             $query->where('action_type', $type);
         }
