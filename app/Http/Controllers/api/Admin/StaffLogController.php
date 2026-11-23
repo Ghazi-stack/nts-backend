@@ -12,19 +12,6 @@ class StaffLogController extends Controller
 {
     public function index(Request $request)
     {
-
-        $storeId = current_store_id();
-        $currentUser = auth('sanctum')->user();
-
-        // DEBUG - yeh temporary hai
-        return response()->json([
-            'debug' => true,
-            'store_id' => $storeId,
-            'user_id' => $currentUser?->id,
-            'user_email' => $currentUser?->email,
-            'is_owner' => Store::where('id', $storeId)->where('user_id', $currentUser?->id)->exists(),
-            'store_owner_id' => Store::where('id', $storeId)->value('user_id'),
-        ]);
         $storeId = current_store_id();
 
         if (!$storeId) {
@@ -36,8 +23,9 @@ class StaffLogController extends Controller
 
         $currentUser = auth('sanctum')->user();
 
-        // Sirf Owner dekh sakta hai
-        $isOwner = Store::where('id', $storeId)
+        // Central database se owner check
+        $isOwner = \App\Models\Store::on('central')
+            ->where('id', $storeId)
             ->where('user_id', $currentUser->id)
             ->exists();
 
