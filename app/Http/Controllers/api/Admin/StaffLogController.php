@@ -12,6 +12,19 @@ class StaffLogController extends Controller
 {
     public function index(Request $request)
     {
+
+        $storeId = current_store_id();
+        $currentUser = auth('sanctum')->user();
+
+        // DEBUG - yeh temporary hai
+        return response()->json([
+            'debug' => true,
+            'store_id' => $storeId,
+            'user_id' => $currentUser?->id,
+            'user_email' => $currentUser?->email,
+            'is_owner' => Store::where('id', $storeId)->where('user_id', $currentUser?->id)->exists(),
+            'store_owner_id' => Store::where('id', $storeId)->value('user_id'),
+        ]);
         $storeId = current_store_id();
 
         if (!$storeId) {
