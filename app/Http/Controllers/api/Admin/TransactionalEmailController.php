@@ -228,18 +228,38 @@ class TransactionalEmailController extends Controller
 
     public function deletePhrase(string $key, int $phraseId)
     {
-        $tpl = TransactionalEmailTemplate::ofStore(current_store_id())->key($key)->firstOrFail();
+        $tpl = TransactionalEmailTemplate::ofStore(current_store_id())->key($key)->first();
+
+        if (!$tpl) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Template not found.',
+            ], 404);
+        }
 
         $phrase = TransactionalEmailPhrase::where('template_id', $tpl->id)
             ->where('id', $phraseId)
-            ->where('is_system', false)
-            ->firstOrFail();
+            ->first();
+
+        if (!$phrase) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Phrase not found.',
+            ], 404);
+        }
+
+        if ($phrase->is_system) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'System phrase cannot be deleted.',
+            ], 403);
+        }
 
         $phrase->delete();
 
         return response()->json([
             'status'  => true,
-            'message' => 'Phrase deleted.',
+            'message' => 'Phrase deleted successfully.',
         ]);
     }
 
