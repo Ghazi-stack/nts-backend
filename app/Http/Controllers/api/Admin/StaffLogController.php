@@ -12,7 +12,10 @@ class StaffLogController extends Controller
 {
     public function index(Request $request)
     {
-        $storeId = current_store_id();
+        // Actual store id lo (legacy nahi)
+        $store = current_store_registry();
+        $storeId = $store->id ?? current_store_id();
+
         $currentUser = auth('sanctum')->user();
 
         if (!$storeId) {
@@ -42,7 +45,10 @@ class StaffLogController extends Controller
             ], 403);
         }
 
-        $query = StaffLog::where('store_id', $storeId)
+        // Staff logs ke liye legacy store id use karo (tenant DB mein wahi hai)
+        $legacyStoreId = current_store_id();
+
+        $query = StaffLog::where('store_id', $legacyStoreId)
             ->orderBy('id', 'desc');
 
         if ($search = $request->input('search')) {
