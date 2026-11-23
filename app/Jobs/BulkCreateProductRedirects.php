@@ -64,6 +64,17 @@ class BulkCreateProductRedirects implements ShouldQueue
             ->orderBy('id')
             ->chunkById(100, function ($products) use (&$created, &$processed, $total, $progressKey) {
                 foreach ($products as $product) {
+                    // Cancel check
+                    if (Cache::get($progressKey . '_cancel')) {
+                        Cache::put($progressKey, [
+                            'current' => $processed,
+                            'total'   => $total,
+                            'created' => $created,
+                            'status'  => 'cancelled',
+                        ], 7200);
+                        return false; // Stop chunking
+                    }
+
                     $seo = ProductSeo::on('tenant')
                         ->where('product_id', $product->id)
                         ->where('store_id', $this->storeId)
@@ -96,7 +107,7 @@ class BulkCreateProductRedirects implements ShouldQueue
                         ]
                     );
 
-                    // 2. ProductSeo update (new URL)
+                    // 2. ProductSeo update
                     $seo->update([
                         'product_url' => $newUrl,
                     ]);
@@ -111,14 +122,19 @@ class BulkCreateProductRedirects implements ShouldQueue
                     'created' => $created,
                     'status'  => 'processing',
                 ], 7200);
+
+                return true;
             });
 
-        Cache::put($progressKey, [
-            'current' => $processed,
-            'total'   => $total,
-            'created' => $created,
-            'status'  => 'completed',
-        ], 7200);
+        // Final status (agar cancel nahi hua)
+        if (!Cache::get($progressKey . '_cancel')) {
+            Cache::put($progressKey, [
+                'current' => $processed,
+                'total'   => $total,
+                'created' => $created,
+                'status'  => 'completed',
+            ], 7200);
+        }
     }
 
     private function generateProductUrl($product): string

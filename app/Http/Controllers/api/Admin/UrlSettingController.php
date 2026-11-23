@@ -342,7 +342,7 @@ class UrlSettingController extends Controller
         ]);
     }
 
-     public function bulkUpdateProgress($progressKey)
+    public function bulkUpdateProgress($progressKey)
     {
         $progress = Cache::get($progressKey, [
             'current' => 0,
@@ -351,9 +351,49 @@ class UrlSettingController extends Controller
             'status'  => 'unknown',
         ]);
 
+        // Message
+        $message = null;
+        switch ($progress['status']) {
+            case 'queued':
+                $message = 'Waiting to start...';
+                break;
+            case 'processing':
+                $message = "Processing {$progress['current']} of {$progress['total']}...";
+                break;
+            case 'completed':
+                $message = $progress['created'] === 0
+                    ? 'No updates needed. All URLs are already up to date.'
+                    : "Completed. {$progress['created']} redirect(s) created.";
+                break;
+            case 'cancelled':
+                $message = 'Process was cancelled.';
+                break;
+            case 'failed':
+                $message = 'Process failed.';
+                break;
+        }
+
+        $progress['message'] = $message;
+
         return response()->json($progress);
     }
 
+
+    public function cancelBulkUpdate(Request $request)
+    {
+        $progressKey = $request->input('progress_key');
+
+        if (!$progressKey) {
+            return response()->json(['status' => false, 'message' => 'Progress key is required.'], 400);
+        }
+
+        Cache::put($progressKey . '_cancel', true, 7200);
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Cancel requested.',
+        ]);
+    }
 
     // ===================== REDIRECTS CRUD =====================
 
