@@ -674,14 +674,14 @@ class ProductController extends Controller
         }
 
         $slug = trim($slug, '/');
+        $slugWithSlash = $slug . '/';
 
         $cacheKey = "product_by_url_store_{$storeId}_slug_" . md5($slug);
 
         try {
-            // Fast Cache - 10 minutes
-            $product = Cache::remember($cacheKey, 5, function () use ($slug, $storeId) {
+            $product = Cache::remember($cacheKey, 5, function () use ($slug, $slugWithSlash, $storeId) {
 
-                // === Fastest First Try: Direct SKU (jaise purana code tha) ===
+                // === Fastest First Try: Direct SKU ===
                 $product = Product::where('store_id', $storeId)
                     ->where('visible_on_storefront', 1)
                     ->where('sku', $slug)
@@ -698,11 +698,14 @@ class ProductController extends Controller
                 if (!$product) {
                     $product = Product::where('store_id', $storeId)
                         ->where('visible_on_storefront', 1)
-                        ->where(function ($q) use ($slug) {
+                        ->where(function ($q) use ($slug, $slugWithSlash) {
                             $q->where('slug', $slug)
-                                ->orWhereHas('seo', function ($sq) use ($slug) {
+                                ->orWhere('slug', $slugWithSlash)
+                                ->orWhereHas('seo', function ($sq) use ($slug, $slugWithSlash) {
                                     $sq->where('product_url', $slug)
-                                        ->orWhere('product_url', '/' . $slug);
+                                        ->orWhere('product_url', '/' . $slug)
+                                        ->orWhere('product_url', $slugWithSlash)
+                                        ->orWhere('product_url', '/' . $slugWithSlash);
                                 });
                         })
                         ->with([
@@ -733,7 +736,6 @@ class ProductController extends Controller
                 ], 403);
             }
 
-            // Reviews ko alag cache mein rakho (response fast rahe)
             $reviews = Cache::remember("product_reviews_{$product->id}", 5, function () use ($product) {
                 return $product->reviews()
                     ->with('user:id,name')
@@ -3277,7 +3279,7 @@ class ProductController extends Controller
             $productIds = array_values(array_unique(
                 array_filter(
                     array_map('intval', $productIds),
-                    fn ($id) => $id > 0
+                    fn($id) => $id > 0
                 )
             ));
 
@@ -3396,7 +3398,6 @@ class ProductController extends Controller
                     'Access-Control-Expose-Headers' => 'X-Total-Rows',
                 ])
                 ->deleteFileAfterSend(true);
-
         } catch (\Throwable $e) {
             if (is_resource($handle)) {
                 fclose($handle);
