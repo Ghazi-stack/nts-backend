@@ -286,4 +286,27 @@ class TransactionalEmailController extends Controller
             'message' => 'Code updated successfully.',
         ]);
     }
+
+    public function resetToDefault(string $key)
+    {
+        $storeId = current_store_id();
+
+        $tpl = TransactionalEmailTemplate::ofStore($storeId)
+            ->key($key)
+            ->with('phrases')
+            ->first();
+
+        if (!$tpl) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Template not found.',
+            ], 404);
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Template data fetched.',
+            'data'    => new TransactionalEmailTemplateResource($tpl),
+        ]);
+    }
 }
