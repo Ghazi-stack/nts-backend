@@ -46,9 +46,17 @@ class PermissionSeeder extends Seeder
             // Marketing
             ['group' => 'marketing', 'name' => 'coupon_codes', 'label' => 'Coupon Codes', 'slug' => '/manage/marketing/coupon-codes', 'sort_order' => 1],
             ['group' => 'marketing', 'name' => 'email_marketing', 'label' => 'Email Marketing', 'slug' => '/manage/marketing/email-marketing', 'sort_order' => 2],
+            ['group' => 'marketing', 'name' => 'transactional_emails', 'label' => 'Transactional emails', 'slug' => '/manage/marketing/transactional-emails', 'sort_order' => 3],
+
+            // analytics
+            ['group' => 'analytics', 'name' => 'real_time', 'label' => 'Real Time', 'slug' => '/manage/analytics/real-time', 'sort_order' => 1],
+            ['group' => 'analytics', 'name' => 'merchandising', 'label' => 'Merchandising', 'slug' => '/manage/analytics/merchandising', 'sort_order' => 2],
+            ['group' => 'analytics', 'name' => 'orders', 'label' => 'Orders', 'slug' => '/manage/analytics/orders', 'sort_order' => 3],
+            ['group' => 'analytics', 'name' => 'customers', 'label' => 'Customers', 'slug' => '/manage/analytics/customers', 'sort_order' => 4],
 
             // Settings
             ['group' => 'settings', 'name' => 'settings', 'label' => 'Settings', 'slug' => '/manage/settings', 'sort_order' => 1],
+            ['group' => 'settings', 'name' => 'store_log', 'label' => 'Store Log', 'slug' => '/manage/settings/store-log', 'sort_order' => 2],
         ];
 
         foreach ($permissions as $perm) {
