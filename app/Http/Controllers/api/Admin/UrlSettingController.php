@@ -408,17 +408,17 @@ class UrlSettingController extends Controller
                 ], 400);
             }
 
-            $perPage  = $request->query('perPage', 50);
-            $search   = trim((string) $request->query('search', ''));
-            $sortBy   = $request->query('sortBy', 'created_at'); // old_url, new_url, created_at
-            $sortDir  = $request->query('sortDir', 'desc'); // asc, desc
+            $perPage       = $request->query('perPage', 50);
+            $search        = trim((string) $request->query('search', ''));
+            $sortBy        = $request->query('sortBy', 'created_at');
+            $sortDirection = $request->query('sortDirection', 'desc');
 
-            // Allowed sort columns
-            $allowedSort = ['old_url', 'new_url', 'created_at', 'entity_type', 'redirect_type'];
+            // Sirf old_url aur new_url allowed
+            $allowedSort = ['old_url', 'new_url'];
             if (!in_array($sortBy, $allowedSort)) {
                 $sortBy = 'created_at';
             }
-            $sortDir = strtolower($sortDir) === 'asc' ? 'asc' : 'desc';
+            $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
 
             $query = Redirect::where('store_id', $storeId);
 
@@ -432,7 +432,7 @@ class UrlSettingController extends Controller
             }
 
             $total = $query->count();
-            $redirects = $query->orderBy($sortBy, $sortDir)->paginate($perPage);
+            $redirects = $query->orderBy($sortBy, $sortDirection)->paginate($perPage);
 
             $data = $redirects->getCollection()->map(function ($redirect) {
                 return [
@@ -469,7 +469,6 @@ class UrlSettingController extends Controller
             ], 500);
         }
     }
-
     public function storeRedirect(Request $request)
     {
         try {
