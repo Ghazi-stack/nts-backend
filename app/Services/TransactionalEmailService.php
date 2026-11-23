@@ -24,11 +24,17 @@ class TransactionalEmailService
             $vars[$phrase->phrase_name] = $phrase->phrase_value;
         }
 
+        // Pehla pass: phrases replace
         $subject = $this->interpolate($tpl->subject ?? '', $vars);
         $html    = $this->interpolate($tpl->body_html ?? '', $vars);
         $text    = $tpl->body_text
             ? $this->interpolate($tpl->body_text, $vars)
             : strip_tags($html);
+
+        // Doosra pass: phrase values ke andar {{name}}, {{store}} replace
+        $subject = $this->interpolate($subject, $vars);
+        $html    = $this->interpolate($html, $vars);
+        $text    = $this->interpolate($text, $vars);
 
         return [
             'subject' => $subject,
@@ -52,7 +58,7 @@ class TransactionalEmailService
     {
         return preg_replace_callback('/{{\s*([a-zA-Z0-9_\.]+)\s*}}/', function ($m) use ($data) {
             $key = $m[1];
-            return Arr::get($data, $key, $m[0]); // nahi mila to original {{key}} chhod do
+            return Arr::get($data, $key, $m[0]);
         }, $str);
     }
 }
