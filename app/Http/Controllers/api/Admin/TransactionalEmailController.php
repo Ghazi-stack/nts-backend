@@ -248,13 +248,6 @@ class TransactionalEmailController extends Controller
             ], 404);
         }
 
-        if ($phrase->is_system) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'System phrase cannot be deleted.',
-            ], 403);
-        }
-
         $phrase->delete();
 
         return response()->json([
