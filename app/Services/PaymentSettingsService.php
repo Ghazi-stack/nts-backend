@@ -343,21 +343,61 @@ class PaymentSettingsService
         });
     }
 
+    // public function disableMethod(
+    //     int $storeId,
+    //     string $methodCode
+    // ): StorePaymentMethod {
+    //     $method = $this->getMethod($storeId, $methodCode);
+
+    //     if (!$method) {
+    //         throw new RuntimeException('Payment method not found.');
+    //     }
+
+    //     $method->is_enabled = false;
+    //     $method->save();
+
+    //     return $method->fresh();
+    // }
+
+
     public function disableMethod(
         int $storeId,
         string $methodCode
     ): StorePaymentMethod {
-        $method = $this->getMethod($storeId, $methodCode);
+        return DB::connection('tenant')->transaction(function () use (
+            $storeId,
+            $methodCode
+        ) {
+            $method = StorePaymentMethod::forStore($storeId)
+                ->where('method_code', $methodCode)
+                ->lockForUpdate()
+                ->first();
 
-        if (!$method) {
-            throw new RuntimeException('Payment method not found.');
-        }
+            if (!$method) {
+                throw new RuntimeException('Payment method not found.');
+            }
 
-        $method->is_enabled = false;
-        $method->save();
+            // Only online payment methods lose their saved configuration.
+            if ($method->category === 'online') {
+                if ($methodCode === 'stripe') {
+                    throw new RuntimeException(
+                        'Stripe must be disconnected through the Stripe OAuth disconnect flow.'
+                    );
+                }
 
-        return $method->fresh();
+                $method->configuration = null;
+                $method->credentials = null;
+                $method->is_configured = false;
+            }
+
+            // Offline methods retain their configuration and credentials.
+            $method->is_enabled = false;
+            $method->save();
+
+            return $method->fresh();
+        });
     }
+
 
     /**
      * Return wallet provider options from the catalog and tenant records.

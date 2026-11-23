@@ -11,14 +11,18 @@ use RuntimeException;
 use Throwable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use App\Services\StripeAccountDisconnector;
 
 class PaymentSettingsController extends Controller
 {
     protected PaymentSettingsService $paymentSettings;
 
-    public function __construct(PaymentSettingsService $paymentSettings)
+    protected StripeAccountDisconnector $stripeDisconnector;
+
+    public function __construct(PaymentSettingsService $paymentSettings, StripeAccountDisconnector $stripeDisconnector)
     {
         $this->paymentSettings = $paymentSettings;
+        $this->stripeDisconnector = $stripeDisconnector;
     }
 
     private function keysToSnakeCase(array $data): array
@@ -590,24 +594,88 @@ class PaymentSettingsController extends Controller
     /**
      * PATCH /payment-settings/{methodCode}/disable
      */
+    // public function disable(string $methodCode)
+    // {
+    //     try {
+    //         $method = $this->paymentSettings->disableMethod(
+    //             $this->getStoreId(),
+    //             $methodCode
+    //         );
+
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Payment method disabled successfully.',
+    //             'data' => $this->formatMethod($method),
+    //         ]);
+    //     } catch (RuntimeException $e) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => $e->getMessage(),
+    //         ], 404);
+    //     } catch (Throwable $e) {
+    //         report($e);
+
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Unable to disable payment method.',
+    //         ], 500);
+    //     }
+    // }
+
+    
     public function disable(string $methodCode)
     {
         try {
-            $method = $this->paymentSettings->disableMethod(
-                $this->getStoreId(),
+            $storeId = $this->getStoreId();
+
+            $method = $this->paymentSettings->getMethod(
+                $storeId,
                 $methodCode
             );
+
+            if (!$method) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Payment method not found.',
+                ], 404);
+            }
+
+            // Stripe requires OAuth revocation before clearing credentials.
+            if ($methodCode === 'stripe') {
+                if ($method->category !== 'online') {
+                    throw new RuntimeException(
+                        'Stripe must be configured as an online payment method.'
+                    );
+                }
+
+                $this->stripeDisconnector->disconnectForStoreId($storeId);
+
+                // The disconnector clears the Stripe record and disconnects
+                // the tenant database connection. Update the loaded model
+                // for the response without querying the database again.
+                $method->configuration = null;
+                $method->credentials = null;
+                $method->is_enabled = false;
+                $method->is_configured = false;
+            } else {
+                $method = $this->paymentSettings->disableMethod(
+                    $storeId,
+                    $methodCode
+                );
+            }
 
             return response()->json([
                 'status' => true,
                 'message' => 'Payment method disabled successfully.',
                 'data' => $this->formatMethod($method),
             ]);
+
         } catch (RuntimeException $e) {
             return response()->json([
                 'status' => false,
                 'message' => $e->getMessage(),
-            ], 404);
+            ], 422);
+
         } catch (Throwable $e) {
             report($e);
 

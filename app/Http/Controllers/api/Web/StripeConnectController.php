@@ -12,12 +12,15 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Stripe\Stripe;
+use App\Services\StripeAccountDisconnector;
+use RuntimeException;
 
 class StripeConnectController extends Controller
 {
     public function __construct(
         private TenantCredentialResolver $tenantResolver,
-        private PaymentSettingsService $paymentSettings
+        private PaymentSettingsService $paymentSettings,
+        private StripeAccountDisconnector $stripeDisconnector
     ) {}
 
     /**
@@ -734,6 +737,139 @@ class StripeConnectController extends Controller
     /**
      * Disconnect the current store's Stripe account.
      */
+    // public function disconnect()
+    // {
+    //     $storeId = current_store_id();
+
+    //     if (!$storeId) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Store not selected.',
+    //         ], 400);
+    //     }
+
+    //     $store = DB::connection('central')
+    //         ->table('stores')
+    //         ->where('legacy_store_id', $storeId)
+    //         ->where('provisioning_status', 'active')
+    //         ->first();
+
+    //     if (!$store || !$store->stripe_account_id) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'No Stripe account is connected.',
+    //         ], 404);
+    //     }
+
+    //     // Select the same environment used when the account was connected.
+    //     $environment = (bool) $store->stripe_livemode
+    //         ? 'live'
+    //         : 'sandbox';
+
+    //     $stripeConfig = config("services.stripe.connect.{$environment}");
+
+    //     $secret = $stripeConfig['secret'] ?? null;
+    //     $clientId = $stripeConfig['client_id'] ?? null;
+
+    //     if (!$secret || !$clientId) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => "Stripe {$environment} configuration is incomplete.",
+    //         ], 500);
+    //     }
+
+    //     $connectedAccountId = $store->stripe_account_id;
+
+    //     try {
+    //         $this->tenantResolver->connectByStoreHash($store->store_hash);
+
+    //         $credentials = $this->paymentSettings->getCredentials(
+    //             (int) ($store->legacy_store_id ?? $store->id),
+    //             'stripe'
+    //         );
+
+    //         if (
+    //             !$credentials ||
+    //             empty($credentials['stripe_user_id'])
+    //         ) {
+    //             throw new \RuntimeException(
+    //                 'Stored Stripe connection credentials are missing.'
+    //             );
+    //         }
+
+    //         // Verify stored account environment before deauthorization.
+    //         $storedLivemode = (bool) ($credentials['livemode'] ?? false);
+    //         $expectedLivemode = $environment === 'live';
+
+    //         if ($storedLivemode !== $expectedLivemode) {
+    //             throw new \RuntimeException(
+    //                 'Stored Stripe account environment does not match the central store record.'
+    //             );
+    //         }
+
+    //         // Revoke OAuth authorization using the matching environment credentials.
+    //         $response = Http::withBasicAuth($secret, '')
+    //             ->asForm()
+    //             ->timeout(30)
+    //             ->post('https://connect.stripe.com/oauth/deauthorize', [
+    //                 'client_id' => $clientId,
+    //                 'stripe_user_id' => $connectedAccountId,
+    //             ]);
+
+    //         if (!$response->successful()) {
+    //             Log::error('Stripe deauthorization failed', [
+    //                 'store_hash' => $store->store_hash,
+    //                 'environment' => $environment,
+    //                 'response' => $response->json(),
+    //             ]);
+
+    //             return response()->json([
+    //                 'status' => false,
+    //                 'message' => 'Stripe could not revoke the connection.',
+    //             ], 422);
+    //         }
+
+    //         $this->paymentSettings->disconnectStripeAccount(
+    //             (int) ($store->legacy_store_id ?? $store->id)
+    //         );
+
+    //         DB::connection('central')
+    //             ->table('stores')
+    //             ->where('id', $store->id)
+    //             ->update([
+    //                 'stripe_account_id' => null,
+    //                 'stripe_livemode' => null,
+    //                 'stripe_connected_at' => null,
+    //                 'updated_at' => now(),
+    //             ]);
+
+    //         Log::info('Stripe account disconnected successfully', [
+    //             'store_hash' => $store->store_hash,
+    //             'environment' => $environment,
+    //             'stripe_account_id' => $connectedAccountId,
+    //         ]);
+
+    //         return response()->json([
+    //             'status' => true,
+    //             'message' => 'Stripe disconnected successfully.',
+    //         ]);
+    //     } catch (\Throwable $e) {
+    //         Log::error('Stripe disconnect failed', [
+    //             'store_hash' => $store->store_hash,
+    //             'environment' => $environment,
+    //             'error' => $e->getMessage(),
+    //         ]);
+
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Unable to disconnect Stripe.',
+    //         ], 500);
+    //     } finally {
+    //         $this->tenantResolver->disconnect();
+    //     }
+    // }
+
+
     public function disconnect()
     {
         $storeId = current_store_id();
@@ -745,115 +881,30 @@ class StripeConnectController extends Controller
             ], 400);
         }
 
-        $store = DB::connection('central')
-            ->table('stores')
-            ->where('legacy_store_id', $storeId)
-            ->where('provisioning_status', 'active')
-            ->first();
-
-        if (!$store || !$store->stripe_account_id) {
-            return response()->json([
-                'status' => false,
-                'message' => 'No Stripe account is connected.',
-            ], 404);
-        }
-
-        // Select the same environment used when the account was connected.
-        $environment = (bool) $store->stripe_livemode
-            ? 'live'
-            : 'sandbox';
-
-        $stripeConfig = config("services.stripe.connect.{$environment}");
-
-        $secret = $stripeConfig['secret'] ?? null;
-        $clientId = $stripeConfig['client_id'] ?? null;
-
-        if (!$secret || !$clientId) {
-            return response()->json([
-                'status' => false,
-                'message' => "Stripe {$environment} configuration is incomplete.",
-            ], 500);
-        }
-
-        $connectedAccountId = $store->stripe_account_id;
-
         try {
-            $this->tenantResolver->connectByStoreHash($store->store_hash);
-
-            $credentials = $this->paymentSettings->getCredentials(
-                (int) ($store->legacy_store_id ?? $store->id),
-                'stripe'
+            $this->stripeDisconnector->disconnectForStoreId(
+                (int) $storeId
             );
-
-            if (
-                !$credentials ||
-                empty($credentials['stripe_user_id'])
-            ) {
-                throw new \RuntimeException(
-                    'Stored Stripe connection credentials are missing.'
-                );
-            }
-
-            // Verify stored account environment before deauthorization.
-            $storedLivemode = (bool) ($credentials['livemode'] ?? false);
-            $expectedLivemode = $environment === 'live';
-
-            if ($storedLivemode !== $expectedLivemode) {
-                throw new \RuntimeException(
-                    'Stored Stripe account environment does not match the central store record.'
-                );
-            }
-
-            // Revoke OAuth authorization using the matching environment credentials.
-            $response = Http::withBasicAuth($secret, '')
-                ->asForm()
-                ->timeout(30)
-                ->post('https://connect.stripe.com/oauth/deauthorize', [
-                    'client_id' => $clientId,
-                    'stripe_user_id' => $connectedAccountId,
-                ]);
-
-            if (!$response->successful()) {
-                Log::error('Stripe deauthorization failed', [
-                    'store_hash' => $store->store_hash,
-                    'environment' => $environment,
-                    'response' => $response->json(),
-                ]);
-
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Stripe could not revoke the connection.',
-                ], 422);
-            }
-
-            $this->paymentSettings->disconnectStripeAccount(
-                (int) ($store->legacy_store_id ?? $store->id)
-            );
-
-            DB::connection('central')
-                ->table('stores')
-                ->where('id', $store->id)
-                ->update([
-                    'stripe_account_id' => null,
-                    'stripe_livemode' => null,
-                    'stripe_connected_at' => null,
-                    'updated_at' => now(),
-                ]);
-
-            Log::info('Stripe account disconnected successfully', [
-                'store_hash' => $store->store_hash,
-                'environment' => $environment,
-                'stripe_account_id' => $connectedAccountId,
-            ]);
 
             return response()->json([
                 'status' => true,
                 'message' => 'Stripe disconnected successfully.',
             ]);
+
+        } catch (RuntimeException $e) {
+            Log::error('Stripe disconnect failed', [
+                'store_id' => $storeId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+
         } catch (\Throwable $e) {
             Log::error('Stripe disconnect failed', [
-                'store_hash' => $store->store_hash,
-                'environment' => $environment,
+                'store_id' => $storeId,
                 'error' => $e->getMessage(),
             ]);
 
@@ -861,10 +912,6 @@ class StripeConnectController extends Controller
                 'status' => false,
                 'message' => 'Unable to disconnect Stripe.',
             ], 500);
-        } finally {
-            $this->tenantResolver->disconnect();
         }
     }
-
-
 }
