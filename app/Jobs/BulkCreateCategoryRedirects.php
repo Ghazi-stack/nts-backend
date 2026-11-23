@@ -62,6 +62,17 @@ class BulkCreateCategoryRedirects implements ShouldQueue
             ->orderBy('id')
             ->chunkById(100, function ($categories) use (&$created, &$processed, $total, $progressKey) {
                 foreach ($categories as $category) {
+                    // Cancel check
+                    if (Cache::get($progressKey . '_cancel')) {
+                        Cache::put($progressKey, [
+                            'current' => $processed,
+                            'total'   => $total,
+                            'created' => $created,
+                            'status'  => 'cancelled',
+                        ], 7200);
+                        return false;
+                    }
+
                     $oldSlug = $category->slug ?? Str::slug($category->name);
                     $oldUrl = '/' . $oldSlug . '/';
                     $newUrl = $this->generateCategoryUrl($category);
@@ -101,14 +112,19 @@ class BulkCreateCategoryRedirects implements ShouldQueue
                     'created' => $created,
                     'status'  => 'processing',
                 ], 7200);
+
+                return true;
             });
 
-        Cache::put($progressKey, [
-            'current' => $processed,
-            'total'   => $total,
-            'created' => $created,
-            'status'  => 'completed',
-        ], 7200);
+        // Final status
+        if (!Cache::get($progressKey . '_cancel')) {
+            Cache::put($progressKey, [
+                'current' => $processed,
+                'total'   => $total,
+                'created' => $created,
+                'status'  => 'completed',
+            ], 7200);
+        }
     }
 
     private function generateCategoryUrl($category): string

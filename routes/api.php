@@ -691,9 +691,10 @@ Route::prefix('dashboard')->middleware([
 
             // Progress (common)
             Route::get('/product/bulk-update/progress/{progressKey}', 'bulkUpdateProgress');
-            Route::post('/bulk-cancel', 'cancelBulkUpdate');
             Route::get('/category/bulk-update/progress/{progressKey}', 'bulkUpdateProgress');
             Route::get('/webpage/bulk-update/progress/{progressKey}', 'bulkUpdateProgress');
+
+            Route::post('/bulk-cancel', 'cancelBulkUpdate');
         });
 
     Route::prefix('currencies')->middleware([
