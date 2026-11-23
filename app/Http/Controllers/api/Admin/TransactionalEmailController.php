@@ -221,26 +221,54 @@ class TransactionalEmailController extends Controller
     public function updatePhrases(Request $r, string $key)
     {
         $r->validate([
-            'phrases'                 => 'required|array',
-            'phrases.*.phraseName'    => 'required|string',
-            'phrases.*.phraseValue'   => 'nullable|string',
+            'phrases'               => 'required|array',
+            'phrases.*.id'          => 'nullable|integer',
+            'phrases.*.phraseName'  => 'required|string',
+            'phrases.*.phraseValue' => 'nullable|string',
         ]);
 
         $tpl = TransactionalEmailTemplate::ofStore(current_store_id())->key($key)->firstOrFail();
 
+        $duplicates = [];
+
         foreach ($r->phrases as $p) {
-            TransactionalEmailPhrase::updateOrCreate(
-                [
-                    'template_id' => $tpl->id,
-                    'phrase_name' => $p['phraseName'],
-                ],
-                [
-                    'phrase_value' => $p['phraseValue'] ?? '',
-                ]
-            );
+            if (!empty($p['id'])) {
+                // ID hai - update karo
+                TransactionalEmailPhrase::where('id', $p['id'])
+                    ->where('template_id', $tpl->id)
+                    ->update([
+                        'phrase_name'  => $p['phraseName'],
+                        'phrase_value' => $p['phraseValue'] ?? '',
+                    ]);
+            } else {
+                // ID nahi - check duplicate
+                $exists = TransactionalEmailPhrase::where('template_id', $tpl->id)
+                    ->where('phrase_name', $p['phraseName'])
+                    ->exists();
+
+                if ($exists) {
+                    $duplicates[] = $p['phraseName'];
+                } else {
+                    TransactionalEmailPhrase::create([
+                        'template_id'  => $tpl->id,
+                        'phrase_name'  => $p['phraseName'],
+                        'phrase_value' => $p['phraseValue'] ?? '',
+                        'is_system'    => false,
+                    ]);
+                }
+            }
         }
 
         $tpl->update(['updated_by' => auth()->id()]);
+
+        // Response
+        if (!empty($duplicates)) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Duplicate phrase name: ' . implode(', ', $duplicates),
+                'duplicates' => $duplicates,
+            ], 422);
+        }
 
         return response()->json([
             'status'  => true,
