@@ -122,7 +122,20 @@ class TransactionalEmailController extends Controller
     public function preview(Request $r, string $key)
     {
         $tpl = $this->svc->get(current_store_id(), $key);
-        $render = $this->svc->render($tpl, $r->input('data', []));
+
+        // Store info lo central database se
+        $store = \App\Models\Store::on('central')
+            ->where('legacy_store_id', current_store_id())
+            ->orWhere('id', current_store_id())
+            ->first();
+
+        // Data merge karo - store name aur base_url automatically add
+        $data = array_merge($r->input('data', []), [
+            'store'     => $store->name ?? ($r->input('data.store') ?? 'Store'),
+            'store_url' => $store->base_url ?? '',
+        ]);
+
+        $render = $this->svc->render($tpl, $data);
 
         return response()->json([
             'status'  => true,
@@ -130,7 +143,6 @@ class TransactionalEmailController extends Controller
             'data'    => $render
         ]);
     }
-
     public function sendTest(Request $r, string $key)
     {
         $storeId = current_store_id();
