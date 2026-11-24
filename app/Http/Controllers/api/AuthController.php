@@ -2435,7 +2435,6 @@ class AuthController extends Controller
 
             $email    = $request->email;
             $password = $request->password;
-            // $storeId  = $request->header('storeId', $request->input('storeId'));
 
             $central = DB::connection('central');
 
@@ -2520,83 +2519,20 @@ class AuthController extends Controller
                 $permissionStoreIds
             )));
 
+            // Header se store ID lo
+            $headerStoreId = $request->header('storeId')
+                ?: $request->header('store_id')
+                ?: $request->header('Store-Id');
+
             $stores = !empty($accessibleStoreIds)
                 ? $central->table('stores')
-                ->whereIn('id', $accessibleStoreIds)
-                ->orderBy('id')
-                ->get()
+                    ->whereIn('id', $accessibleStoreIds)
+                    ->when($headerStoreId, function ($q) use ($headerStoreId) {
+                        $q->where('legacy_store_id', $headerStoreId);
+                    })
+                    ->orderBy('id')
+                    ->get()
                 : collect();
-
-            /*
-            |--------------------------------------------------------------------------
-            | RESOLVE REQUESTED STORE
-            |--------------------------------------------------------------------------
-            */
-
-            // $selectedStore = null;
-
-            // // Resolve an explicitly requested store first.
-            // if ($storeId !== null && $storeId !== '') {
-            //     $selectedStore = $central->table('stores')
-            //         ->where('legacy_store_id', $storeId)
-            //         ->first();
-
-            //     if (!$selectedStore) {
-            //         $selectedStore = $stores->first(
-            //             fn ($store) => (int) $store->id === (int) $storeId
-            //         );
-            //     }
-
-            //     if (
-            //         !$selectedStore ||
-            //         !in_array((int) $selectedStore->id, $accessibleStoreIds, true)
-            //     ) {
-            //         return response()->json([
-            //             'status' => false,
-            //             'message' => 'You do not have access to this store.',
-            //         ], 403);
-            //     }
-            // } else {
-            //     // No store was specified: default to the first owned store.
-            //     $selectedStore = $ownedStores->first();
-
-            //     // If the user owns no stores, use their first accessible store.
-            //     if (!$selectedStore) {
-            //         $selectedStore = $stores->first();
-            //     }
-            // }
-
-            // $permissionStoreId = $selectedStore
-            //     ? (int) $selectedStore->id
-            //     : null;
-
-            // /*
-            // |--------------------------------------------------------------------------
-            // | CENTRAL STORE-SCOPED PERMISSIONS
-            // |--------------------------------------------------------------------------
-            // */
-
-            // $adminPermissions = $permissionStoreId
-            //     ? $admin->permissions()
-            //         ->wherePivot('store_id', $permissionStoreId)
-            //         ->orderBy('group')
-            //         ->orderBy('sort_order')
-            //         ->get()
-            //         ->groupBy('group')
-            //         ->map(function ($items, $group) {
-            //             return [
-            //                 'group' => $group,
-            //                 'permissions' => $items->map(function ($permission) {
-            //                     return [
-            //                         'id'    => $permission->id,
-            //                         'name'  => $permission->name,
-            //                         'label' => $permission->label,
-            //                         'slug'  => $permission->slug,
-            //                     ];
-            //                 })->values(),
-            //             ];
-            //         })->values()
-            //     : collect();
 
             /*
             |--------------------------------------------------------------------------
@@ -2623,41 +2559,6 @@ class AuthController extends Controller
                 $accessToken->expires_at = $expireAt;
                 $accessToken->save();
             }
-
-            /*
-            |--------------------------------------------------------------------------
-            | STORE-SPECIFIC STAFF LOG
-            |--------------------------------------------------------------------------
-            */
-
-            // if ($selectedStore) {
-            //     \Log::info('Selected store tenant fields before login connection', [
-            //         'id' => $selectedStore->id ?? null,
-            //         'name' => $selectedStore->name ?? null,
-            //         'tenant_database' => $selectedStore->tenant_database ?? null,
-            //         'db_username' => $selectedStore->db_username ?? null,
-            //         'has_encrypted_password' => !empty($selectedStore->db_password_encrypted),
-            //         'db_host' => $selectedStore->db_host ?? null,
-            //         'db_port' => $selectedStore->db_port ?? null,
-            //     ]);  
-            //     app(\App\Services\TenantDatabaseManager::class)
-            //         ->connectForStore($selectedStore);  
-
-            //     try {
-            //         StaffLog::record([
-            //             // Tenant logs retain the legacy store ID.
-            //             'store_id'    => $selectedStore->legacy_store_id,
-            //             'user_id'     => $admin->id,
-            //             'username'    => $admin->email,
-            //             'action'      => '(Successfully logged in)',
-            //             'action_type' => 'login',
-            //             'ip_address'  => $request->ip(),
-            //         ]);
-            //     } finally {
-            //         app(\App\Services\TenantDatabaseManager::class)
-            //             ->disconnect();
-            //     }
-            // }
 
             /*
             |--------------------------------------------------------------------------
