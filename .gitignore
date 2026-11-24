@@ -22,3 +22,4 @@ yarn-error.log
 /public/product_images/
 composer.lock
 /public/debug
+/database/migrations/tenant.zip
