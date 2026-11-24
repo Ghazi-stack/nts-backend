@@ -228,7 +228,7 @@ class AuthController extends Controller
     //             //     $resetToken = app('auth.password.broker')->createToken($user);
 
     //             //     $resetLink =
-    //             //         'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
+    //             //         'https://dashboard.advertsedge.com/forgot-password?token='
     //             //         . $resetToken
     //             //         . '&email=' . urlencode($user->email);
 
@@ -261,7 +261,7 @@ class AuthController extends Controller
     //                 );
 
     //                 $resetLink =
-    //                     'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
+    //                     'https://dashboard.advertsedge.com/forgot-password?token='
     //                     . urlencode($resetToken)
     //                     . '&email=' . urlencode($user->email);
 
@@ -707,7 +707,7 @@ class AuthController extends Controller
                     $resetToken = Password::broker('central_users')->createToken($user);
 
                     $resetLink =
-                        'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
+                        'https://dashboard.advertsedge.com/forgot-password?token='
                         . $resetToken
                         . '&email=' . urlencode($user->email);
 
@@ -1420,7 +1420,7 @@ class AuthController extends Controller
                             ->createToken($existingUser);
 
                         $resetLink =
-                            'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
+                            'https://dashboard.advertsedge.com/forgot-password?token='
                             . $resetToken
                             . '&email=' . urlencode($existingUser->email);
 
@@ -1524,7 +1524,7 @@ class AuthController extends Controller
                     $resetToken = app('auth.password.broker')->createToken($user);
 
                     $resetLink =
-                        'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token='
+                        'https://dashboard.advertsedge.com/forgot-password?token='
                         . $resetToken
                         . '&email=' . urlencode($user->email);
 
@@ -1997,7 +1997,7 @@ class AuthController extends Controller
     //                 try {
     //                     $token = app('auth.password.broker')->createToken($existingUser);
 
-    //                     $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token=' . $token .
+    //                     $resetLink = 'https://dashboard.advertsedge.com/forgot-password?token=' . $token .
     //                         '&email=' . urlencode($existingUser->email);
 
     //                     Mail::to($existingUser->email)->send(
@@ -2087,7 +2087,7 @@ class AuthController extends Controller
     //             try {
     //                 $token = app('auth.password.broker')->createToken($user);
 
-    //                 $resetLink = 'https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token=' . $token .
+    //                 $resetLink = 'https://dashboard.advertsedge.com/forgot-password?token=' . $token .
     //                     '&email=' . urlencode($user->email);
 
     //                 Mail::to($user->email)->send(
@@ -4695,7 +4695,7 @@ class AuthController extends Controller
                 'created_at' => Carbon::now(),
             ]);
 
-            $resetLink = "https://admin-dashboard-nu-hazel-12.vercel.app/forgot-password?token={$plainToken}&email={$user->email}";
+            $resetLink = "https://dashboard.advertsedge.com/forgot-password?token={$plainToken}&email={$user->email}";
 
             Mail::to($user->email)->send(
                 new AdminForgotPasswordMail(

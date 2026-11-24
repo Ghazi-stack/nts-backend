@@ -47,7 +47,7 @@ class StoreAccessMail extends StoreMailable
         );
 
         $this->loginLink =
-            'https://admin-dashboard-nu-hazel-12.vercel.app/login';
+            'https://dashboard.advertsedge.com/login';
     }
 
     public function build()
