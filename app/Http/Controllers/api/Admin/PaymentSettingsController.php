@@ -155,8 +155,41 @@ class PaymentSettingsController extends Controller
     // }
 
     
+    // private function formatMethod($method): array
+    // {
+    //     return [
+    //         'id' => $method->id,
+    //         'storeId' => $method->store_id,
+    //         'methodCode' => $method->method_code,
+    //         'category' => $method->category,
+    //         'displayName' => $method->display_name,
+    //         'isEnabled' => (bool) $method->is_enabled,
+    //         'isConfigured' => (bool) $method->is_configured,
+    //         'availableCountries' => $method->available_countries,
+    //         'availableCurrencies' => $method->available_currencies,
+    //         'configuration' => $this->keysToCamelCase(
+    //             $method->configuration ?? []
+    //         ),
+    //         'hasCredentials' => !empty($method->credentials),
+    //         'createdAt' => $method->created_at,
+    //         'updatedAt' => $method->updated_at,
+    //     ];
+    // }
+
+
     private function formatMethod($method): array
     {
+        $configuration = $method->configuration ?? [];
+
+        // Include all existing Stripe defaults and saved settings
+        // in the same configuration object.
+        if ($method->method_code === 'stripe') {
+            $configuration = array_replace_recursive(
+                config('stripe_payment.defaults', []),
+                $configuration
+            );
+        }
+
         return [
             'id' => $method->id,
             'storeId' => $method->store_id,
@@ -167,14 +200,13 @@ class PaymentSettingsController extends Controller
             'isConfigured' => (bool) $method->is_configured,
             'availableCountries' => $method->available_countries,
             'availableCurrencies' => $method->available_currencies,
-            'configuration' => $this->keysToCamelCase(
-                $method->configuration ?? []
-            ),
+            'configuration' => $this->keysToCamelCase($configuration),
             'hasCredentials' => !empty($method->credentials),
             'createdAt' => $method->created_at,
             'updatedAt' => $method->updated_at,
         ];
     }
+
     
     private function validationErrorResponse($validator)
     {
