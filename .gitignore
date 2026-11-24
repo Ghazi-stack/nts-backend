@@ -23,3 +23,4 @@ yarn-error.log
 composer.lock
 /public/debug
 /database/migrations/tenant.zip
+/database/migrations.zip
