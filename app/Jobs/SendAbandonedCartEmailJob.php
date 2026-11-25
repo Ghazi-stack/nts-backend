@@ -1,17 +1,20 @@
 <?php
+
 namespace App\Jobs;
 
 use App\Mail\AbandonedCartMail;
 use App\Models\Cart;
 use App\Models\Store;
 use App\Models\User;
+use App\Services\TenantCredentialResolver;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class SendAbandonedCartEmailJob implements ShouldQueue
@@ -23,14 +26,14 @@ class SendAbandonedCartEmailJob implements ShouldQueue
     public $tries = 3;
 
     public function __construct(
-        public Collection $cartItems,
+        public string $storeHash,
+        public int $storeId,
+        public array $cartIds,
         public string $userEmail,
         public string $userName,
-        public int $storeId,
         public string $emailType,
         public string $timestampColumn
     ) {
-        // Only allow the known reminder timestamp columns.
         if (!in_array($this->timestampColumn, [
             'email_1hr_sent_at',
             'email_24hr_sent_at',
@@ -40,26 +43,70 @@ class SendAbandonedCartEmailJob implements ShouldQueue
                 'Invalid abandoned-cart reminder timestamp column.'
             );
         }
+
+        if (!in_array($this->emailType, ['1hr', '24hr', '48hr'], true)) {
+            throw new \InvalidArgumentException(
+                'Invalid abandoned-cart reminder type.'
+            );
+        }
     }
 
-    public function handle(): void
-    {
-        $cartIds = $this->cartItems->pluck('id')->all();
+    public function handle(
+        TenantCredentialResolver $tenantResolver
+    ): void {
+        $connected = false;
 
         try {
-            $store = Store::findOrFail($this->storeId);
+            // Every queue job establishes its own tenant connection.
+            $storeRecord = $tenantResolver->connectByStoreHash(
+                $this->storeHash
+            );
 
-            // Find the user using the cart's user ID when possible.
-            $userId = $this->cartItems->first()?->user_id;
+            $connected = true;
 
-            $userQuery = User::query()
-                ->where('email', $this->userEmail);
+            // Retrieve store configuration from the central database.
+            $store = Store::on('central')
+                ->where('store_hash', $this->storeHash)
+                ->firstOrFail();
 
-            if ($userId !== null) {
-                $userQuery->where('id', $userId);
+            $expectedTenantStoreId = (int) (
+                $storeRecord->legacy_store_id ?? $storeRecord->id
+            );
+
+            if ($expectedTenantStoreId !== $this->storeId) {
+                throw new \RuntimeException(
+                    'Tenant store ID does not match the queued job.'
+                );
             }
 
-            $user = $userQuery->firstOrFail();
+            // Retrieve the customer from the tenant database.
+            $cartModels = Cart::with(['product.images'])
+                ->whereIn('id', $this->cartIds)
+                ->where('store_id', $this->storeId)
+                ->whereNull('deleted_at')
+                ->get();
+
+            if ($cartModels->isEmpty()) {
+                Log::info('Abandoned cart email skipped: no carts found.', [
+                    'store_hash' => $this->storeHash,
+                    'cart_ids' => $this->cartIds,
+                ]);
+
+                return;
+            }
+
+            $userId = $cartModels->first()->user_id;
+
+            $user = User::on('tenant')
+                ->where('id', $userId)
+                ->where('email', $this->userEmail)
+                ->first();
+
+            if (!$user) {
+                throw new \RuntimeException(
+                    'Customer could not be found in the tenant database.'
+                );
+            }
 
             $storePath = rtrim(
                 $store->base_url ?: config('app.frontend_url', ''),
@@ -74,16 +121,9 @@ class SendAbandonedCartEmailJob implements ShouldQueue
 
             $checkoutLink = $storePath . '/checkout';
 
-            $cartModels = Cart::with(['product.images'])
-                ->whereIn('id', $cartIds)
-                ->where('store_id', $this->storeId)
-                ->whereNull('deleted_at')
-                ->get();
-
             $formattedCartItems = $cartModels->map(function ($cart) {
                 $product = $cart->product;
 
-                // Get the first product image, if available.
                 $thumbnailPath = $product?->images?->first()?->url;
 
                 $awsUrl = rtrim(
@@ -94,19 +134,23 @@ class SendAbandonedCartEmailJob implements ShouldQueue
                 $thumbnail = null;
 
                 if ($thumbnailPath && $awsUrl !== '') {
-                    $thumbnail = $awsUrl . '/' . ltrim($thumbnailPath, '/');
+                    $thumbnail = $awsUrl . '/' . ltrim(
+                        $thumbnailPath,
+                        '/'
+                    );
                 }
 
                 return [
-                    'name'      => $product?->name ?? 'Product',
-                    'sku'       => $product?->sku ?? '',
-                    'quantity'  => $cart->quantity,
+                    'name' => $product?->name ?? 'Product',
+                    'sku' => $product?->sku ?? '',
+                    'quantity' => $cart->quantity,
                     'thumbnail' => $thumbnail,
                 ];
             })->values()->all();
 
-            \Log::info('Abandoned cart email product details', [
-                'cart_ids' => $cartIds,
+            Log::info('Abandoned cart email product details', [
+                'store_hash' => $this->storeHash,
+                'cart_ids' => $this->cartIds,
                 'products' => $formattedCartItems,
             ]);
 
@@ -120,33 +164,66 @@ class SendAbandonedCartEmailJob implements ShouldQueue
                 )
             );
 
-            // Keep the reminder timestamp after the send call succeeds.
-            Cart::whereIn('id', $cartIds)
+            // Mark the reminder timestamp after successful email sending.
+            Cart::whereIn('id', $this->cartIds)
                 ->where('store_id', $this->storeId)
                 ->whereNull('deleted_at')
                 ->update([
                     $this->timestampColumn => now(),
                 ]);
         } catch (Throwable $e) {
-            // Release this reminder's reservation so it can be retried.
-            Cart::whereIn('id', $cartIds)
-                ->where('store_id', $this->storeId)
-                ->where($this->timestampColumn, '>=', now()->subHours(24))
-                ->update([
-                    $this->timestampColumn => null,
-                ]);
+            // Release reservations only while the tenant connection is active.
+            if ($connected) {
+                try {
+                    DB::connection('tenant')
+                        ->table('carts')
+                        ->whereIn('id', $this->cartIds)
+                        ->where('store_id', $this->storeId)
+                        ->where(
+                            $this->timestampColumn,
+                            '>=',
+                            now()->subHours(24)
+                        )
+                        ->update([
+                            $this->timestampColumn => null,
+                        ]);
+                } catch (Throwable $releaseException) {
+                    report($releaseException);
+                }
+            }
 
             throw $e;
+        } finally {
+            $tenantResolver->disconnect();
         }
     }
 
     public function failed(?Throwable $exception): void
     {
-        Cart::whereIn('id', $this->cartItems->pluck('id')->all())
-            ->where('store_id', $this->storeId)
-            ->where($this->timestampColumn, '>=', now()->subHours(24))
-            ->update([
-                $this->timestampColumn => null,
-            ]);
+        try {
+            app(TenantCredentialResolver::class)
+                ->connectByStoreHash($this->storeHash);
+
+            DB::connection('tenant')
+                ->table('carts')
+                ->whereIn('id', $this->cartIds)
+                ->where('store_id', $this->storeId)
+                ->where(
+                    $this->timestampColumn,
+                    '>=',
+                    now()->subHours(24)
+                )
+                ->update([
+                    $this->timestampColumn => null,
+                ]);
+        } catch (Throwable $e) {
+            report($e);
+        } finally {
+            app(TenantCredentialResolver::class)->disconnect();
+        }
+
+        if ($exception) {
+            report($exception);
+        }
     }
 }
