@@ -46,7 +46,7 @@ class BulkInquiryController extends Controller
 
             return response()->json([
                 'status' => true,
-                'message' => 'Bulk inquiry submitted successfully!',
+                'message' => 'The request has been submitted',
                 'data' => new BulkInquiryResource($bulkInquiry)
             ], 201);
 
