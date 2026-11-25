@@ -2520,11 +2520,8 @@ class AuthController extends Controller
                 ->map(fn($id) => (int) $id)
                 ->all();
 
-            $accessibleStoreIds = array_values(array_unique(array_merge(
-                $ownedStores->pluck('id')->map(fn($id) => (int) $id)->all(),
-                $membershipStoreIds,
-                $permissionStoreIds
-            )));
+            // Sirf store_user wale stores lo (id 6 exclude)
+            $accessibleStoreIds = $membershipStoreIds;
 
             $stores = !empty($accessibleStoreIds)
                 ? $central->table('stores')
