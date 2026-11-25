@@ -2498,12 +2498,20 @@ class AuthController extends Controller
 
             $isOwner = $ownedStores->isNotEmpty();
 
-            // store_user.store_id = stores.id (primary key)
-            $membershipStoreIds = $central->table('store_user')
+            // store_user.store_id = legacy_store_id
+            $membershipLegacyIds = $central->table('store_user')
                 ->where('user_id', $admin->id)
                 ->pluck('store_id')
                 ->map(fn($id) => (int) $id)
                 ->all();
+
+            $membershipStoreIds = !empty($membershipLegacyIds)
+                ? $central->table('stores')
+                ->whereIn('legacy_store_id', $membershipLegacyIds)
+                ->pluck('id')
+                ->map(fn($id) => (int) $id)
+                ->all()
+                : [];
 
             $permissionStoreIds = $central->table('user_permissions')
                 ->where('user_id', $admin->id)
