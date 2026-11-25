@@ -74,81 +74,6 @@ class TransactionalEmailController extends Controller
         ]);
     }
 
-    // public function show(string $key)
-    // {
-    //     $tpl = TransactionalEmailTemplate::with([
-    //         'updater',
-    //         'phrases' => function ($q) {
-    //             $q->orderBy('is_system', 'desc')->orderBy('id', 'asc');
-    //         }
-    //     ])
-    //         ->ofStore(current_store_id())
-    //         ->key($key)
-    //         ->firstOrFail();
-
-    //     return response()->json([
-    //         'status'  => true,
-    //         'message' => 'Template fetched.',
-    //         'data'    => new TransactionalEmailTemplateResource($tpl),
-    //         'default' => [
-    //             'bodyHtml' => $this->getDefaultHtml(),
-    //             'subject'  => 'Your {{store}} account details have changed',
-    //             'phrases'  => $this->getDefaultPhrases(),
-    //         ],
-    //     ]);
-    // }
-
-    // private function getDefaultHtml(): string
-    // {
-    //     return '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-    //     <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
-    //     <head>
-    //     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    //     <meta name="viewport" content="width=device-width">
-    //     <style>
-    //     body{margin:0;padding:0;background:#fff;font-family:Montserrat,Arial,sans-serif;}
-    //     .container{max-width:544px;margin:0 auto;padding:0 20px;}
-    //     .logo{text-align:center;padding:24px 0 8px;}
-    //     .logo span{font-size:24px;font-weight:600;color:#333;}
-    //     .divider{padding:8px 0;}
-    //     .divider hr{border:none;border-top:1px solid #e5e5e5;margin:0;}
-    //     .icon{width:40px;height:40px;background:#f5f5f5;border-radius:50%;display:inline-block;text-align:center;line-height:40px;}
-    //     .content{padding:24px 0;}
-    //     h1{font-size:26px;font-weight:600;color:#333;margin:0 0 20px;line-height:1.3;}
-    //     p{font-size:14px;color:#333;line-height:1.5;margin:0 0 12px;}
-    //     a{color:#2199e8;text-decoration:none;}
-    //     strong{font-weight:600;}
-    //     .footer{padding:16px 0 24px;}
-    //     .store-name{font-size:14px;font-weight:600;margin:0 0 2px;color:#333;}
-    //     .store-url{font-size:12px;color:#777;}
-    //     .btn{display:inline-block;border:1px solid #ccc;border-radius:4px;padding:6px 14px;color:#555;font-weight:600;font-size:13px;}
-    //     </style>
-    //     </head>
-    //     <body>
-    //     <div class="container">
-    //     <div class="logo"><a href="{{store_url}}" style="text-decoration:none;color:#333;"><span>{{store}}</span></a></div>
-    //     <div class="divider"><table width="100%"><tr><td width="45%" style="vertical-align:middle;"><hr></td><td width="10%" style="text-align:center;"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="#999" style="vertical-align:middle;"><path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/></svg></span></td><td width="45%" style="vertical-align:middle;"><hr></td></tr></table></div>
-    //     <div class="content"><h1>{{subject}}</h1><p>{{hello}}</p><p>{{message}}</p><p><strong>Email, Password</strong></p><p>{{warning}}</p><p style="margin-top:20px;">{{thanks}}<br>{{security}}</p></div>
-    //     <div class="divider"><table width="100%"><tr><td width="45%" style="vertical-align:middle;"><hr></td><td width="10%" style="text-align:center;"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="#999" style="vertical-align:middle;"><path d="M20 4H4v2h16V4zm1 10v-2l-1-5H4l-1 5v2h1v6h10v-6h4v6h2v-6h1zm-9 4H6v-4h6v4z"/></svg></span></td><td width="45%" style="vertical-align:middle;"><hr></td></tr></table></div>
-    //     <div class="footer"><table width="100%"><tr><td style="vertical-align:middle;"><p class="store-name">{{store}}</p><a href="{{store_url}}" class="store-url">{{store_url}}</a></td><td style="text-align:right;vertical-align:middle;"><a href="{{store_url}}" class="btn">{{go_shopping}}</a></td></tr></table></div>
-    //     </div>
-    //     </body>
-    //     </html>';
-    // }
-
-    // private function getDefaultPhrases(): array
-    // {
-    //     return [
-    //         ['phraseName' => 'subject', 'phraseValue' => 'Your {{store}} account details have changed', 'isSystem' => true],
-    //         ['phraseName' => 'hello', 'phraseValue' => 'Hello {{name}},', 'isSystem' => true],
-    //         ['phraseName' => 'message', 'phraseValue' => 'We wanted to let you know that the following details have been changed on your <a href="{{store_url}}">{{store}}</a> account:', 'isSystem' => true],
-    //         ['phraseName' => 'warning', 'phraseValue' => 'If you made the changes yourself, please disregard this email. If not, please contact the store immediately through their website: <a href="{{store_url}}">{{store_url}}</a>.', 'isSystem' => true],
-    //         ['phraseName' => 'thanks', 'phraseValue' => 'Thanks,', 'isSystem' => true],
-    //         ['phraseName' => 'security', 'phraseValue' => 'The Security Team', 'isSystem' => true],
-    //         ['phraseName' => 'go_shopping', 'phraseValue' => 'Go shopping', 'isSystem' => true],
-    //     ];
-    // }
-
     public function upsert(Request $r, string $key)
     {
         try {
@@ -413,18 +338,59 @@ class TransactionalEmailController extends Controller
             ], 404);
         }
 
-        // Custom phrases delete (jo user ne add kiye)
+        // Custom phrases delete
         TransactionalEmailPhrase::where('template_id', $tpl->id)
             ->where('is_system', false)
             ->delete();
 
-        // Reload
-        $tpl->load('phrases');
+        // System phrases reset to original seeder values
+        $defaultPhrases = $this->getDefaultPhrases($key);
+        foreach ($defaultPhrases as $phrase) {
+            TransactionalEmailPhrase::updateOrCreate(
+                ['template_id' => $tpl->id, 'phrase_name' => $phrase['phrase_name']],
+                ['phrase_value' => $phrase['phrase_value'], 'is_system' => true]
+            );
+        }
+
+        // HTML reset to original seeder HTML
+        $tpl->update([
+            'body_html' => $this->getDefaultHtml($key),
+            'updated_by' => auth()->id(),
+        ]);
 
         return response()->json([
             'status'  => true,
-            'message' => 'Reset successful. Custom phrases removed.',
-            'data'    => new TransactionalEmailTemplateResource($tpl),
+            'message' => 'Reset successful.',
         ]);
+    }
+
+    private function getDefaultHtml(string $key): string
+    {
+        $seeder = new \Database\Seeders\TransactionalEmailTemplateSeeder();
+        $method = (new \ReflectionClass($seeder))->getMethod('getTemplates');
+        $method->setAccessible(true);
+        $all = $method->invoke($seeder);
+
+        foreach ($all as $item) {
+            if ($item['key'] === $key) {
+                return $item['body_html'];
+            }
+        }
+        return '';
+    }
+
+    private function getDefaultPhrases(string $key): array
+    {
+        $seeder = new \Database\Seeders\TransactionalEmailTemplateSeeder();
+        $method = (new \ReflectionClass($seeder))->getMethod('getTemplates');
+        $method->setAccessible(true);
+        $all = $method->invoke($seeder);
+
+        foreach ($all as $item) {
+            if ($item['key'] === $key) {
+                return $item['phrases'] ?? [];
+            }
+        }
+        return [];
     }
 }
