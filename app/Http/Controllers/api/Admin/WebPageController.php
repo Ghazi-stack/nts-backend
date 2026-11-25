@@ -165,14 +165,8 @@ class WebPageController extends Controller
                     }),
                 ],
 
-                'pageUrl' => [
-                    'nullable',
-                    'string',
-                    'max:255',
-                    Rule::unique('web_pages', 'page_url')->where(function ($query) use ($storeId) {
-                        return $query->where('store_id', $storeId);
-                    }),
-                ],
+                'slugWithUrl' => 'nullable|string|max:500',
+
                 'pageTitle' => 'nullable|string|max:255',
                 'pageContent' => 'nullable|string',
                 'pageType' => 'nullable',
@@ -192,21 +186,10 @@ class WebPageController extends Controller
                 'rawHtml' => 'nullable|string',
             ]);
 
-            $currentSlug = trim($validated['pageUrl'], '/');
-
-            if (!empty($validated['parentPage'])) {
-                $parentPage = WebPage::find($validated['parentPage']);
-
-                $slugWithUrl = '/' . trim($parentPage->page_url, '/') . '/' . $currentSlug;
-            } else {
-                $slugWithUrl = '/' . $currentSlug;
-            }
-
-            // Convert camelCase to snake_case for DB
             $data = [
                 'store_id' => $storeId,
                 'page_name' => $validated['pageName'] ?? null,
-                'page_url' => $validated['pageUrl'] ?? null,
+                'slugWithUrl' => $validated['slugWithUrl'] ?? null,
                 'page_title' => $validated['pageTitle'] ?? null,
                 'page_content' => $validated['pageContent'] ?? null,
                 'page_type' => $validated['pageType'] ?? null,
@@ -224,7 +207,6 @@ class WebPageController extends Controller
                 'emailQuestionsTo' => $validated['emailQuestionsTo'] ?? null,
                 'showTheseFields' => $validated['showTheseFields'] ?? null,
                 'rawHtml' => $validated['rawHtml'] ?? null,
-                'slugWithUrl' => $slugWithUrl,
             ];
 
             $page = WebPage::create($data);
@@ -271,17 +253,6 @@ class WebPageController extends Controller
                         ->ignore($page->id),
                 ],
 
-                'pageUrl' => [
-                    'nullable',
-                    'string',
-                    'max:255',
-                    Rule::unique('web_pages', 'page_url')
-                        ->where(function ($query) use ($storeId) {
-                            return $query->where('store_id', $storeId);
-                        })
-                        ->ignore($page->id),
-                ],
-
                 'slugWithUrl' => 'nullable|string|max:500',
 
                 'pageTitle' => 'nullable|string|max:255',
@@ -303,12 +274,10 @@ class WebPageController extends Controller
                 'rawHtml' => 'nullable|string',
             ], [
                 'pageName.unique' => 'A page with this name already exists for this store.',
-                'pageUrl.unique' => 'A page with this URL already exists for this store.',
             ]);
 
             $data = [
                 'page_name' => $validated['pageName'] ?? $page->page_name,
-                'page_url' => $validated['pageUrl'] ?? $page->page_url,
                 'slugWithUrl' => $validated['slugWithUrl'] ?? $page->slugWithUrl,
                 'page_title' => $validated['pageTitle'] ?? $page->page_title,
                 'page_content' => $validated['pageContent'] ?? $page->page_content,
