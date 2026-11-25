@@ -2425,183 +2425,183 @@ class AuthController extends Controller
     // }
 
 
-    public function login(Request $request)
-    {
-        try {
-            $request->validate([
-                'email'    => 'required|email',
-                'password' => 'required',
-            ]);
+   public function login(Request $request)
+{
+    try {
+        $request->validate([
+            'email'    => 'required|email',
+            'password' => 'required',
+        ]);
 
-            $email    = $request->email;
-            $password = $request->password;
+        $email    = $request->email;
+        $password = $request->password;
 
-            $central = DB::connection('central');
+        $central = DB::connection('central');
 
-            /*
-            |--------------------------------------------------------------------------
-            | CENTRAL STAFF AUTHENTICATION
-            |--------------------------------------------------------------------------
-            */
+        /*
+        |--------------------------------------------------------------------------
+        | CENTRAL STAFF AUTHENTICATION
+        |--------------------------------------------------------------------------
+        */
 
-            $admin = CentralUser::where('email', $email)->first();
+        $admin = CentralUser::where('email', $email)->first();
 
-            if (!$admin || !Hash::check($password, $admin->password)) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Invalid email or password.',
-                ], 401);
-            }
-
-            $roleExists = $central->table('roles')
-                ->where('user_role_id', $admin->userRole)
-                ->exists();
-
-            if (!$roleExists) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Invalid user role.',
-                ], 401);
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | TWO-FACTOR AUTHENTICATION
-            |--------------------------------------------------------------------------
-            */
-
-            if ($admin->two_factor_enabled) {
-                if ($admin->two_factor_type === 'email') {
-                    $this->twoFactorService->sendEmailOtp($admin);
-                }
-
-                $pendingToken = $this->twoFactorService->storePendingLogin($admin);
-
-                return response()->json([
-                    'status'              => true,
-                    'two_factor_required' => true,
-                    'two_factor_type'     => $admin->two_factor_type,
-                    'pending_token'       => $pendingToken,
-                    'message'             => $admin->two_factor_type === 'email'
-                        ? 'OTP sent to your email. Please verify to continue.'
-                        : 'Please enter the code from your authenticator app.',
-                ], 200);
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | CENTRAL STORE OWNERSHIP AND MEMBERSHIPS
-            |--------------------------------------------------------------------------
-            */
-
-            $ownedStores = $central->table('stores')
-                ->where('user_id', $admin->id)
-                ->get();
-
-            $isOwner = $ownedStores->isNotEmpty();
-
-            $membershipStoreIds = $central->table('store_user')
-                ->where('user_id', $admin->id)
-                ->pluck('store_id')
-                ->map(fn($id) => (int) $id)
-                ->all();
-
-            $permissionStoreIds = $central->table('user_permissions')
-                ->where('user_id', $admin->id)
-                ->distinct()
-                ->pluck('store_id')
-                ->map(fn($id) => (int) $id)
-                ->all();
-
-            $accessibleStoreIds = array_values(array_unique(array_merge(
-                $ownedStores->pluck('id')->map(fn($id) => (int) $id)->all(),
-                $membershipStoreIds,
-                $permissionStoreIds
-            )));
-
-            // Header se store ID lo
-            $headerStoreId = $request->header('storeId')
-                ?: $request->header('store_id')
-                ?: $request->header('Store-Id');
-
-            $stores = !empty($accessibleStoreIds)
-                ? $central->table('stores')
-                    ->whereIn('id', $accessibleStoreIds)
-                    ->when($headerStoreId, function ($q) use ($headerStoreId) {
-                        $q->where('legacy_store_id', $headerStoreId);
-                    })
-                    ->orderBy('id')
-                    ->get()
-                : collect();
-
-            /*
-            |--------------------------------------------------------------------------
-            | NO STORE SELECTED DURING LOGIN
-            |--------------------------------------------------------------------------
-            */
-
-            $selectedStore = null;
-            $adminPermissions = collect();
-
-            /*
-            |--------------------------------------------------------------------------
-            | CREATE CENTRAL STAFF TOKEN
-            |--------------------------------------------------------------------------
-            */
-
-            $tokenResult = $admin->createToken('adminToken');
-            $plainTextToken = $tokenResult->plainTextToken;
-            $expireAt = now()->addHours(24);
-
-            $accessToken = PersonalAccessToken::findToken($plainTextToken);
-
-            if ($accessToken) {
-                $accessToken->expires_at = $expireAt;
-                $accessToken->save();
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | CENTRAL LOGIN LOG
-            |--------------------------------------------------------------------------
-            */
-
-            Log::info('Dashboard admin logged in successfully', [
-                'user_id' => $admin->id,
-                'email'   => $admin->email,
-                'ip'      => $request->ip(),
-            ]);
-
-            /*
-            |--------------------------------------------------------------------------
-            | RESPONSE
-            |--------------------------------------------------------------------------
-            */
-
-            return response()->json([
-                'status'      => true,
-                'message'     => $isOwner
-                    ? 'Admin logged in successfully.'
-                    : 'User logged in successfully.',
-                'token'       => $plainTextToken,
-                'expireAt'    => $expireAt->toDateTimeString(),
-                'user'        => new UserResource($admin),
-                'stores'      => StoreResource::collection($stores),
-                'permissions' => $adminPermissions,
-                'isOwner'     => $isOwner,
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Login failed: ' . $e->getMessage(), [
-                'exception' => $e,
-            ]);
-
+        if (!$admin || !Hash::check($password, $admin->password)) {
             return response()->json([
                 'status'  => false,
-                'message' => 'Something went wrong during login.',
-            ], 500);
+                'message' => 'Invalid email or password.',
+            ], 401);
         }
-    }
 
+        $roleExists = $central->table('roles')
+            ->where('user_role_id', $admin->userRole)
+            ->exists();
+
+        if (!$roleExists) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Invalid user role.',
+            ], 401);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | TWO-FACTOR AUTHENTICATION
+        |--------------------------------------------------------------------------
+        */
+
+        if ($admin->two_factor_enabled) {
+            if ($admin->two_factor_type === 'email') {
+                $this->twoFactorService->sendEmailOtp($admin);
+            }
+
+            $pendingToken = $this->twoFactorService->storePendingLogin($admin);
+
+            return response()->json([
+                'status'              => true,
+                'two_factor_required' => true,
+                'two_factor_type'     => $admin->two_factor_type,
+                'pending_token'       => $pendingToken,
+                'message'             => $admin->two_factor_type === 'email'
+                    ? 'OTP sent to your email. Please verify to continue.'
+                    : 'Please enter the code from your authenticator app.',
+            ], 200);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | CENTRAL STORE OWNERSHIP AND MEMBERSHIPS
+        |--------------------------------------------------------------------------
+        */
+
+        $ownedStores = $central->table('stores')
+            ->where('user_id', $admin->id)
+            ->get();
+
+        $isOwner = $ownedStores->isNotEmpty();
+
+        // store_user.store_id is actually legacy_store_id
+        $membershipLegacyIds = $central->table('store_user')
+            ->where('user_id', $admin->id)
+            ->pluck('store_id')
+            ->map(fn($id) => (int) $id)
+            ->all();
+
+        $membershipStoreIds = !empty($membershipLegacyIds)
+            ? $central->table('stores')
+                ->whereIn('legacy_store_id', $membershipLegacyIds)
+                ->pluck('id')
+                ->map(fn($id) => (int) $id)
+                ->all()
+            : [];
+
+        $permissionStoreIds = $central->table('user_permissions')
+            ->where('user_id', $admin->id)
+            ->distinct()
+            ->pluck('store_id')
+            ->map(fn($id) => (int) $id)
+            ->all();
+
+        $accessibleStoreIds = array_values(array_unique(array_merge(
+            $ownedStores->pluck('id')->map(fn($id) => (int) $id)->all(),
+            $membershipStoreIds,
+            $permissionStoreIds
+        )));
+
+        $stores = !empty($accessibleStoreIds)
+            ? $central->table('stores')
+                ->whereIn('id', $accessibleStoreIds)
+                ->orderBy('id')
+                ->get()
+            : collect();
+
+        /*
+        |--------------------------------------------------------------------------
+        | NO STORE SELECTED DURING LOGIN
+        |--------------------------------------------------------------------------
+        */
+
+        $selectedStore = null;
+        $adminPermissions = collect();
+
+        /*
+        |--------------------------------------------------------------------------
+        | CREATE CENTRAL STAFF TOKEN
+        |--------------------------------------------------------------------------
+        */
+
+        $tokenResult = $admin->createToken('adminToken');
+        $plainTextToken = $tokenResult->plainTextToken;
+        $expireAt = now()->addHours(24);
+
+        $accessToken = PersonalAccessToken::findToken($plainTextToken);
+
+        if ($accessToken) {
+            $accessToken->expires_at = $expireAt;
+            $accessToken->save();
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | CENTRAL LOGIN LOG
+        |--------------------------------------------------------------------------
+        */
+
+        Log::info('Dashboard admin logged in successfully', [
+            'user_id' => $admin->id,
+            'email'   => $admin->email,
+            'ip'      => $request->ip(),
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | RESPONSE
+        |--------------------------------------------------------------------------
+        */
+
+        return response()->json([
+            'status'      => true,
+            'message'     => $isOwner
+                ? 'Admin logged in successfully.'
+                : 'User logged in successfully.',
+            'token'       => $plainTextToken,
+            'expireAt'    => $expireAt->toDateTimeString(),
+            'user'        => new UserResource($admin),
+            'stores'      => StoreResource::collection($stores),
+            'permissions' => $adminPermissions,
+            'isOwner'     => $isOwner,
+        ]);
+    } catch (\Exception $e) {
+        Log::error('Login failed: ' . $e->getMessage(), [
+            'exception' => $e,
+        ]);
+
+        return response()->json([
+            'status'  => false,
+            'message' => 'Something went wrong during login.',
+        ], 500);
+    }
+}
 
     // public function customerLogin(Request $request)
     // {
