@@ -259,23 +259,6 @@ class WebPageController extends Controller
 
             $page = WebPage::where('store_id', $storeId)->findOrFail($id);
 
-            // $validated = $request->validate([
-            //     'pageName' => 'nullable|string|max:255',
-            //     'pageUrl' => 'nullable|string|max:255',
-            //     'pageTitle' => 'nullable|string|max:255',
-            //     'pageContent' => 'nullable|string',
-            //     'pageType' => 'nullable|string|max:100',
-            //     'templateLayoutFile' => 'nullable|string|max:255',
-            //     'metaKeywords' => 'nullable|string|max:255',
-            //     'metaDescription' => 'nullable|string|max:1000',
-            //     'searchKeywords' => 'nullable|string|max:255',
-            //     'displayAsHomePage' => 'boolean',
-            //     'restrictToCustomersOnly' => 'boolean',
-            //     'showInNavigation' => 'boolean',
-            //     'sortOrder' => 'nullable',
-            //     'parentPage' => 'nullable',
-            // ]);
-
             $validated = $request->validate([
                 'pageName' => [
                     'required',
@@ -299,6 +282,8 @@ class WebPageController extends Controller
                         ->ignore($page->id),
                 ],
 
+                'slugWithUrl' => 'nullable|string|max:500',
+
                 'pageTitle' => 'nullable|string|max:255',
                 'pageContent' => 'nullable|string',
                 'pageType' => 'nullable|string|max:100',
@@ -321,23 +306,10 @@ class WebPageController extends Controller
                 'pageUrl.unique' => 'A page with this URL already exists for this store.',
             ]);
 
-            $pageUrl = $validated['pageUrl'] ?? $page->page_url;
-            $parentPageId = $validated['parentPage'] ?? $page->parent_page;
-
-            $currentSlug = trim($validated['pageUrl'], '/');
-
-            if (!empty($validated['parentPage'])) {
-                $parentPage = WebPage::find($validated['parentPage']);
-
-                $slugWithUrl = '/' . trim($parentPage->page_url, '/') . '/' . $currentSlug;
-            } else {
-                $slugWithUrl = '/' . $currentSlug;
-            }
-
-
             $data = [
                 'page_name' => $validated['pageName'] ?? $page->page_name,
                 'page_url' => $validated['pageUrl'] ?? $page->page_url,
+                'slugWithUrl' => $validated['slugWithUrl'] ?? $page->slugWithUrl,
                 'page_title' => $validated['pageTitle'] ?? $page->page_title,
                 'page_content' => $validated['pageContent'] ?? $page->page_content,
                 'page_type' => $validated['pageType'] ?? $page->page_type,
@@ -351,7 +323,6 @@ class WebPageController extends Controller
                 'is_page_visible' => $validated['isPageVisible'] ?? $page->is_page_visible,
                 'sort_order' => $validated['sortOrder'] ?? $page->sort_order,
                 'parent_page' => $validated['parentPage'] ?? $page->parent_page,
-                'slugWithUrl' => $slugWithUrl,
                 'link' => $validated['link'] ?? null,
                 'emailQuestionsTo' => $validated['emailQuestionsTo'] ?? null,
                 'showTheseFields' => $validated['showTheseFields'] ?? null,
@@ -363,7 +334,7 @@ class WebPageController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Web page updated successfully',
-                'data' => new WebPageResource($page)
+                'data' => new WebPageResource($page->fresh())
             ]);
         } catch (Exception $e) {
             Log::error('Error updating web page: ' . $e->getMessage());
