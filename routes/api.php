@@ -962,6 +962,11 @@ Route::post('/stripe/connect/webhook', [
 
 Route::prefix('web')->middleware([\App\Http\Middleware\ResolveStoreByHash::class, \App\Http\Middleware\ConnectTenantDatabase::class])->group(function () {
 
+    Route::get('/payment-methods', [
+        \App\Http\Controllers\api\Web\StorefrontPaymentMethodController::class,
+        'index',
+    ]);
+
     Route::middleware('auth:sanctum')->get('/customer-profile', [AuthController::class, 'getCustomerProfile']);
     Route::post('/customer/check-token', [AuthController::class, 'checkCustomerToken']);
 

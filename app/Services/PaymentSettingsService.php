@@ -36,6 +36,68 @@ class PaymentSettingsService
             ->get();
     }
 
+    /**
+     * Return enabled, configured methods that match storefront filters.
+     * A missing filter does not make a method unavailable; configured
+     * restrictions are applied when the shopper supplies that dimension.
+     */
+    public function getStorefrontMethods(
+        int $storeId,
+        ?string $currency = null,
+        ?string $country = null
+    ) {
+        // Keep this query portable across supported tenant database drivers;
+        // the dashboard's getActiveMethods currently orders with MySQL FIELD().
+        return StorePaymentMethod::forStore($storeId)
+            ->enabled()
+            ->configured()
+            ->orderBy('id')
+            ->get()
+            ->filter(function (StorePaymentMethod $method) use ($currency, $country) {
+                if ($currency !== null) {
+                    $currencies = $method->available_currencies;
+
+                    if (!is_array($currencies)) {
+                        return false;
+                    }
+
+                    $currencies = array_map(
+                        fn ($code) => strtoupper(trim((string) $code)),
+                        $currencies
+                    );
+
+                    if (!in_array('*', $currencies, true)
+                        && !in_array($currency, $currencies, true)) {
+                        return false;
+                    }
+                }
+
+                if ($country !== null) {
+                    $availability = $method->available_countries;
+
+                    if (is_array($availability)
+                        && !($availability['all_countries'] ?? false)) {
+                        $countries = array_map(
+                            fn ($code) => strtoupper(trim((string) $code)),
+                            $availability['countries'] ?? []
+                        );
+
+                        if (!in_array($country, $countries, true)) {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            })
+            ->sortBy(fn (StorePaymentMethod $method) => array_search(
+                $method->category,
+                self::CATEGORY_ORDER,
+                true
+            ))
+            ->values();
+    }
+
     // public function getGroupedMethods(int $storeId): array
     // {
     //     $methods = $this->getMethods($storeId);
