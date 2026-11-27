@@ -189,7 +189,41 @@ class CustomerMessageController extends Controller
 
             try {
                 $customerEmail = $order->customer?->email;
-                if ($customerEmail) {
+                $emailService = app(\App\Services\TransactionalEmailService::class);
+
+                // Store's "Order Notification" template: toggle decides whether the
+                // customer is emailed; a live template replaces the plain-text email.
+                $rendered = null;
+                if ($customerEmail && $emailService->isEnabled($storeId, 'order_notification')) {
+                    $rendered = $emailService->renderForMail($storeId, 'order_notification', function () use ($storeId, $order, $validated) {
+                        $registry = Store::on('central')->where('legacy_store_id', $storeId)->first();
+                        $logoUrl = \App\Models\Logo::where('store_id', $storeId)->value('logo_url');
+                        $base = \App\Services\TransactionalEmailContext::base($registry, $logoUrl);
+
+                        return $base + [
+                            'customer' => \App\Services\TransactionalEmailContext::customer(
+                                $order->customer->first_name ?? null,
+                                $order->customer->email ?? null,
+                                trim(($order->customer->first_name ?? '') . ' ' . ($order->customer->last_name ?? ''))
+                            ),
+                            'order'    => ['id' => (string) $order->order_number],
+                            'message'  => ['subject' => $validated['subject'], 'body' => $validated['message']],
+                            'links'    => ['account' => $base['store']['url'], 'order_status' => $base['store']['url']],
+                        ];
+                    });
+                } else {
+                    $customerEmail = null; // template disabled: no customer email
+                }
+
+                if ($customerEmail && $rendered) {
+                    Mail::to($customerEmail)->send(new \App\Mail\TransactionalTemplatedMail(
+                        $rendered['subject'],
+                        $rendered['html'],
+                        $rendered['text'],
+                        $rendered['headers'],
+                        storeId: (int) $storeId
+                    ));
+                } elseif ($customerEmail) {
                     $storeName = Store::find($storeId)?->name ?? 'Store';
                     Mail::raw(
                         "Hello " . ($order->customer->first_name ?? '') . ",\n\n" .

@@ -853,6 +853,7 @@ Route::prefix('dashboard')->middleware([
         Route::prefix('transactional-emails')->middleware(['store.hash', 'tenant.dashboard'])->controller(TransactionalEmailController::class)->group(function () {
             Route::get('/get', 'index');
             Route::get('/get-single/{key}', 'show');
+            Route::get('/variables/{key}', 'variables');
             Route::post('/create-key/{key}', 'upsert');
             Route::patch('/toggle/{key}', 'toggle');
             Route::post('/preview/{key}', 'preview');

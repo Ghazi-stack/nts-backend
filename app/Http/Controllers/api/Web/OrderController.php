@@ -4182,7 +4182,7 @@ class OrderController extends Controller
                     ->update(['user_used' => 1]);
             }
 
-            if ($isGuest) {
+            if ($isGuest && app(\App\Services\TransactionalEmailService::class)->isEnabled($storeId, 'guest_account_created')) {
                 try {
                     $store = Store::find($storeId);
                     $frontendUrl = rtrim($store?->base_url ?? '#', '/');
@@ -4675,9 +4675,14 @@ class OrderController extends Controller
             }
 
             try {
+                // Customer copy follows the store's "order_email" template toggle; admin copy always sent.
+                $sendCustomerOrderEmail = app(\App\Services\TransactionalEmailService::class)->isEnabled($storeId, 'order_email');
+
                 foreach ($orders as $ord) {
                     $ord->load('items.product.images', 'items.product.brand', 'billingInformation', 'customer');
-                    Mail::to($validated['email'])->send(new \App\Mail\OrderPlacedMail($ord, $customer, $storeId));
+                    if ($sendCustomerOrderEmail) {
+                        Mail::to($validated['email'])->send(new \App\Mail\OrderPlacedMail($ord, $customer, $storeId));
+                    }
                     $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
                     Mail::to($adminEmail)->send(new \App\Mail\OrderPlacedMail($ord, $customer, $storeId));
                 }
@@ -5665,15 +5670,24 @@ class OrderController extends Controller
 
                 if ($customerEmail) {
                     try {
-                        Mail::to($customerEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId, $shipment));
+                        // Customer copy follows the store's template toggle ("Order Status Update",
+                        // or "Order ready for pickup" for Awaiting Pickup); admin copy always sent.
+                        $sendCustomerStatusEmail = app(\App\Services\TransactionalEmailService::class)
+                            ->isEnabled($storeId, OrderStatusUpdatedMail::templateKeyFor((string) $newStatus));
+
+                        if ($sendCustomerStatusEmail) {
+                            Mail::to($customerEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId, $shipment));
+                        }
 
                         $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
                         Mail::to($adminEmail)->send(new OrderStatusUpdatedMail($order, $newStatus, $storeId, $shipment));
 
-                        OrderTimeline::addEvent($order->id, $storeId, 'email_sent', 'Status update email sent', [
-                            'email'  => $customerEmail,
-                            'status' => $newStatus,
-                        ], 'email');
+                        if ($sendCustomerStatusEmail) {
+                            OrderTimeline::addEvent($order->id, $storeId, 'email_sent', 'Status update email sent', [
+                                'email'  => $customerEmail,
+                                'status' => $newStatus,
+                            ], 'email');
+                        }
                     } catch (\Exception $mailError) {
                         Log::error('ORDER STATUS EMAIL FAILED', [
                             'error'   => $mailError->getMessage(),
@@ -7301,7 +7315,10 @@ class OrderController extends Controller
             if ($emailInvoice) {
                 try {
                     $email = $billingAddressJson['email'] ?? $customer->email;
-                    if ($email) Mail::to($email)->send(new OrderPlacedMail($order, $customer, $storeId));
+                    // Customer copy follows the store's "order_email" template toggle; admin copy always sent.
+                    if ($email && app(\App\Services\TransactionalEmailService::class)->isEnabled($storeId, 'order_email')) {
+                        Mail::to($email)->send(new OrderPlacedMail($order, $customer, $storeId));
+                    }
                     $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');
                     Mail::to($adminEmail)->send(new OrderPlacedMail($order, $customer, $storeId));
                 } catch (\Exception $mailError) {
@@ -9607,25 +9624,28 @@ class OrderController extends Controller
             }
 
             // ===== WELCOME EMAIL =====
-            try {
-                $store = Store::find($storeId);
-                $frontendUrl = rtrim($store?->base_url ?? '#', '/');
-                $resetToken = \Illuminate\Support\Facades\Password::broker()->createToken($storeUser);
-                $resetLink = $frontendUrl . '/auth/reset-password?token=' . $resetToken . '&email=' . urlencode($validated['email']);
+            // Follows the store's "account_created" template toggle.
+            if (app(\App\Services\TransactionalEmailService::class)->isEnabled($storeId, 'account_created')) {
+                try {
+                    $store = Store::find($storeId);
+                    $frontendUrl = rtrim($store?->base_url ?? '#', '/');
+                    $resetToken = \Illuminate\Support\Facades\Password::broker()->createToken($storeUser);
+                    $resetLink = $frontendUrl . '/auth/reset-password?token=' . $resetToken . '&email=' . urlencode($validated['email']);
 
-                Mail::to($validated['email'])->send(
-                    new \App\Mail\WelcomeLoginMail(
-                        $storeUser->name,
-                        $validated['email'],
-                        $resetLink,
-                        $storeId
-                    )
-                );
-            } catch (\Exception $mailEx) {
-                \Log::error('NEW CUSTOMER WELCOME LOGIN EMAIL FAILED', [
-                    'error' => $mailEx->getMessage(),
-                    'email' => $validated['email'],
-                ]);
+                    Mail::to($validated['email'])->send(
+                        new \App\Mail\WelcomeLoginMail(
+                            $storeUser->name,
+                            $validated['email'],
+                            $resetLink,
+                            $storeId
+                        )
+                    );
+                } catch (\Exception $mailEx) {
+                    \Log::error('NEW CUSTOMER WELCOME LOGIN EMAIL FAILED', [
+                        'error' => $mailEx->getMessage(),
+                        'email' => $validated['email'],
+                    ]);
+                }
             }
 
             $formAddress  = $validated['billingAddress'] ?? [];
@@ -10285,7 +10305,8 @@ class OrderController extends Controller
                 if ($emailInvoice) {
                     try {
                         $email = $billingAddressJson['email'] ?? $customer->email;
-                        if ($email) {
+                        // Customer copy follows the store's "order_email" template toggle; admin copy always sent.
+                        if ($email && app(\App\Services\TransactionalEmailService::class)->isEnabled($storeId, 'order_email')) {
                             Mail::to($email)->send(new OrderPlacedMail($order, $customer, $storeId));
                         }
                         $adminEmail = env('MAIL_FROM_SB_ADMIN', 'hkinza575@gmail.com');

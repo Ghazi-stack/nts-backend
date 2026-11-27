@@ -528,6 +528,10 @@ class CustomerController extends Controller
                 ]);
             }
 
+            // Welcome email follows the store's "account_created" template toggle.
+            $sendWelcomeEmail = app(\App\Services\TransactionalEmailService::class)
+                ->isEnabled($storeId, 'account_created');
+
             if (!empty($customer->email) && $rawPassword) {
                 $storeUser = User::create([
                     'name'        => trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
@@ -538,29 +542,31 @@ class CustomerController extends Controller
                     'userRole'    => 2,
                 ]);
 
-                try {
-                    $store = Store::on('central')
-                        ->where('legacy_store_id', $storeId)
-                        ->first();
-                    $frontendUrl = rtrim($store?->base_url ?? '#', '/');
+                if ($sendWelcomeEmail) {
+                    try {
+                        $store = Store::on('central')
+                            ->where('legacy_store_id', $storeId)
+                            ->first();
+                        $frontendUrl = rtrim($store?->base_url ?? '#', '/');
 
-                    $resetToken = \Illuminate\Support\Facades\Password::broker()->createToken($storeUser);
-                    $resetLink  = $frontendUrl . '/auth/reset-password?token=' . $resetToken
-                        . '&email=' . urlencode($customer->email);
+                        $resetToken = \Illuminate\Support\Facades\Password::broker()->createToken($storeUser);
+                        $resetLink  = $frontendUrl . '/auth/reset-password?token=' . $resetToken
+                            . '&email=' . urlencode($customer->email);
 
-                    Mail::to($customer->email)->send(
-                        new \App\Mail\WelcomeLoginMail(
-                            $storeUser->name,
-                            $customer->email,
-                            $resetLink,
-                            $storeId
-                        )
-                    );
-                } catch (\Exception $mailEx) {
-                    \Log::error('NEW CUSTOMER WELCOME LOGIN EMAIL FAILED', [
-                        'error' => $mailEx->getMessage(),
-                        'email' => $customer->email,
-                    ]);
+                        Mail::to($customer->email)->send(
+                            new \App\Mail\WelcomeLoginMail(
+                                $storeUser->name,
+                                $customer->email,
+                                $resetLink,
+                                $storeId
+                            )
+                        );
+                    } catch (\Exception $mailEx) {
+                        \Log::error('NEW CUSTOMER WELCOME LOGIN EMAIL FAILED', [
+                            'error' => $mailEx->getMessage(),
+                            'email' => $customer->email,
+                        ]);
+                    }
                 }
             }
 

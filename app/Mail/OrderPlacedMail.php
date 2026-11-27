@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Services\TransactionalEmailContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
@@ -12,6 +13,9 @@ use App\Mail\StoreMailable;
 class OrderPlacedMail extends StoreMailable
 {
     use Queueable, SerializesModels;
+
+    /** store_id used by transactional_email_templates (legacy store id) */
+    protected $templateStoreId;
 
     public $order;
     public $customer;
@@ -25,6 +29,7 @@ class OrderPlacedMail extends StoreMailable
         $this->customer = $customer;
 
         $sid = $storeId ?? ($order->store_id ?? null);
+        $this->templateStoreId = $sid;
 
         if (!$sid) {
             throw new \Exception('Store ID not provided.');
@@ -48,6 +53,23 @@ class OrderPlacedMail extends StoreMailable
 
     public function build()
     {
+        // Store's dashboard template ("Order Email"), else the default Blade email.
+        if ($this->buildFromStoreTemplate($this->store, $this->templateStoreId, 'order_email', function () {
+            $order = TransactionalEmailContext::order($this->order);
+            $billing = $order['billing_address'] ?? [];
+
+            return TransactionalEmailContext::base($this->store, $this->logoUrl) + [
+                'order'    => $order,
+                'customer' => TransactionalEmailContext::customer(
+                    $billing['first_name'] ?? data_get($this->customer, 'first_name'),
+                    $billing['email'] ?? data_get($this->customer, 'email'),
+                    $billing['full_name'] ?? null
+                ),
+                'links'    => ['order_status' => $this->storePath, 'account' => $this->storePath],
+            ];
+        })) {
+            return $this;
+        }
         $orderNumber = is_array($this->order) ? ($this->order['orderNumber'] ?? $this->order['order_number'] ?? '') : ($this->order->order_number ?? '');
 
         return $this->setStoreSender($this->store)->subject('Your ' . ($this->store?->name ?? 'Store') . ' Order Confirmation (' . $orderNumber . ')')

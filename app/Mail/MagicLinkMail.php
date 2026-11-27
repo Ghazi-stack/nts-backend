@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Services\TransactionalEmailContext;
 use App\Mail\StoreMailable;
 use App\Models\Logo;
 use App\Models\Store;
@@ -11,6 +12,9 @@ use Illuminate\Queue\SerializesModels;
 class MagicLinkMail extends StoreMailable
 {
     use Queueable, SerializesModels;
+
+    /** store_id used by transactional_email_templates (legacy store id) */
+    protected $templateStoreId;
 
     public $user;
     public $store;
@@ -22,6 +26,7 @@ class MagicLinkMail extends StoreMailable
     {
         $this->user = $user;
         $this->loginUrl = $loginUrl;
+        $this->templateStoreId = $storeId;
         $this->store = $this->findStoreByLegacyId($storeId);
 
         $logo = Logo::where('store_id', $storeId)->first();
@@ -36,6 +41,15 @@ class MagicLinkMail extends StoreMailable
 
     public function build()
     {
+        // Store's dashboard template ("Sign-in Link Request"), else the default Blade email.
+        if ($this->buildFromStoreTemplate($this->store, $this->templateStoreId, 'sign_in_link_request', function () {
+            return TransactionalEmailContext::base($this->store, $this->logoUrl) + [
+                'customer' => TransactionalEmailContext::customer(null, data_get($this->user, 'email'), data_get($this->user, 'name')),
+                'links'    => ['sign_in' => $this->loginUrl, 'account' => $this->storePath],
+            ];
+        })) {
+            return $this;
+        }
         return $this->setStoreSender($this->store)
             ->subject('Your sign-in link for ' . ($this->store?->name ?? 'Our Store'))
             ->view('emails.magic_link')

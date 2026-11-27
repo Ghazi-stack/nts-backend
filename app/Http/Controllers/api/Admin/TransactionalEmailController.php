@@ -7,6 +7,8 @@ use App\Http\Resources\TransactionalEmailTemplateResource;
 use App\Mail\TransactionalTemplatedMail;
 use App\Models\TransactionalEmailTemplate;
 use App\Models\TransactionalEmailPhrase;
+use App\Models\Logo;
+use App\Services\TransactionalEmailContext;
 use App\Services\TransactionalEmailService;
 use Exception;
 use Illuminate\Http\Request;
@@ -133,19 +135,9 @@ class TransactionalEmailController extends Controller
     {
         $tpl = $this->svc->get(current_store_id(), $key);
 
-        // Store info lo central database se
-        $store = \App\Models\Store::on('central')
-            ->where('legacy_store_id', current_store_id())
-            ->orWhere('id', current_store_id())
-            ->first();
-
-        // Data merge karo - store name aur base_url automatically add
-        $data = array_merge($r->input('data', []), [
-            'store'     => $store->name ?? ($r->input('data.store') ?? 'Store'),
-            'store_url' => $store->base_url ?? '',
-        ]);
-
-        $render = $this->svc->render($tpl, $data);
+        // Sample order/customer data for this template, plus the real store
+        // (name, URL, logo). Values sent in "data" override the sample.
+        $render = $this->svc->render($tpl, $this->sampleData($key, $r->input('data', [])));
 
         return response()->json([
             'status'  => true,
@@ -172,7 +164,7 @@ class TransactionalEmailController extends Controller
             'data' => 'nullable|array',
         ]);
 
-        $render  = $this->svc->render($tpl, $r->input('data', []));
+        $render  = $this->svc->render($tpl, $this->sampleData($key, $r->input('data', [])));
         $headers = $this->svc->headers($tpl);
 
         Mail::to($r->to)->send(
@@ -338,13 +330,17 @@ class TransactionalEmailController extends Controller
             ], 404);
         }
 
-        // Custom phrases delete
-        TransactionalEmailPhrase::where('template_id', $tpl->id)
-            ->where('is_system', false)
-            ->delete();
-
         // System phrases reset to original seeder values
         $defaultPhrases = $this->getDefaultPhrases($key);
+
+        // Custom phrases delete, plus system phrases the default template
+        // no longer has (left over from the pre-v2 templates).
+        TransactionalEmailPhrase::where('template_id', $tpl->id)
+            ->where(function ($q) use ($defaultPhrases) {
+                $q->where('is_system', false)
+                    ->orWhereNotIn('phrase_name', array_column($defaultPhrases, 'phrase_name'));
+            })
+            ->delete();
         foreach ($defaultPhrases as $phrase) {
             TransactionalEmailPhrase::updateOrCreate(
                 ['template_id' => $tpl->id, 'phrase_name' => $phrase['phrase_name']],
@@ -352,16 +348,75 @@ class TransactionalEmailController extends Controller
             );
         }
 
-        // HTML reset to original seeder HTML
-        $tpl->update([
-            'body_html' => $this->getDefaultHtml($key),
+        // HTML (and subject) reset to the current default template
+        $tpl->update(array_filter([
+            'body_html'  => $this->getDefaultHtml($key),
+            'subject'    => $this->getDefaultSubject($key),
             'updated_by' => auth()->id(),
-        ]);
+        ], fn($v) => $v !== null));
 
         return response()->json([
             'status'  => true,
             'message' => 'Reset successful.',
         ]);
+    }
+
+    /**
+     * Variables a template can use, for the dashboard code editor.
+     */
+    public function variables(string $key)
+    {
+        $tpl = TransactionalEmailTemplate::ofStore(current_store_id())->key($key)->firstOrFail();
+
+        $variables = collect(TransactionalEmailContext::variables($key))
+            ->map(fn($description, $name) => ['name' => $name, 'description' => $description])
+            ->values();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Template variables fetched.',
+            'data'    => [
+                'key'           => $tpl->key,
+                'isLive'        => TransactionalEmailService::isLiveTemplate($tpl->body_html),
+                'sendsEmail'    => in_array($key, TransactionalEmailContext::SENDING_KEYS, true),
+                'variables'     => $variables,
+            ],
+        ]);
+    }
+
+    /**
+     * Sample data + the real store (name, URL, logo) for preview/test sends.
+     */
+    private function sampleData(string $key, $override): array
+    {
+        $store = current_store_registry();
+        $logoUrl = Logo::where('store_id', current_store_id())->value('logo_url');
+
+        $data = TransactionalEmailContext::withLegacyAliases(
+            TransactionalEmailContext::sample($key, $store, $logoUrl)
+        );
+
+        return is_array($override) ? array_replace_recursive($data, $override) : $data;
+    }
+
+    private function getDefaultSubject(string $key): ?string
+    {
+        foreach ($this->defaultTemplates() as $item) {
+            if ($item['key'] === $key) {
+                return $item['subject'] ?? null;
+            }
+        }
+
+        return null;
+    }
+
+    private function defaultTemplates(): array
+    {
+        $seeder = new \Database\Seeders\TransactionalEmailTemplateSeeder();
+        $method = (new \ReflectionClass($seeder))->getMethod('getTemplates');
+        $method->setAccessible(true);
+
+        return $method->invoke($seeder);
     }
 
     private function getDefaultHtml(string $key): string

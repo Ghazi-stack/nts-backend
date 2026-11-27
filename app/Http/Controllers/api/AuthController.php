@@ -37,6 +37,7 @@ use Illuminate\Support\Facades\URL;
 use App\Mail\MagicLinkMail;
 use App\Services\StoreRegistryService;
 use App\Services\TenantProvisioningService;
+use App\Services\TransactionalEmailService;
 use App\Models\CentralUser;
 
 class AuthController extends Controller
@@ -1662,9 +1663,12 @@ class AuthController extends Controller
             DB::connection('tenant')->commit();
 
             try {
-                Mail::to($user->email)->send(
-                    new UserRegistrationMail($user, $legacyStoreId)
-                );
+                // Customer copy follows the store's "account_created" template toggle; admin copy always sent.
+                if (app(TransactionalEmailService::class)->isEnabled($legacyStoreId, 'account_created')) {
+                    Mail::to($user->email)->send(
+                        new UserRegistrationMail($user, $legacyStoreId)
+                    );
+                }
 
                 $adminEmail = env(
                     'MAIL_FROM_SB_ADMIN',
@@ -4917,7 +4921,10 @@ class AuthController extends Controller
                 $user = \App\Models\User::where('email', $request->email)->first();
 
                 if ($user) {
-                    Mail::to($user->email)->send(new PasswordResetSuccessMail($user));
+                    // Confirmation email follows the store's "password_reset" template toggle.
+                    if (app(TransactionalEmailService::class)->isEnabled(current_store_id(), 'password_reset')) {
+                        Mail::to($user->email)->send(new PasswordResetSuccessMail($user));
+                    }
 
                     $customerId = $user->customer_id ?? null;
 
@@ -5544,6 +5551,15 @@ class AuthController extends Controller
                 'status' => false,
                 'message' => 'This account requires additional verification. Please use the existing verification flow.',
             ], 403);
+        }
+
+        // Store disabled the "sign_in_link_request" template: issue no token
+        // and send nothing, but keep the same generic response.
+        if (!app(TransactionalEmailService::class)->isEnabled($storeId, 'sign_in_link_request')) {
+            return response()->json([
+                'status' => true,
+                'message' => 'If an account exists, a sign-in link will be sent.',
+            ]);
         }
 
         // Generate a secure, one-time token.

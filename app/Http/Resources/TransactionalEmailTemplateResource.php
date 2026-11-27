@@ -15,6 +15,11 @@ class TransactionalEmailTemplateResource extends JsonResource
             'name'        => $this->name,
             'description' => $this->description,
             'enabled'     => $this->enabled,
+            // true when real emails use this template; false = the store still
+            // has the old demo template and real emails use the built-in design.
+            'isLive'      => \App\Services\TransactionalEmailService::isLiveTemplate($this->body_html),
+            // false for templates whose email the platform does not send yet.
+            'sendsEmail'  => in_array($this->key, \App\Services\TransactionalEmailContext::SENDING_KEYS, true),
             'headers'     => [
                 'fromName'  => $this->from_name,
                 'fromEmail' => $this->from_email,

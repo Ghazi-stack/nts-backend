@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Services\TransactionalEmailContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
@@ -12,6 +13,9 @@ use App\Mail\StoreMailable;
 class WelcomeLoginMail extends StoreMailable
 {
     use Queueable, SerializesModels;
+
+    /** store_id used by transactional_email_templates (legacy store id) */
+    protected $templateStoreId;
 
     public $userName;
     public $userEmail;
@@ -25,6 +29,7 @@ class WelcomeLoginMail extends StoreMailable
         $this->userName = $userName;
         $this->userEmail = $userEmail;
         $this->resetLink = $resetLink;
+        $this->templateStoreId = $storeId;
 
         $this->store = $this->findStoreByLegacyId($storeId);
 
@@ -37,6 +42,15 @@ class WelcomeLoginMail extends StoreMailable
 
     public function build()
     {
+        // Store's dashboard template ("Account Created"), else the default Blade email.
+        if ($this->buildFromStoreTemplate($this->store, $this->templateStoreId, 'account_created', function () {
+            return TransactionalEmailContext::base($this->store, $this->logoUrl) + [
+                'customer' => TransactionalEmailContext::customer(null, $this->userEmail, $this->userName),
+                'links'    => ['set_password' => (string) $this->resetLink, 'account' => $this->storePath],
+            ];
+        })) {
+            return $this;
+        }
         return $this->setStoreSender($this->store)->subject('Your Login Details - Set Your Password')
             ->view('emails.welcome_login')
             ->with([

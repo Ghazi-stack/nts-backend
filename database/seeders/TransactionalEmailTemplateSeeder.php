@@ -52,7 +52,30 @@ class TransactionalEmailTemplateSeeder extends Seeder
         $this->command->info('Transactional emails seeded successfully for store ' . $storeId);
     }
 
+    /**
+     * Current defaults: the original list, with the templates of emails the
+     * application really sends replaced by their v2 versions
+     * (TransactionalEmailLiveTemplates). Also used by the dashboard's
+     * "Reset to default" via reflection.
+     */
     private function getTemplates(): array
+    {
+        $live = TransactionalEmailLiveTemplates::all();
+
+        return array_map(
+            fn(array $item) => isset($live[$item['key']])
+                ? array_merge($item, $live[$item['key']])
+                : $item,
+            $this->legacyTemplates()
+        );
+    }
+
+    /**
+     * The original (pre-v2) defaults, kept unchanged. The upgrade command
+     * compares stored templates against these to tell untouched templates
+     * from ones a store owner edited.
+     */
+    public function legacyTemplates(): array
     {
         return [
             [
