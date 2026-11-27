@@ -177,9 +177,13 @@ class PaymentSettingsController extends Controller
     // }
 
 
-    private function formatMethod($method): array
+    private function formatMethod($method, ?string $currency = null): array
     {
-        $configuration = $method->configuration ?? [];
+        $effective = $this->paymentSettings->getEffectiveSettings(
+            $method,
+            $currency
+        );
+        $configuration = $effective['configuration'];
 
         // Include all existing Stripe defaults and saved settings
         // in the same configuration object.
@@ -196,8 +200,8 @@ class PaymentSettingsController extends Controller
             'methodCode' => $method->method_code,
             'category' => $method->category,
             'displayName' => $method->display_name,
-            'isEnabled' => (bool) $method->is_enabled,
-            'isConfigured' => (bool) $method->is_configured,
+            'isEnabled' => $effective['isEnabled'],
+            'isConfigured' => $effective['isConfigured'],
             'availableCountries' => $method->available_countries,
             'availableCurrencies' => $method->available_currencies,
             'configuration' => $this->keysToCamelCase($configuration),
@@ -307,7 +311,7 @@ class PaymentSettingsController extends Controller
 
             foreach ($groups as $category => $methods) {
                 $data[$category] = $methods
-                    ->map(fn ($method) => $this->formatMethod($method))
+                    ->map(fn ($method) => $this->formatMethod($method, $currency))
                     ->values()
                     ->all();
             }
@@ -317,7 +321,8 @@ class PaymentSettingsController extends Controller
                 foreach ($data['online'] as $index => $method) {
                     if (
                         $method['methodCode'] === 'stripe' &&
-                        !$method['isConfigured']
+                        !$method['isConfigured'] &&
+                        (!$currency || !$method['hasCredentials'])
                     ) {
                         $data['online'][$index]['connectUrls'] =
                             $this->generateStripeAuthorizationUrls($storeId);
@@ -420,8 +425,19 @@ class PaymentSettingsController extends Controller
     /**
      * GET /payment-settings/{methodCode}
      */
-    public function show(string $methodCode)
+    public function show(Request $request, string $methodCode)
     {
+        $validated = Validator::make($request->query(), [
+            'currency' => ['nullable', 'string', 'size:3', 'alpha'],
+        ]);
+
+        if ($validated->fails()) {
+            return $this->validationErrorResponse($validated);
+        }
+
+        $currency = $request->query('currency');
+        $currency = $currency !== null ? strtoupper(trim($currency)) : null;
+
         try {
             $method = $this->paymentSettings->getMethod(
                 $this->getStoreId(),
@@ -438,7 +454,7 @@ class PaymentSettingsController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Payment method retrieved successfully.',
-                'data' => $this->formatMethod($method),
+                'data' => $this->formatMethod($method, $currency),
             ]);
         } catch (Throwable $e) {
             report($e);
@@ -540,6 +556,7 @@ class PaymentSettingsController extends Controller
         $normalizedData = $this->keysToSnakeCase($request->all());
 
         $validator = Validator::make($normalizedData, [
+            'currency' => 'sometimes|nullable|string|size:3|alpha',
             'display_name' => 'sometimes|required|string|max:150',
 
             // Existing country settings
@@ -571,16 +588,51 @@ class PaymentSettingsController extends Controller
         }
 
         try {
-            $saved = $this->paymentSettings->saveConfiguration(
-                $storeId,
-                $methodCode,
-                $validator->validated()
-            );
+            $validated = $validator->validated();
+            $currency = $validated['currency'] ?? null;
+            unset($validated['currency']);
+
+            if ($currency !== null) {
+                if (array_key_exists('credentials', $validated)) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Provider credentials are store-level and cannot be changed in a currency-specific update.',
+                        'errors' => [
+                            'credentials' => ['Use the existing store-level credential configuration operation.'],
+                        ],
+                    ], 422);
+                }
+
+                if (!array_key_exists('configuration', $validated)
+                    || !is_array($validated['configuration'])) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'A configuration object is required for a currency-specific update.',
+                        'errors' => [
+                            'configuration' => ['The configuration field is required when currency is provided.'],
+                        ],
+                    ], 422);
+                }
+
+                $currency = strtoupper(trim($currency));
+                $saved = $this->paymentSettings->saveCurrencyConfiguration(
+                    $storeId,
+                    $methodCode,
+                    $currency,
+                    $validated['configuration']
+                );
+            } else {
+                $saved = $this->paymentSettings->saveConfiguration(
+                    $storeId,
+                    $methodCode,
+                    $validated
+                );
+            }
 
             return response()->json([
                 'status' => true,
                 'message' => 'Payment configuration saved successfully.',
-                'data' => $this->formatMethod($saved),
+                'data' => $this->formatMethod($saved, $currency),
             ]);
         } catch (Throwable $e) {
             report($e);
@@ -595,18 +647,35 @@ class PaymentSettingsController extends Controller
     /**
      * PATCH /payment-settings/{methodCode}/enable
      */
-    public function enable(string $methodCode)
+    public function enable(Request $request, string $methodCode)
     {
+        $validated = Validator::make($request->all(), [
+            'currency' => ['nullable', 'string', 'size:3', 'alpha'],
+        ]);
+
+        if ($validated->fails()) {
+            return $this->validationErrorResponse($validated);
+        }
+
+        $currency = $request->input('currency');
+        $currency = $currency !== null ? strtoupper(trim($currency)) : null;
+
         try {
-            $method = $this->paymentSettings->enableMethod(
-                $this->getStoreId(),
-                $methodCode
-            );
+            $method = $currency !== null
+                ? $this->paymentSettings->enableCurrency(
+                    $this->getStoreId(),
+                    $methodCode,
+                    $currency
+                )
+                : $this->paymentSettings->enableMethod(
+                    $this->getStoreId(),
+                    $methodCode
+                );
 
             return response()->json([
                 'status' => true,
                 'message' => 'Payment method enabled successfully.',
-                'data' => $this->formatMethod($method),
+                'data' => $this->formatMethod($method, $currency),
             ]);
         } catch (RuntimeException $e) {
             return response()->json([
@@ -655,8 +724,19 @@ class PaymentSettingsController extends Controller
     // }
 
     
-    public function disable(string $methodCode)
+    public function disable(Request $request, string $methodCode)
     {
+        $validated = Validator::make($request->all(), [
+            'currency' => ['nullable', 'string', 'size:3', 'alpha'],
+        ]);
+
+        if ($validated->fails()) {
+            return $this->validationErrorResponse($validated);
+        }
+
+        $currency = $request->input('currency');
+        $currency = $currency !== null ? strtoupper(trim($currency)) : null;
+
         try {
             $storeId = $this->getStoreId();
 
@@ -672,8 +752,16 @@ class PaymentSettingsController extends Controller
                 ], 404);
             }
 
-            // Stripe requires OAuth revocation before clearing credentials.
-            if ($methodCode === 'stripe') {
+            if ($currency !== null) {
+                // Currency-specific Stripe disablement must retain the shared
+                // OAuth connection and only clear this currency's settings.
+                $method = $this->paymentSettings->disableCurrency(
+                    $storeId,
+                    $methodCode,
+                    $currency
+                );
+            // Stripe requires OAuth revocation for a global disable.
+            } elseif ($methodCode === 'stripe') {
                 if ($method->category !== 'online') {
                     throw new RuntimeException(
                         'Stripe must be configured as an online payment method.'
@@ -699,7 +787,7 @@ class PaymentSettingsController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Payment method disabled successfully.',
-                'data' => $this->formatMethod($method),
+                'data' => $this->formatMethod($method, $currency),
             ]);
 
         } catch (RuntimeException $e) {

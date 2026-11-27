@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\StorePaymentMethod;
 use App\Models\StorePaymentMethodProvider;
+use App\Services\StripeAccountDisconnector;
 use App\Services\StripePaymentSettingsResolver;
 use App\Services\TenantCredentialResolver;
 use Illuminate\Database\Schema\Blueprint;
@@ -178,7 +179,7 @@ class StorefrontPaymentMethodsTest extends TestCase
         ]);
 
         $stripeResolver = Mockery::mock(StripePaymentSettingsResolver::class);
-        $stripeResolver->shouldReceive('resolve')->with(self::STORE_ID)->andReturn([
+        $stripeResolver->shouldReceive('resolve')->with(self::STORE_ID, null)->andReturn([
             'active' => true,
             'settings' => [
                 'stripeLinkEnabled' => true,
@@ -211,6 +212,415 @@ class StorefrontPaymentMethodsTest extends TestCase
         $this->getJson('/api/web/payment-methods', [
             'X-Store-Hash' => self::STORE_HASH,
         ])->assertOk()->assertJsonCount(0, 'data.paymentMethods');
+    }
+
+    public function test_currency_configuration_updates_preserve_other_currencies_and_legacy_settings(): void
+    {
+        $method = $this->method('cash_on_delivery', true, true, [
+            'delivery_information' => 'Legacy instructions',
+        ], [], null, ['*']);
+        $service = app(\App\Services\PaymentSettingsService::class);
+
+        $service->saveCurrencyConfiguration(self::STORE_ID, 'cash_on_delivery', 'EUR', [
+            'delivery_information' => 'EUR instructions',
+        ]);
+        $service->saveCurrencyConfiguration(self::STORE_ID, 'cash_on_delivery', 'USD', [
+            'delivery_information' => 'USD instructions',
+        ]);
+        $service->saveCurrencyConfiguration(self::STORE_ID, 'cash_on_delivery', 'USD', [
+            'delivery_information' => 'Updated USD instructions',
+        ]);
+
+        $stored = $method->fresh()->configuration;
+        $this->assertSame('Legacy instructions', $stored['delivery_information']);
+        $this->assertSame(
+            'Updated USD instructions',
+            $stored['currencySettings']['USD']['delivery_information']
+        );
+        $this->assertSame(
+            'EUR instructions',
+            $stored['currencySettings']['EUR']['delivery_information']
+        );
+        $this->assertTrue($stored['currencySettings']['USD']['isEnabled']);
+        $this->assertTrue($stored['currencySettings']['EUR']['isConfigured']);
+    }
+
+    public function test_disabling_one_currency_clears_only_its_settings_and_keeps_stripe_credentials(): void
+    {
+        $credentials = [
+            'stripe_user_id' => 'acct_shared',
+            'access_token' => 'SHARED-STRIPE-TOKEN',
+            'livemode' => false,
+        ];
+        $method = $this->method('stripe', true, true, [
+            'currencySettings' => [
+                'USD' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'statement_descriptor' => 'USD SHOP',
+                    'payment_methods' => ['card' => true],
+                ],
+                'EUR' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'statement_descriptor' => 'EUR SHOP',
+                    'payment_methods' => ['card' => false],
+                ],
+            ],
+        ], $credentials, null, ['*']);
+
+        app(\App\Services\PaymentSettingsService::class)
+            ->disableCurrency(self::STORE_ID, 'stripe', 'USD');
+
+        $stored = $method->fresh();
+        $this->assertSame($credentials, $stored->credentials);
+        $this->assertSame(
+            ['isEnabled' => false, 'isConfigured' => false],
+            $stored->configuration['currencySettings']['USD']
+        );
+        $this->assertSame(
+            'EUR SHOP',
+            $stored->configuration['currencySettings']['EUR']['statement_descriptor']
+        );
+        $this->assertTrue($stored->is_enabled);
+        $this->assertTrue($stored->is_configured);
+    }
+
+    public function test_storefront_returns_only_requested_currency_settings_and_status(): void
+    {
+        $method = $this->method('cash_on_delivery', false, false, [], [], null, ['*']);
+        $method->configuration = [
+            'currencySettings' => [
+                'USD' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'delivery_information' => 'USD-only instructions',
+                ],
+                'EUR' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'delivery_information' => 'EUR-only instructions',
+                ],
+            ],
+        ];
+        $method->save();
+
+        $this->getJson('/api/web/payment-methods?currency=USD', [
+            'X-Store-Hash' => self::STORE_HASH,
+        ])->assertOk()
+            ->assertJsonCount(1, 'data.paymentMethods')
+            ->assertJsonPath('data.paymentMethods.0.paymentInstructions', 'USD-only instructions')
+            ->assertJsonPath('data.paymentMethods.0.isEnabled', true)
+            ->assertDontSee('EUR-only instructions')
+            ->assertDontSee('currencySettings');
+
+        app(\App\Services\PaymentSettingsService::class)
+            ->disableCurrency(self::STORE_ID, 'cash_on_delivery', 'USD');
+
+        $this->getJson('/api/web/payment-methods?currency=USD', [
+            'X-Store-Hash' => self::STORE_HASH,
+        ])->assertOk()->assertJsonCount(0, 'data.paymentMethods');
+
+        $this->getJson('/api/web/payment-methods?currency=EUR', [
+            'X-Store-Hash' => self::STORE_HASH,
+        ])->assertOk()
+            ->assertJsonCount(1, 'data.paymentMethods')
+            ->assertJsonPath('data.paymentMethods.0.paymentInstructions', 'EUR-only instructions');
+    }
+
+    public function test_dashboard_selected_currency_reads_hide_other_currency_configuration(): void
+    {
+        $method = $this->method('cash_on_delivery', false, false, [], [], null, ['*']);
+        $method->configuration = [
+            'currencySettings' => [
+                'USD' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'delivery_information' => 'USD dashboard instructions',
+                ],
+                'EUR' => [
+                    'isEnabled' => false,
+                    'isConfigured' => false,
+                    'delivery_information' => 'EUR dashboard instructions',
+                ],
+            ],
+        ];
+        $method->save();
+
+        $this->withoutMiddleware()
+            ->getJson('/api/dashboard/payment-settings/cash_on_delivery?currency=USD', [
+                'storeId' => (string) self::STORE_ID,
+            ])->assertOk()
+            ->assertJsonPath('data.isEnabled', true)
+            ->assertJsonPath('data.configuration.deliveryInformation', 'USD dashboard instructions')
+            ->assertDontSee('EUR dashboard instructions')
+            ->assertDontSee('currencySettings');
+    }
+
+    public function test_dashboard_stripe_configuration_reads_selected_currency_only(): void
+    {
+        $this->method('stripe', true, true, [
+            'currencySettings' => [
+                'USD' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'statement_descriptor' => 'USD STORE',
+                    'payment_methods' => ['card' => true],
+                ],
+                'EUR' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'statement_descriptor' => 'EUR STORE',
+                    'payment_methods' => ['card' => false],
+                ],
+            ],
+        ], [
+            'stripe_user_id' => 'acct_shared',
+            'access_token' => 'SHARED-STRIPE-TOKEN',
+            'livemode' => false,
+        ]);
+
+        $this->withoutMiddleware()
+            ->getJson('/api/dashboard/payment-settings/stripe/configuration?currency=USD', [
+                'storeId' => (string) self::STORE_ID,
+            ])->assertOk()
+            ->assertJsonPath('data.configuration.statementDescriptor', 'USD STORE')
+            ->assertJsonPath('data.configuration.paymentMethods.card', true)
+            ->assertDontSee('EUR STORE')
+            ->assertDontSee('currencySettings')
+            ->assertDontSee('SHARED-STRIPE-TOKEN');
+    }
+
+    public function test_stripe_resolver_uses_currency_specific_settings_with_shared_credentials(): void
+    {
+        config(['services.stripe.connect.dynamic_settings_enabled' => true]);
+        $this->method('stripe', true, true, [
+            'statement_descriptor' => 'Legacy descriptor',
+            'payment_methods' => ['card' => true],
+            'currencySettings' => [
+                'USD' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'statement_descriptor' => 'USD descriptor',
+                    'payment_methods' => ['card' => true],
+                ],
+                'EUR' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'statement_descriptor' => 'EUR descriptor',
+                    'payment_methods' => ['card' => false],
+                ],
+            ],
+        ], [
+            'stripe_user_id' => 'acct_shared',
+            'access_token' => 'SHARED-STRIPE-TOKEN',
+            'livemode' => false,
+        ]);
+
+        $resolver = app(StripePaymentSettingsResolver::class);
+        $usd = $resolver->resolve(self::STORE_ID, 'USD');
+        $eur = $resolver->resolve(self::STORE_ID, 'EUR');
+
+        $this->assertTrue($usd['active']);
+        $this->assertSame('USD descriptor', $usd['settings']['statementDescriptor']);
+        $this->assertTrue($usd['settings']['paymentMethods']['card']);
+        $this->assertTrue($eur['active']);
+        $this->assertSame('EUR descriptor', $eur['settings']['statementDescriptor']);
+        $this->assertFalse($eur['settings']['paymentMethods']['card']);
+        $this->assertStringNotContainsString(
+            'SHARED-STRIPE-TOKEN',
+            json_encode([$usd, $eur])
+        );
+    }
+
+    public function test_stripe_currency_configuration_update_preserves_other_currency_and_credentials(): void
+    {
+        $credentials = [
+            'stripe_user_id' => 'acct_shared',
+            'access_token' => 'SHARED-STRIPE-TOKEN',
+            'livemode' => false,
+        ];
+        $method = $this->method('stripe', true, true, [
+            'currencySettings' => [
+                'EUR' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'statement_descriptor' => 'EUR descriptor',
+                    'payment_methods' => ['card' => false],
+                ],
+            ],
+        ], $credentials);
+
+        $this->withoutMiddleware()
+            ->putJson('/api/dashboard/payment-settings/stripe/configuration?currency=USD', [
+                'configuration' => [
+                    'statementDescriptor' => 'USD descriptor',
+                    'paymentMethods' => ['card' => true],
+                ],
+            ], [
+                'storeId' => (string) self::STORE_ID,
+            ])->assertOk()
+            ->assertJsonPath('data.configuration.statementDescriptor', 'USD descriptor')
+            ->assertJsonPath('data.configuration.paymentMethods.card', true)
+            ->assertDontSee('EUR descriptor')
+            ->assertDontSee('SHARED-STRIPE-TOKEN');
+
+        $stored = $method->fresh();
+        $this->assertSame($credentials, $stored->credentials);
+        $this->assertSame(
+            'USD descriptor',
+            $stored->configuration['currencySettings']['USD']['statement_descriptor']
+        );
+        $this->assertSame(
+            'EUR descriptor',
+            $stored->configuration['currencySettings']['EUR']['statement_descriptor']
+        );
+        $this->assertArrayNotHasKey(
+            'account_id',
+            $stored->configuration['currencySettings']['USD']
+        );
+        $this->assertArrayNotHasKey(
+            'livemode',
+            $stored->configuration['currencySettings']['USD']
+        );
+    }
+
+    public function test_generic_dashboard_save_changes_only_the_selected_currency(): void
+    {
+        $method = $this->method('cash_on_delivery', true, true, [
+            'delivery_information' => 'Legacy instructions',
+            'currencySettings' => [
+                'EUR' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'delivery_information' => 'EUR instructions',
+                ],
+            ],
+        ], [], null, ['*']);
+
+        $this->withoutMiddleware()
+            ->postJson('/api/dashboard/payment-settings/cash_on_delivery', [
+                'currency' => 'USD',
+                'configuration' => [
+                    'deliveryInformation' => 'USD instructions',
+                ],
+            ], [
+                'storeId' => (string) self::STORE_ID,
+            ])->assertOk()
+            ->assertJsonPath('data.configuration.deliveryInformation', 'USD instructions')
+            ->assertDontSee('EUR instructions')
+            ->assertDontSee('currencySettings');
+
+        $this->assertSame(
+            'USD instructions',
+            $method->fresh()->configuration['currencySettings']['USD']['delivery_information']
+        );
+        $this->assertSame(
+            'EUR instructions',
+            $method->fresh()->configuration['currencySettings']['EUR']['delivery_information']
+        );
+    }
+
+    public function test_currency_specific_stripe_disable_does_not_disconnect_oauth(): void
+    {
+        $credentials = [
+            'stripe_user_id' => 'acct_shared',
+            'access_token' => 'SHARED-STRIPE-TOKEN',
+            'livemode' => false,
+        ];
+        $method = $this->method('stripe', true, true, [
+            'currencySettings' => [
+                'USD' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'payment_methods' => ['card' => true],
+                ],
+                'EUR' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'payment_methods' => ['card' => true],
+                ],
+            ],
+        ], $credentials, null, ['*']);
+
+        $disconnector = Mockery::mock(StripeAccountDisconnector::class);
+        $disconnector->shouldNotReceive('disconnectForStoreId');
+        $this->app->instance(StripeAccountDisconnector::class, $disconnector);
+
+        $this->withoutMiddleware()
+            ->patchJson('/api/dashboard/payment-settings/stripe/disable', [
+                'currency' => 'USD',
+            ], [
+                'storeId' => (string) self::STORE_ID,
+            ])->assertOk()
+            ->assertJsonPath('data.isEnabled', false)
+            ->assertJsonPath('data.isConfigured', false);
+
+        $stored = $method->fresh();
+        $this->assertSame($credentials, $stored->credentials);
+        $this->assertTrue($stored->is_enabled);
+        $this->assertSame(
+            ['isEnabled' => true, 'isConfigured' => true, 'payment_methods' => ['card' => true]],
+            $stored->configuration['currencySettings']['EUR']
+        );
+    }
+
+    public function test_global_stripe_disable_still_uses_the_existing_disconnector(): void
+    {
+        $this->method('stripe', true, true, [], [
+            'stripe_user_id' => 'acct_shared',
+            'access_token' => 'SHARED-STRIPE-TOKEN',
+            'livemode' => false,
+        ]);
+
+        $disconnector = Mockery::mock(StripeAccountDisconnector::class);
+        $disconnector->shouldReceive('disconnectForStoreId')
+            ->once()
+            ->with(self::STORE_ID);
+        $this->app->instance(StripeAccountDisconnector::class, $disconnector);
+
+        $this->withoutMiddleware()
+            ->patchJson('/api/dashboard/payment-settings/stripe/disable', [], [
+                'storeId' => (string) self::STORE_ID,
+            ])->assertOk()
+            ->assertJsonPath('data.isEnabled', false)
+            ->assertJsonPath('data.isConfigured', false);
+    }
+
+    public function test_legacy_global_configuration_is_used_when_currency_entry_is_missing(): void
+    {
+        $this->method('cash_on_delivery', true, true, [
+            'delivery_information' => 'Legacy COD instructions',
+        ], [], null, ['*']);
+
+        $this->getJson('/api/web/payment-methods?currency=GBP', [
+            'X-Store-Hash' => self::STORE_HASH,
+        ])->assertOk()
+            ->assertJsonCount(1, 'data.paymentMethods')
+            ->assertJsonPath('data.paymentMethods.0.paymentInstructions', 'Legacy COD instructions');
+    }
+
+    public function test_global_disable_still_clears_legacy_and_currency_configuration(): void
+    {
+        $method = $this->method('cash_on_delivery', true, true, [
+            'delivery_information' => 'Legacy instructions',
+            'currencySettings' => [
+                'USD' => [
+                    'isEnabled' => true,
+                    'isConfigured' => true,
+                    'delivery_information' => 'USD instructions',
+                ],
+            ],
+        ], ['legacy_credential' => 'legacy']);
+
+        app(\App\Services\PaymentSettingsService::class)
+            ->disableMethod(self::STORE_ID, 'cash_on_delivery');
+
+        $stored = $method->fresh();
+        $this->assertFalse($stored->is_enabled);
+        $this->assertFalse($stored->is_configured);
+        $this->assertNull($stored->configuration);
+        $this->assertNull($stored->credentials);
     }
 
     private function method(

@@ -62,6 +62,7 @@ class StorefrontPaymentMethodController extends Controller
                     $method,
                     $request,
                     $storeId,
+                    $currency,
                     $stripeResolved
                 );
 
@@ -94,10 +95,15 @@ class StorefrontPaymentMethodController extends Controller
         StorePaymentMethod $method,
         Request $request,
         int $storeId,
+        ?string $currency,
         ?array &$stripeResolved
     ): ?array {
         $methodCode = $method->method_code;
         $catalog = $this->paymentSettings->getCatalogMethod($methodCode);
+        $effective = $this->paymentSettings->getEffectiveSettings(
+            $method,
+            $currency
+        );
 
         // Do not publish unknown methods whose storefront behavior is undefined.
         if (!$catalog) {
@@ -120,7 +126,10 @@ class StorefrontPaymentMethodController extends Controller
                 return null;
             }
 
-            $stripeResolved ??= $this->stripeSettings->resolve($storeId);
+            $stripeResolved ??= $this->stripeSettings->resolve(
+                $storeId,
+                $currency
+            );
 
             if (!($stripeResolved['active'] ?? false)) {
                 return null;
@@ -199,7 +208,7 @@ class StorefrontPaymentMethodController extends Controller
         ];
         $instructionKey = $instructionKeys[$methodCode] ?? null;
         $instructions = $instructionKey
-            ? ($method->configuration[$instructionKey] ?? null)
+            ? ($effective['configuration'][$instructionKey] ?? null)
             : null;
 
         if (is_string($instructions) && trim($instructions) !== '') {

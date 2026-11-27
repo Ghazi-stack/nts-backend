@@ -37,6 +37,60 @@ class PaymentSettingsService
     }
 
     /**
+     * Resolve either the legacy store-wide settings or one currency's settings.
+     * The internal currency map is never returned as part of configuration.
+     */
+    public function getEffectiveSettings(
+        StorePaymentMethod $method,
+        ?string $currency = null
+    ): array {
+        $storedConfiguration = $method->configuration ?? [];
+        $currencySettings = $storedConfiguration['currencySettings'] ?? [];
+
+        if ($currency !== null) {
+            $currency = strtoupper(trim($currency));
+
+            if (is_array($currencySettings)
+                && array_key_exists($currency, $currencySettings)) {
+                $entry = is_array($currencySettings[$currency])
+                    ? $currencySettings[$currency]
+                    : [];
+                $configuration = $entry;
+                unset($configuration['isEnabled'], $configuration['isConfigured']);
+                if ($method->method_code === 'stripe') {
+                    unset(
+                        $configuration['connection_type'],
+                        $configuration['account_id'],
+                        $configuration['livemode']
+                    );
+                }
+
+                return [
+                    'isEnabled' => (bool) ($entry['isEnabled'] ?? false),
+                    'isConfigured' => array_key_exists('isConfigured', $entry)
+                        ? (bool) $entry['isConfigured']
+                        : $this->isConfigurationComplete(
+                            $method->method_code,
+                            $configuration,
+                            $method->credentials ?? []
+                        ),
+                    'configuration' => $configuration,
+                    'isCurrencySpecific' => true,
+                ];
+            }
+        }
+
+        unset($storedConfiguration['currencySettings']);
+
+        return [
+            'isEnabled' => (bool) $method->is_enabled,
+            'isConfigured' => (bool) $method->is_configured,
+            'configuration' => $storedConfiguration,
+            'isCurrencySpecific' => false,
+        ];
+    }
+
+    /**
      * Return enabled, configured methods that match storefront filters.
      * A missing filter does not make a method unavailable; configured
      * restrictions are applied when the shopper supplies that dimension.
@@ -46,14 +100,21 @@ class PaymentSettingsService
         ?string $currency = null,
         ?string $country = null
     ) {
+        $currency = $currency !== null ? strtoupper(trim($currency)) : null;
+        $country = $country !== null ? strtoupper(trim($country)) : null;
+
         // Keep this query portable across supported tenant database drivers;
         // the dashboard's getActiveMethods currently orders with MySQL FIELD().
         return StorePaymentMethod::forStore($storeId)
-            ->enabled()
-            ->configured()
             ->orderBy('id')
             ->get()
             ->filter(function (StorePaymentMethod $method) use ($currency, $country) {
+                $effective = $this->getEffectiveSettings($method, $currency);
+
+                if (!$effective['isEnabled'] || !$effective['isConfigured']) {
+                    return false;
+                }
+
                 if ($currency !== null) {
                     $currencies = $method->available_currencies;
 
@@ -172,20 +233,34 @@ class PaymentSettingsService
         return $catalog[$methodCode] ?? null;
     }
 
-    public function isEnabled(int $storeId, string $methodCode): bool
-    {
-        return StorePaymentMethod::forStore($storeId)
-            ->where('method_code', $methodCode)
-            ->where('is_enabled', true)
-            ->where('is_configured', true)
-            ->exists();
-    }
-
-    public function getConfiguration(int $storeId, string $methodCode): ?array
+    public function isEnabled(
+        int $storeId,
+        string $methodCode,
+        ?string $currency = null
+    ): bool
     {
         $method = $this->getMethod($storeId, $methodCode);
 
-        return $method ? ($method->configuration ?? []) : null;
+        if (!$method) {
+            return false;
+        }
+
+        $effective = $this->getEffectiveSettings($method, $currency);
+
+        return $effective['isEnabled'] && $effective['isConfigured'];
+    }
+
+    public function getConfiguration(
+        int $storeId,
+        string $methodCode,
+        ?string $currency = null
+    ): ?array
+    {
+        $method = $this->getMethod($storeId, $methodCode);
+
+        return $method
+            ? $this->getEffectiveSettings($method, $currency)['configuration']
+            : null;
     }
 
     public function getCredentials(int $storeId, string $methodCode): ?array
@@ -344,10 +419,17 @@ class PaymentSettingsService
             }
 
             if (array_key_exists('configuration', $data)) {
+                $existingCurrencySettings = $method->configuration['currencySettings'] ?? null;
                 $method->configuration = array_replace_recursive(
                     $method->configuration ?? [],
-                    $data['configuration'] ?? []
+                    array_diff_key($data['configuration'] ?? [], [
+                        'currencySettings' => true,
+                    ])
                 );
+
+                if (is_array($existingCurrencySettings)) {
+                    $method->configuration['currencySettings'] = $existingCurrencySettings;
+                }
             }
 
             if (array_key_exists('credentials', $data)) {
@@ -367,6 +449,195 @@ class PaymentSettingsService
             // Keep incomplete payment methods disabled.
             $method->is_enabled = $method->is_configured;
 
+            $method->save();
+
+            return $method->fresh();
+        });
+    }
+
+    /** Save configuration for one currency without modifying global state. */
+    public function saveCurrencyConfiguration(
+        int $storeId,
+        string $methodCode,
+        string $currency,
+        array $configuration
+    ): StorePaymentMethod {
+        $currency = strtoupper(trim($currency));
+
+        return DB::connection('tenant')->transaction(function () use (
+            $storeId,
+            $methodCode,
+            $currency,
+            $configuration
+        ) {
+            $method = StorePaymentMethod::forStore($storeId)
+                ->where('method_code', $methodCode)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$method) {
+                throw new RuntimeException('Payment method not found for this store.');
+            }
+
+            $stored = $method->configuration ?? [];
+            $currencySettings = $stored['currencySettings'] ?? [];
+            $currencySettings = is_array($currencySettings) ? $currencySettings : [];
+            $hasCurrencyEntry = array_key_exists($currency, $currencySettings);
+
+            if ($hasCurrencyEntry && is_array($currencySettings[$currency])) {
+                $entry = $currencySettings[$currency];
+                $wasEnabled = (bool) ($entry['isEnabled'] ?? false);
+                unset($entry['isEnabled'], $entry['isConfigured']);
+            } else {
+                $entry = $stored;
+                unset($entry['currencySettings']);
+                $wasEnabled = (bool) $method->is_enabled;
+            }
+
+            if ($methodCode === 'stripe') {
+                unset(
+                    $entry['connection_type'],
+                    $entry['account_id'],
+                    $entry['livemode']
+                );
+            }
+
+            $configuration = array_diff_key($configuration, [
+                'currencySettings' => true,
+                'isEnabled' => true,
+                'isConfigured' => true,
+            ]);
+
+            $entry = array_replace_recursive($entry, $configuration);
+            $isConfigured = $this->isConfigurationComplete(
+                $methodCode,
+                $entry,
+                $method->credentials ?? []
+            );
+
+            // A new currency starts with legacy enablement. A complete first
+            // setup follows the legacy save behavior and enables that currency.
+            $isEnabled = $hasCurrencyEntry
+                ? $wasEnabled
+                : ($wasEnabled || $isConfigured);
+
+            if (!$isConfigured) {
+                $isEnabled = false;
+            }
+
+            $currencySettings[$currency] = array_merge(
+                $entry,
+                [
+                    'isEnabled' => $isEnabled,
+                    'isConfigured' => $isConfigured,
+                ]
+            );
+            $stored['currencySettings'] = $currencySettings;
+
+            $method->configuration = $stored;
+            $method->save();
+
+            return $method->fresh();
+        });
+    }
+
+    /** Enable one configured currency, preserving every other entry. */
+    public function enableCurrency(
+        int $storeId,
+        string $methodCode,
+        string $currency
+    ): StorePaymentMethod {
+        $currency = strtoupper(trim($currency));
+
+        return DB::connection('tenant')->transaction(function () use (
+            $storeId,
+            $methodCode,
+            $currency
+        ) {
+            $method = StorePaymentMethod::forStore($storeId)
+                ->where('method_code', $methodCode)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$method) {
+                throw new RuntimeException('Payment method not found.');
+            }
+
+            $stored = $method->configuration ?? [];
+            $currencySettings = $stored['currencySettings'] ?? [];
+            $currencySettings = is_array($currencySettings) ? $currencySettings : [];
+
+            if (array_key_exists($currency, $currencySettings)
+                && is_array($currencySettings[$currency])) {
+                $entry = $currencySettings[$currency];
+                unset($entry['isEnabled'], $entry['isConfigured']);
+            } else {
+                $entry = $stored;
+                unset($entry['currencySettings']);
+            }
+
+            if ($methodCode === 'stripe') {
+                unset(
+                    $entry['connection_type'],
+                    $entry['account_id'],
+                    $entry['livemode']
+                );
+            }
+
+            if (!$this->isConfigurationComplete(
+                $methodCode,
+                $entry,
+                $method->credentials ?? []
+            )) {
+                throw new RuntimeException(
+                    'Please complete the required configuration for this currency before enabling this payment method.'
+                );
+            }
+
+            $currencySettings[$currency] = array_merge(
+                $entry,
+                ['isEnabled' => true, 'isConfigured' => true]
+            );
+            $stored['currencySettings'] = $currencySettings;
+            $method->configuration = $stored;
+            $method->save();
+
+            return $method->fresh();
+        });
+    }
+
+    /** Disable one currency without clearing shared provider credentials. */
+    public function disableCurrency(
+        int $storeId,
+        string $methodCode,
+        string $currency
+    ): StorePaymentMethod {
+        $currency = strtoupper(trim($currency));
+
+        return DB::connection('tenant')->transaction(function () use (
+            $storeId,
+            $methodCode,
+            $currency
+        ) {
+            $method = StorePaymentMethod::forStore($storeId)
+                ->where('method_code', $methodCode)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$method) {
+                throw new RuntimeException('Payment method not found.');
+            }
+
+            $stored = $method->configuration ?? [];
+            $currencySettings = $stored['currencySettings'] ?? [];
+            $currencySettings = is_array($currencySettings) ? $currencySettings : [];
+            $currencySettings[$currency] = [
+                'isEnabled' => false,
+                'isConfigured' => false,
+            ];
+            $stored['currencySettings'] = $currencySettings;
+
+            $method->configuration = $stored;
             $method->save();
 
             return $method->fresh();
@@ -688,9 +959,12 @@ class PaymentSettingsService
      *
      * Dynamic settings remain inactive until the feature flag is enabled.
      */
-    public function getResolvedStripeSettings(int $storeId): array
+    public function getResolvedStripeSettings(
+        int $storeId,
+        ?string $currency = null
+    ): array
     {
         return app(StripePaymentSettingsResolver::class)
-            ->resolve($storeId);
+            ->resolve($storeId, $currency);
     }
 }

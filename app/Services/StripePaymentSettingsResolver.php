@@ -12,7 +12,7 @@ class StripePaymentSettingsResolver
      * This service is intentionally separate from the payment controller.
      * It does not create, authorize, capture, or modify payments.
      */
-    public function resolve(int $storeId): array
+    public function resolve(int $storeId, ?string $currency = null): array
     {
         $dynamicSettingsEnabled = (bool) config(
             'services.stripe.connect.dynamic_settings_enabled',
@@ -42,7 +42,10 @@ class StripePaymentSettingsResolver
             ];
         }
 
-        if (!$method->is_enabled || !$method->is_configured) {
+        $effective = app(PaymentSettingsService::class)
+            ->getEffectiveSettings($method, $currency);
+
+        if (!$effective['isEnabled'] || !$effective['isConfigured']) {
             return [
                 'active' => false,
                 'reason' => 'stripe_not_enabled_or_configured',
@@ -66,7 +69,7 @@ class StripePaymentSettingsResolver
             ];
         }
 
-        $configuration = $method->configuration ?? [];
+        $configuration = $effective['configuration'];
 
         $transactionType = $configuration['transaction_type']
             ?? 'authorize_only';
@@ -124,8 +127,8 @@ class StripePaymentSettingsResolver
     /**
      * Check whether dynamic Stripe settings are active for a store.
      */
-    public function isActive(int $storeId): bool
+    public function isActive(int $storeId, ?string $currency = null): bool
     {
-        return $this->resolve($storeId)['active'];
+        return $this->resolve($storeId, $currency)['active'];
     }
 }

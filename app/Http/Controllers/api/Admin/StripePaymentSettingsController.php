@@ -56,13 +56,26 @@ class StripePaymentSettingsController extends Controller
     /**
      * GET Stripe settings.
      */
-    public function showConfiguration()
+    public function showConfiguration(Request $request)
     {
-        $method = $this->stripeMethod($this->storeId());
+        $currencyValidator = Validator::make($request->query(), [
+            'currency' => ['nullable', 'string', 'size:3', 'alpha'],
+        ]);
+
+        if ($currencyValidator->fails()) {
+            throw new ValidationException($currencyValidator);
+        }
+
+        $storeId = $this->storeId();
+        $currency = $request->query('currency');
+        $currency = $currency !== null ? strtoupper(trim($currency)) : null;
+        $method = $this->stripeMethod($storeId);
+        $paymentSettings = app(\App\Services\PaymentSettingsService::class);
+        $effective = $paymentSettings->getEffectiveSettings($method, $currency);
 
         $configuration = array_replace_recursive(
             $this->defaultConfiguration(),
-            $method->configuration ?? []
+            $effective['configuration']
         );
 
         return response()->json([
@@ -70,8 +83,8 @@ class StripePaymentSettingsController extends Controller
             'data' => [
                 'methodCode' => 'stripe',
                 'displayName' => $method->display_name,
-                'isEnabled' => (bool) $method->is_enabled,
-                'isConfigured' => (bool) $method->is_configured,
+                'isEnabled' => $effective['isEnabled'],
+                'isConfigured' => $effective['isConfigured'],
                 'dynamicSettingsActive' => (bool) config(
                     'services.stripe.dynamic_settings_enabled',
                     false
@@ -79,7 +92,7 @@ class StripePaymentSettingsController extends Controller
                 'configuration' => $this->toCamelCase($configuration),
                 'resolvedSettings' => app(
                     \App\Services\PaymentSettingsService::class
-                )->getResolvedStripeSettings($this->storeId()),
+                )->getResolvedStripeSettings($storeId, $currency),
                 'connection' => [
                     'connected' => !empty(
                         $method->credentials['stripe_user_id'] ?? null
@@ -99,6 +112,7 @@ class StripePaymentSettingsController extends Controller
         $storeId = $this->storeId();
 
         $validator = Validator::make($request->all(), [
+            'currency' => ['sometimes', 'nullable', 'string', 'size:3', 'alpha'],
             'configuration' => [
                 'required',
                 'array:transactionType,testMode,statementDescriptor,createCustomerOnPaymentAttempt,sendReceiptEmail,sortPaymentMethodsFirst,stripeLinkEnabled,adaptivePricingEnabled,savedCardsEnabled,paymentMethods',
@@ -143,7 +157,10 @@ class StripePaymentSettingsController extends Controller
             throw new ValidationException($validator);
         }
 
-        $input = $validator->validated()['configuration'];
+        $validated = $validator->validated();
+        $currency = $validated['currency'] ?? null;
+        $currency = $currency !== null ? strtoupper(trim($currency)) : null;
+        $input = $validated['configuration'];
 
         $keyMap = [
             'transactionType' => 'transaction_type',
@@ -162,16 +179,26 @@ class StripePaymentSettingsController extends Controller
 
         $normalized = $this->normalizeKeys($input, $keyMap);
 
-        $method = $this->stripeMethod($storeId);
+        if ($currency !== null) {
+            app(\App\Services\PaymentSettingsService::class)
+                ->saveCurrencyConfiguration(
+                    $storeId,
+                    'stripe',
+                    $currency,
+                    $normalized
+                );
+        } else {
+            $method = $this->stripeMethod($storeId);
 
-        $method->configuration = array_replace_recursive(
-            $method->configuration ?? [],
-            $normalized
-        );
+            $method->configuration = array_replace_recursive(
+                $method->configuration ?? [],
+                $normalized
+            );
 
-        $method->save();
+            $method->save();
+        }
 
-        return $this->showConfiguration();
+        return $this->showConfiguration($request);
     }
 
     private function normalizeKeys(array $data, array $keyMap): array
