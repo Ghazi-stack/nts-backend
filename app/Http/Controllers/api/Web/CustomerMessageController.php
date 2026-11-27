@@ -207,7 +207,7 @@ class CustomerMessageController extends Controller
                                 trim(($order->customer->first_name ?? '') . ' ' . ($order->customer->last_name ?? ''))
                             ),
                             'order'    => ['id' => (string) $order->order_number],
-                            'message'  => ['subject' => $validated['subject'], 'body' => $validated['message']],
+                            'message_data' => ['subject' => $validated['subject'], 'body' => $validated['message']],
                             'links'    => ['account' => $base['store']['url'], 'order_status' => $base['store']['url']],
                         ];
                     });

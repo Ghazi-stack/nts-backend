@@ -25,6 +25,20 @@ class TransactionalEmailContext
         'sign_in_link_request',
         'password_reset',
         'order_notification',
+        'return_requested',
+        'account_settings_edited',
+    ];
+
+    /**
+     * All 14 template keys (every one has a v3 template and preview data).
+     * Keys not in SENDING_KEYS have no sending feature yet.
+     */
+    public const ALL_KEYS = [
+        'order_email', 'order_status_update', 'order_ready_for_pickup',
+        'guest_account_created', 'account_created', 'sign_in_link_request',
+        'password_reset', 'order_notification', 'return_requested',
+        'account_settings_edited', 'return_status_change',
+        'gift_certificate_recipient', 'product_review_request', 'guest_order_access',
     ];
 
     /** Same asset base the Blade order email used for relative image paths. */
@@ -190,6 +204,8 @@ class TransactionalEmailContext
             'tracking_number'   => (string) (data_get($order, 'tracking_number') ?? ''),
             'tracking_carrier'  => (string) (data_get($order, 'tracking_carrier_name') ?? ''),
             'billing_address'   => $billing ? self::address($billing) : null,
+            // Orders store one address (billing); no separate shipping address yet.
+            'shipping_address'  => null,
         ];
     }
 
@@ -269,6 +285,7 @@ class TransactionalEmailContext
             'order_id'    => data_get($data, 'order.id'),
             'order_total' => data_get($data, 'order.total'),
             'link'        => data_get($data, 'links.sign_in') ?: data_get($data, 'links.set_password') ?: data_get($data, 'links.register'),
+            'from'        => data_get($data, 'gift.from_name'),
         ];
 
         if (isset($data['status']) && is_array($data['status'])) {
@@ -340,24 +357,73 @@ class TransactionalEmailContext
         ];
 
         $customer = self::customer('Jane', 'jane@example.com', 'Jane Doe');
+        $orderCtx = self::order($order);
+
+        // Product review request: one review link per item.
+        foreach ($orderCtx['items'] as $i => $item) {
+            $orderCtx['items'][$i]['review_url'] = $url;
+        }
+
+        $status = match (true) {
+            $key === 'order_ready_for_pickup' => self::status('Awaiting Pickup'),
+            // Return emails: {{status}} is the return request status.
+            str_starts_with($key, 'return_')  => ['name' => 'Pending', 'message' => '', 'color' => '#777'],
+            default                           => self::status('Shipped'),
+        };
 
         return array_merge($base, [
             'customer' => $customer,
-            'order'    => self::order($order),
-            'status'   => self::status('Shipped'),
+            'order'    => $orderCtx,
+            'status'   => $status,
             'shipment' => self::shipment(['shipping_method' => 'Standard Shipping', 'shipped_by' => 'FedEx', 'tracking_number' => '1Z999AA10123456784']),
             'links'    => [
-                'register'     => $url . '/auth/signup',
-                'set_password' => $key === 'account_created' ? $url . '/auth/reset-password?token=sample' : '',
-                'sign_in'      => $url . '/?actiontoken=sample',
-                'account'      => $url,
-                'order_status' => $url,
+                'register'       => $url . '/auth/signup',
+                'set_password'   => '',
+                'sign_in'        => $url . '/?actiontoken=sample',
+                'reset_password' => $url . '/auth/reset-password?token=sample&email=jane%40example.com',
+                'account'        => $url,
+                'order_status'   => $url,
+                'view_order'     => $url,
+                'return_status'  => $url,
+                'redeem'         => $url,
             ],
-            'message'  => [
+            'message_data' => [
                 'subject' => 'About your order',
                 'body'    => 'Hi Jane, your order will ship tomorrow.',
             ],
+            'return'   => self::returnRequest([
+                'reason'       => 'Received wrong item',
+                'returnAction' => 'Refund',
+                'comments'     => 'The size does not fit.',
+                'status'       => 'Pending',
+            ], $order),
+            'account'  => ['changes' => 'Email, Password'],
+            'gift'     => [
+                'from_name'   => 'John Smith',
+                'from_email'  => 'john@example.com',
+                'amount'      => '$50.00',
+                'expiry_date' => now()->addYear()->format('jS M Y'),
+            ],
         ]);
+    }
+
+    /**
+     * Return request data for return emails.
+     *
+     * @param object|array $return ReturnRequest (reason, returnAction, comments, status)
+     * @param object|array $order  Order with items.product
+     */
+    public static function returnRequest($return, $order): array
+    {
+        $orderCtx = self::order($order);
+
+        return [
+            'reason'   => (string) (data_get($return, 'reason') ?? ''),
+            'action'   => (string) (data_get($return, 'returnAction') ?? ''),
+            'comments' => (string) (data_get($return, 'comments') ?? ''),
+            'status'   => (string) (data_get($return, 'status') ?? ''),
+            'items'    => $orderCtx['items'],
+        ];
     }
 
     /**
@@ -401,6 +467,16 @@ class TransactionalEmailContext
             'links.order_status'    => 'Link for the customer to check the order',
         ];
 
+        $return = [
+            'order.id'              => 'Order number',
+            'return.reason'         => 'Return reason',
+            'return.action'         => 'Requested action (refund, exchange, ...)',
+            'return.comments'       => 'Customer comments',
+            'return.status'         => 'Return status',
+            '#each return.items'    => 'Loop over items: name, sku, brand, image_url, quantity',
+            'links.return_status'   => 'Link to check the return',
+        ];
+
         $map = [
             'order_email'            => $customer + $order,
             'order_status_update'    => $customer + $order + [
@@ -421,13 +497,25 @@ class TransactionalEmailContext
                 'links.account'      => 'Sign-in / account link',
             ],
             'sign_in_link_request'   => $customer + ['links.sign_in' => 'One-time sign-in link (valid 15 minutes)'],
-            'password_reset'         => $customer + ['links.account' => 'Sign-in link'],
+            'password_reset'         => $customer + ['links.reset_password' => 'Password reset link'],
             'order_notification'     => $customer + [
                 'order.id'        => 'Order number',
-                'message.subject' => 'Message subject',
-                'message.body'    => 'Message text',
-                'links.account'   => 'Storefront link',
+                'message_data.subject' => 'Message subject',
+                'message_data.body'    => 'Message text',
+                'links.account'        => 'Storefront link',
             ],
+            'return_requested'       => $customer + $return,
+            'return_status_change'   => $customer + $return + ['status.name' => 'Return status'],
+            'account_settings_edited' => $customer + ['account.changes' => 'What changed, e.g. "Email, Password"'],
+            'gift_certificate_recipient' => $customer + [
+                'gift.from_name'   => 'Sender name',
+                'gift.from_email'  => 'Sender email',
+                'gift.amount'      => 'Gift certificate amount',
+                'gift.expiry_date' => 'Expiry date',
+                'links.redeem'     => 'How to redeem link',
+            ],
+            'product_review_request' => $customer + ['#each order.items' => 'Loop over purchased items: name, sku, image_url, review_url'],
+            'guest_order_access'     => $customer + ['order.id' => 'Order number', 'order.total' => 'Order total', 'links.view_order' => 'Secure link to view the order'],
         ];
 
         return $common + ($map[$key] ?? []);

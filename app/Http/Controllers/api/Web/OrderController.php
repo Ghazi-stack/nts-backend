@@ -6079,6 +6079,32 @@ class OrderController extends Controller
             'is_submit'    => $request->isSubmit ?? false,
         ]);
 
+        // "Return Requested" confirmation to the customer (only when the store's
+        // template is enabled and live; never blocks the request).
+        $emailService = app(\App\Services\TransactionalEmailService::class);
+        $order->loadMissing('items.product.images', 'items.product.brand', 'billingInformation');
+        $emailService->sendTemplateOnly(
+            current_store_id(),
+            'return_requested',
+            $order->billingInformation->email ?? $user->email ?? null,
+            function () use ($emailService, $order, $returnRequest, $user) {
+                $base = $emailService->storeContext(current_store_id());
+                $orderCtx = \App\Services\TransactionalEmailContext::order($order);
+
+                return $base + [
+                    'customer' => \App\Services\TransactionalEmailContext::customer(
+                        $orderCtx['billing_address']['first_name'] ?? null,
+                        $orderCtx['billing_address']['email'] ?? $user->email ?? null,
+                        $user->name ?? null
+                    ),
+                    'order'    => $orderCtx,
+                    'return'   => \App\Services\TransactionalEmailContext::returnRequest($returnRequest, $order),
+                    'status'   => ['name' => (string) $returnRequest->status, 'message' => '', 'color' => '#777'],
+                    'links'    => ['return_status' => $base['store']['url'], 'account' => $base['store']['url']],
+                ];
+            }
+        );
+
         return response()->json([
             'status'  => true,
             'message' => 'Return request submitted successfully.',

@@ -816,6 +816,27 @@ class CustomerController extends Controller
                 'password'         => 'nullable|string|confirmed',
             ]);
 
+            // For the "Account Settings Edited" email: what changed, and the
+            // address the account had before (security notice goes there).
+            $previousEmail = $user->email;
+            $changed = [];
+            if (!empty($validated['email']) && $validated['email'] !== $user->email) {
+                $changed[] = 'Email';
+            }
+            if (!empty($validated['password'])) {
+                $changed[] = 'Password';
+            }
+            if ((isset($validated['firstName']) && $validated['firstName'] !== $customer->first_name)
+                || (isset($validated['lastName']) && $validated['lastName'] !== $customer->last_name)) {
+                $changed[] = 'Name';
+            }
+            if (isset($validated['phone']) && $validated['phone'] !== $customer->phone) {
+                $changed[] = 'Phone';
+            }
+            if (isset($validated['companyName']) && $validated['companyName'] !== $customer->company_name) {
+                $changed[] = 'Company';
+            }
+
             // Password check
             if (!empty($validated['password'])) {
                 if (!Hash::check($validated['currentPassword'], $user->password)) {
@@ -842,6 +863,26 @@ class CustomerController extends Controller
             // Sync name to User table
             $user->name = trim($customer->first_name . ' ' . $customer->last_name);
             $user->save();
+
+            // "Account Settings Edited" notice (only when the store's template is
+            // enabled and live; never blocks the update).
+            if ($changed) {
+                $emailStoreId = $user->store_id ?? current_store_id();
+                $emailService = app(\App\Services\TransactionalEmailService::class);
+                $emailService->sendTemplateOnly(
+                    $emailStoreId,
+                    'account_settings_edited',
+                    $previousEmail,
+                    fn() => $emailService->storeContext($emailStoreId) + [
+                        'customer' => \App\Services\TransactionalEmailContext::customer(
+                            $customer->first_name,
+                            $previousEmail,
+                            $user->name
+                        ),
+                        'account'  => ['changes' => implode(', ', $changed)],
+                    ]
+                );
+            }
 
             return response()->json([
                 'status' => true,

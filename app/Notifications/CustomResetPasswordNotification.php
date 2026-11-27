@@ -50,7 +50,32 @@ class CustomResetPasswordNotification extends Notification
             . '/auth/reset-password?token=' . urlencode($this->token)
             . '&email=' . urlencode($notifiable->email);
 
-        
+        // Store's dashboard template ("Password Reset") when live, else the
+        // default Blade email. This email is always sent (never blocked by
+        // the template toggle) so customers can always reset their password.
+        $rendered = app(\App\Services\TransactionalEmailService::class)->renderForMail(
+            $storeId,
+            'password_reset',
+            fn() => \App\Services\TransactionalEmailContext::base($store, $logo?->logo_url) + [
+                'customer' => \App\Services\TransactionalEmailContext::customer(
+                    null,
+                    $notifiable->email ?? null,
+                    $notifiable->name ?? null
+                ),
+                'links'    => ['reset_password' => $resetUrl, 'account' => $storePath],
+            ]
+        );
+
+        if ($rendered) {
+            return (new \App\Mail\TransactionalTemplatedMail(
+                $rendered['subject'],
+                $rendered['html'],
+                $rendered['text'],
+                $rendered['headers'],
+                storeId: (int) $storeId
+            ))->to($notifiable->email);
+        }
+
         return (new MailMessage)
             ->from(
                 config('mail.from.address'),

@@ -149,6 +149,62 @@ class TransactionalEmailService
         }
     }
 
+    /**
+     * Sends an email that exists only as a store template (no Blade
+     * version): sent when the template is enabled AND live (v2+ marker).
+     * Never throws: failures are logged so the caller's flow continues.
+     *
+     * @param callable(): array $context
+     */
+    public function sendTemplateOnly($storeId, string $key, ?string $to, callable $context): bool
+    {
+        if (!$storeId || !$to || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            return false;
+        }
+
+        try {
+            if (!$this->isEnabled($storeId, $key)) {
+                return false;
+            }
+
+            $rendered = $this->renderForMail($storeId, $key, $context);
+
+            if ($rendered === null) {
+                return false;
+            }
+
+            \Illuminate\Support\Facades\Mail::to($to)->send(new \App\Mail\TransactionalTemplatedMail(
+                $rendered['subject'],
+                $rendered['html'],
+                $rendered['text'],
+                $rendered['headers'],
+                storeId: (int) $storeId
+            ));
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Transactional email failed', [
+                'store_id' => $storeId,
+                'key'      => $key,
+                'error'    => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
+     * Store + logo context for template-only emails sent from controllers.
+     */
+    public function storeContext($storeId): array
+    {
+        $registry = \App\Models\Store::on('central')->where('legacy_store_id', $storeId)->first()
+            ?? current_store_registry();
+        $logoUrl = \App\Models\Logo::where('store_id', $storeId)->value('logo_url');
+
+        return TransactionalEmailContext::base($registry, $logoUrl);
+    }
+
     public function headers(TransactionalEmailTemplate $tpl): array
     {
         return [

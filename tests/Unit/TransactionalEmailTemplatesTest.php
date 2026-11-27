@@ -107,7 +107,7 @@ class TransactionalEmailTemplatesTest extends TestCase
         $out = $this->render('order_email', $data);
 
         $this->assertClean($out);
-        $this->assertSame('Your New Town Spares Order Confirmation (5001)', $out['subject']);
+        $this->assertSame('Your New Town Spares Order Confirmation (#5001)', $out['subject']);
         $this->assertStringContainsString('Brake Pad', $out['html']);
         $this->assertStringContainsString('BP-1', $out['html']);
         $this->assertStringContainsString('Bosch', $out['html']);
@@ -139,10 +139,10 @@ class TransactionalEmailTemplatesTest extends TestCase
         $out = $this->render('order_status_update', $data);
 
         $this->assertClean($out);
-        $this->assertSame('Order #5001 Status Updated to Shipped - New Town Spares', $out['subject']);
+        $this->assertSame('Your New Town Spares Order Has Been Updated (#5001)', $out['subject']);
         $this->assertStringContainsString('Great news! Your order has been shipped.', $out['html']);
-        $this->assertStringContainsString('#337ab7', $out['html']);
-        $this->assertStringContainsString('FedEx', $out['html']);
+        $this->assertStringContainsString('Ground', $out['html']);        // shipment method
+        $this->assertStringContainsString('Brake Pad', $out['html']);     // products in this order
 
         $this->assertSame('order_ready_for_pickup', \App\Mail\OrderStatusUpdatedMail::templateKeyFor('Awaiting Pickup'));
         $this->assertSame('order_status_update', \App\Mail\OrderStatusUpdatedMail::templateKeyFor('Shipped'));
@@ -155,7 +155,7 @@ class TransactionalEmailTemplatesTest extends TestCase
         ];
 
         $welcome = $this->render('account_created', $base + ['links' => ['set_password' => 'https://x/reset?t=1', 'account' => 'https://x']]);
-        $this->assertSame('Your Login Details - Set Your Password', $welcome['subject']);
+        $this->assertSame('Thanks for registering at New Town Spares', $welcome['subject']);
         $this->assertStringContainsString('https://x/reset?t=1', $welcome['html']);
         $this->assertStringContainsString('Hello Sara,', $welcome['html']);
 
@@ -163,6 +163,7 @@ class TransactionalEmailTemplatesTest extends TestCase
         $this->assertSame('Thanks for registering at New Town Spares', $registered['subject']);
         $this->assertStringContainsString('Sign in to account', $registered['html']);
         $this->assertStringNotContainsString('Set your password', $registered['html']);
+        $this->assertStringContainsString('Set your password', $welcome['html']);
     }
 
     public function test_preview_overrides_from_old_dashboard_do_not_wipe_store_data(): void
@@ -176,7 +177,7 @@ class TransactionalEmailTemplatesTest extends TestCase
 
         $out = $this->render('order_email', $merged);
 
-        $this->assertSame('Your New Town Spares Order Confirmation (777)', $out['subject']);
+        $this->assertSame('Your New Town Spares Order Confirmation (#777)', $out['subject']);
         $this->assertStringContainsString('New Town Spares', $out['html']);
         $this->assertSame('x', $merged['extra']);
     }
@@ -185,7 +186,7 @@ class TransactionalEmailTemplatesTest extends TestCase
     {
         $out = $this->render('order_email', TransactionalEmailContext::sample('order_email', $this->store()));
 
-        $this->assertStringContainsString('Image Coming Soon', $out['html']);
+        $this->assertStringContainsString('Image<br>Coming<br>Soon', $out['html']);
     }
 
     public function test_old_demo_templates_are_not_live(): void
@@ -198,7 +199,42 @@ class TransactionalEmailTemplatesTest extends TestCase
         }
     }
 
-    public function test_reset_to_default_list_uses_v2_for_sending_keys_only(): void
+    public function test_v3_templates_keep_the_original_design_and_phrases(): void
+    {
+        $legacy = collect((new TransactionalEmailTemplateSeeder())->legacyTemplates())->keyBy('key');
+
+        foreach (TransactionalEmailLiveTemplates::all() as $key => $tpl) {
+            $old = $legacy[$key];
+
+            // Same <head> (all CSS) as the original template.
+            preg_match('#<head>.*?</head>#s', $old['body_html'], $oldHead);
+            $this->assertStringContainsString($oldHead[0], $tpl['body_html'], "$key lost its original styles");
+
+            // Every original phrase is still there with the same wording.
+            $phrases = collect($tpl['phrases'])->pluck('phrase_value', 'phrase_name');
+            foreach ($old['phrases'] as $p) {
+                $this->assertSame($p['phrase_value'], $phrases[$p['phrase_name']] ?? null, "$key phrase {$p['phrase_name']} changed");
+            }
+
+            // No demo data left.
+            foreach (['Demo Product', 'Demo product name', 'John Doe', '$250.100', 'Stehr Inc', 'Name of Product'] as $demo) {
+                $this->assertStringNotContainsString($demo, $tpl['body_html'], "$key still has demo data: $demo");
+            }
+        }
+    }
+
+    public function test_every_template_renders_sample_data_cleanly(): void
+    {
+        foreach (TransactionalEmailContext::ALL_KEYS as $key) {
+            $out = $this->render($key, TransactionalEmailContext::sample($key, $this->store()));
+
+            $this->assertClean($out);
+            $this->assertStringContainsString('New Town Spares', $out['html'], "$key lacks store name");
+            $this->assertStringNotContainsString('Qty: Qty:', $out['html'], "$key repeats the Qty label");
+        }
+    }
+
+    public function test_reset_to_default_list_has_live_templates_for_all_keys(): void
     {
         $seeder = new TransactionalEmailTemplateSeeder();
         $method = (new \ReflectionClass($seeder))->getMethod('getTemplates');
@@ -208,10 +244,9 @@ class TransactionalEmailTemplatesTest extends TestCase
         $this->assertCount(14, $all);
 
         foreach ($all as $key => $item) {
-            $this->assertSame(
-                in_array($key, TransactionalEmailContext::SENDING_KEYS, true),
+            $this->assertTrue(
                 TransactionalEmailService::isLiveTemplate($item['body_html']),
-                "unexpected live state for $key"
+                "default for $key should be live"
             );
             $this->assertNotEmpty($item['name']);
             $this->assertNotEmpty($item['description']);
