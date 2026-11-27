@@ -279,6 +279,34 @@ class TransactionalEmailContext
         return $data + array_filter($aliases, fn($v) => $v !== null && $v !== '');
     }
 
+    /**
+     * Applies preview values sent by the dashboard on top of sample data.
+     *
+     * Older dashboard builds send flat values such as data.store = "" (the
+     * previous preview expected a store-name string). Those must never wipe
+     * out structured values (store, order, ...), so a scalar never replaces
+     * an array, and empty/null values are ignored.
+     */
+    public static function mergeOverrides(array $base, array $overrides): array
+    {
+        foreach ($overrides as $key => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            if (array_key_exists($key, $base) && is_array($base[$key])) {
+                if (is_array($value)) {
+                    $base[$key] = self::mergeOverrides($base[$key], $value);
+                }
+                continue;
+            }
+
+            $base[$key] = $value;
+        }
+
+        return $base;
+    }
+
     // ------------------------------------------------- preview sample data
 
     /**

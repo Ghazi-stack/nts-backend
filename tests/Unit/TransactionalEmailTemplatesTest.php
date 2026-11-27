@@ -112,7 +112,8 @@ class TransactionalEmailTemplatesTest extends TestCase
         $this->assertStringContainsString('BP-1', $out['html']);
         $this->assertStringContainsString('Bosch', $out['html']);
         $this->assertStringContainsString('https://aws-backend-assets.s3.us-east-2.amazonaws.com/products/bp.jpg', $out['html']);
-        $this->assertStringContainsString('$25.00 &times; 2', $out['html']);
+        $this->assertStringContainsString('$25.00', $out['html']);   // unit price
+        $this->assertStringContainsString('Qty: 2', $out['html']);
         $this->assertStringContainsString('$50.00', $out['html']);   // line total + subtotal
         $this->assertStringContainsString('$7.50', $out['html']);    // shipping
         $this->assertStringContainsString('-$2.00', $out['html']);   // discount
@@ -162,6 +163,29 @@ class TransactionalEmailTemplatesTest extends TestCase
         $this->assertSame('Thanks for registering at New Town Spares', $registered['subject']);
         $this->assertStringContainsString('Sign in to account', $registered['html']);
         $this->assertStringNotContainsString('Set your password', $registered['html']);
+    }
+
+    public function test_preview_overrides_from_old_dashboard_do_not_wipe_store_data(): void
+    {
+        $sample = TransactionalEmailContext::sample('order_email', $this->store());
+
+        // Older dashboard builds post data.store as a plain string (or empty).
+        $merged = TransactionalEmailContext::mergeOverrides($sample, [
+            'store' => '', 'store_url' => null, 'order' => ['id' => '777'], 'extra' => 'x',
+        ]);
+
+        $out = $this->render('order_email', $merged);
+
+        $this->assertSame('Your New Town Spares Order Confirmation (777)', $out['subject']);
+        $this->assertStringContainsString('New Town Spares', $out['html']);
+        $this->assertSame('x', $merged['extra']);
+    }
+
+    public function test_items_without_image_show_placeholder(): void
+    {
+        $out = $this->render('order_email', TransactionalEmailContext::sample('order_email', $this->store()));
+
+        $this->assertStringContainsString('Image Coming Soon', $out['html']);
     }
 
     public function test_old_demo_templates_are_not_live(): void

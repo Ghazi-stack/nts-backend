@@ -21,8 +21,25 @@ class TransactionalEmailTemplateUpgrader
 {
     public const UPGRADED   = 'upgraded';
     public const CREATED    = 'created';
+    public const REFRESHED  = 'refreshed';
     public const ALREADY_V2 = 'already_v2';
     public const CUSTOMIZED = 'customized';
+
+    /**
+     * sha1 of earlier v2 default bodies (normalized whitespace). A stored
+     * template matching one of these was never edited, so it can safely be
+     * refreshed to the current v2 design.
+     */
+    private const PREVIOUS_V2_HASHES = [
+        'order_email'            => ['7d17940ace317f33d33403f6ddfd90d777ede880'],
+        'order_status_update'    => ['7994741cc77cee81aeb6a58972844c3e8224aca3'],
+        'order_ready_for_pickup' => ['3ed60447ab32c4fb43ce70451e0d190a68759666'],
+        'guest_account_created'  => ['5eb9ece44b13a271e15e7a7680e9043f52e4f5e4'],
+        'account_created'        => ['5d4522dbf2ae040286de257fd8ea9fd1473a7fe0'],
+        'sign_in_link_request'   => ['e9e3db162012c6a66bc243eca0a1b6e741466aa8'],
+        'password_reset'         => ['21c9b6c1e68af44cb871ed9448e35280c2983c8f'],
+        'order_notification'     => ['ece4585294f48c1ec90790a155aa792c2ec35fd9'],
+    ];
 
     /**
      * @return array<string, string> template key => outcome
@@ -51,7 +68,22 @@ class TransactionalEmailTemplateUpgrader
             }
 
             if (TransactionalEmailService::isLiveTemplate($tpl->body_html)) {
-                $report[$key] = self::ALREADY_V2;
+                $hash = self::hash($tpl->body_html);
+
+                if ($hash === self::hash($v2['body_html'])) {
+                    $report[$key] = self::ALREADY_V2;
+                } elseif (in_array($hash, self::PREVIOUS_V2_HASHES[$key] ?? [], true)) {
+                    // Untouched earlier v2 design: move to the current one.
+                    $report[$key] = self::REFRESHED;
+
+                    if ($apply) {
+                        $this->refresh($tpl, $v2);
+                    }
+                } else {
+                    // Owner edited the v2 template: keep their version.
+                    $report[$key] = self::ALREADY_V2;
+                }
+
                 continue;
             }
 
@@ -150,10 +182,42 @@ class TransactionalEmailTemplateUpgrader
         });
     }
 
+    /**
+     * Replaces an untouched earlier v2 body with the current one and adds
+     * phrases the new design uses. Existing phrases are left as they are.
+     */
+    private function refresh(TransactionalEmailTemplate $tpl, array $v2): void
+    {
+        DB::connection('tenant')->transaction(function () use ($tpl, $v2) {
+            $tpl->update(['body_html' => $v2['body_html']]);
+
+            $existing = $tpl->phrases->pluck('phrase_name')->all();
+
+            foreach ($v2['phrases'] as $phrase) {
+                if (!in_array($phrase['phrase_name'], $existing, true)) {
+                    TransactionalEmailPhrase::create([
+                        'template_id'  => $tpl->id,
+                        'phrase_name'  => $phrase['phrase_name'],
+                        'phrase_value' => $phrase['phrase_value'],
+                        'is_system'    => true,
+                    ]);
+                }
+            }
+        });
+    }
+
+    private static function normalize(?string $s): string
+    {
+        return (string) preg_replace('/\s+/', ' ', trim(str_replace("\r\n", "\n", (string) $s)));
+    }
+
+    private static function hash(?string $s): string
+    {
+        return sha1(self::normalize($s));
+    }
+
     private static function sameHtml(?string $a, ?string $b): bool
     {
-        $normalize = fn(?string $s) => preg_replace('/\s+/', ' ', trim(str_replace("\r\n", "\n", (string) $s)));
-
-        return $normalize($a) === $normalize($b);
+        return self::normalize($a) === self::normalize($b);
     }
 }

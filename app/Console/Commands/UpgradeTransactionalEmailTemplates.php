@@ -64,7 +64,8 @@ class UpgradeTransactionalEmailTemplates extends Command
         }
 
         $this->line('');
-        $this->line('Results: upgraded / created = switched to v2; already_v2 = nothing to do;');
+        $this->line('Results: upgraded / created = switched to v2; refreshed = untouched v2 moved to the latest design;');
+        $this->line('already_v2 = nothing to do (latest design, or v2 edited by the owner);');
         $this->line('customized = owner edited the old template, left as is (use "Reset to default" in the dashboard).');
 
         return $failed ? self::FAILURE : self::SUCCESS;

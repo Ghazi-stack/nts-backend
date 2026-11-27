@@ -396,7 +396,7 @@ class TransactionalEmailController extends Controller
             TransactionalEmailContext::sample($key, $store, $logoUrl)
         );
 
-        return is_array($override) ? array_replace_recursive($data, $override) : $data;
+        return is_array($override) ? TransactionalEmailContext::mergeOverrides($data, $override) : $data;
     }
 
     private function getDefaultSubject(string $key): ?string

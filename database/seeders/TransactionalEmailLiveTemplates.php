@@ -27,23 +27,21 @@ class TransactionalEmailLiveTemplates
                 'subject' => "{{lang 'subject'}}",
                 'body_html' => self::layout(
                     self::h1("{{lang 'title'}}")
-                    . self::p("{{lang 'hello'}}")
-                    . self::p("{{lang 'message'}}")
                     . self::h2("{{lang 'order_title'}}")
                     . self::orderItems()
                     . self::orderTotals()
-                    . self::orderMethods()
                     . self::billingAddress()
-                    . '{{#if order.comments}}' . self::h3("{{lang 'comment_label'}}")
-                    . '<p style="margin:0 0 16px;white-space:pre-line;">{{order.comments}}</p>{{/if}}'
-                    . self::button('{{links.order_status}}', "{{lang 'check_label'}}")
+                    . '{{#if order.comments}}' . self::h2("{{lang 'comment_label'}}")
+                    . '<p style="margin:0 0 8px;font-size:14px;color:#333333;white-space:pre-line;">{{order.comments}}</p>{{/if}}'
+                    . self::button('{{links.order_status}}', "{{lang 'check_label'}}"),
+                    'cart'
                 ),
                 'phrases' => self::phrases([
                     'subject'               => 'Your {{store.name}} Order Confirmation ({{order.id}})',
                     'title'                 => 'Thanks for your order',
-                    'hello'                 => 'Hi {{customer.first_name}},',
-                    'message'               => 'We have received your order and will let you know when it ships.',
                     'order_title'           => 'Order #{{order.id}}',
+                    'quantity'              => 'Qty:',
+                    'no_image'              => 'Image Coming Soon',
                     'sku'                   => 'SKU:',
                     'brand'                 => 'Brand:',
                     'subtotal'              => 'Subtotal',
@@ -78,7 +76,8 @@ class TransactionalEmailLiveTemplates
                     . '{{#if shipment.method}}' . self::row("{{lang 'shipping_method'}}", '{{shipment.method}}') . '{{/if}}'
                     . '{{#if shipment.shipped_by}}' . self::row("{{lang 'shipped_by'}}", '{{shipment.shipped_by}}') . '{{/if}}'
                     . '</table>'
-                    . self::button('{{links.order_status}}', "{{lang 'check_status'}}")
+                    . self::button('{{links.order_status}}', "{{lang 'check_status'}}"),
+                    'box'
                 ),
                 'phrases' => self::phrases([
                     'subject'         => 'Order #{{order.id}} Status Updated to {{status.name}} - {{store.name}}',
@@ -109,7 +108,8 @@ class TransactionalEmailLiveTemplates
                     . self::h3("{{lang 'location_title'}}")
                     . self::p('<strong>{{store.name}}</strong><br><a href="{{store.url}}" style="color:#333;">{{store.domain}}</a>')
                     . self::p("{{lang 'opening_hours_note'}}")
-                    . self::button('{{links.order_status}}', "{{lang 'check_status'}}")
+                    . self::button('{{links.order_status}}', "{{lang 'check_status'}}"),
+                    'store'
                 ),
                 'phrases' => self::phrases([
                     'subject'            => '{{store.name}} - Order #{{order.id}} is ready for pickup',
@@ -117,6 +117,8 @@ class TransactionalEmailLiveTemplates
                     'hello'              => 'Hello {{customer.first_name}},',
                     'message'            => 'Good news! Your order is ready and waiting for you to pick it up.',
                     'order_title'        => 'Order #{{order.id}}',
+                    'quantity'           => 'Qty:',
+                    'no_image'           => 'Image Coming Soon',
                     'sku'                => 'SKU:',
                     'brand'              => 'Brand:',
                     'location_title'     => 'Pickup location',
@@ -135,7 +137,8 @@ class TransactionalEmailLiveTemplates
                     . self::p("{{lang 'instruction'}}")
                     . self::button('{{links.register}}', "{{lang 'create_account'}}")
                     . self::p('<span style="color:#777;font-size:13px;">{{lang \'email_label\'}} {{customer.email}}</span>')
-                    . self::p("{{lang 'help'}}")
+                    . self::p("{{lang 'help'}}"),
+                    'user'
                 ),
                 'phrases' => self::phrases([
                     'subject'        => 'Create Your Account - {{store.name}}',
@@ -164,7 +167,8 @@ class TransactionalEmailLiveTemplates
                     . '{{else}}'
                     . self::button('{{links.account}}', "{{lang 'sign_in'}}")
                     . '{{/if}}'
-                    . self::p("{{lang 'help'}}")
+                    . self::p("{{lang 'help'}}"),
+                    'user'
                 ),
                 'phrases' => self::phrases([
                     'subject'              => '{{#if links.set_password}}Your Login Details - Set Your Password{{else}}Thanks for registering at {{store.name}}{{/if}}',
@@ -190,7 +194,8 @@ class TransactionalEmailLiveTemplates
                     . self::p("{{lang 'alternatively'}}")
                     . '<p style="margin:0 0 16px;word-break:break-all;font-size:13px;"><a href="{{links.sign_in}}" style="color:#333;">{{links.sign_in}}</a></p>'
                     . self::p("{{lang 'login_request'}}")
-                    . self::p("{{lang 'secure'}}")
+                    . self::p("{{lang 'secure'}}"),
+                    'lock'
                 ),
                 'phrases' => self::phrases([
                     'subject'       => 'Your sign-in link for {{store.name}}',
@@ -211,7 +216,8 @@ class TransactionalEmailLiveTemplates
                     . self::p("{{lang 'hello'}}")
                     . self::p("{{lang 'message'}}")
                     . self::p("{{lang 'warning'}}")
-                    . self::button('{{links.account}}', "{{lang 'sign_in'}}")
+                    . self::button('{{links.account}}', "{{lang 'sign_in'}}"),
+                    'lock'
                 ),
                 'phrases' => self::phrases([
                     'subject'     => 'Your Password Was Successfully Reset',
@@ -234,7 +240,8 @@ class TransactionalEmailLiveTemplates
                     . '<p style="margin:0 0 8px;"><strong>{{message.subject}}</strong></p>'
                     . '<p style="margin:0;white-space:pre-line;">{{message.body}}</p>'
                     . '</div>'
-                    . self::button('{{links.account}}', "{{lang 'reply'}}")
+                    . self::button('{{links.account}}', "{{lang 'reply'}}"),
+                    'mail'
                 ),
                 'phrases' => self::phrases([
                     'subject'     => 'Re: {{message.subject}} - {{store.name}}',
@@ -261,9 +268,16 @@ class TransactionalEmailLiveTemplates
         return $out;
     }
 
-    private static function layout(string $content): string
+    /**
+     * Shared layout, styled like the original seeded templates: centered
+     * store name/logo, divider with an icon, outlined buttons, footer with
+     * store name, URL and "Go shopping". Inline styles for email clients.
+     */
+    private static function layout(string $content, string $icon = 'mail'): string
     {
         $marker = TransactionalEmailService::LIVE_MARKER;
+        $top = self::divider($icon);
+        $bottom = self::divider('store');
 
         return <<<HTML
 {$marker}
@@ -274,20 +288,22 @@ class TransactionalEmailLiveTemplates
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{store.name}}</title>
 </head>
-<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,Helvetica,sans-serif;color:#333333;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;">
-<tr><td align="center" style="padding:24px 12px;">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:6px;">
-<tr><td align="center" style="padding:28px 24px 12px;">
-<a href="{{store.url}}" style="text-decoration:none;color:#333333;">{{#if store.logo_url}}<img src="{{store.logo_url}}" alt="{{store.name}}" style="max-height:60px;max-width:220px;border:0;">{{else}}<span style="font-size:22px;font-weight:bold;">{{store.name}}</span>{{/if}}</a>
+<body style="margin:0;padding:0;background:#ffffff;font-family:Montserrat,Arial,Helvetica,sans-serif;color:#333333;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;">
+<tr><td align="center" style="padding:0 16px;">
+<table role="presentation" width="544" cellpadding="0" cellspacing="0" style="max-width:544px;width:100%;">
+<tr><td align="center" style="padding:24px 0;">
+<a href="{{store.url}}" style="text-decoration:none;color:#333333;">{{#if store.logo_url}}<img src="{{store.logo_url}}" alt="{{store.name}}" style="max-height:64px;max-width:240px;border:0;">{{else}}<span style="font-size:28px;font-weight:600;color:#333333;">{{store.name}}</span>{{/if}}</a>
 </td></tr>
-<tr><td style="padding:12px 32px 28px;font-size:15px;line-height:1.6;">
+<tr><td>{$top}</td></tr>
+<tr><td style="padding:24px 0;font-size:14px;line-height:1.5;color:#333333;">
 {$content}
 </td></tr>
-<tr><td style="padding:20px 32px;border-top:1px solid #eeeeee;font-size:13px;color:#777777;">
+<tr><td>{$bottom}</td></tr>
+<tr><td style="padding:16px 0 24px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-<td style="vertical-align:middle;"><strong style="color:#333333;">{{store.name}}</strong><br><a href="{{store.url}}" style="color:#777777;">{{store.domain}}</a></td>
-<td align="right" style="vertical-align:middle;"><a href="{{store.url}}" style="display:inline-block;padding:10px 18px;background:#333333;color:#ffffff;text-decoration:none;border-radius:4px;">{{lang 'go_shopping'}}</a></td>
+<td style="vertical-align:middle;"><p style="margin:0 0 2px;font-size:14px;font-weight:600;color:#333333;">{{store.name}}</p><a href="{{store.url}}" style="font-size:12px;color:#777777;text-decoration:none;">{{store.domain}}</a></td>
+<td align="right" style="vertical-align:middle;"><a href="{{store.url}}" style="display:inline-block;border:1px solid #cccccc;border-radius:4px;padding:6px 14px;color:#555555;font-weight:600;font-size:13px;text-decoration:none;">{{lang 'go_shopping'}}</a></td>
 </tr></table>
 </td></tr>
 </table>
@@ -298,75 +314,106 @@ class TransactionalEmailLiveTemplates
 HTML;
     }
 
+    /**
+     * Horizontal rule with a round icon in the middle. Emoji are used
+     * because inline SVG is stripped by Gmail and Outlook.
+     */
+    private static function divider(string $icon): string
+    {
+        $glyph = [
+            'cart'  => '&#128722;',
+            'store' => '&#127978;',
+            'box'   => '&#128230;',
+            'user'  => '&#128100;',
+            'lock'  => '&#128274;',
+            'mail'  => '&#9993;',
+        ][$icon] ?? '&#9993;';
+
+        return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:8px 0;"><tr>'
+            . '<td width="45%" style="vertical-align:middle;"><div style="border-top:1px solid #e5e5e5;font-size:0;line-height:0;">&nbsp;</div></td>'
+            . '<td width="10%" align="center" style="vertical-align:middle;"><span style="display:inline-block;width:40px;height:40px;line-height:40px;border-radius:50%;background:#f5f5f5;text-align:center;font-size:18px;color:#999999;">' . $glyph . '</span></td>'
+            . '<td width="45%" style="vertical-align:middle;"><div style="border-top:1px solid #e5e5e5;font-size:0;line-height:0;">&nbsp;</div></td>'
+            . '</tr></table>';
+    }
+
     private static function h1(string $text): string
     {
-        return '<h1 style="margin:0 0 16px;font-size:24px;line-height:1.3;color:#222222;">' . $text . '</h1>';
+        return '<h1 style="margin:0 0 16px;font-size:26px;font-weight:600;line-height:1.3;color:#333333;">' . $text . '</h1>';
     }
 
     private static function h2(string $text): string
     {
-        return '<h2 style="margin:24px 0 8px;font-size:18px;color:#222222;">' . $text . '</h2>';
+        return '<h2 style="margin:24px 0 12px;padding-bottom:8px;border-bottom:1px solid #e5e5e5;font-size:18px;font-weight:500;color:#333333;">' . $text . '</h2>';
     }
 
     private static function h3(string $text): string
     {
-        return '<h3 style="margin:20px 0 8px;font-size:16px;color:#222222;">' . $text . '</h3>';
+        return '<h3 style="margin:20px 0 8px;font-size:16px;font-weight:600;color:#333333;">' . $text . '</h3>';
     }
 
     private static function p(string $html): string
     {
-        return '<p style="margin:0 0 16px;">' . $html . '</p>';
+        return '<p style="margin:0 0 12px;font-size:14px;line-height:1.5;color:#333333;">' . $html . '</p>';
     }
 
+    /** Outlined button, as in the original templates. */
     private static function button(string $href, string $label): string
     {
-        return '<p style="margin:24px 0;"><a href="' . $href . '" style="display:inline-block;padding:12px 24px;background:#333333;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;">' . $label . '</a></p>';
+        return '<p style="margin:20px 0 0;"><a href="' . $href . '" style="display:inline-block;border:1px solid #999999;border-radius:4px;padding:6px 14px;color:#555555;font-weight:600;font-size:14px;text-decoration:none;">' . $label . '</a></p>';
     }
 
-    private static function row(string $label, string $value): string
+    /** Right-aligned label/value row. */
+    private static function row(string $label, string $value, bool $bold = false): string
     {
-        return '<tr><td style="padding:4px 0;color:#777777;">' . $label . '</td><td align="right" style="padding:4px 0;">' . $value . '</td></tr>';
+        $weight = $bold ? 'font-weight:600;color:#333333;' : 'color:#777777;';
+
+        return '<tr><td align="right" style="padding:3px 12px 3px 0;font-size:13px;' . $weight . '">' . $label . '</td>'
+            . '<td align="right" width="170" style="padding:3px 0;font-size:13px;font-weight:600;color:#333333;">' . $value . '</td></tr>';
     }
 
     private static function statusBadge(): string
     {
-        return '<p style="margin:0 0 16px;"><span style="display:inline-block;padding:6px 14px;border-radius:14px;background:{{status.color}};color:#ffffff;font-weight:bold;">{{status.name}}</span></p>';
+        return '<p style="margin:0 0 16px;"><span style="display:inline-block;padding:6px 14px;border-radius:14px;background:{{status.color}};color:#ffffff;font-weight:600;font-size:13px;">{{status.name}}</span></p>';
     }
 
+    /**
+     * Item rows: image (or "Image Coming Soon" box) | name, SKU, brand,
+     * unit price | Qty | line total.
+     */
     private static function orderItems(): string
     {
-        return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 16px;font-size:14px;">'
+        return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 8px;">'
             . '{{#each order.items}}'
             . '<tr>'
-            . '<td width="72" style="padding:10px 0;border-bottom:1px solid #eeeeee;vertical-align:top;">{{#if image_url}}<img src="{{image_url}}" alt="{{name}}" width="60" style="border:0;border-radius:4px;">{{/if}}</td>'
-            . '<td style="padding:10px 8px;border-bottom:1px solid #eeeeee;vertical-align:top;">'
-            . '<strong>{{name}}</strong>'
-            . '{{#if sku}}<br><span style="color:#888888;font-size:13px;">{{lang \'sku\'}} {{sku}}</span>{{/if}}'
-            . '{{#if brand}}<br><span style="color:#888888;font-size:13px;">{{lang \'brand\'}} {{brand}}</span>{{/if}}'
-            . '<br><span style="color:#555555;">{{price}} &times; {{quantity}}</span>'
+            . '<td width="76" style="padding:16px 0;border-bottom:1px solid #e5e5e5;vertical-align:top;">'
+            . '{{#if image_url}}<img src="{{image_url}}" alt="{{name}}" width="60" height="60" style="display:block;width:60px;height:60px;object-fit:cover;border:1px solid #dddddd;border-radius:4px;">'
+            . '{{else}}<div style="width:60px;height:60px;background:#f5f5f5;border:1px solid #dddddd;border-radius:4px;text-align:center;font-size:9px;line-height:1.3;color:#999999;padding-top:13px;box-sizing:border-box;">{{lang \'no_image\'}}</div>{{/if}}'
             . '</td>'
-            . '<td align="right" style="padding:10px 0;border-bottom:1px solid #eeeeee;vertical-align:top;white-space:nowrap;">{{total}}</td>'
+            . '<td style="padding:16px 8px;border-bottom:1px solid #e5e5e5;vertical-align:top;font-size:13px;">'
+            . '<p style="margin:0 0 4px;font-size:14px;font-weight:600;color:#333333;">{{name}}</p>'
+            . '{{#if sku}}<p style="margin:0;font-size:12px;color:#666666;">{{lang \'sku\'}} {{sku}}</p>{{/if}}'
+            . '{{#if brand}}<p style="margin:0;font-size:12px;color:#666666;">{{lang \'brand\'}} {{brand}}</p>{{/if}}'
+            . '<p style="margin:4px 0 0;font-size:12px;color:#666666;">{{price}}</p>'
+            . '</td>'
+            . '<td width="60" style="padding:16px 8px;border-bottom:1px solid #e5e5e5;vertical-align:top;font-size:13px;color:#555555;white-space:nowrap;">{{lang \'quantity\'}} {{quantity}}</td>'
+            . '<td width="80" align="right" style="padding:16px 0;border-bottom:1px solid #e5e5e5;vertical-align:top;font-size:14px;font-weight:600;color:#333333;white-space:nowrap;">{{total}}</td>'
             . '</tr>'
             . '{{/each}}'
             . '</table>';
     }
 
+    /** Right-aligned summary: totals, then payment and shipping method. */
     private static function orderTotals(): string
     {
-        return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;margin:0 0 16px;">'
+        return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 8px;">'
             . self::row("{{lang 'subtotal'}}", '{{order.subtotal}}')
             . '{{#if order.shipping_value}}' . self::row("{{lang 'shipping'}}", '{{order.shipping}}') . '{{/if}}'
             . '{{#if order.discount}}' . self::row("{{lang 'discount'}}", '-{{order.discount}}') . '{{/if}}'
             . '{{#if order.manual_discount}}' . self::row("{{lang 'manual_discount'}}", '-{{order.manual_discount}}') . '{{/if}}'
-            . '<tr><td style="padding:8px 0;border-top:1px solid #eeeeee;"><strong>{{lang \'total\'}}</strong></td>'
-            . '<td align="right" style="padding:8px 0;border-top:1px solid #eeeeee;"><strong>{{order.total}}</strong></td></tr>'
+            . self::row("{{lang 'total'}}", '{{order.total}}', true)
+            . '{{#if order.payment_method}}' . self::row("{{lang 'payment_method'}}", '{{order.payment_method}}') . '{{/if}}'
+            . '{{#if order.shipping_method}}' . self::row("{{lang 'shipping_method'}}", '{{order.shipping_method}}') . '{{/if}}'
             . '</table>';
-    }
-
-    private static function orderMethods(): string
-    {
-        return '{{#if order.shipping_method}}' . self::p("<strong>{{lang 'shipping_method'}}</strong> {{order.shipping_method}}") . '{{/if}}'
-            . '{{#if order.payment_method}}' . self::p("<strong>{{lang 'payment_method'}}</strong> {{order.payment_method}}") . '{{/if}}';
     }
 
     private static function billingAddress(): string
@@ -374,9 +421,9 @@ HTML;
         $a = 'order.billing_address';
 
         return '{{#if ' . $a . '}}'
-            . self::h3("{{lang 'billing_address_label'}}")
-            . '<p style="margin:0 0 16px;padding:12px 16px;background:#f7f7f7;border-radius:4px;">'
-            . '{{' . $a . '.full_name}}<br>'
+            . self::h2("{{lang 'billing_address_label'}}")
+            . '<p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#555555;">'
+            . '<strong style="color:#333333;">{{' . $a . '.full_name}}</strong><br>'
             . '{{#if ' . $a . '.company}}{{' . $a . '.company}}<br>{{/if}}'
             . '{{' . $a . '.address_line_1}}<br>'
             . '{{#if ' . $a . '.address_line_2}}{{' . $a . '.address_line_2}}<br>{{/if}}'
