@@ -104,9 +104,114 @@ class TransactionalEmailContext
         ];
     }
 
-    public static function money($amount, string $symbol = '$'): string
+    /**
+     * Formats an amount. Without a format it uses "$" and 2 decimals (the
+     * old Blade emails' format); order emails pass the order's currency.
+     *
+     * @param array{symbol?: string, location?: string, decimals?: int, decimal_token?: string, thousands_token?: string}|null $fmt
+     */
+    public static function money($amount, ?array $fmt = null): string
     {
-        return $symbol . number_format((float) $amount, 2);
+        $fmt = ($fmt ?? []) + [
+            'symbol'          => '$',
+            'location'        => 'left',
+            'decimals'        => 2,
+            'decimal_token'   => '.',
+            'thousands_token' => ',',
+        ];
+
+        $number = number_format(
+            (float) $amount,
+            (int) $fmt['decimals'],
+            (string) $fmt['decimal_token'],
+            (string) $fmt['thousands_token']
+        );
+
+        return $fmt['location'] === 'right'
+            ? $number . $fmt['symbol']
+            : $fmt['symbol'] . $number;
+    }
+
+    /**
+     * The order's currency (amounts on an order are stored already converted
+     * to it). Symbol and code come from the order; position, separators and
+     * decimals come from the store's currency settings when available.
+     *
+     * @param object|array $order
+     */
+    public static function currencyFormat($order): array
+    {
+        $code = (string) (data_get($order, 'currency_code') ?? '');
+        $fmt = [
+            'code'   => $code !== '' ? $code : 'USD',
+            'symbol' => (string) (data_get($order, 'currency_symbol') ?: '$'),
+        ];
+
+        if ($code === '') {
+            return $fmt;
+        }
+
+        try {
+            $currency = \App\Models\Currency::query()
+                ->when(data_get($order, 'store_id'), fn($q, $storeId) => $q->where('store_id', $storeId))
+                ->where('code', $code)
+                ->first();
+
+            if ($currency) {
+                $fmt += [
+                    'location'        => $currency->symbol_location === 'right' ? 'right' : 'left',
+                    'decimals'        => (int) ($currency->decimal_places ?? 2),
+                    'decimal_token'   => (string) ($currency->decimal_token ?: '.'),
+                    'thousands_token' => (string) ($currency->thousands_token ?? ','),
+                ];
+            }
+        } catch (\Throwable $e) {
+            // No tenant connection (e.g. preview/tests): default separators.
+        }
+
+        return $fmt;
+    }
+
+    /**
+     * Shipping method as shown on the storefront, e.g. "FedEx (FedEx Ground®)".
+     * Checkout saves that label in billing_information.shipping_data (as a
+     * plain string or as {"display_name": ...}); older orders may only have a
+     * service code such as "FEDEX_GROUND".
+     */
+    public static function shippingMethodLabel($billing): string
+    {
+        $data = data_get($billing, 'shipping_data');
+
+        if (is_string($data) && $data !== '') {
+            $decoded = json_decode($data, true);
+            $data = json_last_error() === JSON_ERROR_NONE && $decoded !== null ? $decoded : $data;
+        }
+
+        if (is_array($data)) {
+            $label = (string) ($data['display_name'] ?? $data['name'] ?? $data['label'] ?? '');
+            if ($label !== '') {
+                return $label;
+            }
+        } elseif (is_string($data) && trim($data) !== '') {
+            return trim($data);
+        }
+
+        $code = trim((string) (data_get($billing, 'shipping_method') ?? ''));
+
+        if ($code === '') {
+            return '';
+        }
+
+        $fedex = \App\Models\FedexConfiguration::allServiceCodes();
+
+        if (isset($fedex[$code])) {
+            return 'FedEx (' . $fedex[$code] . ')';
+        }
+
+        // e.g. "flat_rate" -> "Flat rate"
+        return preg_match('/^[A-Za-z0-9_]+$/', $code)
+            ? ucfirst(strtolower(str_replace('_', ' ', $code)))
+            : $code;
     }
 
     /**
@@ -143,6 +248,7 @@ class TransactionalEmailContext
     public static function order($order): array
     {
         $billing = data_get($order, 'billingInformation') ?? data_get($order, 'billing_information');
+        $fmt = self::currencyFormat($order);
 
         $items = [];
         $subtotal = 0.0;
@@ -160,9 +266,9 @@ class TransactionalEmailContext
                 'brand'      => (string) (data_get($product, 'brand.name') ?? ''),
                 'image_url'  => self::productImage($product),
                 'quantity'   => $qty,
-                'price'      => self::money($price),
+                'price'      => self::money($price, $fmt),
                 'price_value' => $price,
-                'total'      => self::money($line),
+                'total'      => self::money($line, $fmt),
                 'total_value' => $line,
             ];
         }
@@ -172,10 +278,6 @@ class TransactionalEmailContext
         $manual = (float) (data_get($order, 'manual_discount') ?? data_get($order, 'manualDiscount') ?? 0);
         $total = (float) (data_get($order, 'total_amount') ?? data_get($order, 'totalAmount') ?? 0);
 
-        $shippingData = data_get($billing, 'shipping_data');
-        if (is_string($shippingData)) {
-            $shippingData = json_decode($shippingData, true);
-        }
 
         $paymentMethod = (string) (data_get($billing, 'payment_method') ?? '');
         $status = (string) (data_get($order, 'status') ?? '');
@@ -187,19 +289,20 @@ class TransactionalEmailContext
             'date'              => $createdAt ? \Illuminate\Support\Carbon::parse($createdAt)->format('M d, Y h:i A') : '',
             'items'             => $items,
             'item_count'        => count($items),
-            'subtotal'          => self::money($subtotal),
+            'subtotal'          => self::money($subtotal, $fmt),
             'subtotal_value'    => $subtotal,
-            'shipping'          => self::money($shipping),
+            'shipping'          => self::money($shipping, $fmt),
             'shipping_value'    => $shipping,
-            'discount'          => $discount > 0 ? self::money($discount) : '',
+            'discount'          => $discount > 0 ? self::money($discount, $fmt) : '',
             'discount_value'    => $discount,
-            'manual_discount'   => $manual > 0 ? self::money($manual) : '',
+            'manual_discount'   => $manual > 0 ? self::money($manual, $fmt) : '',
             'manual_discount_value' => $manual,
             'coupon_code'       => (string) (data_get($order, 'coupon_code') ?? ''),
-            'total'             => self::money($total),
+            'total'             => self::money($total, $fmt),
+            'currency'          => ['code' => $fmt['code'], 'symbol' => $fmt['symbol']],
             'total_value'       => $total,
             'payment_method'    => $paymentMethod !== '' ? ucfirst(str_replace('_', ' ', $paymentMethod)) : '',
-            'shipping_method'   => (string) (data_get($shippingData, 'display_name') ?? data_get($billing, 'shipping_method') ?? ''),
+            'shipping_method'   => self::shippingMethodLabel($billing),
             'comments'          => (string) (data_get($order, 'comments') ?? ''),
             'tracking_number'   => (string) (data_get($order, 'tracking_number') ?? ''),
             'tracking_carrier'  => (string) (data_get($order, 'tracking_carrier_name') ?? ''),
@@ -219,13 +322,26 @@ class TransactionalEmailContext
 
         $images = collect($images);
         $image = $images->firstWhere('is_primary', 1) ?? $images->first();
-        $path = (string) (data_get($image, 'path') ?? data_get($image, 'url') ?? '');
+        // Same as ProductImageResource: "url" when set, else the S3 URL of "path".
+        $url = trim((string) (data_get($image, 'url') ?? ''));
+        if ($url !== '' && preg_match('#^https?://#i', $url)) {
+            return $url;
+        }
 
+        $path = trim((string) (data_get($image, 'path') ?? ''));
         if ($path === '') {
             return '';
         }
 
-        return str_starts_with($path, 'http') ? $path : self::ASSET_BASE . ltrim($path, '/');
+        if (preg_match('#^https?://#i', $path)) {
+            return $path;
+        }
+
+        try {
+            return \Illuminate\Support\Facades\Storage::disk('s3')->url(ltrim($path, '/'));
+        } catch (\Throwable $e) {
+            return self::ASSET_BASE . ltrim($path, '/');
+        }
     }
 
     public static function status(string $status): array
@@ -334,7 +450,18 @@ class TransactionalEmailContext
         $base = self::base($store, $logoUrl);
         $url = $base['store']['url'] ?: 'https://example.com';
 
+        // Preview in the store's default currency when one is configured.
+        $defaultCurrency = null;
+        try {
+            $defaultCurrency = \App\Models\Currency::where('is_default', true)->first();
+        } catch (\Throwable $e) {
+            // no tenant connection (tests)
+        }
+
         $order = [
+            'currency_code'   => $defaultCurrency->code ?? null,
+            'currency_symbol' => $defaultCurrency->symbol ?? null,
+            'store_id'        => $defaultCurrency->store_id ?? null,
             'order_number' => '1001',
             'status'       => 'Shipped',
             'created_at'   => now(),

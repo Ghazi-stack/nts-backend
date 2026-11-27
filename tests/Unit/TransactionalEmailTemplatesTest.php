@@ -199,6 +199,58 @@ class TransactionalEmailTemplatesTest extends TestCase
         }
     }
 
+    public function test_shipping_method_shows_the_storefront_label(): void
+    {
+        // Checkout saves the storefront label as a plain string (array cast decodes it to a string).
+        $this->assertSame('FedEx (FedEx Ground®)', TransactionalEmailContext::shippingMethodLabel(
+            ['shipping_data' => 'FedEx (FedEx Ground®)', 'shipping_method' => 'FEDEX_GROUND']
+        ));
+        // ...or JSON text / an array with display_name.
+        $this->assertSame('Flat Rate', TransactionalEmailContext::shippingMethodLabel(
+            ['shipping_data' => '{"display_name":"Flat Rate"}', 'shipping_method' => 'flat_rate']
+        ));
+        $this->assertSame('Express', TransactionalEmailContext::shippingMethodLabel(
+            ['shipping_data' => ['display_name' => 'Express']]
+        ));
+        // Only a FedEx service code saved: readable FedEx name, never "FEDEX_GROUND".
+        $this->assertSame('FedEx (FedEx Ground)', TransactionalEmailContext::shippingMethodLabel(
+            ['shipping_data' => null, 'shipping_method' => 'FEDEX_GROUND']
+        ));
+        $this->assertSame('Free shipping', TransactionalEmailContext::shippingMethodLabel(
+            ['shipping_method' => 'free_shipping']
+        ));
+    }
+
+    public function test_amounts_use_the_order_currency(): void
+    {
+        $order = $this->orderModelLike() + ['currency_code' => 'GBP', 'currency_symbol' => '£'];
+
+        $ctx = TransactionalEmailContext::order($order);
+
+        $this->assertSame('£55.48', $ctx['total']);
+        $this->assertSame('£25.00', $ctx['items'][0]['price']);
+        $this->assertSame(['code' => 'GBP', 'symbol' => '£'], $ctx['currency']);
+
+        // Store currency settings: symbol on the right, comma decimals.
+        $this->assertSame('1.234,50 €', TransactionalEmailContext::money(1234.5, [
+            'symbol' => ' €', 'location' => 'right', 'decimals' => 2, 'decimal_token' => ',', 'thousands_token' => '.',
+        ]));
+        // No currency on the order: same "$" format as before.
+        $this->assertSame('$55.48', TransactionalEmailContext::order($this->orderModelLike())['total']);
+    }
+
+    public function test_product_image_prefers_the_full_image_url(): void
+    {
+        $ctx = TransactionalEmailContext::order([
+            'items' => [['price' => 1, 'quantity' => 1, 'product' => [
+                'name' => 'X',
+                'images' => [['is_primary' => 1, 'path' => 'products/x.jpg', 'url' => 'https://cdn.example.com/x.jpg']],
+            ]]],
+        ]);
+
+        $this->assertSame('https://cdn.example.com/x.jpg', $ctx['items'][0]['image_url']);
+    }
+
     public function test_v3_templates_keep_the_original_design_and_phrases(): void
     {
         $legacy = collect((new TransactionalEmailTemplateSeeder())->legacyTemplates())->keyBy('key');
