@@ -18,6 +18,20 @@ if (!function_exists('current_store_id')) {
     }
 }
 
+if (!function_exists('current_registry_store_id')) {
+    /**
+     * Central registry store ID (central.stores.id) for the resolved store.
+     * Use this for central tables such as store_user and user_permissions.
+     * Use current_store_id() for tenant tables (TEN-013).
+     */
+    function current_registry_store_id(): ?int
+    {
+        $store = current_store_registry();
+
+        return ($store && !empty($store->id)) ? (int) $store->id : null;
+    }
+}
+
 if (!function_exists('current_store_hash')) {
     function current_store_hash(): ?string
     {

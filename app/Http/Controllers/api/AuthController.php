@@ -581,6 +581,7 @@ class AuthController extends Controller
 
             $registryStore = null;
             $registryStoreId = null;
+            $legacyStoreId = null;
 
             if ($userRole !== 1) {
                 $storeHash = $request->header('x-store-hash')
@@ -606,12 +607,17 @@ class AuthController extends Controller
                     ], 404);
                 }
 
-                // $registryStoreId = (int) $registryStore->id;
-                $registryStoreId = (int) (
+                // Central tables (store_user, user_permissions) use the
+                // central registry ID; login, tenant.dashboard and
+                // permission checks all read it (TEN-013).
+                $registryStoreId = (int) $registryStore->id;
+
+                // Legacy ID is still required by StoreAccessMail.
+                $legacyStoreId = (int) (
                     $registryStore->legacy_store_id ?? 0
                 );
 
-                if (!$registryStoreId) {
+                if (!$legacyStoreId) {
                     $central->rollBack();
 
                     return response()->json([
@@ -716,7 +722,7 @@ class AuthController extends Controller
                             $user->name,
                             $user->email,
                             $resetLink,
-                            $registryStoreId
+                            $legacyStoreId
                         )
                     );
                 } catch (\Throwable $mailError) {
@@ -833,13 +839,14 @@ class AuthController extends Controller
             $registryStore = app(TenantProvisioningService::class)
                 ->provisionDatabase((int) $registryStore->id);
 
-            // $registryStoreId = (int) $registryStore->id;
+            // Central tables use the central registry ID (TEN-013).
+            $registryStoreId = (int) $registryStore->id;
 
-            $registryStoreId = (int) (
+            $legacyStoreId = (int) (
                 $registryStore->legacy_store_id ?? 0
             );
 
-            if (!$registryStoreId) {
+            if (!$registryStoreId || !$legacyStoreId) {
                 $central->rollBack();
 
                 return response()->json([
@@ -3823,7 +3830,8 @@ class AuthController extends Controller
     {
         try {
             $central = DB::connection('central');
-            $storeId = current_store_id();
+            // Central tables use the central registry ID (TEN-013).
+            $storeId = current_registry_store_id();
             $registryStore = current_store_registry();
 
             if (!$storeId || !$registryStore) {
@@ -3842,7 +3850,7 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            // Check access using the legacy store ID.
+            // Check access using the central registry store ID.
             $hasAccess = $central->table('user_permissions')
                 ->where('user_id', $currentUser->id)
                 ->where('store_id', $storeId)
@@ -3859,7 +3867,7 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            // Fetch staff assigned to this store by legacy store ID.
+            // Fetch staff assigned to this store by central registry ID.
             $userIds = $central->table('store_user')
                 ->where('store_id', $storeId)
                 ->distinct()
@@ -3964,7 +3972,7 @@ class AuthController extends Controller
     {
         try {
             $central = DB::connection('central');
-            $storeId = current_store_id();
+            $storeId = current_registry_store_id();
 
             if (!$storeId) {
                 return response()->json([
@@ -3989,7 +3997,7 @@ class AuthController extends Controller
                 ->exists();
 
             $isOwner = Store::on('central')
-                ->where('legacy_store_id', $storeId)
+                ->where('id', $storeId)
                 ->where('user_id', $currentUser->id)
                 ->exists();
 
@@ -4179,7 +4187,7 @@ class AuthController extends Controller
     {
         try {
             $central = DB::connection('central');
-            $storeId = current_store_id();
+            $storeId = current_registry_store_id();
 
             if (!$storeId) {
                 return response()->json([
@@ -4204,7 +4212,7 @@ class AuthController extends Controller
                 ->exists();
 
             $isOwner = Store::on('central')
-                ->where('legacy_store_id', $storeId)
+                ->where('id', $storeId)
                 ->where('user_id', $currentUser->id)
                 ->exists();
 
@@ -4433,7 +4441,7 @@ class AuthController extends Controller
     {
         try {
             $central = DB::connection('central');
-            $storeId = current_store_id();
+            $storeId = current_registry_store_id();
 
             if (!$storeId) {
                 return response()->json([
@@ -4482,7 +4490,7 @@ class AuthController extends Controller
                 ->exists();
 
             $isOwner = Store::on('central')
-                ->where('legacy_store_id', $storeId)
+                ->where('id', $storeId)
                 ->where('user_id', $currentUser->id)
                 ->exists();
 
