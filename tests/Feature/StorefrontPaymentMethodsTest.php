@@ -521,6 +521,129 @@ class StorefrontPaymentMethodsTest extends TestCase
         );
     }
 
+    public function test_currency_payment_operations_are_independent_in_both_directions(): void
+    {
+        $legacyConfiguration = ['delivery_information' => 'Legacy instructions'];
+        $method = $this->method(
+            'cash_on_delivery',
+            false,
+            false,
+            $legacyConfiguration,
+            [],
+            null,
+            ['*']
+        );
+        $globalState = [
+            'is_enabled' => $method->is_enabled,
+            'is_configured' => $method->is_configured,
+            'legacy_configuration' => $legacyConfiguration,
+        ];
+
+        $assertGlobalStateUnchanged = function () use ($method, $globalState): void {
+            $current = $method->fresh();
+            $this->assertSame($globalState['is_enabled'], $current->is_enabled);
+            $this->assertSame($globalState['is_configured'], $current->is_configured);
+            $this->assertSame(
+                $globalState['legacy_configuration'],
+                array_diff_key($current->configuration, ['currencySettings' => true])
+            );
+        };
+
+        $dashboard = $this->withoutMiddleware();
+        $headers = ['storeId' => (string) self::STORE_ID];
+
+        $dashboard->postJson('/api/dashboard/payment-settings/cash_on_delivery', [
+            'currency' => 'USD',
+            'configuration' => ['deliveryInformation' => 'USD instructions'],
+        ], $headers)->assertOk()
+            ->assertJsonPath('data.configuration.deliveryInformation', 'USD instructions');
+        $assertGlobalStateUnchanged();
+
+        $dashboard->postJson('/api/dashboard/payment-settings/cash_on_delivery', [
+            'currency' => 'GBP',
+            'configuration' => ['deliveryInformation' => 'GBP instructions'],
+        ], $headers)->assertOk()
+            ->assertJsonPath('data.configuration.deliveryInformation', 'GBP instructions');
+        $assertGlobalStateUnchanged();
+
+        $savedCurrencies = $method->fresh()->configuration['currencySettings'];
+        $this->assertSame('USD instructions', $savedCurrencies['USD']['delivery_information']);
+        $this->assertTrue($savedCurrencies['USD']['isEnabled']);
+        $this->assertSame('GBP instructions', $savedCurrencies['GBP']['delivery_information']);
+
+        // Start both currencies in a configured but disabled state to exercise
+        // enable operations independently from the save behavior.
+        $configuration = $method->fresh()->configuration;
+        $configuration['currencySettings']['USD']['isEnabled'] = false;
+        $configuration['currencySettings']['GBP']['isEnabled'] = false;
+        $method->configuration = $configuration;
+        $method->save();
+
+        $dashboard->patchJson('/api/dashboard/payment-settings/cash_on_delivery/enable', [
+            'currency' => 'USD',
+        ], $headers)->assertOk()->assertJsonPath('data.isEnabled', true);
+        $assertGlobalStateUnchanged();
+        $this->assertFalse($method->fresh()->configuration['currencySettings']['GBP']['isEnabled']);
+
+        $dashboard->patchJson('/api/dashboard/payment-settings/cash_on_delivery/enable', [
+            'currency' => 'GBP',
+        ], $headers)->assertOk()->assertJsonPath('data.isEnabled', true);
+        $assertGlobalStateUnchanged();
+        $this->assertTrue($method->fresh()->configuration['currencySettings']['USD']['isEnabled']);
+
+        $dashboard->patchJson('/api/dashboard/payment-settings/cash_on_delivery/disable', [
+            'currency' => 'USD',
+        ], $headers)->assertOk()->assertJsonPath('data.isEnabled', false);
+        $assertGlobalStateUnchanged();
+        $gbp = $method->fresh()->configuration['currencySettings']['GBP'];
+        $this->assertTrue($gbp['isEnabled']);
+        $this->assertTrue($gbp['isConfigured']);
+        $this->assertSame('GBP instructions', $gbp['delivery_information']);
+
+        $dashboard->postJson('/api/dashboard/payment-settings/cash_on_delivery', [
+            'currency' => 'USD',
+            'configuration' => ['deliveryInformation' => 'USD instructions'],
+        ], $headers)->assertOk();
+        $dashboard->patchJson('/api/dashboard/payment-settings/cash_on_delivery/enable', [
+            'currency' => 'USD',
+        ], $headers)->assertOk()->assertJsonPath('data.isEnabled', true);
+        $dashboard->postJson('/api/dashboard/payment-settings/cash_on_delivery', [
+            'currency' => 'GBP',
+            'configuration' => ['deliveryInformation' => 'GBP instructions'],
+        ], $headers)->assertOk();
+        $dashboard->patchJson('/api/dashboard/payment-settings/cash_on_delivery/enable', [
+            'currency' => 'GBP',
+        ], $headers)->assertOk();
+        $this->assertTrue($method->fresh()->configuration['currencySettings']['USD']['isEnabled']);
+        $dashboard->patchJson('/api/dashboard/payment-settings/cash_on_delivery/disable', [
+            'currency' => 'GBP',
+        ], $headers)->assertOk()->assertJsonPath('data.isEnabled', false);
+        $assertGlobalStateUnchanged();
+        $usd = $method->fresh()->configuration['currencySettings']['USD'];
+        $this->assertTrue($usd['isEnabled']);
+        $this->assertTrue($usd['isConfigured']);
+        $this->assertSame('USD instructions', $usd['delivery_information']);
+
+        $dashboard->getJson('/api/dashboard/payment-settings?currency=GBP', $headers)
+            ->assertOk()
+            ->assertJsonPath('data.offline.0.isEnabled', false)
+            ->assertJsonPath('data.offline.0.configuration', [])
+            ->assertDontSee('USD instructions')
+            ->assertDontSee('currencySettings');
+
+        $this->withMiddleware()->getJson('/api/web/payment-methods?currency=USD', [
+            'X-Store-Hash' => self::STORE_HASH,
+        ])->assertOk()
+            ->assertJsonCount(1, 'data.paymentMethods')
+            ->assertJsonPath('data.paymentMethods.0.paymentInstructions', 'USD instructions')
+            ->assertDontSee('GBP instructions')
+            ->assertDontSee('currencySettings');
+
+        $this->withMiddleware()->getJson('/api/web/payment-methods?currency=GBP', [
+            'X-Store-Hash' => self::STORE_HASH,
+        ])->assertOk()->assertJsonCount(0, 'data.paymentMethods');
+    }
+
     public function test_currency_specific_stripe_disable_does_not_disconnect_oauth(): void
     {
         $credentials = [

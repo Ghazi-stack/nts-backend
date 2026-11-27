@@ -14,9 +14,14 @@ class PaymentSettingsService
     public function getMethods(int $storeId)
     {
         return StorePaymentMethod::forStore($storeId)
-            ->orderByRaw("FIELD(category, 'online', 'wallet', 'offline')")
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->sortBy(fn (StorePaymentMethod $method) => array_search(
+                $method->category,
+                self::CATEGORY_ORDER,
+                true
+            ))
+            ->values();
     }
 
     public function getMethod(int $storeId, string $methodCode): ?StorePaymentMethod
